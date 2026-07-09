@@ -1,0 +1,157 @@
+-----------------------------------------------------
+-- Copyright ATOMTECH Ltd 2024                     --
+--                                                 --
+-- Function : Create Volumn for Drawings in Design --
+-- Author   : Tseng                                --
+-- Date     : 2024/06/24                           --
+-----------------------------------------------------
+
+layout form !!DrawingPlan
+
+  -- The current view and its limits
+  member .pointSt     is POSITION
+  member .pointEn     is POSITION
+	
+	!this.formTitle = 'Set View Limits'
+	
+	button .caldrwg  'Calculate by Drawinglist'  at xmin ymax+0.2 width 20
+	
+	para .para0 at xmax+6 ymin.caldrwg text 'Margin'
+	text .margintext at xmax+0.5 ymin.caldrwg width 10 is REAL
+	
+  para .para00 at xmax+6 ymin.caldrwg text 'Lock All'
+	toggle .lockall at xmax+0.5 ymin.caldrwg
+
+	para .para01 at xmin.caldrwg ymax+0.2 text 'From E'
+	text .fretext at xmax ymin.para01 width 15 is string
+	toggle .frelock at xmax+0.5 ymin.fretext
+	para .para02 at xmax+0.8 ymin.frelock text 'N'
+	text .frntext at xmax ymin.para01 width 15 is string
+	toggle .frnlock at xmax+0.5 ymin.fretext
+	para .para03 at xmax+0.8 ymin.frelock text 'U'
+	text .frutext at xmax ymin.para01 width 15 is string
+	toggle .frulock at xmax+0.5 ymin.fretext
+	button .frombt 'Pick' at xmax+0.8 ymin.fretext width 10 call |!This.PickPoint('Start Position')|
+	
+	para .para04 at xmin.para01 ymax+0.2 text 'To     E'
+	text .toetext at xmax.para04 ymin.para04 width 15 is string
+	toggle .toelock at xmax.toetext+0.5 ymin.toetext
+	para .para05 at xmax.toelock+0.8 ymin.toelock text 'N'
+	text .tontext at xmax.para05 ymin.para04 width 15 is string
+	toggle .tonlock at xmax.tontext+0.5 ymin.toetext
+	para .para06 at xmax.tonlock+0.8 ymin.toelock text 'U'
+	text .toutext at xmax.para06 ymin.para04 width 15 is string
+	toggle .toulock at xmax.toutext+0.5 ymin.toetext
+	button .tobt   'Pick'   at xmax.toulock+0.8 ymin.toetext width 10 call |!This.PickPoint('End Position')|
+	button .create 'Create Box' at xmin.para01   ymax+0.2    width 12 call |!This.CreateBox()|
+	button .delete 'Delete Box' at xmax.create+2 ymin.create width 12 call |!This.DeleteBox()|	
+	
+  button .apply  'Apply'  at xmax.toelock ymax+5 width 10
+	button .Cancel 'Cancel' at xmax.apply+1  ymin.apply width 10 call '!This.Close()'
+
+exit
+
+define method .DrawingPlan()
+  AID CLEAR ALL
+  !this.fretext.val = ''
+  !this.frntext.val = ''
+  !this.frutext.val = ''
+	
+	!this.tobt.active = false
+	!this.create.active = false
+	!this.delete.active = false	
+	
+	!this.fretext.CALLBACK = |!this.modifyText('Start Position')|
+	!this.frntext.CALLBACK = |!this.modifyText('Start Position')|
+	!this.frutext.CALLBACK = |!this.modifyText('Start Position')|
+	!this.toetext.CALLBACK = |!this.modifyText('End Position')|
+	!this.tontext.CALLBACK = |!this.modifyText('End Position')|
+	!this.toutext.CALLBACK = |!this.modifyText('End Position')|
+	
+endmethod
+
+define method .modifyText(!str is string)
+	if (!str eq 'Start Position') then
+	  !this.pointSt.east  = !!DrawingPlan.fretext.val.real()
+	  !this.pointSt.north = !!DrawingPlan.frntext.val.real()
+	  !this.pointSt.up    = !!DrawingPlan.frutext.val.real()
+		!this.MarkText(!this.pointSt, 'Start Position')
+	else
+	  !this.pointEn.east  = !!DrawingPlan.toetext.val.real()
+	  !this.pointEn.north = !!DrawingPlan.tontext.val.real()
+	  !this.pointEn.up    = !!DrawingPlan.toutext.val.real()
+		!this.MarkText(!this.pointEn, 'End Position')
+	endif
+endmethod
+
+define method .CreateBox()
+  AID CLEAR ALL
+  !xcen = str(!this.pointSt.east  + (!this.pointEn.east  - !this.pointSt.east) * 0.5)
+  !ycen = str(!this.pointSt.north + (!this.pointEn.north - !this.pointSt.north) * 0.5)
+  !zcen = str(!this.pointSt.up + (!this.pointEn.up - !this.pointSt.up) * 0.5)
+  !xlen = abs(!this.pointEn.east  - !this.pointSt.east)
+  !ylen = abs(!this.pointEn.north  - !this.pointSt.north)
+  !zlen = abs(!this.pointEn.up  - !this.pointSt.up)
+	=2013286748/281463
+	handle any
+	  !!alert.error ('No EQUI is available')
+	elsehandle none
+	  new box pos e $!xcen n $!ycen u $!zcen xlen $!xlen ylen $!ylen zlen $!zlen level 1 5
+	endhandle
+  
+  
+endmethod
+
+define method .PickPoint(!str is string)
+  !packet = object EDGPACKET()
+  !packet.definePosition('Pick Position')
+--  !packet.action = |!!MarkText(!this.return[1].position, '$!str')|
+  !packet.action = |!!DrawingPlan.MarkText(!this.return[1].position, '$!str')|
+	!packet.remove = true	
+  !!edgCntrl.add(!packet)
+endmethod
+
+define method .MarkText(!pos is position, !str1 is string)
+	!posw = !pos.wrt(WORL)
+	AID CLEAR ALL
+	if (!str1 eq 'Start Position') then
+	  !!DrawingPlan.fretext.val = !posw.east.string('D4')
+	  !!DrawingPlan.frntext.val = !posw.north.string('D4')
+	  !!DrawingPlan.frutext.val = !posw.up.string('D4')
+		!!DrawingPlan.tobt.active = true
+    !!DrawingPlan.pointSt = !posw
+		AID TEXT |Start Position| AT $!pos
+		AID SPHERE $!pos DIA 300
+    if (!!DrawingPlan.pointEn.set()) then
+      if (!!DrawingPlan.fretext.val.real() eq !!DrawingPlan.toetext.val.real() or !!DrawingPlan.frntext.val.real() eq !!DrawingPlan.tontext.val.real() or !!DrawingPlan.frutext.val.real() eq !!DrawingPlan.toutext.val.real()) then
+        !!DrawingPlan.create.active = false
+        !!DrawingPlan.delete.active = false
+      else
+        !!DrawingPlan.create.active = true
+        !!DrawingPlan.delete.active = true
+      endif
+      AID TEXT |End Position| AT $!!DrawingPlan.pointEn
+			AID SPHERE $!!DrawingPlan.pointEn DIA 300
+    endif
+	else
+	  !!DrawingPlan.toetext.val = !posw.east.string('D4')
+	  !!DrawingPlan.tontext.val = !posw.north.string('D4')
+	  !!DrawingPlan.toutext.val = !posw.up.string('D4')
+		if (!!DrawingPlan.fretext.val.real() eq !!DrawingPlan.toetext.val.real() or !!DrawingPlan.frntext.val.real() eq !!DrawingPlan.tontext.val.real() or !!DrawingPlan.frutext.val.real() eq !!DrawingPlan.toutext.val.real()) then
+			!!DrawingPlan.create.active = false
+			!!DrawingPlan.delete.active = false
+		else
+			!!DrawingPlan.create.active = true
+			!!DrawingPlan.delete.active = true
+		endif
+    !!DrawingPlan.pointEn = !posw
+    AID TEXT |Start Position| AT $!!DrawingPlan.pointSt
+		AID SPHERE $!!DrawingPlan.pointSt DIA 300
+    AID TEXT |End Position| AT $!pos
+		AID SPHERE $!pos DIA 300
+	endif
+endmethod
+
+define method .Close()
+   kill !!DrawingPlan
+endmethod

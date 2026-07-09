@@ -1,0 +1,81 @@
+----------------------------------------------
+-- Function : Trim line mto for CSC project --
+--            combiine two files for mto    --
+--            one is bran members mto file  --
+--            another is bolt mto fie       --
+-- Auther : T.W. Tseng                      --
+-- Date : 2024/02/29                        --
+----------------------------------------------
+
+setup form !!TrimMto
+title 'Trim Mto'
+  path down
+	frame    .pipefram |pipe mto file|
+    button .pipemto  'Select a file' call '!This.selfile(|pipe|)'
+	  para   .pipepara text |File:| width 40
+	exit
+	frame    .boltfram |bolt mto file|
+    button .boltmto  'Select a file' call '!This.selfile(|bolt|)'
+	  para   .boltpara text |File:| width 40
+	exit
+  button .Apply    'Apply          ' call '!This.Apply()'
+  button .Cancel   'Cancel         ' call '!This.Close()'
+	
+	member .pipefile is STRING
+	member .boltfile is STRING
+exit
+
+define method .TrimMto()
+  !This.Apply.active = false
+endmethod
+
+define method .selfile(!type is string)
+  if (undefined(!!fileBrowser)) then
+	  pml load form !!fileBrowser
+	endif
+
+	import 'pmlfilebrowser'
+	handle any
+	endhandle
+
+  Using namespace 'Aveva.Core.Presentation'
+	!browser = object PMLFILEBROWSER( 'OPEN' )
+	!browser.show('C:\temp\', '*.txt', 'Pipe Mto File', true, '', 2)
+	!file = !browser.file()
+	if (!file neq '') then
+	  !this.pipepara.val = !file
+		!this.pipefile = !file
+	endif
+endmethod
+
+
+
+define method .Apply()
+	if (!file neq '') then
+		!ff = object file(!file)
+		!ff.Open('READ')
+		do
+			!line = !ff.ReadRecord()
+			if (!line.Set() and !line neq '') then
+--				if (!line.matchwild('*[*') and !line.matchwild('*]*')) then
+--					!ent = !line.split('[').getindexed(2).split(']').getindexed(1)
+--					if (not badref(!ent)) then
+--						var !type type of $!ent
+--						if (!type eq 'ATTA') then
+--							!This.CheckCE()
+--						elseif () then
+--						endif
+--						endif
+--					endif
+--				endif
+			else
+				break
+			endif
+		enddo
+		!ff.close()
+	endif
+endmethod
+
+define method .Close()
+   kill !!TrimMto
+endmethod

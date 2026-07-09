@@ -1,0 +1,1498 @@
+setup form !!LINENO
+  title 'Line NO. Functions'
+  frame.frame1 'Create Single Line NO.'
+    PATH DOWN
+    rgroup.Line 'Add Underline' FRAME
+      add tag 'Yes' select 'LYES'
+      add tag 'No ' select 'LNO'
+    exit
+    rgroup.Elev 'W/ Elevation' FRAME at XMAX.Line + 3 YMIN.Line
+      add tag 'None' select 'ENONE'
+      add tag 'BOP ' select 'EBOP'
+      add tag 'CL  ' select 'ECL'
+    exit
+    PATH RIGHT
+    button .createhori 'Hor Dir' call '!This.Apply(|Hori|)' at XMIN.Line YMAX.Elev + 0.2
+    button .createvert 'Vert Dir' call '!This.Apply(|Vert|)'
+    button .createalig 'Align Dir' call '!This.Apply(|Align|)'
+  exit
+  PATH DOWN
+  frame.frame2 'Modify Line NO.'
+    button .modifyloc1 '  Ortho. Move  ' call '!This.Loc(|Ortho|)'
+    button .modifyloc2 'Non-Ortho. Move' call '!This.Loc(|Northo|)'
+    button .modify     'Offset w/BENT  ' form !!Offs
+    button .modifyali  'Align TEXT' at XMAX.modifyloc1 + 1 YMIN.modifyloc1 call '!This.AliTEXT()'
+    button .modifyalib 'Align BENT' call '!This.AliBENT()'
+    button .modifyclr  'Clearance ' call '!This.Clear()'
+  exit
+  frame.frame3 'Multi Line NO.' at XMAX.frame1 + 1 YMIN.frame1
+    PATH DOWN
+    rgroup.MLineDir 'Line No. Dir.' FRAME
+      add tag 'Horizontal' select 'hor'
+--      add tag ' Vertical ' select 'ver'
+    exit
+    frame.frame4 'Line NO. POS.'
+      button .LU 'L.U.' call '!This.Apply1(|LU|)'
+      button .RU 'R.U.' at XMAX.LU + 1 YMIN.LU call '!This.Apply1(|RU|)'
+      button .LL 'L.L.' at XMIN.LU YMAX.LU + 0.2 call '!This.Apply1(|LL|)'
+      button .RL 'R.L.' at XMIN.RU YMIN.LL call '!This.Apply1(|RL|)'
+    exit
+    button .DELETEM '  Delete   ' at XMIN.LL call '!This.DeleteM()'
+  exit
+  button .Cancel '   Cancel  ' at XMIN.DELETEM YMIN.modifyclr call '!This.Close()'
+exit
+
+define method .LINENO()
+  !This.Line.Val = 1
+  !This.Elev.Val = 1
+	!This.LayerOfLineno()
+endmethod
+
+define method .LayerOfLineno()
+  !oldref = REF
+  VLYSET 1
+  handle ANY
+  elsehandle NONE
+	  !!LineNoLayer = object dbref()
+	  var !mems coll mem of ce
+		do !mem values !mems
+		  $!mem
+			var !ltitle LTITLE OF $!mem
+			if (!ltitle.eq('LineNo')) then
+				!!LineNoLayer = ref
+			endif
+		enddo		
+		if (!!LineNoLayer.badref()) then
+			NEW VLAYER
+			LTITLE 'LineNo'
+			!!LineNoLayer = ref
+			SHEE
+			var !views coll all view for ce
+			do !view values !views
+			  $!view
+				!viewname = NAME
+				$!viewname/LINE_Labs
+				handle ANY
+				elsehandle NONE
+				  var !mems coll all GLAB for ce
+					do !mem values !mems
+					  $!mem
+--					  var !btext BTEXT of $!mem
+--						if (!btext.matchwild('#<*')) then
+						  Vlayrf $!!LineNoLayer
+--						endif
+					enddo
+					$!viewname/LINE_Labs
+					VNOT 1
+					handle ANY
+					elsehandle NONE
+					  var !mems coll all STRA for ce
+					  do !mem values !mems
+					    $!mem
+						  Vlayrf $!!LineNoLayer
+					  enddo
+					endhandle
+				endhandle
+			enddo
+		endif
+	endhandle
+	$!oldref
+endmethod
+
+define method .Apply1(!tmpdir is String)
+  if ( !This.MLineDir.selection() EQ 'hor') then
+    !dir = !tmpdir
+  else
+    if (!tmpdir eq 'LU') then
+      !dir = 'RU'
+    elseif (!tmpdir eq 'RU') then
+      !dir = 'RL'
+    elseif (!tmpdir eq 'LL') then
+      !dir = 'LU'
+    else
+      !dir = 'LL'
+    endif
+  endif
+
+  var !VIEW (NAME of VIEW)
+  handle ANY
+    !!Alert.Error('Not on VIEW level !')
+  elsehandle NONE
+    $!VIEW
+    !ViewDir = DIR
+    !This.LayerOfLineno()       
+    ------------------------------------------------------------
+    -- Can't transfer SHPOS to ENUPOS in a non-orthogonal view --
+    ------------------------------------------------------------
+--    !tmpdirarray = !ViewDir.String().Before(' WRT').Split(' ')
+--    if (!tmpdirarray.Size() gt 1) then
+--      !oldviewdir = !ViewDir.String().Before(' WRT')
+--      DIR $!tmpdirarray[1]
+--    endif
+    
+--    $p $!tmpdirarray[1]
+    
+    var !viewdirupt VIEWDIR UP
+    var !viewdirdnt VIEWDIR DOWN
+    var !viewdirlet VIEWDIR LEFT
+    var !viewdirrit VIEWDIR RIGHT
+    !viewdirup = Object Direction(!viewdirupt)
+    !viewdirdn = Object Direction(!viewdirdnt)
+    !viewdirle = Object Direction(!viewdirlet)
+    !viewdirri = Object Direction(!viewdirrit)
+		
+		!viewdiraxis = !viewdirup.cross(!viewdirle)
+		
+    $!VIEW/LINE_Labs
+    handle ANY
+      $!VIEW
+      $!VIEW/REDU_Labs
+      handle ANY
+      endhandle
+      NEW LAYE $!VIEW/LINE_Labs
+      Lvisibility true
+      Purpose LABG
+      Ucode mm  Distance  mm  Bore Nominal 
+      Font 11
+      Lterminator off
+      Justification Left
+      Alignment Base
+      Dterminator off
+      Tsize 2mm
+      Chosht 6mm
+      Asubtended 0
+      Pjustification Towards 
+      Overshoot 1mm
+      Plclearance 1mm
+      Doffset 25mm
+      Dmspacing 0mm
+--      Direction E
+      Cheight 3.5mm
+      Lleader true
+      Lframe false
+      Lshape Straight
+      Gbox 1mm
+      Cspacing 0
+      Lspacing 0
+      Llclearance 0mm
+      Xyscale 1 1
+      Bpoffset 0mm 0mm
+      Blnk true
+      Bmargin 0mm
+      Trsf Nulref
+      Fterminator Default
+      Pcode mms to 0 dpls  Inches to 1 dpls  Fractions to 32 ths  Angles to 1 dpls 
+      Txcolour Yellow 
+      NLStyle Solid 
+      NLColour Cyan 
+      FStyle SolidFilled 
+      FColour Cyan 
+      LLStyle Solid 
+      LLColour Cyan 
+      LFStyle Solid 
+      LFColour Cyan 
+      DLStyle Solid 
+      DLColour Cyan 
+      PLStyle Solid 
+      PLColour Cyan 
+      MStyle Off 
+      MColour Cyan 
+      CHStyle Off 
+      CHColour Grey
+    endhandle
+    
+    prompt off
+    prompt load escape |Identify a Insert Point for Line No.|
+    var !inspos SHPO @
+    HANDLE ANY
+      prompt on
+      prompt dismiss
+--      if (!tmpdirarray.Size() gt 1) then
+--        $!VIEW
+--        DIR $!oldviewdir
+--      endif 
+    elsehandle NONE
+    
+      ----------------------------------------------
+      ------------   Create GLAB   -----------------
+      ----------------------------------------------
+      !refarray = Object Array()
+      !boparray = Object Array()
+      !xypoarray = Object Array()
+      do
+        prompt off
+        prompt load escape |Identify PIPE for Line NO.|
+        ID DESEL @
+        handle ANY $* USER cancel
+          prompt on
+          prompt dismiss
+          break
+        elsehandle NONE
+          !ref = REF
+					var !type TYPE
+					if (!type eq 'BRAN') then
+					  var !ref1 MEM 1
+						!ref = !ref1.dbref()
+					endif
+          var !branref BRAN OF $!ref
+
+          !refarray.Append(!ref)
+          
+          ---------------------------------------
+          ------  Find out correct point  -------
+          ---------------------------------------
+--					if (!type eq 'BRAN') then
+--					  var !refdirt HDIR OF $!ref WRT WORL
+--            !refdirt0 = object direction(!refdirt)
+--            !refdirt1 = !refdirt0.opposite().string()
+--					else
+					  var !refdirt PA DIR OF $!ref WRT WORL
+            var !refdirt1 PL DIR OF $!ref WRT WORL
+--					endif
+					
+
+          !refdir  = Object Direction(!refdirt)
+          !refdir1 = Object Direction(!refdirt1)
+          if (!refdir.EQ(!ViewDir) or !refdir.EQ(!ViewDir.Opposite()) or !refdir1.EQ(!ViewDir) or !refdir1.EQ(!ViewDir.Opposite())) then
+            if (!refdir.EQ(!ViewDir) or !refdir.EQ(!ViewDir.Opposite())) then
+              !boparray.Append('BOP EL#PLBOPU+')
+            else
+              !boparray.Append('BOP EL#PABOPU+')
+            endif
+          else
+            ----------------------------------------------------------
+            -- find out PA or PL which one is closer to insertpoint -- 
+            ----------------------------------------------------------
+--						if (!type eq 'BRAN') then
+--              var !papost HPOS OF $!ref WRT WORL
+--              var !plpost TPOS OF $!ref WRT WORL
+--						else
+              var !papost PA POS OF $!ref WRT WORL
+              var !plpost PL POS OF $!ref WRT WORL
+--						endif
+            $!VIEW
+            var !pashpos SHPOS OF $!papost
+            var !plshpos SHPOS OF $!plpost
+            !papos = Object Position(!pashpos)
+            !plpos = Object Position(!plshpos)
+            !insposenu = Object Position(!inspos)
+            if (!insposenu.Distance(!papos) gt !insposenu.Distance(!plpos)) then
+              !boparray.Append('BOP EL#PLBOPU+')
+            else
+              !boparray.Append('BOP EL#PABOPU+')
+            endif
+          endif          
+          
+--					if (!type eq 'BRAN') then
+--					  var !pustr U HPOS OF $!ref
+--					else
+					  var !pustr U OF $!ref
+--					endif
+          var !podstr POD 1 OF $!ref
+          !pbopstr = !pustr.Real() - !podstr.Real() * 0.5
+          !pbop = !pbopstr.Real().String('D0')
+          if (undefined(!prebop)) then
+            !prebop = !pbop
+            !chksamebop = TRUE
+          else
+            if (!chksamebop) then
+              if (!prebop.Real() eq !pbop.Real()) then
+                !chksamebop = TRUE
+              else
+                !chksamebop = FALSE
+              endif
+            else
+            endif
+          endif
+        endhandle
+      enddo
+      if (!dir eq 'RU' or !dir eq 'LU') then
+        !refarray = !refarray.Invert()
+        !boparray = !boparray.Invert()
+      endif
+      
+      if (!refarray.Size() gt 0) then
+        if (!chksamebop) then
+          if ( !This.MLineDir.selection() EQ 'hor') then
+            if (!dir eq 'RL' or !dir eq 'LL') then
+              !yoff = -4
+            else
+              !yoff = 4
+            endif
+            !newadegrees = 0
+          else
+            if (!dir eq 'RL' or !dir eq 'LL') then
+              !yoff = 4
+            else
+              !yoff = -4
+            endif
+            !newadegrees = 90
+          endif
+        else
+          if ( !This.MLineDir.selection() EQ 'hor') then
+            if (!dir eq 'RL' or !dir eq 'LL') then
+              !yoff = -9
+            else
+              !yoff = 9
+            endif
+            !newadegrees = 0
+          else
+            if (!dir eq 'RL' or !dir eq 'LL') then
+              !yoff = 9
+            else
+              !yoff = -9
+            endif
+            !newadegrees = 90
+          endif
+        endif
+        
+        
+        -----------------------------------------------------
+        --  find out the maximun no. of naming convention  --
+        -----------------------------------------------------
+        !maxarray = Object Array()
+        var !glabarray COLL ALL GLAB FOR $!VIEW/LINE_Labs
+        if (!glabarray.Size() gt 0) then
+          do !ref values !glabarray
+            var !refname NAME OF $!ref
+            if (!refname.MatchWild('*-Multi-*')) then
+              !chkmax = !refname.After('-Multi-')
+              !noarray = !chkmax.Split('-')
+              !maxarray.Append(!noarray[1].Real())
+            endif
+          enddo
+        endif
+        if (!maxarray.Size() eq 0) then
+          !maxno1 = 1
+        else
+          !maxno1 = !maxarray.Sort().Last() + 1
+        endif
+        
+        !counti = 1
+        !maxno2 = 1
+        do !ref values !refarray
+          $!VIEW/LINE_Labs          
+          NEW GLAB $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2
+					Vlayrf $!!LineNoLayer
+          !maxno2 = !maxno2 + 1
+          DDNA $!ref
+          ----------------------------------------------------------------------------------------
+          -- if BOP elevations are the same, only the last line no. will show the BOP elevation --
+          ----------------------------------------------------------------------------------------
+          if (!chksamebop) then
+            if (!dir eq 'RU') then
+              if (!counti eq 1) then
+                !newbtext = '#< ' & String(!refarray.Size() - !counti + 1) & '. #PIPE(C2:)#>#/     ' & !boparray[!counti] &'#/         (TYP.)'
+              else
+                !newbtext = '#< ' & String(!refarray.Size() - !counti + 1) & '. #PIPE(C2:)#>'
+              endif
+            elseif (!dir eq 'LU') then
+              if (!counti eq 1) then
+                !newbtext = String(!refarray.Size() - !counti + 1) & '. #PIPE(C2:)#/     ' & !boparray[!counti] &'#/         (TYP.)'
+              else
+                !newbtext = String(!refarray.Size() - !counti + 1) & '. #PIPE(C2:)'
+              endif
+            elseif (!dir eq 'LL') then
+              if (!counti eq !refarray.Size()) then
+                !newbtext = !counti.String() & '. #PIPE(C2:)#/     ' & !boparray[!counti] &'#/         (TYP.)'
+              else
+                !newbtext = !counti.String() & '. #PIPE(C2:)'
+              endif
+            else
+              if (!counti eq !refarray.Size()) then
+                !newbtext = '#< ' & !counti.String() & '. #PIPE(C2:)#>#/     ' & !boparray[!counti] &'#/         (TYP.)'
+              else
+                !newbtext = '#< ' & !counti.String() & '. #PIPE(C2:)#>'
+              endif
+            endif
+          else
+            if (!dir eq 'LU' or !dir eq 'RU') then
+              !newbtext = '#< ' & String(!refarray.Size() - !counti + 1) & '. #PIPE(C2:)#>#/     ' & !boparray[!counti]
+            else
+              !newbtext = '#< ' & !counti.String() & '. #PIPE(C2:)#>#/     ' & !boparray[!counti]
+            endif
+          endif
+          Btext |$!newbtext|
+          ADEGREES $!newadegrees
+          Lleader false
+          Pkey unset
+          Pkdistance 0.5
+          Oset true
+          Ppdirection -1
+          Lframe false
+          Gbox 0mm
+          Cheight 3.5mm
+          Cspacing 0
+          Lspacing 0
+          Llclearance 0mm
+          Tsize 2mm
+          Lterminator Off
+          Apoffset unset 
+          Bpoffset 0mm 0mm
+          Lshape Straight
+          Font 11
+          Justification Left
+          Alignment Base
+          Blnk true
+          Bmargin 0mm
+          Lvisibility true
+          Position unset
+          Txcolour 67
+          LLStyle Solid 
+          LLColour 147
+          LFStyle Solid 
+          LFColour 147
+          !newy = (!counti - 1) * !yoff
+          ABSO
+          XYPO $!inspos
+          if ( !This.MLineDir.selection() EQ 'hor') then
+            if (!dir eq 'LU' or !dir eq 'LL') then
+              BY X -75
+            endif
+            BY Y $!newy
+          else
+            if (!dir eq 'LU' or !dir eq 'LL') then
+              BY Y -75
+            endif
+            BY X $!newy
+          endif
+          var !tmpxypo XYPO
+          !xypoarray.Append(!tmpxypo)
+          !counti = !counti + 1
+        enddo
+        
+        ----------------------------------------------
+        ----------   Draw Lines & Dots  --------------
+        ----------------------------------------------
+        VNOT 1
+        handle ANY
+          NEW VNOT
+          Pkdistance 0.5
+          Adegrees 0
+          Ppdirection -1
+          Lvisibility true
+          Justification Left
+          Alignment Bbody
+          Font 11
+          Blnk true
+          Bmargin 0mm
+          Cheight 3.5mm
+          Cspacing 0
+          Lspacing 0
+          Txcolour 67
+          NLStyle Solid 
+          NLColour 147
+          FStyle Off 
+          FColour Cyan 
+          MStyle Off 
+          MColour Cyan 
+        endhandle
+        
+        -- find out the intersection point --
+        
+        !counti = 1
+        do !ref values !refarray
+          $!ref
+--					var !type TYPE 
+--					if (!type eq 'BRAN') then
+--					  var !refdirt HDIR WRT WORL
+--					else
+						if (!boparray[!counti].MatchWild('*PLBOP*')) then
+							var !refdirt PL DIR WRT WORL
+						else
+							var !refdirt PA DIR WRT WORL
+						endif
+--					endif
+
+          !refdir = Object Direction(!refdirt)
+--					if (!type eq 'BRAN') then
+--					  !refenupos = HPOS WRT WORL
+--					else
+					  !refenupos = POS WRT WORL
+--					endif
+          
+          !refenupos1 = !refenupos.Offset(!refdir,100)
+          !line1 = Object Line(!refenupos, !refenupos1)
+          $!VIEW/LINE_Labs
+          var !tmppt1 ENUPOS OF $!inspos
+          !tmppt2 = !tmppt1.Position()
+					
+					if (min(!refdir.angle(!viewdirle), !refdir.angle(!viewdirri)) lt 30) then
+					  !tmppt3 = !tmppt2.Offset(!viewdirup,100)
+					else
+					  !tmppt3 = !tmppt2.Offset(!viewdirle,100)
+					endif					
+					
+--          if ( !This.MLineDir.selection() EQ 'hor') then
+--            !tmppt3 = !tmppt2.Offset(!viewdirup,100)
+--          else
+--            !tmppt3 = !tmppt2.Offset(!viewdirle,100)
+--          endif
+          !line2 = Object Line(!tmppt2, !tmppt3)
+          !interpt1 = !line1.Intersection(!line2)
+          handle ANY
+          elsehandle NONE
+            VNOT 1
+            var !interpt2 SHPOS OF $!interpt1
+            if (undefined(!firstdot)) then
+              !firstdot = !interpt2
+            endif
+            NEW CIRC $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 RAD 0.5 AT $!interpt2 FSTYLE SOL
+            !maxno2 = !maxno2 + 1
+            NEW TEXP $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 AT $!interpt2
+						Cheitx '3.5mm'
+            if (!dir eq 'LU' or !dir eq 'RU') then
+              !tmpbtex = String(!refarray.Size() - !counti + 1) & '.'
+            else
+              !tmpbtex = !counti.String() & '.'
+            endif
+            BTEX |$!tmpbtex|
+            BY X-4 Y1
+            !maxno2 = !maxno2 + 1
+            -------------------------------------------------
+            -- Draw a underscope when !dir = 'LU' or 'LL', --
+            -------------------------------------------------
+						!insposarray = !inspos.split(' ')
+            if (!dir eq 'LU' or !dir eq 'LL') then
+              !tmpxypoarray = !xypoarray[!counti].Split(' ')
+              !interpt2array = !interpt2.Split(' ')
+							
+							if (min(!refdir.angle(!viewdirle), !refdir.angle(!viewdirri)) lt 30) then
+							  if (!This.MLineDir.selection() EQ 'hor') then
+									!tmpxypo1 = !tmpxypoarray[2]
+									!tmpxypo2 = !tmpxypoarray[4].Real() - 0.5
+									!baselinep1 = 'X ' & !tmpxypo1 & ' Y ' & !tmpxypo2.String()
+									!baselinep2 = 'X ' & !interpt2array[2] & ' Y ' & !tmpxypo2.String()
+                  NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!baselinep1 TPT $!baselinep2
+									Vlayrf $!!LineNoLayer
+                  !maxno2 = !maxno2 + 1
+								endif
+							else
+							  if (!This.MLineDir.selection() EQ 'hor') then
+									!tmpxypo1 = !tmpxypoarray[2]
+									!tmpxypo2 = !tmpxypoarray[4].Real()
+									!baselinep1 = 'X ' & !tmpxypo1 & ' Y ' & !tmpxypo2.String()
+									!baselinep2 = 'X ' & !insposarray[2] & ' Y ' & !tmpxypo2.String()
+                  NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!baselinep1 TPT $!baselinep2
+									Vlayrf $!!LineNoLayer
+                  !maxno2 = !maxno2 + 1
+								endif
+							endif							
+            endif
+          endhandle
+          !counti = !counti + 1
+        enddo
+				
+				
+				
+				
+				if (min(!refdir.angle(!viewdirle), !refdir.angle(!viewdirri)) lt 30) then
+          if ( !This.MLineDir.selection() EQ 'hor') then
+            !newy1 = !insposarray[4].Real() + !newy - 0.5
+            !tpt = !insposarray[1] & ' ' & !insposarray[2] & ' ' & !insposarray[3] & ' ' & !newy1.String()
+          else
+					  if (!dir eq 'LU') then
+              !newy1 = !insposarray[2].Real() + !newy
+              !tpt = !insposarray[1] & ' ' & !newy1.String() & ' ' & !insposarray[3] & ' ' & !xypoarray[1].split(' ')[4]
+					  elseif (!dir eq 'LL') then
+              !tpt = !xypoarray[1]
+						else
+              !newy1 = !insposarray[2].Real() + !newy
+              !tpt = !insposarray[1] & ' ' & !newy1.String() & ' ' & !insposarray[3] & ' ' & !insposarray[4]
+						endif
+          endif
+				else
+				  if ( !This.MLineDir.selection() EQ 'hor') then
+            !newy1 = !insposarray[4].Real() + !newy
+            !tpt = !insposarray[1] & ' ' & !insposarray[2] & ' ' & !insposarray[3] & ' ' & !newy1.String()
+
+					else
+					  if (!dir eq 'RU' or !dir eq 'LU') then
+              !newy1 = !insposarray[2].Real() + !newy
+              !tpt = !insposarray[1] & ' ' & !newy1.String() & ' ' & !insposarray[3] & ' ' & !insposarray[4]
+						elseif (!dir eq 'RL' or !dir eq 'LL') then
+              !newy1 = !insposarray[2].Real() + !newy
+              !tpt = !insposarray[1] & ' ' & !newy1.String() & ' ' & !insposarray[3] & ' ' & !insposarray[4]
+						endif
+					endif
+        endif
+				
+				
+				
+				
+				
+        VNOT 1
+        !tmpfirstdot = Object Position(!firstdot)
+        !tmptpt = Object Position(!tpt)
+        !dist = !tmpfirstdot.Distance(!tmptpt)
+        if ( !This.MLineDir.selection() EQ 'hor') then
+         if (!dir eq 'LU' or !dir eq 'RU') then
+           !lineang = -90
+         else
+           !lineang = 90
+         endif
+        else
+         if (!dir eq 'RU') then
+           !lineang = 0
+				 elseif (!dir eq 'LU') then
+				   !lineang = 0
+					 !dist = !tmptpt.Distance(Object Position(!interpt2))
+         elseif (!dir eq 'RL') then
+           !lineang = 180
+					 !dist = !tmptpt.Distance(Object Position(!interpt2))
+         elseif (!dir eq 'LL') then
+           !lineang = 0
+					 !dist = !tmptpt.Distance(Object Position(!interpt2))
+         endif
+        endif
+				
+				
+				if (min(!refdir.angle(!viewdirle), !refdir.angle(!viewdirri)) lt 30) then
+				  if ( !This.MLineDir.selection() EQ 'hor') then
+						NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!tpt LEN $!dist ANG $!lineang
+						Vlayrf $!!LineNoLayer
+						!maxno2 = !maxno2 + 1
+					else
+					  !dist1 = (!counti - 2) * abs(!yoff)
+						NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!tpt LEN $!dist1 ANG $!lineang
+						Vlayrf $!!LineNoLayer
+						!maxno2 = !maxno2 + 1
+						if ( !This.MLineDir.selection() EQ 'hor') then
+						 if (!dir eq 'LU' or !dir eq 'RU') then
+							 !lineang = 0
+						 else
+							 !lineang = 180
+						 endif
+						else
+						 if (!dir eq 'RL' or !dir eq 'RU') then
+							 !lineang = -90
+						 else
+							 !lineang = 90
+						 endif
+						endif
+						if (!dir eq 'LL') then
+						  NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!inspos LEN $!dist ANG $!lineang
+							Vlayrf $!!LineNoLayer
+						else
+						  NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!xypoarray[1] LEN $!dist ANG $!lineang
+							Vlayrf $!!LineNoLayer
+						endif
+						!maxno2 = !maxno2 + 1
+					endif
+				else
+				  if ( !This.MLineDir.selection() EQ 'hor') then
+					  !dist1 = (!counti - 2) * abs(!yoff)
+						NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!tpt LEN $!dist1 ANG $!lineang
+						Vlayrf $!!LineNoLayer
+						!maxno2 = !maxno2 + 1
+						if ( !This.MLineDir.selection() EQ 'hor') then
+						 if (!dir eq 'LU' or !dir eq 'LL') then
+							 !lineang = 0
+						 else
+							 !lineang = 180
+						 endif
+						else
+						 if (!dir eq 'RL' or !dir eq 'RU') then
+							 !lineang = -90
+						 else
+							 !lineang = 90
+						 endif
+						endif
+--						if (!dir eq 'LL') then
+--						  NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!xypoarray[1] LEN $!dist ANG $!lineang
+--						else
+						  NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!inspos LEN $!dist ANG $!lineang
+							Vlayrf $!!LineNoLayer
+--						endif
+						!maxno2 = !maxno2 + 1
+
+					else
+					  if (!dir eq 'RU' or !dir eq 'LU') then
+						  NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!tpt LEN $!dist ANG 0
+							Vlayrf $!!LineNoLayer
+							!maxno2 = !maxno2 + 1
+					  elseif (!dir eq 'RL' or !dir eq 'LL') then
+						  NEW STRA $!VIEW/LINE_Labs-Multi-$!maxno1-$!maxno2 FPT $!tpt LEN $!dist ANG 180
+							Vlayrf $!!LineNoLayer
+							!maxno2 = !maxno2 + 1
+						endif
+					endif
+				endif
+				
+				
+
+      endif
+    endhandle
+--    if (!tmpdirarray.Size() gt 1) then
+--      $!VIEW
+--      DIR $!oldviewdir
+--    endif
+    REFRESH
+  endhandle
+endmethod
+
+define method .Apply(!dir is STRING)
+  var !VIEW (NAME of VIEW)
+  handle ANY
+    !!Alert.Error('Not on VIEW level !')
+  elsehandle NONE
+	  !This.LayerOfLineno()
+    Var !Proj PROJ ID
+    $!VIEW
+    !ViewDir = DIR
+    var !viewdirupt VIEWDIR UP
+    var !viewdirrit VIEWDIR RIGHT
+    !viewdirup = Object Direction(!viewdirupt)
+    !viewdirri = Object Direction(!viewdirrit)
+    
+    ------------------------------------------------------------
+    -- Can't transfer SHPOS to ENUPOS in a non-orthogonal view --
+    ------------------------------------------------------------
+    !tmpdirarray = !ViewDir.String().Before(' WRT').Split(' ')
+    if (!tmpdirarray.Size() gt 1) then
+      !oldviewdir = !ViewDir.String().Before(' WRT')
+      DIR $!tmpdirarray[1]
+    endif
+    
+    $!VIEW/LINE_Labs
+    handle ANY
+      $!VIEW
+      $!VIEW/REDU_Labs
+      handle ANY
+      endhandle
+      NEW LAYE $!VIEW/LINE_Labs
+      Lvisibility true
+      Purpose LABG
+      Ucode mm  Distance  mm  Bore Nominal 
+      Font 11
+      Lterminator off
+      Justification Left
+      Alignment Base
+      Dterminator off
+      Tsize 2mm
+      Chosht 6mm
+      Asubtended 0
+      Pjustification Towards 
+      Overshoot 1mm
+      Plclearance 1mm
+      Doffset 25mm
+      Dmspacing 0mm
+--      Direction E
+      Cheight 3.5mm
+      Lleader true
+      Lframe false
+      Lshape Straight
+      Gbox 1mm
+      Cspacing 0
+      Lspacing 0
+      Llclearance 0mm
+      Xyscale 1 1
+      Bpoffset 0mm 0mm
+      Blnk true
+      Bmargin 0mm
+      Trsf Nulref
+      Fterminator Default
+      Pcode mms to 0 dpls  Inches to 1 dpls  Fractions to 32 ths  Angles to 1 dpls 
+      Txcolour Yellow 
+      NLStyle Solid 
+      NLColour Cyan 
+      FStyle SolidFilled 
+      FColour Cyan 
+      LLStyle Solid 
+      LLColour Cyan 
+      LFStyle Solid 
+      LFColour Cyan 
+      DLStyle Solid 
+      DLColour Cyan 
+      PLStyle Solid 
+      PLColour Cyan 
+      MStyle Off 
+      MColour Cyan 
+      CHStyle Off 
+      CHColour Grey
+    endhandle
+    do
+      prompt off
+      prompt load escape |Identify PIPE for Line NO.|
+      ID DESEL @
+      handle ANY $* USER cancel
+        if (!tmpdirarray.Size() gt 1) then
+          $!VIEW
+          DIR $!oldviewdir
+        endif
+        prompt on
+        prompt dismiss
+        break
+      elsehandle NONE
+        !ref = REF
+        !rref = REF
+        var !refdirt PA DIR OF $!ref
+        handle ANY
+          -- User maybe select a BRAN and BRAN doesn't have PA attribure --
+          var !type TYPE OF $!ref
+          !!Alert.Message('You selected a $!type !')
+        elsehandle NONE
+          !refdir = Object Direction(!refdirt)
+		  PROMPT OFF
+		  PROMPT LOAD ESCAPE |Position LineNo with the cursors|
+		  var !newpos SHPO @
+		  HANDLE ANY
+		    prompt on
+		    prompt dismiss
+		    break
+		  endhandle
+          $!VIEW/LINE_Labs
+          NEW GLAB
+					Vlayrf $!!LineNoLayer
+          DDNA $!ref
+          !ref = ref
+          if ( !This.Line.selection() EQ 'LYES') then
+            Lleader true
+            if ( !This.Elev.selection() EQ 'ENONE') then
+              if (!Proj EQ 'ILO') then
+                Btext '#<#PIPE(P_:1)(C2:)#>#/#PIPE(P_2:)(C2:)'
+              else
+                Btext '#<#PIPE(C2:)#>'
+              endif
+            elseif ( !This.Elev.selection() EQ 'EBOP') then
+              --------------------------------------------------------------------------------------------------------------
+              --  if view dir is "D", check component dir is not equal or opposite to view dir                            --
+              --  if view dir isn't "D" means "Section View", check component dir is not equal or opposite to VIEWDIR UP  --
+              --------------------------------------------------------------------------------------------------------------
+              if (!tmpdirarray[1] EQ 'D') then
+                if (!refdir.EQ(!ViewDir) or !refdir.EQ(!ViewDir.Opposite())) then
+                  if (!Proj EQ 'ILO') then
+                    Btext '#<#PIPE(P_:1)(C2:)#>#/#PIPE(P_2:)(C2:)#/BOP EL#PLBOPU+'
+                  else
+                    Btext '#<#PIPE(C2:)#15#>#/BOP EL#PLBOPU+'
+                  endif
+                else
+                  if (!Proj EQ 'ILO') then
+                    Btext '#<#PIPE(P_:1)(C2:)#>#/#PIPE(P_2:)(C2:)#/BOP EL#PABOPU+'
+                  else
+                    Btext '#<#PIPE(C2:)#15#>#/BOP EL#PABOPU+'
+                  endif
+                endif
+              else
+                if (!refdir.EQ(!viewdirup) or !refdir.EQ(!viewdirup.Opposite())) then
+                  if (!Proj EQ 'ILO') then
+                    Btext '#<#PIPE(P_:1)(C2:)#>#/#PIPE(P_2:)(C2:)#/BOP EL#PLBOPU+'
+                  else
+                    Btext '#<#PIPE(C2:)#15#>#/BOP EL#PLBOPU+'
+                  endif
+                else
+                  if (!Proj EQ 'ILO') then
+                    Btext '#<#PIPE(P_:1)(C2:)#>#/#PIPE(P_2:)(C2:)#/BOP EL#PABOPU+'
+                  else
+                    Btext '#<#PIPE(C2:)#15#>#/BOP EL#PABOPU+'
+                  endif
+                endif
+              endif
+            else
+              if (!Proj EQ 'ILO') then
+                Btext '#<#PIPE(P_:1)(C2:)#>#/#PIPE(P_2:)(C2:)#/~C EL#POSU+'
+              else
+                Btext '#<#PIPE(C2:)#15#>#/~C EL#POSU+'
+              endif
+            endif
+          else
+            Lleader false
+            if ( !This.Elev.selection() EQ 'ENONE') then
+              if (!Proj EQ 'ILO') then
+                Btext '#PIPE(P_:1)(C2:)#/#PIPE(P_2:)(C2:)'
+              else
+                Btext '#PIPE(C2:)'
+              endif
+
+              
+            elseif ( !This.Elev.selection() EQ 'EBOP') then
+              ------------------------------------------------------------------------------------------------------------
+              --  if view dir is "D", check component dir is not equal or opposite to view dir                          --
+              --  if view dir is "D" means "Section View", check component dir is not equal or opposite to VIEWDIR UP   --
+              ------------------------------------------------------------------------------------------------------------
+              if (!tmpdirarray[1] EQ 'D') then
+                if (!refdir.EQ(!ViewDir) or !refdir.EQ(!ViewDir.Opposite())) then
+                  if (!Proj EQ 'ILO') then
+                    Btext '#PIPE(P_:1)(C2:)#/#PIPE(P_2:)(C2:)#/BOP EL#PLBOPU+'
+                  else
+                    Btext '#<#PIPE(C2:)#15#>#/BOP EL#PLBOPU+'
+                  endif
+                else
+                  if (!Proj EQ 'ILO') then
+                    Btext '#PIPE(P_:1)(C2:)#/#PIPE(P_2:)(C2:)#/BOP EL#PABOPU+'
+                  else
+                    Btext '#<#PIPE(C2:)#15#>#/BOP EL#PABOPU+'
+                  endif
+                endif
+              else
+                if (!refdir.EQ(!viewdirup) or !refdir.EQ(!viewdirup.Opposite())) then
+                  if (!Proj EQ 'ILO') then
+                    Btext '#PIPE(P_:1)(C2:)#/#PIPE(P_2:)(C2:)#/BOP EL#PLBOPU+'
+                  else
+                    Btext '#<#PIPE(C2:)#15#>#/BOP EL#PLBOPU+'
+                  endif
+                else
+                  if (!Proj EQ 'ILO') then
+                    Btext '#PIPE(P_:1)(C2:)#/#PIPE(P_2:)(C2:)#/BOP EL#PABOPU+'
+                  else
+                    Btext '#<#PIPE(C2:)#15#>#/BOP EL#PABOPU+'
+                  endif
+                endif
+              endif
+            else
+              if (!Proj EQ 'ILO') then
+                Btext '#PIPE(P_:1)(C2:)#/#PIPE(P_2:)(C2:)#/~C EL#POSU+'
+              else
+                Btext '#PIPE(C2:)#15#/~C EL#POSU+'
+              endif
+            endif
+          endif
+          Pkey unset
+          Pkdistance 0.5
+          -- Oset false
+          Oset true
+          Ppdirection -1
+          Lframe false
+          Gbox 0mm
+          Cheight 3.5mm
+          Cspacing 0
+          Lspacing 0
+          Llclearance 0mm
+          Tsize 2mm
+          Lterminator Off
+          Apoffset unset 
+          Bpoffset 0mm 0mm
+          Lshape Straight
+          Font 11
+          Justification Left
+          Alignment Base
+          Blnk true
+          Bmargin 0mm
+          Lvisibility true
+          Position unset
+          Txcolour 67
+          LLStyle Solid 
+          LLColour 147
+          LFStyle Solid 
+          LFColour 147
+          if (!dir eq 'Hori') then
+            Adegrees 0
+			oset true
+			!newx = !newpos.split(' ')[2]
+            Xyposition -40 1
+			oset false
+			var !oldxy xypo
+			!oldy = !oldxy.split(' ')[4]
+			Xyposition $!newx $!oldy
+            !xoff = !!Calcpof(!ref)
+			cpof orig
+            Cpoffset $!xoff -1
+          elseif (!dir eq 'Vert') then
+            Adegrees 90
+			oset true
+			!newy = !newpos.split(' ')[4]
+            Xyposition -1 10 
+			oset false
+			var !oldxy xypo
+			!oldx = !oldxy.split(' ')[2]
+			Xyposition $!oldx $!newy
+            !xoff = !!Calcpof(!ref)
+			cpof orig
+            Cpoffset $!xoff -1
+          else
+            -- Align direction of pipe --
+            var !puenupos ENUPOS OF @
+            handle ANY
+              -- User cancelled --
+              DELETE GLAB
+            elsehandle NONE
+              var !p0enupos P0 POS OF $!rref WRT WORL
+              var !paenupos PA POS OF $!rref WRT WORL
+              var !plenupos PL POS OF $!rref WRT WORL
+              var !padir PA DIR OF $!rref
+              var !pldir PL DIR OF $!rref
+              
+              !puenupos1 = Object Position(!puenupos)
+              !p0enupos1 = Object Position(!p0enupos)
+              !paenupos1 = Object Position(!paenupos)
+              !plenupos1 = Object Position(!plenupos)
+              !padir1 = Object Direction(!padir)
+              !pldir1 = Object Direction(!pldir)
+              
+              !dirp0pu = !p0enupos1.Direction(!puenupos1)
+              !chkplane = object plane(!p0enupos1, object orientation('Z is $!ViewDir'))
+              !dirp0pu = !dirp0pu.Projected(!chkplane)
+              
+              !minang = Min(!dirp0pu.Angle(!padir1), !dirp0pu.Angle(!padir1.Opposite()), !dirp0pu.Angle(!pldir1), !dirp0pu.Angle(!pldir1.Opposite()))
+              if (!minang EQ !dirp0pu.Angle(!padir1)) then
+                !slopedir = !padir1
+                !paenupos2 = !paenupos1.Offset(!padir1,10)
+                !templine = Object Line(!paenupos2, !paenupos1)
+              elseif (!minang EQ !dirp0pu.Angle(!padir1.Opposite())) then
+                !slopedir = !padir1.Opposite()
+                !paenupos2 = !paenupos1.Offset(!padir1,10)
+                !templine = Object Line(!paenupos2, !paenupos1)
+              elseif (!minang EQ !dirp0pu.Angle(!pldir1)) then
+                !slopedir = !pldir1
+                !plenupos2 = !plenupos1.Offset(!pldir1,10)
+                !templine = Object Line(!plenupos2, !plenupos1)
+              else
+                !slopedir = !pldir1.Opposite()
+                !plenupos2 = !plenupos1.Offset(!pldir1,10)
+                !templine = Object Line(!plenupos2, !plenupos1)
+              endif
+              
+              !adegrees = !viewdirri.Angle(!slopedir)
+              if (!viewdirup.Angle(!slopedir) LE 90) then
+                if (!viewdirri.Angle(!slopedir) LE 100) then
+                  -- 1st quardrant --
+--                  $P 1111111111
+                else
+                  -- 2nd quardrant --
+                  !adegrees = !adegrees - 180
+--                  $P 2222222222
+                endif
+              else
+                if (!viewdirri.Angle(!slopedir) GE 90) then
+                  -- 3rd quardrant --
+                  !adegrees = 180 - !adegrees
+--                  $P 33333333333
+                else
+                  -- 4th quardrant --
+                  !adegrees = -1 * !adegrees
+--                  $P 44444444444
+                endif
+              endif
+              
+              !intpt = !templine.Near(!puenupos1)
+              var !intpt1 SHPOS OF $!intpt
+              !offx = -1 * Cos(90 - !adegrees)
+              !offy = Sin(90 - !adegrees)
+                            
+              Adegrees $!adegrees
+              ABSO
+              Xyposition $!intpt1
+              BY X $!offx
+              BY Y $!offy
+              if ( !This.Elev.selection() NEQ 'ENONE') then
+                CPOF 0 -1
+              endif
+              
+            endhandle
+          endif
+        endhandle
+      endhandle
+    enddo
+  endhandle
+  if (defined(!tmpdirarray)) then
+    if (!tmpdirarray.Size() gt 1) then
+      $!VIEW
+      DIR $!oldviewdir
+    endif
+  endif
+  REFRESH
+endmethod
+
+define method .Loc(!opt is STRING)
+  do
+    prompt off
+    prompt load escape |Identify a Line NO|
+    var !lab IDENTIFY GLAB @
+    handle ANY $* USER cancel
+      prompt on
+      prompt dismiss
+      break
+    elsehandle NONE
+      $!lab
+      ENHAN CE
+      PROMPT OFF
+      PROMPT LOAD ESCAPE |Position Line NO with the cursors|
+      
+      if (!opt EQ 'Ortho') then
+      -- orthogonal move --
+        var !newpos SHPO @
+        HANDLE ANY
+          prompt on
+          prompt dismiss
+          break
+        elsehandle NONE
+          $!lab
+          !view = NAME OF VIEW
+          $!view
+          !ViewDir = DIR
+          var !viewdirupt VIEWDIR UP
+          var !viewdirrit VIEWDIR RIGHT
+          !viewdirup = Object Direction(!viewdirupt)
+          !viewdirri = Object Direction(!viewdirrit)
+          
+          ------------------------------------------------------------
+          -- Can't transfer SHPOS to ENUPOS in a non-orthogonal view --
+          ------------------------------------------------------------
+          !tmpdirarray = !ViewDir.String().Before(' WRT').Split(' ')
+          if (!tmpdirarray.Size() gt 1) then
+            !oldviewdir = !ViewDir.String().Before(' WRT')
+            DIR $!tmpdirarray[1]
+          endif
+          $!lab
+          ENHAN CE
+          !ang1 = ADEG
+          ABSO
+          var !xypo XYPO
+          var !ddnashpos SHPOS OF DDNA OF CE
+          VNOT 1
+          handle ANY
+            LAYE
+            NEW VNOT
+          endhandle
+          NEW STRA FPT $!ddnashpos TPT $!xypo
+          !ang = ADEG
+          DELETE STRA
+          $!lab
+          var !btex BTEXT
+          !ddnashposarray = !ddnashpos.Split(' ')
+          if (!ang.Abs() LE 90) then
+            !x = !ddnashposarray[2].Real() + 1
+          else
+            !x = !ddnashposarray[2].Real() - 1
+          endif
+          if (!ang EQ 90 or !ang EQ -90) then
+            !y = !ddnashposarray[4].Real()
+          elseif (!ang GE 0 and !ang LT 90) then
+            !y = !ddnashposarray[4].Real() + Tan(!ang1)
+          elseif (!ang GT 90 and !ang LE 180) then
+            !y = !ddnashposarray[4].Real() - Tan(!ang1)
+          elseif (!ang GT -180 and !ang LT -90) then
+            !y = !ddnashposarray[4].Real() - Tan(!ang1)
+          else
+            !y = !ddnashposarray[4].Real() + Tan(!ang1)
+          endif
+          !ddnashpos1 = !ddnashposarray[1] & ' ' & !x & ' ' & !ddnashposarray[3]& ' ' & !y
+          var !ddnapos  ENUPOS OF $!ddnashpos
+          var !ddnapos1 ENUPOS OF $!ddnashpos1
+          var !newpos1  ENUPOS OF $!newpos
+          !tmpline = Object Line(!ddnapos.Position(), !ddnapos1.Position())
+          !intpt = !tmpline.Near(!newpos1.Position())
+          var !intpt1 SHPOS OF $!intpt
+          ABSO
+          XYPO $!intpt1
+          
+          if (!ang GE 0 and !ang LE 100) then
+            -- 1st quardrant --
+            !adegrees = !ang.Abs()
+          elseif (!ang GT 100 and !ang LE 180) then            
+            -- 2nd quardrant --
+            !adegrees = !ang.Abs() - 180
+          elseif (!ang GT -189 and !ang LE -90) then
+            -- 3rd quardrant --
+            !adegrees = 180 - !ang.Abs()
+          else
+            -- 4th quardrant --
+            !adegrees = -1 * !ang.Abs()
+          endif
+
+          !offx = -1 * Cos(90 - !adegrees)
+          !offy = Sin(90 - !adegrees)
+          BY X $!offx
+          BY Y $!offy
+          !cpofx = !!Calcpof(!lab.dbref())
+          CPOF $!cpofx -1
+          LSHA STRAIGHT
+          BPOF unset
+          OFFS
+          UNENHAN CE
+          if (defined(!tmpdirarray)) then
+            if (!tmpdirarray.Size() gt 1) then
+              $!VIEW
+              DIR $!oldviewdir
+            endif
+          endif
+        endhandle
+      else
+      -- non-orthogonal move --
+        at @
+        HANDLE ANY
+        elsehandle NONE
+          !tmp = CE
+          !xoff = !!Calcpof(!lab.dbref())
+          Cpoffset $!xoff -1
+          LSHA STRAIGHT
+          BPOF unset
+          UNENHAN CE
+        ENDHANDLE
+      endif
+      prompt dismiss
+      PROMPT ON
+    endhandle
+  enddo
+  if (defined(!tmpdirarray)) then
+    if (!tmpdirarray.Size() gt 1) then
+      $!VIEW
+      DIR $!oldviewdir
+    endif
+  endif
+endmethod
+
+define method .AliTEXT()
+  prompt off
+  prompt load escape |Identify a Line NO for Base|
+  var !lab IDENTIFY GLAB @
+  handle ANY $* USER cancel
+    prompt on
+    prompt dismiss
+    break
+  elsehandle NONE
+    $!lab
+    ENHAN CE
+    var !ang ADEG of $!lab
+    ABSO
+    var !oldxypo XYPO of $!lab
+    !oldxypoarray = !oldxypo.split(' ')
+    do
+      PROMPT OFF
+      PROMPT LOAD ESCAPE |Identify a Line NO to Move|
+      var !lab1 IDENTIFY GLAB @
+      HANDLE ANY
+        UNENHAN ALL
+        break
+      elsehandle NONE
+        $!lab1
+        
+        var !ang1 ADEG of $!lab1
+        ABSO
+        var !newxyposition XYPO of $!lab1
+        !newxypoarray = !newxyposition .split(' ')
+        if (!ang EQ !ang1) then
+          if (!ang.real() EQ 90 or !ang.real() EQ -90) then
+            !newxypo = !newxypoarray [2] & ' ' & !oldxypoarray[4]
+          elseif (!ang.real() EQ 0 or !ang.real() EQ 180) then
+            !newxypo = !oldxypoarray[2] & ' ' & !newxypoarray [4]
+          endif
+          if (defined(!newxypo)) then
+            ENHAN CE
+            ABSO
+            XYPO $!newxypo
+            !xoff = !!Calcpof(!lab1.dbref())
+            Cpoffset $!xoff -1
+            OFFS
+            LSHA STRAIGHT
+            BPOF unset
+          endif
+        endif
+      ENDHANDLE
+      prompt dismiss
+      PROMPT ON
+    enddo
+    UNENHAN ALL
+  endhandle
+endmethod
+
+define method .AliBENT()
+  prompt off
+  prompt load escape |Identify a Line NO for Base|
+  var !lab IDENTIFY GLAB @
+  handle ANY $* USER cancel
+    prompt on
+    prompt dismiss
+    break
+  elsehandle NONE
+    $!lab
+    ENHAN CE
+    var !baseshpos SHPOS OF DDNA OF CE
+    !baseshposarray = !baseshpos.split(' ')
+    !bpof = BPOF
+    !bpofsize = !bpof.size()
+    if (!bpofsize EQ 0) then
+      !!Alert.Error('No Bent Found !')
+    else
+      !ang = ADEG
+      do
+        PROMPT OFF
+        PROMPT LOAD ESCAPE |Identify a Line NO to Modify BENT|
+        var !lab1 IDENTIFY GLAB @
+        HANDLE ANY
+          UNENHAN ALL
+          break
+        elsehandle NONE
+          $!lab1
+          ENHAN CE
+          var !chgshpos SHPOS OF DDNA OF CE
+          !chgshposarray = !chgshpos.split(' ')
+          LSHA BENT
+          if (!ang EQ 90 or !ang EQ -90 or !ang EQ 270) then
+            !result = '0 ' & (!baseshposarray[4].real() - !chgshposarray[4].real() + !bpof[2]) 
+            if (!bpofsize EQ 4) then
+              OFFS
+              !xy1 = XYPO
+              !xy2 = !xy1.string()
+              !xy3 = !xy2.split(' ')
+              if (!xy3[1] EQ 'E') then
+                !result = !result & ' ' & (!xy3[2].real() + 1 ) & ' ' & (!baseshposarray[4].real() - !chgshposarray[4].real() + !bpof[4])
+              else
+                !result = !result & ' ' & ((- !xy3[2].real()) + 1 ) & ' ' & (!baseshposarray[4].real() - !chgshposarray[4].real() + !bpof[4])
+              endif
+            endif
+            BPOF $!result
+          elseif (!ang EQ 0 or !ang EQ 180 or !ang EQ -180) then
+            !result = (!baseshposarray[2].real() - !chgshposarray[2].real() + !bpof[1])  & ' 0'
+            if (!bpofsize EQ 4) then
+              OFFS
+              !xy1 = XYPO
+              !xy2 = !xy1.string()
+              !xy3 = !xy2.split(' ')
+              if (!xy3[3] EQ 'N') then
+                !result = !result & ' ' & (!baseshposarray[2].real() - !chgshposarray[2].real() + !bpof[3]) & ' ' & (!xy3[4].real() - 1 )
+              else
+                !result = !result & ' ' & (!baseshposarray[2].real() - !chgshposarray[2].real() + !bpof[3]) & ' ' & ((- !xy3[4].real()) + 1 )
+              endif
+            endif
+            BPOF $!result
+          endif
+        ENDHANDLE
+        prompt dismiss
+        PROMPT ON
+        UNENHAN ALL
+      enddo
+    endif
+  endhandle
+endmethod
+
+define method .Clear()
+  do
+    prompt off
+    prompt load escape |Identify a Line NO to Change Clearance|
+    var !lab IDENTIFY GLAB @
+    handle ANY $* USER cancel
+      prompt on
+      prompt dismiss
+      break
+    elsehandle NONE
+      $!lab
+      ENHAN CE
+      !ang1 = ADEG
+      var !newpos SHPO @
+      HANDLE ANY
+        prompt on
+        prompt dismiss
+        UNENHAN CE
+        break
+      elsehandle NONE
+        !newposarray = !newpos.Split(' ')
+        ABSO
+        var !xypo XYPO
+        !xypoarray = !xypo.Split(' ')
+        var !ddnashpos SHPOS OF DDNA OF CE
+        VNOT 1
+        handle ANY
+          LAYE
+          NEW VNOT
+        endhandle
+        NEW STRA FPT $!ddnashpos TPT $!xypo
+        !ang = ADEG
+        DELETE STRA
+        $!lab
+        !ddnashposarray = !ddnashpos.Split(' ')
+        if (!ang.Abs() LE 90) then
+          !x = !ddnashposarray[2].Real() + 1
+        else
+          !x = !ddnashposarray[2].Real() - 1
+        endif
+        if (!ang EQ 90 or !ang EQ -90) then
+          !y = !ddnashposarray[4].Real()
+        elseif (!ang GE 0 and !ang LT 90) then
+          !y = !ddnashposarray[4].Real() + Tan(!ang1)
+        elseif (!ang GT 90 and !ang LE 180) then
+          !y = !ddnashposarray[4].Real() - Tan(!ang1)
+        elseif (!ang GT -180 and !ang LT -90) then
+          !y = !ddnashposarray[4].Real() - Tan(!ang1)
+        else
+          !y = !ddnashposarray[4].Real() + Tan(!ang1)
+        endif
+        !ddnashpos1 = !ddnashposarray[1] & ' ' & !x & ' ' & !ddnashposarray[3]& ' ' & !y
+        var !ddnapos  ENUPOS OF $!ddnashpos
+        var !ddnapos1 ENUPOS OF $!ddnashpos1
+        var !newpos1  ENUPOS OF $!newpos
+        !tmpline = Object Line(!ddnapos.Position(), !ddnapos1.Position())
+        !intpt = !tmpline.Near(!newpos1.Position())
+        var !intpt1 SHPOS OF $!intpt
+        !intpt1array = !intpt1.Split(' ')
+        !apofx = !intpt1array[2].Real() - !ddnashposarray[2].Real()
+        !apofy = !intpt1array[4].Real() - !ddnashposarray[4].Real()
+        APOF $!apofx $!apofy
+        
+        ------------------------------------
+--        if (!ang EQ 90) then
+--          if (!ddnashposarray[4].Real() GT !xypoarray[4].Real() and !newposarray[4].Real() LT !xypoarray[4].Real())
+            !xoff = !!Calcpof(!lab.dbref())
+            Cpoffset $!xoff -1
+--          elseif (!ddnashposarray[4].Real() LT !xypoarray[4].Real() and !newposarray[4].Real() GT !xypoarray[4].Real())
+--            !xoff = !!Calcpof(!lab)
+--            Cpoffset $!xoff -1
+--          endif
+--        else
+--        endif
+        ------------------------------------
+        
+        UNENHAN CE
+      endhandle
+    endhandle
+  enddo
+endmethod
+
+define method .DeleteM()
+  prompt off
+  prompt load escape |Identify a Line NO|
+  var !lab IDENTIFY GLAB @
+  handle ANY $* USER cancel
+    prompt on
+    prompt dismiss
+  elsehandle NONE
+    $!lab
+    var !labname NAME
+    if (!labname.MatchWild('*-Multi-*')) then
+      !chkmax = !labname.After('-Multi-')
+      !noarray = !chkmax.Split('-')
+      !deleteno = '-Multi-' & !noarray[1]
+    endif
+    if (undefined(!deleteno)) then
+      !!Alert.Error('Not a Line No.!')
+    else
+      var !VIEW (NAME of VIEW)
+      var !glabarray COLL ALL GLAB FOR $!VIEW/LINE_Labs
+      do !ref values !glabarray
+        $!ref
+        !refname = NAME
+        if (!refname.MatchWild(|*$!deleteno*|)) then
+          DELETE GLAB
+        endif
+      enddo
+      var !glabarray COLL ALL STRA FOR $!VIEW/LINE_Labs
+      do !ref values !glabarray
+        $!ref
+        !refname = NAME
+        if (!refname.MatchWild(|*$!deleteno*|)) then
+          DELETE STRA
+        endif
+      enddo
+      var !glabarray COLL ALL CIRC FOR $!VIEW/LINE_Labs
+      do !ref values !glabarray
+        $!ref
+        !refname = NAME
+        if (!refname.MatchWild(|*$!deleteno*|)) then
+          DELETE CIRC
+        endif
+      enddo
+      var !glabarray COLL ALL TEXP FOR $!VIEW/LINE_Labs
+      do !ref values !glabarray
+        $!ref
+        !refname = NAME
+        if (!refname.MatchWild(|*$!deleteno*|)) then
+          DELETE TEXP
+        endif
+      enddo
+    endif
+  endhandle
+endmethod
+
+define method .Close()
+  kill !!LINENO
+endmethod

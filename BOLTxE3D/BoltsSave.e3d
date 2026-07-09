@@ -1,0 +1,11 @@
+$(
+
+$)
+Using namespace 'Aveva.Core.Presentation' $*
+!browser = object PMLFILEBROWSER('SAVE')
+!browser.show('%PDMSUSER%', 'Report', 'Report Filename', false ,' xls files (*.xls)|*.xls' , 2)
+!file = !browser.file()
+if (!file neq '') then
+  !!BoltsReport.dbCtrl.saveGridToExcel(!browser.file())
+  !!BoltsReport.file = !file
+endif

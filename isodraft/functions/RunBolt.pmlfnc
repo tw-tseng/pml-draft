@@ -1,0 +1,30 @@
+-----------------------------------------
+-- Function : Creat bolt file per line --
+---Auther : tw tseng                   --
+-- Date   : 2022/12/23                 --
+-----------------------------------------
+define function !!RunBolt()
+  options default
+  var !proj proj id
+  if (!proj eq '400999DAC') then
+    $M/%DACISO%/STD/ISOA2
+		!path = '/C:\temp\CCP\'
+  elseif (!proj eq '400780') then
+    $M/%BAAISO%/STD/ISOA2
+		!path = '/C:\temp\COP\'
+  elseif (!proj eq 'THH') then
+    $M/%THHISO%/STD/ISO_THH
+		!path = '/C:\temp\THH\'
+  endif
+	!file = Object file('C:\TEMP\BOLT_ERROR.txt')
+	!file.open('APPEND')
+  var !linebolt name of ce
+  BOLTREPORT CE
+  handle any
+		!file.writerecord(!linebolt)
+	elsehandle none
+	  !linebolt = !path & !linebolt & '_bolt.txt'
+		MOVEFILE /c:\temp\bolt.txt $!linebolt OVERWRITE
+  endhandle
+	!file.close()
+endfunction

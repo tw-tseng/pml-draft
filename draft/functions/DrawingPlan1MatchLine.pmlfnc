@@ -1,0 +1,21 @@
+---------------------------------------------
+-- Function : Draw match line main program --
+-- Auther   : tw tseng                     --
+-- Date     : 2025/12/28                   --
+---------------------------------------------
+define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
+	var !projid proj id
+	!dirlist = 'right left down up'
+	!format = object format()
+	!format.dp = 0
+	do !jj from 1 to 4
+		!dir = !dirlist.part(!jj)
+		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		!!DrawingPlan1MatchLine1(!dir, !projid, !equistr, !format)
+	enddo
+	note 1
+	new stra fpt $!!DrawingPlan1.viewULsh tpt $!!DrawingPlan1.viewURsh NLStyle DChainedThick  NLColour Magenta 
+	new stra fpt $!!DrawingPlan1.viewLLsh tpt $!!DrawingPlan1.viewLRsh NLStyle DChainedThick  NLColour Magenta 
+	new stra fpt $!!DrawingPlan1.viewLRsh tpt $!!DrawingPlan1.viewURsh NLStyle DChainedThick  NLColour Magenta 
+	new stra fpt $!!DrawingPlan1.viewLLsh tpt $!!DrawingPlan1.viewULsh NLStyle DChainedThick  NLColour Magenta
+endfunction

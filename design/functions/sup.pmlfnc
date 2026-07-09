@@ -1,0 +1,127 @@
+---------------------------------------------------------------
+-- Function : Batch to DBLIST specific objects to text files --
+--          : run !!sup1() to import objects later           --
+-- Auther   : tw tseng                                       --
+-- Date     : 20221230                                       --
+---------------------------------------------------------------
+define function !!sup()
+		
+  -----------------
+  -- export PIPE --
+  -----------------
+--  !file = 'C:\TEMP\atta-2nd.TXT'	
+--	!ff = object file(!file)
+--	!ff.open('OVERWRITE')
+--  !file1 = 'C:\TEMP\REST-2nd.TXT'
+--  !ff1 = object file(!file1)
+--  !ff1.open('READ')	
+--  !lines =!ff1.readfile()	
+--  do !i From 1 to !lines.size()
+--    !line = !lines[!i]
+--    !atta = !line.split('!').getindexed(4)
+--    $!atta
+--    handle any
+--      $p error -> $!atta
+--    elsehandle none    
+--      var !attaName NAME
+--      var !attaSPREF SPREF
+--      var !attaLstu LSTU
+--      var !attaCref CREF
+--      var !attaPos  POS
+--      var !attaStex STEXT
+--      var !attaOrder ORDER
+--      if (!attaOrder.real() eq 1) then
+--        var !attaPrev Owner
+--      else
+--        var !attaPrev PREV
+--      endif
+--      !str = !attaName & ';' & !attaSPREF & ';' & !attaLstu & ';' & !attaCref & ';' & !attaPos & ';' & !attaStex & ';' & !attaPrev
+--      !ff.writerecord(!str)
+--    endhandle
+--  enddo
+--  !ff.close()
+--  !ff1.close()
+      
+      
+	!file1 = 'C:\TEMP\ATTA1.TXT'
+	!ff1 = object file(!file1)
+	!ff1.open('READ')	
+
+	!attas =!ff1.readfile()	
+	do !i From 1 to !attas.size()
+		!name = !attas[!i]
+		/$!name
+		handle any
+			$p error -> $!name
+		elsehandle none      
+			var !pipe CE
+			var !pipename name of $!pipe
+			$!pipename
+			var !zone name of zone of $!pipe
+			!pipename = '/c:\temp\' & !pipename.substring(2) & '!' & !zone.substring(2) & '.txt'
+			$p $!pipename
+			ALPHA FILE $!pipename
+			OUTPUT $!pipe
+			handle any
+				!error = !!error.text
+				WRITEALPHAFILE ''
+				WRITEALPHAFILE ' ERROR - $!error'
+				WRITEALPHAFILE ''
+			endhandle
+			TERM
+		
+  -----------------
+  -- export REST --
+  -----------------
+--  !file1 = 'C:\TEMP\REST-1st.TXT'
+--  !ff1 = object file(!file1)
+--  !ff1.open('READ')	
+--  !lines =!ff1.readfile()	
+--  do !i From 1 to !lines.size()
+--    !line = !lines[!i]
+--    !rest = !line.split('!').getindexed(2)
+--    $!rest
+--    handle any
+--      $p error -> $!name
+--    elsehandle none    
+--      !zone = !line.split('!').getindexed(1)
+--      !filename = '/c:\temp\' & !rest.substring(2).replace('/', '-') & '!' & !zone.substring(2)  & '.txt'
+--      ALPHA FILE $!filename
+--      OUTPUT $!rest
+--      handle any
+--        !error = !!error.text
+--        WRITEALPHAFILE ''
+--        WRITEALPHAFILE '-- ERROR - $!error'
+--        WRITEALPHAFILE ''
+--      endhandle
+--      TERM
+--    endhandle
+--  enddo
+--  !ff1.close()
+			
+		  -----------------
+		  -- export STRU --
+			-----------------
+--		  var !strus coll all stru with matchwild(name, '*$!name*') for /SUPPORT /SUPPORT1
+--			do !j From 1 to !strus.size()
+--			  !stru = !strus[!j]
+--				var !struname name of $!stru
+--				!struname = '/c:\temp\' & !struname.substring(2).replace('/', '-') & '.txt'
+--				$p $!struname
+--				ALPHA FILE $!struname
+--				OUTPUT $!stru
+--				handle any
+--				  !error = !!error.text
+--					WRITEALPHAFILE ''
+--					WRITEALPHAFILE '-- ERROR - $!error'
+--					WRITEALPHAFILE ''
+--				endhandle
+--				TERM
+--			enddo
+			
+			
+			
+--		endhandle
+--	enddo
+--	!ff1.close()
+endfunction

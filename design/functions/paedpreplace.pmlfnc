@@ -1,0 +1,40 @@
+define function !!paedpreplace(!inRefNo is ANY)
+   $* combine exist design parameter at Design module with paragon values
+
+   !myAryExistDP = ARRAY()
+   !Eidx = REAL()
+   !Cidx = REAL()
+   !DPSetValue = STRING()
+
+   !myAryExistDP = DESP
+
+   !Eidx = 0
+   Do !ExistIdx Values !myAryExistDP     
+      !Eidx = $!Eidx + 1
+      $* $P $!Eidx, $!ExistIdx 
+      
+      !Cidx = 0
+      Do !CateIdx Values !!myAryDOrder
+         !Cidx = $!Cidx + 1
+                  
+         If (!Cidx EQ !Eidx) then 
+            $* $P Cayegory: $!Cidx, $!!myAryDVal[$!CateIdx]
+            !!myAryDVal[$!CateIdx] = $!ExistIdx 
+            Break
+         Else 
+           $* $P $!Cidx,  $!Eidx
+         EndIf
+      EndDo
+
+   EndDo
+   
+   !!myAryDiniVal = !!myAryDVal     $* ---- Keep Initial design parameter to Array !!myAryDiniVal
+
+   !mySetValue = 'Desp '
+   Do !CateIdx Values !!myAryDOrder        
+      !strDpVal = STRING($!!myAryDVal[$!CateIdx])
+      !mySetValue = !mySetValue + !strDpVal + ' '
+   EndDo
+    $* $P $!mySetValue
+   $!mySetValue
+endfunction

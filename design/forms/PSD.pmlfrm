@@ -1,0 +1,1358 @@
+------------------------------------------------
+-- Copyright ATOMTECH Ltd 2009                --
+--                                            --
+-- Function : Create PSL Component            --
+-- Author   : IT department of ATOMTECH       --
+-- Date     : 2009/01/5                       --
+------------------------------------------------
+
+setup form !!PSD dialog
+  member  .meAttaRef      is  DBREF 
+  member  .meHangerlen    is  REAL
+  member  .meHangerDir    is  DIRECTION
+  member  .meRiserDir     is  DIRECTION
+
+title 'PSD Tools'
+  path down
+  frame.fram1 'Support NO.'
+    para   .Supnam  text '' width 35
+    button .CeAtta  at xmax.Supnam+ 1 ymin.Supnam   '  CE  ' call '!This.CheckCeAtta()'
+  exit
+--  frame.fram2 'Storage Area'
+--    para   .Storage text '' width 18
+--    button .CeZone  at xmax.Storage+ 1 ymin.Storage '  CE  ' call '!This.CheckCeZone()'
+--  exit
+  text   .Length    tagwid 20 'Hanger Sup''t Length'  width 7 is real
+  text   .Riserdir  tagwid 20 'Riser Clamp Direction' width 7 is string
+  para   .Status text '' width 25
+  button .Apply  at xmin.Status ymax.Status+1.2 call '!This.Apply()'
+  button .Cancel at xmax.Status - 4 ymax.Status+1.2 call '!This.Close()'
+--  para   .Logo at xmax.Status - 18.5 ymax.Status pixmap
+exit
+
+define method .PSD()
+--  !This.logo.addPixmap(!!PML.getPathName('logo1.png'))
+  pml reload object string
+  !This.Length.Val = 1000
+  !This.Riserdir.Val = 'N'
+  !This.Apply.Active = False
+  if (Defined(!!Attaname)) then
+     !This.Supnam.Val = !!Attaname
+     !This.meAttaRef = !!Attaname.Dbref()
+  endif
+--  if (Defined(!!ZoneName)) then
+--     !This.Storage.Val = !!ZoneName
+--  endif
+  if (Defined(!!Attaname) and Defined(!!ZoneName)) then
+     !This.Apply.Active = True
+  endif
+  if (Badref(Object Dbref('/2001-PSL'))) then
+     !This.Status.Val = 'Status : Invalid Spec. for PSL !'
+     !This.CeAtta.Active = False
+     !This.Apply.Active = False
+  endif
+endmethod
+
+define method .CheckCeAtta()
+  !This.Apply.Active = False
+  if (!!CE.BadRef()) then
+     !This.Status.Val = 'Status : Invalid Component !'
+     !This.Supnam.Val = ''
+     if (!This.meAttaRef.Set()) then
+        !This.meAttaRef = Object Dbref()
+     endif
+  elseif (!!CE.Type NEQ 'ATTA') then
+     !This.Status.Val = 'Please Select ATTA !'
+     !This.Supnam.Val = ''
+     if (!This.meAttaRef.Set()) then
+        !This.meAttaRef = Object Dbref()
+     endif
+  else
+     !This.Status.Val = ''
+     !This.Supnam.Val = !!CE.Name
+     !This.meAttaRef = !!CE
+--     if (!This.meAttaRef.Set() and Defined(!!ZoneName)) then
+     if (!This.meAttaRef.Set()) then
+        !This.Apply.Active = True
+     endif
+     !RestName = !This.Supnam.Val & '/RE'
+     ADD $!This.Supnam.Val
+     if (!RestName.NameExists()) then
+         ADD $!RestName
+     endif    
+     !Views = !!GphViews.Views
+     !ThoPos[1] = !This.meAttaRef.Pos.Wrt(WORLD).East
+     !ThoPos[2] = !This.meAttaRef.Pos.Wrt(WORLD).North
+     !ThoPos[3] = !This.meAttaRef.Pos.Wrt(WORLD).Up
+     !Views[1].Through = !ThoPos
+  endif
+endmethod
+
+define method .CheckCeZone()
+  if (!!CE.Type NEQ 'ZONE') then
+     !This.Status.Val = 'Please Select ZONE !'
+     !This.Storage.Val = ''
+     if (Defined(!!ZoneName)) then
+        !!ZoneName.Delete()
+     endif
+  else
+     !This.Status.Val = ''
+     !This.Storage.Val = !!CE.Name
+     !!ZoneName = !!CE.Name
+     if (!This.meAttaRef.Set() and Defined(!!ZoneName)) then
+        !This.Apply.Active = True
+     endif
+  endif
+endmethod
+
+define method .Apply()
+  var !Pdir PA DIR of $!This.meAttaRef
+  !!Attaname = !This.meAttaRef.Name
+  !Pipdir = !This.meAttaRef.Adir.Wrt(WORLD)
+  !Pbore = para[1] of catref of lstube of $!This.meAttaRef
+  
+  !This.meRiserDir = Object Direction(!This.Riserdir.Val)
+  !This.meHangerlen = !This.Length.Val
+ 
+  var !pslmdsexe evar pslmdsexe
+  var !PSI evar PSI
+  var !PSO evar PSO
+  var !DAT evar DAT
+  if (!pslmdsexe.Empty() or !PSI.Empty() or !PSO.Empty() or !DAT.Empty()) then
+     !!Alert.Message('Please setup environment variables "PSLMDSEXE","PSI","PSO","DAT"')
+     GOLABEL /END
+  endif
+ 
+  -----------------------------------------
+  ---------     Output *.psi     ---------- 
+  -----------------------------------------
+  !HFdata = !This.meAttaRef.:POWMAXFORCE
+  handle ANY
+    !HFdata = !This.meAttaRef.:USTFORCES
+  endhandle
+  !HMdata = !This.meAttaRef.:USTMOVEMENT
+  do !I from 1 to 6
+     if (undefined (!HFdata[$!I])) then
+        !HFdata[$!I] = 0
+     endif
+     if (undefined (!HMdata[$!I])) then
+        !HMdata[$!I] = 0
+     endif
+     !HFdata[!I] = !HFdata[!I].abs()
+  enddo
+  !HFdata.Sort()
+  
+  !Destemp = !This.meAttaRef.Owner.Owner.:POWDTEMP
+  handle ANY
+    !Destemp = !This.meAttaRef.:ABBDTEMP
+     handle ANY
+         !Destemp = !This.meAttaRef.Owner.:DESTEMP
+         handle ANY
+            !Destemp = !This.meAttaRef.Owner.TEMP
+         endhandle
+     endhandle
+  endhandle
+  if (!Destemp.Unset()) then
+     !Destemp = 0
+  endif
+  
+  !pipesize = !This.RealSize(!This.meAttaRef.Lbore.real())
+  !attaname = !This.meAttaRef.Name.substring(2)
+  !PSLEXE = object file (!pslmdsexe)
+  !PSI = !PSI & '\'& !attaname & '.psi'
+  !PSO = !PSO & '\'& !attaname & '.pso'
+  !DAT = !DAT & '\'& !attaname & '.dat'
+  !liffile = object file(!PSI)
+  !loffile = object file(!PSO)
+  !datdir =  object file(!DAT)
+  !Config =  object file()
+ 
+  !liffile.Open('OVERWRITE')
+  !liffile.WriteRecord('[DWG]')
+  !liffile.WriteRecord('HangerMark=' & !attaname)
+  !liffile.WriteRecord('DwgNo=' & !attaname)
+  !liffile.WriteRecord('')
+  !liffile.WriteRecord('[Load]')
+  !liffile.WriteRecord('Normal=' & !HFdata.Last().string('D2'))
+  !liffile.WriteRecord('Emergency=' & !HFdata[5].string('D2'))
+  !liffile.WriteRecord('Failure=' & !HFdata[4].string('D2'))
+  !liffile.WriteRecord('Hydro=' & !HFdata[3].string('D2'))
+  !liffile.WriteRecord('HS140=' & !HFdata[2].string('D2'))
+  !liffile.WriteRecord('')
+  !liffile.WriteRecord('[Pipe]')
+  !liffile.WriteRecord('Size=' & !pipesize)
+  !liffile.WriteRecord('Temp=' & !Destemp)
+  !liffile.WriteRecord('Insulation=' & !This.meAttaRef.Inth.string('D0'))
+  !liffile.WriteRecord('Pipe_Z=' & !This.meAttaRef.pos.up.string('D1'))
+  !liffile.WriteRecord('Pipe_X=' & !This.meAttaRef.pos.east.string('D1'))
+  !liffile.WriteRecord('Pipe_Y=' & !This.meAttaRef.pos.north.string('D1'))
+  !liffile.WriteRecord('Orientation_X=' & !This.meAttaRef.ori.alpha.string('D1'))
+  !liffile.WriteRecord('Orientation_Y=' & !This.meAttaRef.ori.beta.string('D1'))
+  if (!This.meAttaRef.Ori.Alpha.Abs() GE 80) then
+     -- Vertical pipe, record gamma of direction of riser clamp
+     !RiserDir = !This.meRiserDir.Cross(Object Direction('U'))
+     Handle Any
+        !RiserDir = Object Direction('N')
+        !This.meRiserDir = !RiserDir
+     endHandle
+     if (!RiserDir.Eq(Object Direction('S'))) then
+        !gammadir = 0
+     elseif (!RiserDir.Eq(Object Direction('W'))) then
+        !gammadir = -90
+     elseif (!RiserDir.Eq(Object Direction('E'))) then
+        !gammadir = 90
+     else
+        !gammadir = 180
+     endif
+     !liffile.WriteRecord('Orientation_Z=' & !gammadir.string('D1'))
+  else
+     -- Horizontal pipe --
+     !liffile.WriteRecord('Orientation_Z=' & !This.meAttaRef.Ori.Gamma.String('D1'))
+  endif
+  !liffile.WriteRecord('Material=unset')
+  !liffile.WriteRecord('')
+  !liffile.WriteRecord('[StaticMovements]')
+  !liffile.WriteRecord('Lateral=' & !HMdata[1].String('D1'))
+  !liffile.WriteRecord('Horizontal=' & !HMdata[2].String('D1'))
+  !liffile.WriteRecord('Vertical=' & !HMdata[3].String('D1'))
+  !liffile.WriteRecord('')
+  !liffile.WriteRecord('[DynamicMovements]')
+  !liffile.WriteRecord('Positive=0')
+  !liffile.WriteRecord('Negative=0')
+  !liffile.WriteRecord('')
+  !liffile.WriteRecord('[SteelConnection]')
+  !liffile.WriteRecord('El_Steel_L=1000')
+  !liffile.WriteRecord('El_Steel_R=1000')
+  !liffile.WriteRecord('Width=500')
+  !liffile.WriteRecord('Steel_Z=' & ( !This.meAttaRef.Pos.Up.Real() + !This.meHangerlen))
+  !liffile.WriteRecord('Steel_X=' & !This.meAttaRef.Pos.East.String('D1'))
+  !liffile.WriteRecord('Steel_Y=' & !This.meAttaRef.Pos.North.String('D1'))
+  !liffile.WriteRecord('')
+  !liffile.WriteRecord('[MDSHangerConfig]')
+  !liffile.WriteRecord('Config=1')
+  !liffile.WriteRecord('Length=0')
+  if (Defined(!!meVendorconfig)) then
+     !liffile.WriteRecord('VendorConfig=' & !!meVendorconfig)
+  else
+     !liffile.WriteRecord('VendorConfig=1')
+  endif
+  !liffile.WriteRecord('Joint Beam Flange Width=100')
+  !liffile.WriteRecord('Joint Beam Flange Thickness=10')
+  !liffile.WriteRecord('Joint Rotate=TRUE')
+  !liffile.WriteRecord('Alpha=0')
+  !liffile.WriteRecord('Alpha35=90')
+  !liffile.WriteRecord('Yoffset=0')
+  !liffile.WriteRecord('Yangle=0')
+  !liffile.WriteRecord('XOffset=0')
+  !liffile.WriteRecord('Xangle=0')
+  !liffile.WriteRecord('UstSprRate=')
+  !liffile.WriteRecord('Parallel=FALSE')
+  !liffile.Close()
+
+  -----------------------------------------
+  ---------  Execute PSLDesigner  --------- 
+  -----------------------------------------
+  SYSCOM |""$!PSLEXE"" /MDS /$!loffile /$!liffile /$!Config /$!datdir|
+  
+  -----------------------------------------
+  ---  Read *.pso to create components  --- 
+  -----------------------------------------
+  if (!loffile.Exists()) then
+     !loffile.Open('READ')
+     !EyntNo = 0
+     !HangerArray  = Object Array()
+     !HangerArray1 = Object Array()
+     !I = 1
+     do
+        !Line = !loffile.ReadRecord()
+        if (!Line.Set() and !Line neq '') then
+           !LineArray = !Line.Split(',')
+           if (!LineArray[1] eq 'BOM') then
+           elseif (!LineArray[1].MatchWild('GAMMA*')  or $
+                   !LineArray[1].MatchWild('ORI *')   or $
+                   !LineArray[1].MatchWild('INVERTED=*')) then
+              !HangerArray[!i - 1] = !HangerArray[!i - 1] & ',' &!Line
+           elseif (!LineArray[1].MatchWild('DESPAR*')) then
+              !HangerArray[!i - 1] = !HangerArray[!i - 1] & ',' &!Line
+              if (!HangerArray[!i - 1].MatchWild('*Spreader Beam*')) then
+                 !SpreaderBeamDesp = !Line.After('DESPAR ')
+              elseif (!HangerArray[!i - 1].MatchWild('*VBM-*') or $
+                        !HangerArray[!i - 1].MatchWild('*VIBM-*') or $
+                        !HangerArray[!i - 1].MatchWild('*HD-*') or $
+                        !HangerArray[!i - 1].MatchWild('*VD-*') or $
+                        !HangerArray[!i - 1].MatchWild('*VID-*') or $
+                        !HangerArray[!i - 1].MatchWild('*HS-*') or $
+                        !HangerArray[!i - 1].MatchWild('*VS-*') or $
+                        !HangerArray[!i - 1].MatchWild('*VIS-*') or $
+                        !HangerArray[!i - 1].MatchWild('*HBM-*')) then
+                   !VBMDesp = !Line.After('DESPAR ')
+              endif
+           elseif (!LineArray[1] eq 'DATA') then
+              if (!LineArray[2] eq ':MdsLoad') then
+                 !MdsLoad = !LineArray[3].Real()
+              endif
+           elseif (!LineArray[1].MatchWild('CONFIG *')) then
+              !vendorconfig = !LineArray[1].After('CONFIG ')
+              !!meVendorconfig = !vendorconfig
+           elseif (!LineArray[1].MatchWild('End *')) then
+              !HangerArray1 = !HangerArray
+              !I = 1
+              !HangerArray.Clear()
+              !HangerArray2 = Object Array()
+           else
+              if (!LineArray[4].MatchWild('Variable*')) then
+                 !Line = ''
+                 do !J indices !LineArray
+                    if  (!J eq 1) then
+                       !Line = !LineArray[!J]
+                    elseif (!J eq 4) then
+                       !Line = !Line & ',' & !LineArray[5].After('Variable Effort Support ').Substring(1, !LineArray[5].After('Variable Effort Support ').Length() - 1 ) & !LineArray[4].After('Variable')
+                    else
+                       !Line = !Line & ',' & !LineArray[!J]
+                    endif
+                 enddo
+                 !HangerArray.Append(!Line)
+                 !I = !I + 1
+              elseif (!LineArray[4].MatchWild('F486I-*')) then
+                 !Line = ''
+                 do !J indices !LineArray
+                    if  (!J eq 1) then
+                       !Line = !LineArray[!J]
+                    elseif (!J eq 4) then
+                       !Line = !Line & ',' & !LineArray[4].Replace('F486I-','F486-')
+                    else
+                       !Line = !Line & ',' & !LineArray[!J]
+                    endif
+                 enddo
+                 !HangerArray.Append(!Line)
+                 !I = !I + 1
+              elseif (!LineArray[4].MatchWild('F518I-*')) then
+                 !Line = ''
+                 do !J indices !LineArray
+                    if  (!J eq 1) then
+                       !Line = !LineArray[!J]
+                    elseif (!J eq 4) then
+                       !Line = !Line & ',' & !LineArray[4].Replace('F518I-','F518-')
+                    else
+                       !Line = !Line & ',' & !LineArray[!J]
+                    endif
+                 enddo
+                 !HangerArray.Append(!Line)
+                 !I = !I + 1
+                 !f518Ang = -90
+              elseif (!LineArray[4].MatchWild('*_S*')) then
+                 !Line = ''
+                 do !J indices !LineArray
+                    if  (!J eq 1) then
+                       !Line = !LineArray[!J]
+                    elseif (!J eq 4) then
+                       !Line = !Line & ',' & !LineArray[4].Replace('_S','')
+                    else
+                       !Line = !Line & ',' & !LineArray[!J]
+                    endif
+                 enddo
+                 !HangerArray.Append(!Line)
+                 !I = !I + 1
+              elseif (!LineArray[5].Set()) then
+                 -- only for 2 suspend types constant spring --
+                 if (!LineArray[3] eq '2') then
+                    if (defined(!HangerArray2)) then
+                       if (undefined(!HangerArray4)) then
+                          !HangerArray4 = Object Array()
+                       endif
+                       !HangerArray4.Append(!Line)
+                    else
+                       if (undefined(!HangerArray3)) then
+                          !HangerArray3 = Object Array()
+                       endif
+                       !HangerArray3.Append(!Line)
+                    endif                      
+                 endif
+                 
+                 if (!LineArray[5] eq '"Eye"') then
+                    !EyntNo = !EyntNo + 1
+                    !HangerArray.Append(!Line)
+                    !I = !I + 1
+                 elseif (!LineArray[5].MatchWild('"Constant Effort Support*')) then
+                    !Line = ''
+                    do !J indices !LineArray
+                       if  (!J eq 1) then
+                          !Line = !LineArray[!J]
+                       elseif (!J eq 4) then
+                          if (!LineArray[5].MatchWild('"Constant Effort Support ?BM*') or !LineArray[5].MatchWild('"Constant Effort Support VIBM*')) then
+                             !Line = !Line & ',' & !LineArray[5].After('"Constant Effort Support ').Replace('"','') & '-' & !LineArray[4]
+                          else
+                             !Line = !Line & ',' & !LineArray[5].After('"Constant Effort Support ') & '-' & $
+                                                   !LineArray[6].Replace(' ','').Replace('"','') & '-' & $
+                                                   !LineArray[4]
+                          endif
+                       else
+                          !Line = !Line & ',' & !LineArray[!J]
+                       endif
+                    enddo
+                    !HangerArray.Append(!Line)
+                    !I = !I + 1
+--                 elseif (!LineArray[5].MatchWild('"Pedestal for *')) then
+                    -- Don't do anything --
+                 else
+                    !HangerArray.Append(!Line)
+                    !I = !I + 1
+                 endif
+              endif
+           endif
+           
+           -- exception condition --
+           -- Two suspended type constant spring w/ VendorConfig is 24, some hanger2 components belong to hanger3 --
+           if ((!Line.MatchWild('*D, TS2*') or !Line.MatchWild('*D, TS4*')) and $
+               (!vendorconfig eq '24' or !vendorconfig eq '29' or !vendorconfig eq '36')) then
+              !Exception = 1
+           elseif (!Line.MatchWild('*D, TS3*') and $
+                  (!vendorconfig eq '24' or !vendorconfig eq '29' or !vendorconfig eq '36')) then
+              !Exception = 2
+           elseif ((!Line.MatchWild('*D, TS2*') or !Line.MatchWild('*D, TS4*')) and $
+                   (!vendorconfig eq '33' or !vendorconfig eq '47' or !vendorconfig eq '49')) then
+              !Exception = 3
+           elseif (!Line.MatchWild('*D, TS3*') and $
+                  (!vendorconfig eq '33' or !vendorconfig eq '47' or !vendorconfig eq '49')) then
+              !Exception = 4
+           else
+              if (undefined(!Exception)) then
+                 !Exception = 0
+              endif
+           endif
+        else
+           break
+        endif
+     enddo
+     if (defined(!Line)) then
+        !Line.Delete()
+     endif
+     !loffile.Close()
+     
+     if (defined(!HangerArray2)) then
+        !HangerArray2 = !HangerArray
+     else
+        !HangerArray1 = !HangerArray
+     endif
+     
+     -- exception condition --
+     -- Two suspended type constant spring w/ VendorConfig is 24, some hanger2 components belong to hanger3 --
+     if (!Exception eq 1 or !Exception eq 2) then
+        -- move "eye nut" or "clevis" to hanger3 --
+        !HangerArray3 = Object Array()
+        !HangerArray3.Append(!HangerArray2[1])
+        if (!Exception eq 2) then
+           -- move "pin" to hanger3 --
+           !HangerArray3.Append(!HangerArray2[2])
+        endif
+        !HangerArray2.DeleteFrom(1, !Exception)
+        !HangerArray2.Compress()
+     -- Two suspended type constant spring w/ VendorConfig is 33, some hanger2 components belong to hanger3 --
+     elseif (!Exception eq 3 or !Exception eq 4) then
+        -- move "eye nut" or "clevis" to hanger3 --
+        !HangerArray3 = Object Array()
+        if (!Exception eq 3) then
+           !HangerArray3.Append(!HangerArray2.Last())
+           !HangerArray2.DeleteFrom(!HangerArray2.Size(), 1)
+        else
+           -- move "pin" to hanger3 --
+           !HangerArray3.Append(!HangerArray2[!HangerArray2.Size() - 1])
+           !HangerArray3.Append(!HangerArray2.Last())
+           !HangerArray2.DeleteFrom(!HangerArray2.Size() - 1, 2)
+        endif
+        !HangerArray2.Compress()
+     -- only for vendorconfig = 32 or 46, DS spring conn to batten plate    --
+     -- Split to 3 Hangers and DS spring move to the 1st component of HANG2 --
+     elseif (!vendorconfig eq '32' or !vendorconfig eq '46') then
+        !TempHangerArray3 = !HangerArray1
+        !TempHangerArray1 = !HangerArray1.DeleteFrom(!HangerArray1.Size() - 7, 8)
+        !TempHangerArray2 = !TempHangerArray3.DeleteFrom(1, !TempHangerArray3.Size() - 8)
+        !TempHangerArray2.Append(!TempHangerArray1[4])
+        !TempHangerArray1.DeleteFrom(4, 1)
+        !TempHangerArray1.Compress()
+        !TempHangerArray2.Compress()
+        !HangerArray3 = !HangerArray2
+        !HangerArray2 = !TempHangerArray2
+        !HangerArray1 = !TempHangerArray1
+     endif
+     
+     if (!HangerArray1.Size() gt 0) then
+        if (!vendorconfig eq '53' or $
+            !vendorconfig eq '54' or $
+            !vendorconfig eq '57' or $
+            !vendorconfig eq '58' or $
+            !vendorconfig eq '63' or $
+            !vendorconfig eq '64' or $
+            !vendorconfig eq '65' or $
+            !vendorconfig eq '66') then
+           -- Don't reverse the array.
+        else
+           !HangerArray1 = !HangerArray1.Invert()
+        endif
+        
+        -- Check whether direction of ATTA and direction of Hanger is compitable ? --
+        if (!This.meAttaRef.Ori.Alpha.Abs() ge 80) then
+           -- Vertical pipe --
+           if ( !vendorconfig.Real() eq  3                                 or $
+               (!vendorconfig.Real() ge  8 and !vendorconfig.Real() le 12) or $
+               (!vendorconfig.Real() ge 17 and !vendorconfig.Real() le 18) or $
+               (!vendorconfig.Real() ge 35 and !vendorconfig.Real() le 38) or $
+                !vendorconfig.Real() ge 51) then
+              -- Direction of pipe and Vendor config is competible --
+           else
+              !tempmessage = 'Config ' & !vendorconfig & ' is for HORIZONTAL pipe. Please re-select !'
+              !!Alert.Message(!tempmessage)
+              GOLABEL /END
+           endif
+        else
+           -- Horizontal pipe --
+           if ((!vendorconfig.Real() ge  8 and !vendorconfig.Real() le 12) or $
+               (!vendorconfig.Real() ge 17 and !vendorconfig.Real() le 18) or $
+               (!vendorconfig.Real() ge 35 and !vendorconfig.Real() le 38)) then
+              -- Direction of pipe and Vendor config is competible --
+              !tempmessage = 'Config ' & !vendorconfig & ' is for VERTICAL pipe. Please re-select !'
+              !!Alert.Message(!tempmessage)
+              GOLABEL /END
+           endif
+        endif
+        
+        -- Define Hanger Direction --
+        if (!vendorconfig eq '3' or $
+           (!vendorconfig.Real() ge 51 and !vendorconfig.Real() le 58)) then
+           -- Follow user keyin value --
+           if (!This.meAttaRef.Ori.Alpha.Abs() ge 80) then
+              -- Vertical pipe --
+              !tempstring = 'N'
+           else
+              -- Horizontal pipe --
+              !tempstring = 'D'
+           endif
+           !no = !!Alert.Input('The Direction of Hanger is', !tempstring)
+           !This.meHangerDir = Object Direction(!no)
+           Handle Any
+              !This.meHangerDir = Object Direction(!tempstring)
+           endHandle
+        elseif (!vendorconfig eq '7' or $
+           (!vendorconfig.Real() ge 63 and !vendorconfig.Real() le 66)) then
+           !This.meHangerDir = Object Direction('D')
+        else
+           !This.meHangerDir = Object Direction('U')
+        endif
+        !HangDir = !This.meHangerDir
+        !PipeDir = !This.meAttaRef.Adir
+        !Desdir = !This.meHangerDir
+        
+        if (defined(!FixDimComlin)) then
+           !FixDimComlin.Delete()
+        endif
+        if (defined(!FixDimEynt)) then
+           !FixDimEynt.Delete()
+        endif
+        if (defined(!RotateAngle)) then
+           !RotateAngle.Delete()
+        endif
+        
+        !Oldrest = !This.meAttaRef.Name & '/RE'
+        if (!Oldrest.NameExists()) then
+           $!Oldrest
+           DELETE REST
+        endif
+--        $!!ZoneName
+		if (!This.meAttaRef.Name.matchwild('_')) then
+		  !!ZoneName = '/SUPPORT_' & !This.meAttaRef.Name.split('_').getindexed(2)
+		  $!!ZoneName
+		  handle any
+            /SUPPORT
+			NEW ZONE NAME $!!ZoneName
+		  endhandle
+		endif
+		
+        NEW REST $!This.meAttaRef.Name/RE
+        PURP HS
+        HSPEC /2001-PSL
+        NEW HANG
+          POS  HH AT $!This.meAttaRef
+          HCON ATTA
+          HBOR $!This.meAttaRef.ABOR
+          Hdir $!PipeDir
+          
+        !HangerArray.Clear()
+        !HangerArray = !HangerArray1  
+        !I = 1
+        do
+           !Spec = '/2001-PSL/' & !HangerArray[!I].Part(4,',')
+           !Spec = !Spec.Part(1 ,' ')
+           if (!Spec.NameExists()) then
+           else
+              if (!HangerArray[!I].Part(5,',').MatchWild('*RH/LH*')) then
+                 !Spec = !Spec & '-LR' 
+              elseif (!HangerArray[!I].Part(5,',').MatchWild('*RH/RH*')) then
+                 !Spec = !Spec & '-RR' 
+              endif
+              if (!Spec.NameExists()) then
+              else
+--                 !!Alert.Message('No spref data !')
+              endif
+           endif   
+		   
+		   
+		   !Spref = Object Dbref(!Spec)
+		   handle any
+           
+		   
+		   elsehandle none
+		   
+		   
+		   
+		   
+		   
+		   
+           !Type = !Spref.Catref.Gtyp
+           NEW $!Type
+               !!CE.GTYP = !Spref.Catref.Gtyp
+               !!CE.SPRE = !Spref
+               
+           if (!Spref.Name.MatchWild('/2001-PSL/RC?-*') or !Spref.Name.MatchWild('/2001-PSL/FPR*')) then
+              !nextSpec = Object Dbref('/2001-PSL/' & !HangerArray[!I + 1].Part(4,',').Part(1,' '))
+              !nextbore = !nextSpec.Catref.Para[1].String()
+              !desp = !nextbore & ' ' & !HangerArray[!I].Part(4,',').After(' S=')
+              DESP $!desp
+              CONN
+              if (!vendorconfig eq '55' or $
+                  !vendorconfig eq '56' or $
+                  !vendorconfig eq '57' or $
+                  !vendorconfig eq '58') then
+                  -- only for Strut/Snubber, the direction of riser clamp should be as same as Hangdir --
+                  ORI AND P8 is $!This.meRiserDir
+                  Handle ANY
+                  endHandle
+                  if (!HangDir.Angle(!!CE.Ori.Ydir()).Abs() ge 10) then
+                     ANGLE -90
+                  endif                
+              else
+                 ORI AND P8 is $!This.meRiserDir
+                 Handle ANY
+                 endHandle
+                 if ( !!CE.adir.up lt 0 ) then
+                   ANGLE -90
+                 endif
+              endif
+              !ConnREF = REF
+           elseif (!Spref.Name.MatchWild('/2001-PSL/513S-*')) then
+              if (!vendorconfig eq '61' or !vendorconfig eq '62' or !vendorconfig eq '63' or !vendorconfig eq '64') then
+                 !PcliAng = !This.meHangerDir
+             else
+                 !PcliAng = !This.meHangerDir.Opposite().String().Before(' WRT')
+             endif
+              CONN
+              ORI AND P3 is $!PcliAng
+              Handle ANY
+                 $p Direction is error !
+              endHandle
+           elseif (!Spref.Name.MatchWild('/2001-PSL/513-*') or $
+                   !Spref.Name.MatchWild('/2001-PSL/514-*') or $
+                   !Spref.Name.MatchWild('/2001-PSL/515-*') or $
+                   !Spref.Name.MatchWild('/2001-PSL/F512-*')) then
+              CONN
+              ORI AND P3 is $!This.meHangerDir
+              Handle ANY
+                 $p Direction is error !
+              endHandle
+           elseif (!Spref.Name.MatchWild('/2001-PSL/F488A-*')) then
+              CONN
+              -- The direction of washer is as same as that of ATTA
+              !RotateAngle = !PipeDir.String().Before(' WRT')
+              ORI AND P4 IS $!RotateAngle
+              !ConnREF = REF
+           elseif (!Spref.Name.MatchWild('/2001-PSL/F122*')) then
+              CONN
+              -- The direction of every Eynt is as same as that of ATTA
+              !RotateAngle = !PipeDir.String().Before(' WRT')
+              ORI AND P4 IS $!RotateAngle
+           elseif (!Spref.Catref.Gtyp.MatchWild('PCLI')) then
+              !nextSpec = Object Dbref('/2001-PSL/' & !HangerArray[!I + 1].Part(4,',').Part(1,' '))
+              !nextbore = !nextSpec.Catref.Para[1].String()
+              if (!HangerArray[!I].Part(4,',').MatchWild('* C=*') or !Destemp ge 600) then
+                 -- Extend dim C of Clamp to suit insulation thickness --
+                 !CatrefPara = !Spref.Catref.Para
+                 do !J indices !CatrefPara
+                    if (!J eq 7) then
+                       if (!HangerArray[!I].Part(4,',').MatchWild('* C=*')) then
+                          -- Extend the dimension of center to pin --
+                          !nextbore = !nextbore & ' ' & !HangerArray[!I].Part(4,',').Part(2,'=')
+                       else
+                          !nextbore = !nextbore & ' ' & !CatrefPara[!J]
+                       endif
+                    elseif (!J eq 9) then
+                       if (!HangerArray[!I].Part(4,',').MatchWild('* C=*')) then
+                          -- Extend the dimension of center to the top --
+                          !nextbore = !nextbore & ' ' & String(!CatrefPara[!J] - !CatrefPara[7] + !HangerArray[!I].Part(4,',').Part(2,'=').Real())
+                       else
+                          !nextbore = !nextbore & ' ' & !CatrefPara[!J]
+                       endif
+                    else
+                       !nextbore = !nextbore & ' ' & !CatrefPara[!J]
+                    endif
+                 enddo
+                 !atecomment = 'Special Clamp,PartNo=' & !Spref.Name.After('2001-PSL/')
+                 if (!HangerArray[!I].Part(4,',').MatchWild('* C=*')) then
+                    !atecomment = !atecomment & ',C=' & !HangerArray[!I].Part(4,',').Part(2,'=')
+                 endif
+                 !atecomment = !atecomment & ',Loading=' & !MdsLoad & $
+                               ',Temp='    & !Destemp & $
+                               ',InsThk='  & !This.meAttaRef.Inth.string('D0')
+                 !Spref = Object Dbref('/2001-PSL/SP-PC3')
+                 !!CE.SPRE = !Spref
+--                 :USTDRWG |$!atecomment|
+              endif
+              DESP $!nextbore
+              CONN
+              ORI AND P4 is U
+              -- The dimension of PC3 with comlin is error, update the correct dimension to rod height --
+              if (!Spref.Name.MatchWild('*-CM?-*')) then
+                 !PcliPOS = !HangerArray[!I].Part(11,',').Replace(')','').Real().Abs()
+                 !EyntPOS = !HangerArray[!I + 1].Part(11,',').Replace(')','').Real().Abs()
+                 !EyntDim = !nextSpec.Catref.Para[3] - !Spref.Catref.Prop.Pdia.Real() * 0.5
+                 !FixDimComlin = !PcliPOS - !EyntPOS - !EyntDim - !Spref.Catref.Prop.Heig.Real()
+              endif
+           elseif (!Spref.Catref.Gtyp.MatchWild('PCLA')) then
+              -- Select leg qt'y --
+              !no = !!Alert.Input('Leg no. (1/2/3/4)', '1')
+              if (!no.Real().Between(1,4)) then
+                 !no = 'PB' & !no
+              else
+                 !no = 'PB1'
+              endif
+              Handle ANY
+                 -- if user keyin string --
+                 !no = 'PB1'
+              endHandle
+              !Spec = !Spec.Replace('PB1',!no)
+              !Spref = Object Dbref(!Spec)
+              !!CE.SPRE = !Spref
+              -- Check if special clamp base --
+              if (!This.meAttaRef.Inth gt !Spref.Catref.Prop.Inth.Real()) then
+                 !desp = ''
+                 !CatrefPara = !Spref.Catref.Para
+                 do !J indices !CatrefPara
+                    if (!J eq 11) then
+                       -- The maximun lagging th'k is less than the insulation th'k of ATTA --
+                       !desp = !desp & ' ' & String(!This.meAttaRef.Inth + !Spref.Catref.Prop.Heig.Real() - !Spref.Catref.Prop.Inth.Real())
+                       !F495fix = !This.meAttaRef.Inth - !Spref.Catref.Prop.Inth.Real()
+                    else
+                       !desp = !desp & ' ' & !CatrefPara[!J]
+                    endif
+                 enddo
+                 !atecomment = 'Special Clamp Base,PartNo=' & !Spref.Name.After('2001-PSL/') & $
+                               ',C=' & String(!This.meAttaRef.Inth + !Spref.Catref.Prop.Heig.Real() - !Spref.Catref.Prop.Inth.Real()) & $
+                               ',Loading=' & !MdsLoad & $
+                               ',Temp='    & !Destemp & $
+                               ',InsThk='  & !This.meAttaRef.Inth.string('D0')
+                 !Spref = Object Dbref('/2001-PSL/SP-' & !no)
+                 !!CE.SPRE = !Spref
+                 DESP $!desp
+--                 :USTDRWG |$!atecomment|
+              endif
+                 
+              CONN
+              if (!vendorconfig eq '14' or $
+                  !vendorconfig eq '19' or $
+                  !vendorconfig eq '21' or $
+                  (!vendorconfig.Real() ge 21 and !vendorconfig.Real() le 27) or $
+                  (!vendorconfig.Real() ge 41 and !vendorconfig.Real() le 44)) then
+                 !PcliDir = !This.meHangerDir.Opposite()
+              else
+                 !PcliDir = !This.meHangerDir
+              endif
+              DIR $!PcliDir
+              Handle ANY
+                 -- A slope pipe maybe cause an error -- 
+              endHandle
+           elseif (!Spref.Catref.Gtyp.MatchWild('HROD')) then
+              !height = !HangerArray[!I].Part(4,',').Part(2,' ').After('L=').Real()
+              -- Update the correct dimension of PC3 with comlin to rod length --
+              if (defined(!FixDimComlin)) then
+                 !height = !height + !FixDimComlin
+                 !FixDimComlin.Delete()
+              endif
+              if (defined(!FixDimEynt)) then
+                 !height = !height + !FixDimEynt
+                 !FixDimEynt.Delete()
+              endif
+              !chktype1 = Object Dbref('/2001-PSL/' & !HangerArray[!I - 1].Part(4,',').Part(1,' '))
+              if (!chktype1.Catref.Gtyp eq 'HNUT') then
+                 if (!I eq 2) then
+                    -- To get Prop.Rtvb of hanger1 of DS spring
+                    !chktype1 = !!CE.Owner.Href
+                    !desp1 = !chktype1.Prop.Rtvb
+                 else 
+                    -- normal case --
+                    !chktype1 = Object Dbref('/2001-PSL/' & !HangerArray[!I - 2].Part(4,',').Part(1,' '))
+                    if (!chktype1.Name.MatchWild('/2001-PSL/DS-*')) then
+                       -- only for DS spring --
+                       if (!vendorconfig eq '32' or !vendorconfig eq '46') then
+                          !chktype1 = !ConnREF1
+                       else
+                          !chktype1 = !ConnREF
+                       endif
+                    endif
+                 endif
+              endif
+              !chktype2 = Object Dbref('/2001-PSL/' & !HangerArray[!I + 1].Part(4,',').Part(1,' '))
+              if (!chktype2.Catref.Gtyp eq 'HNUT') then
+                 !chktype2 = Object Dbref('/2001-PSL/' & !HangerArray[!I + 2].Part(4,',').Part(1,' '))
+              endif
+              !desp1 = !chktype1.Prop.Rtvb
+              if (!chktype2.Name.MatchWild('/2001-PSL/VBM-*') or $
+                    !chktype2.Name.MatchWild('/2001-PSL/VIBM-*') or $
+                    !chktype2.Name.MatchWild('/2001-PSL/HBM-*') or $
+                    !chktype2.Name.MatchWild('/2001-PSL/VD-*') or $
+                    !chktype2.Name.MatchWild('/2001-PSL/HS-*') or $
+                    !chktype2.Name.MatchWild('/2001-PSL/VS-*') or $
+                    !chktype2.Name.MatchWild('/2001-PSL/VIS-*') or $
+                    !chktype2.Name.MatchWild('/2001-PSL/VID-*') or $
+                    !chktype2.Name.MatchWild('/2001-PSL/HD-*')) then
+                 -- RTVA of some constant springs was decided by design parameter --
+                 !desp2 = Object String(!VBMDesp.Part(13,' ').Real() + 38.5)
+              else
+                 !desp2 = !chktype2.Prop.Rtva
+              endif
+              !desp = !desp1 & ' ' & !desp2
+              HEIG $!height
+              DESP $!desp
+              CONN
+           elseif (!Spref.Catref.Gtyp.MatchWild('EYNT')) then
+              if ( !I eq 1 ) then
+                 -- The 1st Component of Hanger2 of Riser Clamp
+                 !chktype1 = !ConnREF
+              else
+                 !chktype1 = Object Dbref('/2001-PSL/' & !HangerArray[!I - 1].Part(4,',').Part(1,' '))
+              endif
+              !chktype2 = Object Dbref('/2001-PSL/' & !HangerArray[!I + 1].Part(4,',').Part(1,' '))
+              Handle ANY
+                 -- Only for Spreader Beam --
+                 !chktype2 = !chktype1
+              endHandle
+              if (!chktype1.Catref.Gtyp eq 'HNUT') then
+                 !desp1 = !chktype1.Prop.Conn
+                 !desp2 = !chktype2.Prop.Pdia
+              else
+                 !desp1 = !chktype2.Catref.Prop.Conn
+                 !desp2 = !chktype1.Catref.Prop.Pdia
+              endif
+              !desp = !desp1 & ' ' & !desp2
+              DESP $!desp
+              CONN
+              if (defined(!RotateAngle)) then
+                 if (!chktype1.Catref.Gtyp eq 'HNUT') then
+                    ORI AND P3 IS $!RotateAngle
+                    if (!vendorconfig.Real() ge 13 and !vendorconfig.Real() le 50) then
+                    else
+                       !RotateAngle.Delete()
+                    endif
+                 endif
+              else
+                 if ((!vendorconfig.Real() ge 13 and !vendorconfig.Real() le 16) or $
+                     (!vendorconfig.Real() ge 20 and !vendorconfig.Real() le 26) or $
+                     (!vendorconfig.Real() ge 28 and !vendorconfig.Real() le 34) or $
+                     (!vendorconfig.Real() ge 39 and !vendorconfig.Real() le 50)) then
+                    -- The direction of every Eynt is as same as that of the 1st Eynt 
+                    !RotateAngle = !!CE.Ori.Ydir().String().Before(' WRT')
+                 elseif ((!vendorconfig.Real() ge 17 and !vendorconfig.Real() le 18) or $
+                     (!vendorconfig.Real() ge 35 and !vendorconfig.Real() le 38)) then
+                    -- The direction of every Eynt is as same as that of the 1st Eynt 
+                    !RotateAngle = !This.meRiserDir.Opposite().Cross(Object Direction('U')).String().Before(' WRT')
+                 elseif (!vendorconfig.Real() eq 27) then
+                    -- The direction of every Eynt is as same as that of ATTA
+                    !RotateAngle = !PipeDir.String().Before(' WRT')
+                    ORI AND P3 IS $!RotateAngle
+                 else
+                    !RotateAngle = !!CE.Ori.Ydir().Opposite().Cross(Object Direction('U')).String().Before(' WRT')
+                 endif
+              endif
+--                if (defined(!FixDimEynt)) then
+--                   !FixDimEynt.Delete()
+--                else
+--                   !FixDimEynt = (!desp2.Real() - !desp1.Real()) * 0.5 * !EyntNo
+--               endif
+           elseif (!Spref.Catref.Gtyp.MatchWild('CLEV')) then
+              !chktype1 = Object Dbref('/2001-PSL/' & !HangerArray[!I - 1].Part(4,',').Part(1,' '))
+              CONN
+              if (defined(!RotateAngle)) then
+                 if (!chktype1.Catref.Gtyp eq 'HNUT') then
+                    ORI AND P3 IS $!RotateAngle
+                    if (!vendorconfig.Real() ge 13 and !vendorconfig.Real() le 50) then
+                    else
+                       !RotateAngle.Delete()
+                    endif
+                 endif
+              else
+                 if ((!vendorconfig.Real() ge 13 and !vendorconfig.Real() le 16) or $
+                     (!vendorconfig.Real() ge 20 and !vendorconfig.Real() le 26) or $
+                     (!vendorconfig.Real() ge 28 and !vendorconfig.Real() le 34) or $
+                     (!vendorconfig.Real() ge 39 and !vendorconfig.Real() le 50)) then
+                    -- The direction of every Eynt is as same as that of the 1st Eynt 
+                    !RotateAngle = !!CE.Ori.Ydir().String().Before(' WRT')
+                 elseif (!vendorconfig.Real() eq 27) then
+                    -- The direction of every Eynt is as same as that of ATTA
+                    !RotateAngle = !PipeDir.String().Before(' WRT')
+                    ORI AND P3 IS $!RotateAngle
+                 else
+                    !RotateAngle = !!CE.Ori.Ydir().Opposite().Cross(Object Direction('U')).String().Before(' WRT')
+                 endif
+              endif
+           elseif (!Spref.Catref.Gtyp.MatchWild('HNUT')) then
+              if (!I eq 1) then
+                 -- The nut is the 1st component of hanger 2 of DS spring
+                 CONN
+              else
+                 -- if a rod is font of the nut, nut angle will be -90 --
+                 !pretype = '/2001-PSL/' & !HangerArray[!I - 1].Part(4,',').Part(1 ,' ')
+                 if (!pretype.NameExists()) then
+                 else
+                    if (!HangerArray[!I - 1].Part(5,',').MatchWild('*RH/LH*')) then
+                       !pretype = !pretype & '-LR' 
+                    elseif (!HangerArray[!I - 1].Part(5,',').MatchWild('*RH/RH*')) then
+                       !pretype = !pretype & '-RR' 
+                    endif
+                    if (!pretype.NameExists()) then
+                    else
+--                       !!Alert.Message('No spref data !')
+                    endif
+                 endif
+                 CONN
+                 if (!pretype.Dbref().Catref.Gtyp eq 'HROD') then
+                    ANGLE -90
+                 endif
+                 if (!Spref.Name.MatchWild('/2001-PSL/F277-*')) then
+                    if (!pretype.Dbref().Catref.Gtyp eq 'HNUT') then
+                       -- A locknut connects to fullnut --
+                       DESP $!lockgap
+                    else
+                       -- A locknut connects to rodcouling --
+                       DESP 0
+                    endif
+                 else
+                    !lockgap = !Spref.Catref.Prop.Heig.Real() + 1
+                 endif
+              endif
+           elseif (!Spref.Catref.Gtyp.MatchWild('SPAC')) then
+              !height = !HangerArray[!I].Part(4,',').Part(2,' ').After('L=')
+              if (Defined(!F495fix)) then
+                 !height = String(!height.Real() - !F495fix)
+              endif
+              HEIG $!height
+              CONN
+           elseif (!Spref.Catref.Gtyp.MatchWild('VSPR')) then
+		      !desp = ''
+              if (!Spref.Name.MatchWild('*-C*')) then
+                 -- for Constant spring --
+                 if (!Spref.Name.MatchWild('/2001-PSL/?BM*') or !Spref.Name.MatchWild('/2001-PSL/VIBM*')) then
+                    !desp = !HangerArray[!I].Part(12,',').After('DESPAR ')
+                    !heig = !HangerArray[!I].Part(12,',').After('DESPAR ').Split(' ').Last()
+                 else
+                    !desp = !HangerArray[!I].Part(13,',').After('DESPAR ')
+                    !heig = !HangerArray[!I].Part(13,',').After('DESPAR ').Split(' ').Last()
+                 endif
+              else
+                 -- For variable spring --
+                 !desp = !HangerArray[!I].Part(12,',').After('DESPAR ')
+                 !heig = '0'
+              endif
+			  if (!desp eq '') then
+			    !desp = '0 0 200'
+			  endif
+              HEIG $!heig
+              DESP $!desp
+              CONN
+              
+              -- Rotate the direction of spring  --
+              if (!This.meAttaRef.Ori.Alpha.Abs() ge 80) then
+                 -- Vertical pipe --
+                 -- Base on the direction of riser clamp --
+                 !RiserDir = P2 DIR OF $!ConnREF
+                 if (!ConnREF.Angle eq 90) then
+                    !RiserDir = !RiserDir.Opposite()
+                 endif
+                 if (!RiserDir.Eq(Object Direction('S')) or !RiserDir.Eq(Object Direction('W'))) then
+                    !gammadir = 0
+                 elseif (!RiserDir.Eq(Object Direction('E'))) then
+                    !gammadir = 90
+                 else
+                    !gammadir = 180
+                 endif
+                 if (!gammadir eq 0 or !gammadir eq -90) then
+                    if (!HangerArray[!I].After('GAMMA=') eq '-90') then
+                       !gamma = Object Direction('E')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '0') then
+                       !gamma = Object Direction('N')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '90') then
+                       !gamma = Object Direction('W')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '180' or !HangerArray[!I].After('GAMMA=') eq '-180') then
+                       !gamma = Object Direction('S')
+                    endif
+                 elseif (!gammadir eq 90) then
+                    if (!HangerArray[!I].After('GAMMA=') eq '-90') then
+                       !gamma = Object Direction('E')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '0') then
+                       !gamma = Object Direction('S')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '90') then
+                       !gamma = Object Direction('W')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '180' or !HangerArray[!I].After('GAMMA=') eq '-180') then
+                       !gamma = Object Direction('N')
+                    endif
+                 else
+                    if (!HangerArray[!I].After('GAMMA=') eq '-90') then
+                       !gamma = Object Direction('W')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '0') then
+                       !gamma = Object Direction('N')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '90') then
+                       !gamma = Object Direction('E')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '180' or !HangerArray[!I].After('GAMMA=') eq '-180') then
+                       !gamma = Object Direction('S')
+                    endif
+                 endif
+              else
+                 -- Horizontal pipe --
+                 !gammadir = !This.meAttaRef.ori.gamma
+                 if (!gammadir eq 0 or !gammadir eq -90) then
+                    if (!HangerArray[!I].After('GAMMA=') eq '-90') then
+                       !gamma = Object Direction('E')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '0') then
+                       !gamma = Object Direction('N')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '90') then
+                       !gamma = Object Direction('W')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '180' or !HangerArray[!I].After('GAMMA=') eq '-180') then
+                       !gamma = Object Direction('S')
+                    endif
+                 elseif (!gammadir eq 90) then
+                    if (!HangerArray[!I].After('GAMMA=') eq '-90') then
+                       !gamma = Object Direction('E')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '0') then
+                       !gamma = Object Direction('S')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '90') then
+                       !gamma = Object Direction('W')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '180' or !HangerArray[!I].After('GAMMA=') eq '-180') then
+                       !gamma = Object Direction('N')
+                    endif
+                 else
+                    if (!HangerArray[!I].After('GAMMA=') eq '-90') then
+                       !gamma = Object Direction('E')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '0') then
+                       !gamma = Object Direction('N')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '90') then
+                       !gamma = Object Direction('W')
+                    elseif (!HangerArray[!I].After('GAMMA=') eq '180' or !HangerArray[!I].After('GAMMA=') eq '-180') then
+                       !gamma = Object Direction('S')
+                    endif
+                 endif
+              endif
+              if (Undefined(!gamma)) then
+                 !gamma = Object Direction('E')
+              endif
+              if (!Spref.Name.MatchWild('*-C*')) then
+                 -- for Constant spring --
+                 !P1pos = P1 POS
+                 !P20dir = P20 DIR
+                 !DiffAng = !gamma.Angle(!P20dir)
+                 ROTATE THROUGH $!P1pos ABOUT D WRT CE BY $!DiffAng
+                 -- check rotate angle should be positive or negative --
+                 !newP20dir = P20 DIR
+                 if (!gamma.Angle(!newP20dir).Abs() gt 10) then
+                    !DiffAng = !DiffAng * -2
+                    ROTATE THROUGH $!P1pos ABOUT D WRT CE BY $!DiffAng
+                 endif
+              elseif (!Spref.Name.MatchWild('/2001-PSL/DS-*')) then
+                 -- for DS spring --
+              else
+                 -- for Constant spring --
+                 !P1pos = P1 POS
+                 !P9dir = P9 DIR
+                 !DiffAng = !gamma.Angle(!P9dir)
+                 ROTATE THROUGH $!P1pos ABOUT D WRT CE BY $!DiffAng
+                 -- check rotate angle should be positive or negative --
+                 !newP9dir = P9 DIR
+                 if (!gamma.Angle(!newP9dir).Abs() gt 10) then
+                    !DiffAng = !DiffAng * -2
+                    ROTATE THROUGH $!P1pos ABOUT D WRT CE BY $!DiffAng
+                 endif
+              endif
+              
+              if (!Spref.Name.MatchWild('/2001-PSL/DS-*')) then
+                 !VsprAngle = !PipeDir.Cross(Object Direction('U')).String().Before(' WRT')
+                 ORI AND P6 IS $!VsprAngle
+                 if (!vendorconfig eq '32' or !vendorconfig eq '46') then
+                    !ConnREF1 = REF
+                 else
+                    !ConnREF = REF
+                 endif
+              elseif (!Spref.Name.MatchWild('/2001-PSL/HD-*') or $
+                      !Spref.Name.MatchWild('/2001-PSL/VD-*') or $
+                      !Spref.Name.MatchWild('/2001-PSL/VID-*')) then
+                 if (!vendorconfig eq '33' or $
+                     !vendorconfig eq '47' or $
+                     !vendorconfig eq '49') then
+                    -- expection condition --
+                    !ConnREF1 = REF
+                 elseif (undefined(!ConnREF)) then
+                    !ConnREF = REF
+                 elseif (undefined(!ConnREF1)) then
+                    !ConnREF1 = REF
+                 elseif (undefined(!ConnREF2)) then
+                    !ConnREF2 = REF
+                 endif
+                 
+              endif
+           elseif (!Spref.Catref.Gtyp.MatchWild('STLS')) then
+              !desp = !HangerArray[!I].Part(12,',').After('DESPAR ')
+              !heig = !HangerArray[!I].Part(4,',').After(' S=')
+              !StlsAngle = !PipeDir.Cross(Object Direction('U')).Opposite().String().Before(' WRT')
+              Handle ANY
+                 -- The spreader beam of riser clamp doesn't rotate --
+              endHandle
+              HEIG $!heig
+              DESP $!desp
+              if (!HangerArray[!I].MatchWild('*INVERTED*')) then
+                 ANGLE -90
+              elseif (defined(!f518Ang)) then
+                 -- for F518 Invert type --
+                 ANGLE -90
+              else
+                 ANGLE 90
+              endif
+              CONN
+              ORI AND P3 IS $!StlsAngle
+              Handle ANY
+                 -- Upper spread beam can't change the oritation or  --
+                 -- The spread beam of riser clamp can't change the oritation --
+              endHandle
+              if (undefined(!ConnREF)) then
+                 !ConnREF = REF
+              endif
+           elseif (!Spref.Catref.Gtyp.MatchWild('SLUG')) then
+              if (!I eq !HangerArray.Size()) then
+                 -- For normal case --
+                 CONN
+              else
+                 !chktype2 = Object Dbref('/2001-PSL/' & !HangerArray[!I + 1].Part(4,',').Part(1,' '))
+                 if (!chktype2.Catref.Gtyp eq 'HPIN') then
+                    -- Only for Spreader beam --
+                    CONN
+                    ORI AND P3 IS $!RotateAngle
+                 else
+                    -- For normal case --
+                    CONN
+                 endif
+              endif
+           elseif (!Spref.Catref.Gtyp.MatchWild('UBOL')) then
+              !desp = String((!SpreaderBeamDesp.Part(3,' ').Real() - !SpreaderBeamDesp.Part(4,' ').Real()) * 0.25)
+              CONN
+              DESP $!desp
+              ORI AND P3 IS D
+           elseif (!Spref.Catref.Gtyp.MatchWild('SNUB')) then
+              !desp = !HangerArray[!I].Part(4,',').After(' S=')
+              DESP $!desp
+              CONN
+              ORI AND P3 is $!This.meHangerDir
+           else
+              CONN
+           endif
+		   
+		   
+		   
+		   
+		   endhandle
+		   
+		   
+		   
+           
+           if (!I eq !HangerArray.Size()) then
+              if (defined(!HangerArray2)) then
+                 !I = 1
+                 !HangerArray.Clear()
+                 !HangerArray = !HangerArray2
+                 if (!vendorconfig eq '53' or $
+                     !vendorconfig eq '54' or $
+                     !vendorconfig eq '57' or $
+                     !vendorconfig eq '58' or $
+                     !vendorconfig eq '63' or $
+                     !vendorconfig eq '64' or $
+                     !vendorconfig eq '65' or $
+                     !vendorconfig eq '66') then
+                    -- Don't reverse the array
+                 else
+                    !HangerArray.Invert()
+                 endif
+                 !HangerArray2.Delete()
+                 END
+                 CONN PT TO LAST MEM
+                 NEW HANG
+				 if (defined(!ConnREF)) then
+				   CONN PH TO $!ConnREF
+				 endif
+                 
+              elseif (defined(!HangerArray3)) then
+                 !I = 1
+                 !HangerArray.Clear()
+                 !HangerArray = !HangerArray3
+                 if (!vendorconfig eq '53' or $
+                     !vendorconfig eq '54' or $
+                     !vendorconfig eq '57' or $
+                     !vendorconfig eq '58' or $
+                     !vendorconfig eq '63' or $
+                     !vendorconfig eq '64' or $
+                     !vendorconfig eq '65' or $
+                     !vendorconfig eq '66') then
+                    -- Don't reverse the array
+                 else
+                    !HangerArray.Invert()
+                 endif
+                 !HangerArray3.Delete()
+                 END
+                 CONN PT TO LAST MEM
+				 handle any
+				 elsehandle none
+                   NEW HANG
+                   CONN PH TO $!ConnREF1
+				 endhandle
+              elseif (defined(!HangerArray4)) then
+                 !I = 1
+                 !HangerArray.Clear()
+                 !HangerArray = !HangerArray4
+                 if (!vendorconfig eq '53' or $
+                     !vendorconfig eq '54' or $
+                     !vendorconfig eq '57' or $
+                     !vendorconfig eq '58' or $
+                     !vendorconfig eq '63' or $
+                     !vendorconfig eq '64' or $
+                     !vendorconfig eq '65' or $
+                     !vendorconfig eq '66') then
+                    -- Don't reverse the array
+                 else
+                    !HangerArray.Invert()
+                 endif
+                 !HangerArray4.Delete()
+                 END
+                 CONN PT TO LAST MEM
+				 handle any
+				 elsehandle none
+                   NEW HANG
+                   CONN PH TO $!ConnREF2
+				 endhandle
+              else
+                 END
+                 CONN PT TO LAST MEM
+				 handle any
+				 endhandle
+                 GOLABEL /OK
+              endif
+           else
+              !I = !I + 1
+           endif
+		   
+		   
+		   
+		   
+		   
+		   
+        enddo
+        LABEL /OK
+        !liffile.DeleteFile()
+        !loffile.DeleteFile()
+     else
+        GOLABEL /END
+     endif
+  else
+     GOLABEL /END
+  endif
+  
+  $!This.meAttaRef
+ 
+  LABEL /END
+  !This.Close()
+endmethod
+
+define method .RealSize(!NPS is real) IS REAL
+  if (!NPS eq 8) then
+     !Returnsize = 13
+  elseif (!NPS eq 10) then
+     !Returnsize = 17
+  elseif (!NPS eq 15) then
+     !Returnsize = 21.3
+  elseif (!NPS eq 20) then
+     !Returnsize = 26.9
+  elseif (!NPS eq 25) then
+     !Returnsize = 33.7
+  elseif (!NPS eq 32) then
+     !Returnsize = 42.4
+  elseif (!NPS eq 40) then
+     !Returnsize = 48.3
+  elseif (!NPS eq 50) then
+     !Returnsize = 60.3
+  elseif (!NPS eq 65) then
+     !Returnsize = 73
+  elseif (!NPS eq 76) then
+     !Returnsize = 76.1
+  elseif (!NPS eq 80) then
+     !Returnsize = 88.9
+  elseif (!NPS eq 108) then
+     !Returnsize = 108
+  elseif (!NPS eq 100) then
+     !Returnsize = 114.3
+  elseif (!NPS eq 125) then
+     !Returnsize = 141.3
+  elseif (!NPS eq 133) then
+     !Returnsize = 133
+  elseif (!NPS eq 140) then
+     !Returnsize = 139.7
+  elseif (!NPS eq 159) then
+     !Returnsize = 159
+  elseif (!NPS eq 150) then
+     !Returnsize = 168.3
+  elseif (!NPS eq 194) then
+     !Returnsize = 193.7
+  elseif (!NPS eq 200) then
+     !Returnsize = 219.1
+  elseif (!NPS eq 245) then
+     !Returnsize = 244.5
+  elseif (!NPS eq 267) then
+     !Returnsize = 267
+  elseif (!NPS eq 250) then
+     !Returnsize = 273
+  elseif (!NPS eq 300) then
+     !Returnsize = 323.9
+  elseif (!NPS eq 350) then
+     !Returnsize = 355.6
+  elseif (!NPS eq 368) then
+     !Returnsize = 368
+  elseif (!NPS eq 400) then
+     !Returnsize = 406.6
+  elseif (!NPS eq 419) then
+     !Returnsize = 419
+  elseif (!NPS eq 450) then
+     !Returnsize = 457.2
+  elseif (!NPS eq 500) then
+     !Returnsize = 508
+  elseif (!NPS eq 550) then
+     !Returnsize = 558.8
+  elseif (!NPS eq 600) then
+     !Returnsize = 609.6
+  elseif (!NPS eq 650) then
+     !Returnsize = 660.4
+  elseif (!NPS eq 700) then
+     !Returnsize = 711.2
+  elseif (!NPS eq 750) then
+     !Returnsize = 762
+  elseif (!NPS eq 800) then
+     !Returnsize = 812.8
+  elseif (!NPS eq 900) then
+     !Returnsize = 914.4
+  elseif (!NPS eq 1000) then
+     !Returnsize = 1016.0
+  endif
+  return !Returnsize
+endmethod
+
+define method .Close()
+   kill !!PSD
+endmethod

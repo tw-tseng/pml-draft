@@ -1,0 +1,78 @@
+define function !!paAutoWeldSchArySpec(!inSpecCollection is STRING) is ARRAY
+    !myArySummary = ARRAY()
+    !myAryDetail = ARRAY()
+    !mySingleSpec = ARRAY()
+    !youSingleSpec = ARRAY()
+
+    !myArySummary =  !inSpecCollection.SPLIT('}')         $* !myArySummary element have a record information Spec, MaxSize, Stype
+
+    !Rid = 0
+    Do !SingleSpec Values !myArySummary
+          !mySingleSpe = !SingleSpec.SPLIT(',')
+          !Rid = !Rid + 1
+          !Cid = 0 
+          Do !aryElement Values !mySingleSpe
+                !Cid = !Cid + 1
+                !myAryDetail.APPEND(!aryElement)               $* !myAryDetail array, [ single element, serial datas conjection ]           
+                !youSingleSpec[!Rid][!Cid] = |$!aryElement|     $* !youSingleSpec: multiple dimension array, [N x 3]; single spec information
+          EndDo          
+    EndDo
+
+   -- Multiple dimension array <!youSingleSpec> feedback; every record with variable fields: Spec_Name , Max_WeldSize , Weld_Sch, Weld_Material
+   Return !youSingleSpec
+
+  $( 
+      !myArySummary =  !inSpecCollection.SPLIT('}')
+
+      $P __ Summary Items
+      !ids = 0
+      Do !tmpSum Values !myArySummary
+            !ids = !ids + 1
+            $P $!ids : $!tmpSum
+      EndDo
+      $P =======================
+      $P
+
+    $P ___ Extract Detail Datas; be hidden now ___
+    !Rid = 0
+    Do !SingleSpec Values !myArySummary
+          !mySingleSpe = !SingleSpec.SPLIT(',')
+          !Rid = !Rid + 1
+          !Cid = 0 
+          Do !aryElement Values !mySingleSpe
+                !Cid = !Cid + 1
+             --   $P $!aryElement
+                !myAryDetail.APPEND(!aryElement) 
+
+                !youSingleSpec[!Rid][!Cid] = |$!aryElement|
+                $P $!Rid , $!Cid : $!youSingleSpec[$!Rid][$!Cid]
+          EndDo          
+    EndDo
+
+    !MySize = !myAryDetail.Size()
+    !YouSize = !youSingleSpec.Size()   
+    $P ====== myAryDetail.Size() : $!MySize =======
+    $P ====== YouSingleSpec.Size() : $!YouSize =======
+    $P
+
+    $P ___ Row Records; with 3 columns ___ 
+    !RecIdx = 0
+    Do !rowSpec Values !youSingleSpec
+          !RecIdx = !RecIdx + 1
+          $P $!RecIdx : $!rowSpec[1] , $!rowSpec[2] , $!rowSpec[3] 
+    EndDo
+    $P =======================
+    $P   
+
+    $P ___ Detail Items
+    !idd = 0
+    Do !tmpDtl Values !myAryDetail
+          !idd = !idd + 1
+          $P $!idd : $!tmpDtl
+    EndDo
+    $P =======================
+ 
+   -- Single dimension array <!myAryDetail> feedback; every record with 3 fields: Spec_Name , Max_CouplingSize , Stype of Coupling
+   Return !myAryDetail
+  $)  
+endfunction

@@ -1,0 +1,209 @@
+--------------------------------------
+-- Function : Flow Arrow Annotation --
+-- Auther   : tw tseng              --
+-- Date     : 2025/08/15            --
+--------------------------------------
+define function !!DrawingPlan1FlowAnnotation(!name is string)
+	NEW LAYE $!name/SS/S1/V1/ateFLOW_R$!!DrawingPlan1.rev
+	Purpose FLOW
+	Lvisibility true
+	Ucode mm  Distance  mm  Bore Nominal 
+	Font 1
+	Lterminator Off
+	Justification Left
+	Alignment Base
+	Dterminator Arrows
+	Tsize 2mm
+	Chosht 6mm
+	Asubtended 0
+	Pjustification Towards 
+	Overshoot 2mm
+	Plclearance 0mm
+	Doffset 25mm
+	Dmspacing 0mm
+	Cheight 3mm
+	Lleader false
+	Lframe false
+	Lshape Straight
+	Gbox 0mm
+	Cspacing 0
+	Lspacing 0
+	Llclearance 0mm
+	Xyscale 1 1
+	Xyposition 10mm 10mm 
+	Bpoffset 0mm 0mm
+	Blnk false
+	Bmargin 0mm
+	Trsf unset
+	Fterminator Default
+	Pcode mms to 0 dpls  Inches to 1 dpls  Fractions to 32 ths  Angles to 1 dpls 
+	NLStyle Solid 
+	NLColour Cyan 
+	FStyle SolidFilled 
+	FColour Cyan 
+	Txcolour yellow 
+	LLStyle Solid 
+	LLColour Cyan 
+	LFStyle Solid 
+	LFColour Cyan 
+	DLStyle Solid 
+	DLColour Grey 
+	PLStyle Solid 
+	PLColour Grey 
+	MStyle Off 
+	MColour Cyan 
+	CHStyle Off 
+	CHColour Grey 
+	ACDSTY unset
+	Posformat ENU
+	Grsystem Nulref
+	SpPurpose unset
+	Function unset
+	
+	--------------------------------------
+	-- sort !sortedtypes by tubi length --
+	--------------------------------------
+	using namespace 'Aveva.Core.Samples'
+	!obj = object AteSortLineNo()
+	var !brans vscan for all bran
+	!tubiss = object array()
+	do !bran values !brans
+		var !pname name of pipe of $!bran
+		var !tubis vscan for all tubi with matchwild(name of pipe, |$!pname|)
+		!tubiss.clear()
+		if defined(!tubis) then
+			do !tt from 1 to !tubis.size()
+				!tubi = 'ileave tube of ' & !tubis[!tt].part(2)
+				---------------------------
+				-- exclude vertical pipe --
+				---------------------------
+				var !grad gradient of $!tubi
+				handle any
+				elsehandle none
+					if (abs(!grad.real()) leq 1) then
+						var !ltle ltle of $!tubi
+						!ltle1 = !ltle.replace('mm', '').real() + 0.0000000001 * !tt
+						!tubiss.append(!ltle1 & '~' & !tubi & '~x!x!x!x!x!x')
+					endif
+				endhandle
+			enddo
+			if (not(!tubiss.empty())) then
+				----------------------------------------------
+				-- find out the longest tubi for flow arrow --
+				----------------------------------------------
+				!tubi = !obj.method('y', !tubiss).last().split('~').getindexed(2)
+				------------------------
+				-- check insert point --
+				------------------------
+				var !p1 pos p1 of $!tubi wrt worl
+				var !p2 pos p2 of $!tubi wrt worl
+				!p1posenu = object position(!p1) 
+				!p2posenu = object position(!p2)
+				!p1posenu.up = 0
+				!p2posenu.up = 0
+				var !p1possh shpos of $!p1posenu
+				var !p2possh shpos of $!p2posenu
+				!p12linesh = object line(!p1possh.position(), !p2possh.position())
+				
+				--------------------------------------------------------
+				-- find which boundary line is intersection with tubi --
+				--------------------------------------------------------
+				if (not(!!DrawingPlan1.CheckInsideView(!p1possh, !!DrawingPlan1.viewULsh, !!DrawingPlan1.viewURsh, !!DrawingPlan1.viewLRsh, !!DrawingPlan1.viewLLsh))) then
+					!dist1 = !p1possh.distance(!!DrawingPlan1.viewUlinesh.intersection(!p12linesh))
+					handle any
+						!dist1 = 1111111111111
+					endhandle
+					!dist2 = !p1possh.distance(!!DrawingPlan1.viewDlinesh.intersection(!p12linesh))
+					handle any
+						!dist2 = 1111111111111
+					endhandle
+					!dist3 = !p1possh.distance(!!DrawingPlan1.viewLlinesh.intersection(!p12linesh))
+					handle any
+						!dist3 = 1111111111111
+					endhandle
+					!dist4 = !p1possh.distance(!!DrawingPlan1.viewRlinesh.intersection(!p12linesh))
+					handle any
+						!dist4 = 1111111111111
+					endhandle
+					if (min(!dist1, !dist2, !dist3, !dist4) eq !dist1) then
+						!p1possh = !!DrawingPlan1.viewUlinesh.intersection(!p12linesh)
+					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist2) then
+						!p1possh = !!DrawingPlan1.viewDlinesh.intersection(!p12linesh)
+					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist3) then
+						!p1possh = !!DrawingPlan1.viewLlinesh.intersection(!p12linesh)
+					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist4) then
+						!p1possh = !!DrawingPlan1.viewRlinesh.intersection(!p12linesh)
+					endif
+				endif			
+				if (not(!!DrawingPlan1.CheckInsideView(!p2possh, !!DrawingPlan1.viewULsh, !!DrawingPlan1.viewURsh, !!DrawingPlan1.viewLRsh, !!DrawingPlan1.viewLLsh))) then
+					!dist1 = !p2possh.distance(!!DrawingPlan1.viewUlinesh.intersection(!p12linesh))
+					handle any
+						!dist1 = 1111111111111
+					endhandle
+					!dist2 = !p2possh.distance(!!DrawingPlan1.viewDlinesh.intersection(!p12linesh))
+					handle any
+						!dist2 = 1111111111111
+					endhandle
+					!dist3 = !p2possh.distance(!!DrawingPlan1.viewLlinesh.intersection(!p12linesh))
+					handle any
+						!dist3 = 1111111111111
+					endhandle
+					!dist4 = !p2possh.distance(!!DrawingPlan1.viewRlinesh.intersection(!p12linesh))
+					handle any
+						!dist4 = 1111111111111
+					endhandle
+					if (min(!dist1, !dist2, !dist3, !dist4) eq !dist1) then
+						!p2possh = !!DrawingPlan1.viewUlinesh.intersection(!p12linesh)
+					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist2) then
+						!p2possh = !!DrawingPlan1.viewDlinesh.intersection(!p12linesh)
+					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist3) then
+						!p2possh = !!DrawingPlan1.viewLlinesh.intersection(!p12linesh)
+					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist4) then
+						!p2possh = !!DrawingPlan1.viewRlinesh.intersection(!p12linesh)
+					endif
+				endif
+				
+				!mid = !p1possh.position().midpoint(!p2possh.position())
+				!mid1 = !mid.string().before(' U').replace('E', 'X').replace('N', 'Y')
+				var !mid1 enupos of $!mid1
+				!mtbe = !tubi.after('of ')
+				var !type type of $!mtbe
+				if (!type.eqnocase('BRAN')) then
+					var !pldir hdir of $!mtbe
+				else
+					var !pldir pl dir of $!mtbe
+				endif
+				
+				var !viewdirup viewdir up
+				!pldira = object direction(!pldir)
+				!viewdirupa = object direction(!viewdirup)
+				!ang = !viewdirupa.angle(!pldira)
+				if (!ang.leq(40)) then
+					!ang = !ang * -1
+				else
+					var !viewdirri viewdir right
+					!viewdirria = object direction(!viewdirri)
+					if (!viewdirria.angle(!pldira).leq(40)) then
+						!ang = !ang * -1
+					endif
+				endif
+				NEW SLAB
+				DDNA $!tubi
+				tmrf /DRA/MAS/SYMBOLS/GEN/WELD/WELD-ARR
+				Font 1
+				Blnk false
+				Bmargin 0mm
+				Xyscale 1 1
+				Cheitx '2mm'
+				Lvisibility true
+				Txcolour Yellow
+				LLColour Cyan
+				LFColour Cyan
+				Alignment Hbody
+				POS $!mid1
+				XYPO 0 0
+				Adegrees $!ang      
+			endif
+		endif
+	enddo
+endfunction

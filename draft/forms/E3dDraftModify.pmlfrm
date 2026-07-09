@@ -1,0 +1,1269 @@
+------------------------------------------------
+-- Copyright ATOMTECH Ltd 2023                --
+--                                            --
+-- Function : for E3D Draft functions         --
+-- Author   : IT department of ATEGROUP       --
+-- Date     : 2023/01/18                      --
+------------------------------------------------
+
+setup form !!E3dDraftModify
+
+title 'Draft Tools'
+  path down
+  button .cableTAGALL  'CableTag ALL' call '!This.cableTAG(|ALL|)'
+  button .cableTAGCCT  'CableTag CCT' call '!This.cableTAG(|CCT|)'
+  button .cableTAGHVT  'CableTag HVT' call '!This.cableTAG(|HVT|)'
+  button .cableTAGLVT  'CableTag LVT' call '!This.cableTAG(|LVT|)'
+  button .cableTAGMVT  'CableTag MVT' call '!This.cableTAG(|MVT|)'
+  button .cableTAGSCT  'CableTag SCT' call '!This.cableTAG(|SCT|)'	
+  button .cableEQUI    'EquipTag      ' at xmax.cableTAGALL+2 ymin.cableTAGALL call '!This.equipTAG()'
+  button .xyPos        'XYpos         ' at xmin.cableEQUI ymax.cableEQUI+0.2 call '!This.xyPos()'
+  button .alltag       'TAGs for Cable' at xmin.cableEQUI ymax.xyPos+0.2 call '!This.alltag()'
+  button .runalltag    'Run all TAGs  ' at xmin.cableEQUI ymax.alltag+0.2 call '!This.runalltag()'
+  button .supporttag   'Support TAGs  ' at xmin.cableEQUI ymax.runalltag+0.2 call '!This.supporttag()'
+  button .lineno       'Line No.      ' at xmin.cableEQUI ymax.supporttag+0.2 call 'show !!LINENO'
+  button .flowarrow    'Flow Arrow    ' at xmax.alltag+2 ymin.cableTAGALL call '!!FlowArrow()'
+  button .CheckLineNo  'Check LineNo  ' at xmax.alltag+2 ymax.flowarrow+0.2 call '!This.CheckLineNo()'
+  button .slope        'Slope Symbol  ' at xmax.alltag+2 ymax.CheckLineNo+0.2 call '!This.slope()'
+  button .Cancel                      at xmin.cableTAGALL ymax.lineno+0.2 call '!This.Close()'
+exit
+
+define method .slope()
+	!ce = ref
+	var !drwgs coll all drwg for $!ce
+	do !drw values !drwgs	
+		var !drwg name of drwg of $!drw
+		handle any
+		elsehandle none
+			var !views coll all view for $!drwg
+			do !vie values !views
+				var !view name of $!vie
+				$!view
+				!viewdir = direction
+				!thpo = thposition
+				!adegrees = adegrees
+				var !vwlimits vwlimits
+				!size = size
+				!pipes = object array()
+				var !brans vscan for all bran
+				do !bran values !brans
+					var !pipe name of pipe of $!bran
+					!pipes.append(!pipe)
+				enddo						
+				!pipes.unique()				
+				do !pipe values !pipes
+				  !tubes = object array()
+				  var !tubis vscan for all tubi for $!pipe
+					do !tubi values !tubis
+						!tubi = !tubi.replace('TUBI', 'ileave tube of')
+						var !mtbe mtbe of $!tubi
+						handle any
+						  -- tubi length is less then 1mm
+						elsehandle none
+							var !mtype type of $!mtbe
+							if (!mtype eq 'BRAN') then
+								var !chkan Hdirection of $!mtbe
+								var !startp hposition of $!mtbe
+							else
+								var !chkan pl dir of $!mtbe
+								var !startp pl pos of $!mtbe
+							endif
+							!chkang = object direction(!chkan)
+							!startpt = object position(!startp)
+							var !itle itle of $!tubi
+							!endpt = !startpt.offset(!chkang, !itle.real())
+							if (!chkang.angle(!viewdir) le 46 or !chkang.angle(!viewdir.opposite()) le 46) then
+							else
+								var !gradi gradient of $!tubi
+								if (!gradi.real().between(-0.2, 0.2) and !gradi.real() neq 0) then
+								  var !bran name of bran of $!tubi
+									var !order order of $!tubi
+									if (!order.length() eq 1) then
+										!order = '00' & !order
+									elseif (!order.length() eq 2) then
+										!order = '0' & !order
+									endif
+									!tubes.append(!bran & '!' & !order & '!' & !startpt.string() & '!' &!endpt.string() & '!' & !tubi)
+								endif
+							endif
+						endhandle
+					enddo
+					!tubes.sort()
+					---------------------------------------------------------
+					-- merge implied tubi and find out the longest segment --
+					---------------------------------------------------------
+					!tube1s = object array()
+					do !x from 1 to !tubes.size()
+					  !tubi = !tubes[!x].split('!').getindexed(5)
+						if (!x eq 1) then
+						  !
+						else
+						endif
+					enddo
+				enddo
+
+			enddo
+		endhandle
+	enddo
+endmethod
+
+
+define method .CheckLineNo()
+  if (!!alert.confirm('Check LineNo may take a long time!') eq 'YES') then
+		!ce = ref
+		var !drwgs coll all drwg for $!ce
+		do !drw values !drwgs	
+			var !drwg name of drwg of $!drw
+			handle any
+			elsehandle none
+				$!drwg/DRAWLIST
+				$!drwg/DRAWLIST/compare
+				handle any
+				elsehandle none
+					delete idli
+				endhandle
+				new idli name $!drwg/DRAWLIST/compare
+				!lackpipe = object array()
+				!ff = object file('C:\TEMP\Dwgno_result1_dif.csv')
+				!ff.open('READ')
+				do
+					!line = !ff.ReadRecord()
+					if (!line.Set() and !line neq '') then
+						if (!line.split(',').getindexed(1) eq !drwg.substring(2,100)) then
+							!lack = !line.split(',').getindexed(2)
+							new adde idna $!lack
+							!lackpipe.append(!lack)
+						endif
+					else
+						break
+					endif
+				enddo
+				!ff.close()
+				var !views coll all view for $!drwg
+				do !vie values !views
+					var !view name of $!vie
+					$!view
+					var !dir dir
+					if (!dir eq 'D') then					
+						idln $!drwg/DRAWLIST/compare
+						var !limits Vwlimits of $!view
+						
+						update design ignore
+
+						$!view/VALV_Labs
+						handle any
+						elsehandle none
+							delete laye
+						endhandle
+						$!view/INST_Labs
+						handle any
+						elsehandle none
+							delete laye
+						endhandle
+						$!view/NOZZ_Labs
+						handle any
+						elsehandle none
+							delete laye
+						endhandle
+						$!view/SupportTag
+						handle any
+						elsehandle none
+							delete laye
+						endhandle
+					
+						$!view/LINE_Labs  
+						handle any
+							NEW LAYE NAME $!view/LINE_Labs
+							Lvisibility true
+							Font 11
+							Justification Template
+							Alignment Template
+							Tsiztx '3mm'
+							Chostx '6mm'
+							Asubtended 0degree
+							Pjustification Towards 
+							Oshttx '2mm'
+							Plcltx '0mm'
+							Doffset 25mm
+							Dmsptx '0mm'
+							Lleader true
+							Lframe true
+							Lshape Straight
+							Gboxtx '1mm'
+							Llcltx '0mm'
+							Xyscale 1 1
+							Xyposition 25mm 25mm 
+							Blnk true
+							Bmargin 0mm
+							Trsf Nulref
+							Txcolour Grey 
+							NLStyle Solid 
+							NLColour Grey 
+							FStyle Off 
+							FColour Grey 
+							LLStyle Solid 
+							LLColour Grey 
+							LFStyle Solid 
+							LFColour Grey 
+							DLStyle Solid 
+							DLColour Grey 
+							PLStyle Solid 
+							PLColour Grey 
+							MColour Grey 
+							CHStyle Off 
+							CHColour Grey
+						elsehandle none
+							var !olds coll all for ce
+							do !old values !olds
+								$!old
+								handle any
+								elsehandle none
+									var !otype type of $!old
+									if (!otype neq 'LAYE') then
+										DELETE $!otype
+									endif
+								endhandle
+							enddo
+						endhandle
+						$!view/LINE_Labs 			
+						
+						
+						do !pipe values !lackpipe
+							var !name name of $!pipe
+							var !ents vscan for all bran mem for $!name
+							!sent = ''
+							do !ent values !ents
+								if (!ent.matchwild('*TUBI*')) then
+								else
+									!sent = !ent
+									break
+								endif
+							enddo
+							if (!sent eq '') then
+								do !ent values !ents
+									if (!ent.matchwild('*TUBI*')) then
+										!temptent = !ent.split(' ').getindexed(2)
+										var !mtbe mtbe of $!temptent
+										!sent = !mtbe
+										break
+									endif
+								enddo
+							endif
+							
+							if (!sent eq '') then
+								$p $!drwg $!name
+							else
+								NEW GLAB
+								Ddname $!sent
+								!isbran = false 
+								var !padir pa dir of $!sent
+								handle any
+									--------------
+									-- for bran --
+									--------------
+									var !padir hdirection of $!sent
+									var !pldir hdirection of $!sent
+									!isbran = true 
+								elsehandle none
+									var !pldir pl dir of $!sent
+								endhandle
+								
+								!chkpadir = object direction(!padir)
+								!chkpldir = object direction(!pldir)
+								if ((!chkpadir.angle(object direction('U')) le 44 or !chkpadir.angle(object direction('D')) le 44) and (!chkpldir.angle(object direction('U')) le 44 or !chkpldir.angle(object direction('D')) le 44)) then
+									Btext '#<#PIPE(C2:)#>'
+								else
+									if (!isbran) then
+										var !btex u hpos of $!sent
+										!btext = !name.substring(2,100) & '#/BOP EL+' & !btex.split('.').getindexed(1).replace('mm','')
+										Btext |$!btext|
+									else
+										if (!chkpadir.angle(object direction('U')) le 44 or !chkpadir.angle(object direction('D')) le 44) then
+											Btext '#<#PIPE(C2:)#>#/BOP EL+#PLBOPU(C2:)'
+										else
+											Btext '#<#PIPE(C2:)#>#/BOP EL+#PABOPU(C2:)'
+										endif
+									endif
+								endif
+								
+	$(										
+											var !posu u pl of $!sent
+											if (!posu.real() ge 0) then
+												!btext = !name.substring(2,100) & '#/BOP EL+' & !posu.split('.').getindexed(1).replace('mm','')
+												Btext |$!btext|
+											else
+												!btext = !name.substring(2,100) & '#/BOP EL-' & !posu.split('.').getindexed(1).replace('mm','')
+												Btext |$!btext|
+											endif
+										else
+											
+											var !posu u pa of $!sent
+											if (!posu.real() ge 0) then
+												!btext = !name.substring(2,100) & '#/BOP EL+' & !posu.split('.').getindexed(1).replace('mm','')
+												Btext |$!btext|
+											else
+												!btext = !name.substring(2,100) & '#/BOP EL-' & !posu.split('.').getindexed(1).replace('mm','')
+												Btext |$!btext|
+											endif
+										endif
+	$)					
+								
+								Nppt -1
+								Pkey unset
+								Pkdistance 0.5
+								Lframe false
+								Gboxtx '1mm'
+								Cheitx '3.5mm'
+								Llcltx '0mm'
+								Tsiztx '2mm'
+								Lterid 0
+								Lleader true
+								Apoftx unset
+								Lshape Angled Vertical
+								Font 1
+								Justification Left
+								Alignment Hbody
+								Blnk true
+								Lvisibility true
+								Txcolour Yellow 
+								LLStyle Solid 
+								LLColour Cyan 
+								LFStyle Solid 
+								LFColour Cyan
+							endif
+						enddo
+					
+						$!view/LINE_Labs 
+						var !olds coll all glab for ce
+		--				Spread remote omit   gap 2.0000 margin 0.0000 select all from !olds
+						Spread local xoff 5.0000 yoff 5.0000 select all from !olds
+						
+						$!view
+						var !olds coll all laye for ce
+						do !old values !olds
+							$!old
+							var !dels coll all ldim for ce
+							do !del values !dels
+								$!del
+								delete ldim
+							enddo
+						enddo
+					endif
+					
+				enddo
+			endhandle
+		enddo
+	endif
+endmethod
+
+
+define method .CheckLineNoBak()
+  !Locref = REF
+	prompt off 
+	Prompt load ESCAPE 'Select View'
+	ID VIEW @
+	handle ANY
+		GOLABEL /END
+	endHandle
+	var !view name of view
+	$!view
+	var !limits Vwlimits of $!view
+	var !idln idln
+	!limits = !limits.replace('From ', '')
+	var !addes coll all adde for $!idln
+	var !remes coll all reme for $!idln
+	!add = ''
+	!rem = ''
+	if (!addes.size() gt 0) then
+	  do !x from 1 to !addes.size()
+		  var !idna idna of $!addes[$!x]      
+		  !add = !add & ' ' & $!idna
+      handle any
+      endhandle
+		enddo
+	endif
+		if (!remes.size() gt 0) then
+	  do !x from 1 to !remes.size()
+		  var !idna idna of $!remes[$!x] 
+		  !rem = !rem & ' ' & $!idna
+      handle any
+      endhandle
+		enddo
+	endif
+  
+	if (!rem neq '') then
+	  !add = !add & 'EXCL ' & $!rem
+	endif
+  
+  var !pipes COLL ALL PIPE WITHIN $!limits for $!add 
+  
+	$!view/LINE_Labs  
+  var !olds coll all for ce
+  do !old values !olds
+    $!old
+    handle any
+    elsehandle none
+      var !otype type of $!old
+      if (!otype neq 'LAYE') then
+        DELETE $!otype
+      endif
+    endhandle
+  enddo
+	$!view/LINE_Labs 
+	do !pipe values !pipes
+	  var !name name of $!pipe    
+    
+    var !ents coll all bran members within $!limits for $!name
+
+    !sent = ''
+    -----------------------------------------
+    -- 1st step : for entities inside view --
+    -----------------------------------------
+    do !ent values !ents
+      var !type type of $!ent
+      if (!type neq 'TUBI') then
+        var !chk vside of $!ent
+        if (!chk.split(' ').getindexed(3) eq 'Inside') then
+          !sent = !ent
+          break
+        endif
+      endif
+    enddo
+    
+    ----------------------------------
+    -- 2nd step : for vertical tubi --
+    ----------------------------------
+    if (!sent eq '') then
+      do !ent values !ents
+        var !type type of $!ent
+        if (!type eq 'TUBI') then
+          var !mtbe mtbe of $!ent
+          var !mtype type of $!mtbe
+          if (!mtype eq 'BRAN') then
+            var !chkan Hdirection of $!mtbe
+          else
+            var !chkan pl dir of $!mtbe
+          endif
+--        $p !chkan= $!chkan
+          !chkang = object direction(!chkan)
+          if (!chkang.angle(object direction('U')) le 46 or !chkang.angle(object direction('D')) le 46) then
+            !sent = !ent
+            break        
+          endif
+        endif
+      enddo
+    endif
+    
+    ------------------------------------------
+    -- 3th step : for entities outside view --
+    ------------------------------------------
+    if (!sent eq '') then
+      do !ent values !ents
+        var !type type of $!ent
+        if (!type neq 'TUBI') then
+          var !chk vside of p3 of $!ent
+          handle any
+          elsehandle none
+            if (!chk.split(' ').getindexed(3) eq 'Inside') then
+              !sent = !ent
+              break
+            endif
+          endhandle
+        endif
+      enddo
+    endif
+    
+    --(26)/0150CB01_AIP_0025_N_UTS2002
+    ------------------------------------
+    -- 4nd step : for horizontal tubi --
+    ------------------------------------
+    if (!sent eq '') then
+      do !ent values !ents
+        var !type type of $!ent
+        if (!type eq 'TUBI') then
+          var !mtbe mtbe of $!ent
+					!sent = !mtbe
+$(
+          var !mtype type of $!mtbe
+          if (!mtype eq 'BRAN') then
+            var !prepos Hposition of $!mtbe
+          else
+            var !prepos p1 pos of $!mtbe
+          endif
+
+          var !chk vside of $!prepos
+          if (!chk.split(' ').getindexed(3) eq 'Inside') then
+            !sent = !ent
+            break
+          endif
+          if (!sent eq '') then
+            var !mten mten of $!ent
+            var !mtype type of $!mten
+            if (!mtype eq 'BRAN') then
+              var !prepos tposition of $!mtbe
+            else
+              var !prepos p1 pos of $!mtbe
+            endif
+            var !chk vside of $!prepos
+            if (!chk.split(' ').getindexed(3) eq 'Inside') then
+              !sent = !ent
+              break
+            endif
+          endif
+          
+          if (!sent eq '') then
+            var !mtbe mtbe of $!ent
+            var !mtype type of $!mtbe
+            if (!mtype eq 'BRAN') then
+              var !prepos Hposition of $!mtbe
+            else
+              var !prepos p1 pos of $!mtbe
+            endif
+            var !chk vside of $!prepos
+            
+            --q viewdir left          
+          endif
+$)          
+        endif
+      enddo
+    endif
+    if (!sent eq '') then
+      $p $!name
+    else
+      NEW GLAB
+      Ddname $!sent
+      Btext '#PIPE(C2:)'
+      Nppt -1
+      Pkey unset
+      Pkdistance 0.5
+      Lframe false
+      Gboxtx '1mm'
+      Cheitx '3.5mm'
+      Llcltx '0mm'
+      Tsiztx '2mm'
+      Lterid 0
+      Lleader true
+      Apoftx unset
+      Lshape Angled Vertical
+      Font 5
+      Justification Left
+      Alignment Hbody
+      Blnk true
+      Lvisibility true
+      Txcolour Yellow 
+      LLStyle Solid 
+      LLColour Cyan 
+      LFStyle Solid 
+      LFColour Cyan
+    endif
+    
+	enddo
+  
+  $!view/LINE_Labs 
+  var !olds coll all glab for ce
+  Spread remote omit   gap 2.0000 margin 0.0000 select all from !olds
+  
+  $!view
+  var !olds coll all laye for ce
+  do !old values !olds
+    $!old
+    var !dels coll all ldim for ce
+    do !del values !dels
+      $!del
+      delete ldim
+    enddo
+  enddo
+  
+  LABEL /END
+  prompt on
+endmethod
+
+-- slope test  /4-00780-G0-GE-GEN-PI-PIR-0341/S1
+
+define method .runalltag()
+  !Locref = REF
+  !file = 'C:\TEMP\update_error.TXT'
+  !ff = object file(!file)
+  !ff.open('OVERWRITE')
+  !ff.close()
+  !ff.open('APPEND')
+	var !views coll all VIEW for CE
+	do !view values !views
+		var !view name of $!view
+		var !layes coll all LAYE for $!view
+		do !laye values !layes
+		  var !laye name of $!laye
+			if (!laye.matchwild('*EquipTag') or !laye.matchwild('*LINE_Labs') or !laye.matchwild('*VALV_Labs') or !laye.matchwild('*REDU_Labs') or !laye.matchwild('*INST_Labs') or !laye.matchwild('*EQUI_Labs')) then
+			  $!laye
+				DELETE LAYE
+			endif
+	  enddo
+		-----------------------------
+		-- check null drawing list --
+		-----------------------------
+		$!view
+		var !idln Idlname of ce
+		$!idln
+		var !addes coll members of ce
+		do !adde values !addes
+		  var !idnas idna of $!adde
+			$!idnas
+			handle any
+			  $!adde
+				DELETE $!!ce.type
+			endhandle
+	  enddo		
+		
+		$!view
+		VLYSET 1
+		handle ANY
+		elsehandle NONE
+			!equilayer = object dbref()
+			!instlayer = object dbref()
+			var !mems coll mem of ce
+			do !mem values !mems
+				$!mem
+				var !ltitle LTITLE OF $!mem
+				if (!ltitle.eq('EQUIlayer')) then
+					!equilayer = ref
+				elseif (!ltitle.eq('INSTlayer')) then
+					!instlayer = ref
+				endif
+			enddo		
+			if (!equilayer.unset()) then
+				NEW VLAYER
+				LTITLE 'EQUIlayer'
+				!equilayer = ref
+			endif
+			if (!instlayer.unset()) then
+				NEW VLAYER
+				LTITLE 'INSTlayer'
+				!instlayer = ref
+			endif
+			$!view/EQUI_Labs
+			handle any
+				$!view
+				1
+				LAST
+				NEW LAYE NAME $!view/EQUI_Labs
+				Lvisibility true
+				Font 5
+				Justification Template
+				Alignment Template
+				Tsiztx '3mm'
+				Chostx '6mm'
+				Asubtended 0degree
+				Pjustification Towards 
+				Oshttx '2mm'
+				Plcltx '0mm'
+				Doffset 25mm
+				Dmsptx '0mm'
+				Lleader true
+				Lframe true
+				Lshape Straight
+				Gboxtx '1mm'
+				Llcltx '0mm'
+				Xyscale 1 1
+				Xyposition 25mm 25mm 
+				Blnk true
+				Bmargin 0mm
+				Trsf Nulref
+				Txcolour Grey 
+				NLStyle Solid 
+				NLColour Grey 
+				FStyle Off 
+				FColour Grey 
+				LLStyle Solid 
+				LLColour Grey 
+				LFStyle Solid 
+				LFColour Grey 
+				DLStyle Solid 
+				DLColour Grey 
+				PLStyle Solid 
+				PLColour Grey 
+				MColour Grey 
+				CHStyle Off 
+				CHColour Grey
+				Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/EQUIPMENT/NAME
+			elsehandle none
+				Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/EQUIPMENT/NAME
+				Lvisibility TRUE
+			endhandle	
+			$!view/INST_Labs
+			handle any
+				$!view
+				1
+				LAST
+				NEW LAYE NAME $!view/INST_Labs
+				Lvisibility true
+				Font 5
+				Justification Template
+				Alignment Template
+				Tsiztx '3mm'
+				Chostx '6mm'
+				Asubtended 0degree
+				Pjustification Towards 
+				Oshttx '2mm'
+				Plcltx '0mm'
+				Doffset 25mm
+				Dmsptx '0mm'
+				Lleader true
+				Lframe true
+				Lshape Straight
+				Gboxtx '1mm'
+				Llcltx '0mm'
+				Xyscale 1 1
+				Xyposition 25mm 25mm 
+				Blnk true
+				Bmargin 0mm
+				Trsf Nulref
+				Txcolour Grey 
+				NLStyle Solid 
+				NLColour Grey 
+				FStyle Off 
+				FColour Grey 
+				LLStyle Solid 
+				LLColour Grey 
+				LFStyle Solid 
+				LFColour Grey 
+				DLStyle Solid 
+				DLColour Grey 
+				PLStyle Solid 
+				PLColour Grey 
+				MColour Grey 
+				CHStyle Off 
+				CHColour Grey
+				Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/INSTRUMENT/ISNAMED2
+			elsehandle none
+				Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/INSTRUMENT/ISNAMED2
+				Lvisibility TRUE
+			endhandle
+			
+			$!view
+			UPDATE DESIGN IGNORE
+     handle any
+       !ff.writerecord(!view)
+     elsehandle none
+  			UPDATE $!view tagg overwrite
+       handle any
+         !ff.writerecord(!view)
+       elsehandle none
+         var !mems coll all SLAB for $!view/EQUI_Labs
+    			do !mem values !mems
+    				$!mem
+    				Vlayrf $!equilayer
+--    				var !ddna ddna of $!mem
+--    				var !posu u of $!ddna
+--    				if (!posu.matchwild('*-*')) then
+--    				  Tmrf /PW-DRAW-DFLTS-LIBY/LABEL/TAG/INSTR/INST-NO3
+--    				endif
+    			enddo
+    			var !mems coll all SLAB for $!view/INST_Labs
+    			do !mem values !mems
+    				$!mem
+    				Vlayrf $!instlayer
+    			enddo
+       endhandle
+     endhandle
+		endhandle
+	enddo
+  !ff.close()
+  $p C:\TEMP\update_error.TXT
+--  syscom |""C:\Windows\System32\notepad.exe"" C:\TEMP\update_error.TXT|
+endmethod
+
+define method .alltag()
+  !Locref = REF
+	prompt off 
+	Prompt load ESCAPE 'Select View'
+	ID VIEW @
+	handle ANY
+		GOLABEL /END
+	endHandle
+	var !view name of view
+	
+	$!view
+	VLYSET 1
+  handle ANY
+  elsehandle NONE
+	  !equilayer = object dbref()
+	  !valvlayer = object dbref()
+	  !instlayer = object dbref()
+	  var !mems coll mem of ce
+		do !mem values !mems
+		  $!mem
+			var !ltitle LTITLE OF $!mem
+			if (!ltitle.eq('EQUIlayer')) then
+				!equilayer = ref
+			elseif (!ltitle.eq('VALVlayer')) then
+				!valvlayer = ref
+			elseif (!ltitle.eq('INSTlayer')) then
+				!instlayer = ref
+			endif
+		enddo		
+		if (!equilayer.unset()) then
+			NEW VLAYER
+			LTITLE 'EQUIlayer'
+			!equilayer = ref
+		endif
+		if (!valvlayer.unset()) then
+			NEW VLAYER
+			LTITLE 'VALVlayer'
+			!valvlayer = ref
+		endif
+		if (!instlayer.unset()) then
+			NEW VLAYER
+			LTITLE 'INSTlayer'
+			!instlayer = ref
+		endif
+	
+		$!view/EQUI_Labs
+		handle any
+		  $!view
+			1
+			LAST
+			NEW LAYE NAME $!view/EQUI_Labs
+			Lvisibility true
+			Font 5
+			Justification Template
+			Alignment Template
+			Tsiztx '3mm'
+			Chostx '6mm'
+			Asubtended 0degree
+			Pjustification Towards 
+			Oshttx '2mm'
+			Plcltx '0mm'
+			Doffset 25mm
+			Dmsptx '0mm'
+			Lleader true
+			Lframe true
+			Lshape Straight
+			Gboxtx '1mm'
+			Llcltx '0mm'
+			Xyscale 1 1
+			Xyposition 25mm 25mm 
+			Blnk true
+			Bmargin 0mm
+			Trsf Nulref
+			Txcolour Grey 
+			NLStyle Solid 
+			NLColour Grey 
+			FStyle Off 
+			FColour Grey 
+			LLStyle Solid 
+			LLColour Grey 
+			LFStyle Solid 
+			LFColour Grey 
+			DLStyle Solid 
+			DLColour Grey 
+			PLStyle Solid 
+			PLColour Grey 
+			MColour Grey 
+			CHStyle Off 
+			CHColour Grey
+			Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/EQUIPMENT/NAME
+		elsehandle none
+		  Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/EQUIPMENT/NAME
+			Lvisibility TRUE
+		endhandle	
+		$!view/VALV_Labs
+		handle any
+		  $!view
+			1
+			LAST
+			NEW LAYE NAME $!view/VALV_Labs
+			Lvisibility true
+			Font 5
+			Justification Template
+			Alignment Template
+			Tsiztx '3mm'
+			Chostx '6mm'
+			Asubtended 0degree
+			Pjustification Towards 
+			Oshttx '2mm'
+			Plcltx '0mm'
+			Doffset 25mm
+			Dmsptx '0mm'
+			Lleader true
+			Lframe true
+			Lshape Straight
+			Gboxtx '1mm'
+			Llcltx '0mm'
+			Xyscale 1 1
+			Xyposition 25mm 25mm 
+			Blnk true
+			Bmargin 0mm
+			Trsf Nulref
+			Txcolour Grey 
+			NLStyle Solid 
+			NLColour Grey 
+			FStyle Off 
+			FColour Grey 
+			LLStyle Solid 
+			LLColour Grey 
+			LFStyle Solid 
+			LFColour Grey 
+			DLStyle Solid 
+			DLColour Grey 
+			PLStyle Solid 
+			PLColour Grey 
+			MColour Grey 
+			CHStyle Off 
+			CHColour Grey
+			Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/PIPING/VALV1
+		elsehandle none
+		  Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/PIPING/VALV1
+			Lvisibility TRUE
+		endhandle
+		$!view/INST_Labs
+		handle any
+		  $!view
+			1
+			LAST
+			NEW LAYE NAME $!view/INST_Labs
+			Lvisibility true
+			Font 5
+			Justification Template
+			Alignment Template
+			Tsiztx '3mm'
+			Chostx '6mm'
+			Asubtended 0degree
+			Pjustification Towards 
+			Oshttx '2mm'
+			Plcltx '0mm'
+			Doffset 25mm
+			Dmsptx '0mm'
+			Lleader true
+			Lframe true
+			Lshape Straight
+			Gboxtx '1mm'
+			Llcltx '0mm'
+			Xyscale 1 1
+			Xyposition 25mm 25mm 
+			Blnk true
+			Bmargin 0mm
+			Trsf Nulref
+			Txcolour Grey 
+			NLStyle Solid 
+			NLColour Grey 
+			FStyle Off 
+			FColour Grey 
+			LLStyle Solid 
+			LLColour Grey 
+			LFStyle Solid 
+			LFColour Grey 
+			DLStyle Solid 
+			DLColour Grey 
+			PLStyle Solid 
+			PLColour Grey 
+			MColour Grey 
+			CHStyle Off 
+			CHColour Grey
+			Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/INSTRUMENT/ISNAMED1
+		elsehandle none
+		  Trsf /PW-DRAW-DFLTS-LIBY/AUTOTAG/INSTRUMENT/ISNAMED1
+			Lvisibility TRUE
+		endhandle
+		
+		UPDATE $!view tagg overwrite
+		
+		var !mems coll all SLAB for $!view/EQUI_Labs
+		do !mem values !mems
+			$!mem
+			Vlayrf $!equilayer
+		enddo
+		var !mems coll all SLAB for $!view/VALV_Labs
+		do !mem values !mems
+			$!mem
+			Vlayrf $!valvlayer
+		enddo
+		var !mems coll all SLAB for $!view/INST_Labs
+		do !mem values !mems
+			$!mem
+			Vlayrf $!instlayer
+		enddo
+	endhandle
+
+endmethod
+
+define method .xyPos()
+  view
+	handle any
+		!!Alert.Message('Not in a View')
+	elsehandle none
+		var !pos1 enupos of @
+		!array1 = !pos1.split(' ')
+		!size1 = !array1.size()
+		!pos2 = !array1[!size1 - 5] & ' ' & !array1[!size1 - 4] & ' ' & !array1[!size1 - 3] & ' ' & !array1[!size1 - 2] & ' ' & !array1[!size1 - 1] & ' ' & !array1[!size1]
+		!pos3 = object position(!pos2)
+		var !Proj PROJ CODE 
+		if (!Proj eq 'DAC') then
+		  !site = '/DWG_GA-1'
+		else
+		  !site = '/GA'
+		endif
+		!site1 = !site.Dbref()
+		!pos4 = !pos3.wrt(!site1)
+		!array2 = !pos4.string().replace('mm','').split(' ')
+		!string1 = 'X ' & !array2[2].real().string('D0') & '#/Y ' & !array2[4].real().string('D0')
+
+		var !view VIEW
+		$!view/USER_Notes
+		NEW GLAB
+		DDNM =15201/540
+		Btext |$!string1|
+		POS $!pos3
+		XYPOS 25 25
+	endhandle
+endmethod
+
+define method .cableTAG(!cablename is string)
+  !Locref = REF
+	prompt off 
+	Prompt load ESCAPE 'Select View'
+	ID VIEW @
+	handle ANY
+		GOLABEL /END
+	endHandle
+	var !view name of view
+	$!view/User_CableTag
+	handle any
+	  NEW LAYE NAME $!view/User_CableTag
+		Lvisibility true
+		Font 5
+		Justification Template
+		Alignment Template
+		Tsiztx '3mm'
+		Chostx '6mm'
+		Asubtended 0degree
+		Pjustification Towards 
+		Oshttx '2mm'
+		Plcltx '0mm'
+		Doffset 25mm
+		Dmsptx '0mm'
+		Lleader true
+		Lframe true
+		Lshape Straight
+		Gboxtx '1mm'
+		Llcltx '0mm'
+		Xyscale 1 1
+		Xyposition 25mm 25mm 
+		Blnk true
+		Bmargin 0mm
+		Trsf Nulref
+		Txcolour Grey 
+		NLStyle Solid 
+		NLColour Grey 
+		FStyle Off 
+		FColour Grey 
+		LLStyle Solid 
+		LLColour Grey 
+		LFStyle Solid 
+		LFColour Grey 
+		DLStyle Solid 
+		DLColour Grey 
+		PLStyle Solid 
+		PLColour Grey 
+		MColour Grey 
+		CHStyle Off 
+		CHColour Grey 
+	endhandle
+	var !limits Vwlimits of $!view
+	!limits = !limits.replace('From ', '')
+	!limitd = !limits.split(' ').getindexed(6).replace('mm', '').real().int()
+        if (!limits.split(' ').getindexed(5) eq 'D') then
+          !limitd = !limitd * -1
+        endif
+	!limitu = !limits.split(' ').getindexed(13).replace('mm', '').real().int()
+        if (!limits.split(' ').getindexed(12) eq 'D') then
+          !limitu = !limitu * -1
+        endif
+	if (!limitd gt !limitu ) then
+	  !tempu = !limitd
+		!limitd = !limitu
+		!limitu = !tempu 
+	endif
+	var !ftubs COLL ALL FTUB WITHIN $!limits
+	!chks = object array()
+	do !ftub values !ftubs
+	  var !pos1 u of $!ftub
+		!pos2 = !pos1.replace('mm', '').real().int()
+		if (!pos2 ge !limitd and !pos2 le !limitu) then
+			var !pname name of pipe of $!ftub
+			if (!cablename eq 'ALL') then
+			  !bool = !pname.MatchWild('*CCT*') or !pname.MatchWild('*HVT*') or !pname.MatchWild('*LVT*') or !pname.MatchWild('*MVT*') or !pname.MatchWild('*SCT*')
+			else
+			  !bool = !pname.MatchWild('*$!cablename*')
+			endif
+			
+			if (!bool) then
+				!name = !pname & '!' & !pos2
+				if (!chks.find(!name).size() eq 0) then
+					!chks.append(!name)
+
+					NEW GLAB
+					Ddname $!ftub
+					if (!pos1.substring(1,1) eq '-') then
+						Btext '#PIPE(C2:)-EL.-#POSU(C2:)'
+					else
+					Btext '#PIPE(C2:)-EL.+#POSU(C2:)'
+					endif
+					Nppt -1
+					Pkey unset
+					Pkdistance 0.5
+					Lframe false
+					Gboxtx '1mm'
+					Cheitx '3.5mm'
+					Llcltx '0mm'
+					Tsiztx '2mm'
+					Lterid 0
+					Lleader true
+					Apoftx unset
+					Lshape Angled Vertical
+					Font 5
+					Justification Left
+					Alignment Hbody
+					Blnk true
+					Lvisibility true
+					Txcolour Yellow 
+					LLStyle Solid 
+					LLColour Cyan 
+					LFStyle Solid 
+					LFColour Cyan 
+				endif
+			endif
+		endif
+	enddo
+  LABEL /END
+  prompt on
+endmethod
+
+define method .equipTAG()
+  !Locref = REF
+	prompt off 
+	Prompt load ESCAPE 'Select View'
+	ID VIEW @
+	handle ANY
+		GOLABEL /END
+	endHandle
+	var !view name of view
+	$!view/User_EquipTag
+	handle any
+	  NEW LAYE NAME $!view/User_EquipTag
+		Lvisibility true
+		Font 5
+		Justification Template
+		Alignment Template
+		Tsiztx '3mm'
+		Chostx '6mm'
+		Asubtended 0degree
+		Pjustification Towards 
+		Oshttx '2mm'
+		Plcltx '0mm'
+		Doffset 25mm
+		Dmsptx '0mm'
+		Lleader true
+		Lframe true
+		Lshape Straight
+		Gboxtx '1mm'
+		Llcltx '0mm'
+		Xyscale 1 1
+		Xyposition 25mm 25mm 
+		Blnk true
+		Bmargin 0mm
+		Trsf Nulref
+		Txcolour Grey 
+		NLStyle Solid 
+		NLColour Grey 
+		FStyle Off 
+		FColour Grey 
+		LLStyle Solid 
+		LLColour Grey 
+		LFStyle Solid 
+		LFColour Grey 
+		DLStyle Solid 
+		DLColour Grey 
+		PLStyle Solid 
+		PLColour Grey 
+		MColour Grey 
+		CHStyle Off 
+		CHColour Grey 
+	endhandle
+	$!view
+	var !limits Vwlimits of $!view
+	var !idln idln
+	!limits = !limits.replace('From ', '')
+	var !addes coll all adde for $!idln
+	var !remes coll all reme for $!idln
+	!add = ''
+	!rem = ''
+	if (!addes.size() gt 0) then
+	  do !x from 1 to !addes.size()
+		  var !idna idna of $!addes[$!x] 
+		  !add = !add & ' ' & $!idna
+		enddo
+	endif
+		if (!remes.size() gt 0) then
+	  do !x from 1 to !remes.size()
+		  var !idna idna of $!remes[$!x] 
+		  !rem = !rem & ' ' & $!idna
+		enddo
+	endif
+	if (!remes.size() gt 0) then
+	  var !equips COLL ALL EQUI WITHIN $!limits for $!add EXCL $!rem
+	else
+	  var !equips COLL ALL EQUI WITHIN $!limits for $!add
+	endif
+	
+	$!view/User_EquipTag
+	do !equip values !equips
+	  var !name name of $!equip
+		NEW GLAB
+		Ddname $!equip
+		Btext '#NAME(C2:)'
+		Nppt -1
+		Pkey unset
+		Pkdistance 0.5
+		Lframe false
+		Gboxtx '1mm'
+		Cheitx '3.5mm'
+		Llcltx '0mm'
+		Tsiztx '2mm'
+		Lterid 0
+		Lleader true
+		Apoftx unset
+		Lshape Angled Vertical
+		Font 5
+		Justification Left
+		Alignment Hbody
+		Blnk true
+		Lvisibility true
+		Txcolour Yellow 
+		LLStyle Solid 
+		LLColour Cyan 
+		LFStyle Solid 
+		LFColour Cyan
+	enddo
+  LABEL /END
+  prompt on
+endmethod
+
+define method .supporttag()
+  !Locref = REF
+	prompt off 
+	Prompt load ESCAPE 'Select View'
+	ID VIEW @
+	handle ANY
+		GOLABEL /END
+	endHandle
+	var !view name of view
+	
+	!!GaCSC(!view)
+	
+  LABEL /END
+  prompt on
+endmethod
+
+define method .Close()
+   kill !!E3dDraftModify
+endmethod

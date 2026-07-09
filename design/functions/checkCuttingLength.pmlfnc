@@ -1,0 +1,94 @@
+----------------------------------------------------
+-- Function : Check cutting length not too short  --
+-- Date     : 2023/02/04                          --
+-- Auther   : tw tseng                            --
+----------------------------------------------------
+define function !!checkCuttingLength()
+
+  !checkdist = 75
+	!ceref = REF
+	!cetype = TYPE
+  if (!cetype eq 'SITE' or !cetype eq 'ZONE' or !cetype eq 'PIPE' or !cetype eq 'GPWL' or !cetype eq 'GPSET') then
+    var !pipes coll all pipe for $!ceref
+		!i = 0
+    if (!pipes.size() gt 0) then
+		  !ff = object file('c:\temp\CheckCuttingLength.txt')
+			!ff.open('overwrite')
+      do !pipe values !pipes
+				var !brans coll all bran for $!pipe
+				do !bran values !brans
+				  $!bran
+					var !brann name of $!bran
+					var !zone name of zone of $!bran
+					if (defined(!branhead)) then
+					  !branhead.delete()
+					endif
+					1
+					handle any
+						var !dist atle
+						if (!dist.real() lt !checkdist) then
+						  var !hbor hbor of $!bran 
+							!ff.writerecord(!zone & ' ' & !brann & ' ' & !brann & ' ' & !hbor & ' ' & !dist)
+							!i = !i + 1
+						endif
+						break
+					elsehandle none
+						var !type type
+						var !p1bore p1 bore
+						if (!type neq 'ATTA' and !type neq 'OLET' and !type neq 'PTAP') then
+							var !ref ref
+						  if (undefined(!branhead)) then
+						    !branhead = !bran
+								var !dist cons dist pa of $!ref to ph
+							else
+							  var !dist cons dist pa of $!ref to pl of $!pref
+						  endif
+							if (!dist.real() lt 1) then
+  							!dist = '11111111'
+							endif
+							var !pref ref
+							if (!dist.real() lt !checkdist) then
+							  !ff.writerecord(!zone & ' ' & !brann & ' ' & !ref & ' ' & !p1bore & ' ' & !dist)
+							  !i = !i + 1
+							endif
+						endif
+						do !j
+						  next
+							handle any
+							  break
+							elsehandle none
+							  var !type type
+								var !p1bore p1 bore
+								if (!type neq 'ATTA' and !type neq 'OLET' and !type neq 'PTAP') then
+									var !ref ref
+								  if (undefined(!branhead)) then
+									  !branhead = !bran
+										var !dist cons dist pa of $!ref to ph
+									else
+									  var !dist cons dist pa of $!ref to pl of $!pref
+									endif
+									if (!dist.real() lt 1) then
+										!dist = '11111111'
+									endif
+									var !pref ref
+									if (!dist.real() lt !checkdist) then
+									  !ff.writerecord(!zone & ' ' & !brann & ' ' & !ref & ' ' & !p1bore & ' ' & $!dist)
+							      !i = !i + 1
+									endif
+								endif
+							endhandle
+						enddo
+					endhandle	
+				enddo
+			enddo
+			!ff.close()
+		endif
+		$p *************************************************************
+		$p $!i result(s) exported to c:\temp\CheckCuttingLength.txt
+		$p *************************************************************
+--			syscom |""C:\Windows\System32\notepad.exe"" c:\temp\CheckCuttingLength.txt|
+
+	else
+	  !!alert.warning('select SITE, ZONE, PIPE, GPWL, GPSET')
+	endif
+endfunction

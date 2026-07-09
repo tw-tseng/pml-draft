@@ -1,0 +1,77 @@
+----------------------------------------------------------
+-- Function : Mto two unions for each sw or scrd valve  --
+-- Date     : 2023/12/14                                --
+-- Auther   : tw tseng                                  --
+----------------------------------------------------------
+define function !!UnionMto()
+	!ceref = REF
+	!cetype = TYPE
+  if (!cetype eq 'SITE' or !cetype eq 'ZONE' or !cetype eq 'valv' or !cetype eq 'GPWL' or !cetype eq 'GPSET') then
+    var !valvs coll all valv with (matchwild(p1 conn,'SW*') or matchwild(p1 conn,'SC*')) for $!ceref
+		!i = 0
+    if (!valvs.size() gt 0) then
+		  !result = object file('c:\temp\UnionMto.txt')
+			!result.open('overwrite')
+      do !valv values !valvs
+			  $!valv
+				var !pipe name of pipe
+				var !documentnumber :PWMFIELD5 OF pipe
+				var !spre name of spref
+				!spres = !spre.split('/')
+				!pspec = '/' & !spres[2]
+				var !p1bore p1 bore
+				var !p2bore p2 bore
+				!spco = !pspec & '/UN_SC3000-' & !p1bore.replace('mm','')
+				if (!pspec eq '/0010CB01' or !pspec eq '/0010CB06' or !pspec eq '/0150CB01' or !pspec eq '/0150CB03' or !pspec eq '/0150CB04' or !pspec eq '/0150CB06' or !pspec eq '/0150CB08' or !pspec eq '/0150CB10' or !pspec eq '/0150CB11' or !pspec eq '/0300CB01') then
+				  var !dtxr 'Union ASME B16.11 FTHD 3000# FRGD. ASTM A 105'
+					var !thk '3000#'
+					!pnum = 'UNIB1611THNNAS1053000#-' & !p1bore.replace('mm','')
+				elseif (!pspec eq '/0150HA02') then
+				  var !dtxr 'Union ASME B16.11 FTHD 3000# FRGD. ASTM A 182 GR. F304'
+					var !thk '3000#'
+					!pnum = 'UNIB1611THNNAS1823000#-' & !p1bore.replace('mm','')
+				endif
+				var !cwei 0
+				if (!p1bore eq '15mm') then
+				  var !cwei 0.36
+				elseif (!p1bore eq '20mm') then
+				  var !cwei 0.6
+				elseif (!p1bore eq '25mm') then
+				  var !cwei 0.79
+				elseif (!p1bore eq '32mm') then
+				  var !cwei 0.975
+				elseif (!p1bore eq '40mm') then
+				  var !cwei 1.86
+				elseif (!p1bore eq '50mm') then
+				  var !cwei 2.7
+				elseif (!p1bore eq '65mm') then
+				  var !cwei 4.4
+				elseif (!p1bore eq '80mm') then
+				  var !cwei 6
+				endif
+				!atle = atle
+				!ltle = ltle
+				!qty = 0
+				if (!atle ge 200) then
+				  !qty = !qty + 1
+				endif
+				if (!ltle ge 200) then
+				  !qty = !qty + 1
+				endif
+				if (!qty neq 0) then
+				  --                   LINE NO !TYPE!     P1BORE         !P2BORE!  P3BORE  !DTXR!  ITLE!  QUANTITY!MTOC!MTOT!CWEIGHT!UWEIGHT!SPREF!:PNUM OF SPREF!DocumentNumber!thk
+					!result.writerecord(!pipe & '!UNIO!' & !p1bore & '!' & !p2bore & '!0!' & !dtxr & '!0!' & !qty.string() & '!0!0!' & !cwei & '!0!' & !spco & '!' & !pnum & '!' & !documentnumber & '!' & !thk)
+				endif
+			enddo
+			!result.close()
+		endif
+		$!ceref
+		$p ***********************************
+		$p exported to c:\temp\UnionMto.txt
+		$p ***********************************
+--		syscom |""C:\Windows\System32\notepad.exe"" c:\temp\UnionCheck.txt|
+
+	else
+	  !!alert.warning('select SITE, ZONE, valv, GPWL, GPSET')
+	endif
+endfunction

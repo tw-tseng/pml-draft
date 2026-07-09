@@ -1,0 +1,108 @@
+setup form !!Offs
+  title 'Offset Functions'
+  PATH DOWN
+  text .Dist 'Offset Distance' width 7 is real
+  button .Ok 'Apply' call '!This.Apply()'
+  button .Cancel at XMAX.Ok + 5 YMIN.Ok call '!This.Close()'
+exit
+
+define method .Offs()
+  !This.Dist.Val = 1
+endmethod
+
+define method .Apply()
+  do
+    prompt off
+    prompt load escape |Identify a Line NO to Offset|
+    var !lab IDENTIFY GLAB @
+    handle ANY $* USER cancel
+      prompt on
+      prompt dismiss
+      break
+    elsehandle NONE
+      prompt dismiss
+      PROMPT ON
+      $!lab
+      OFFS
+      var !oldxypo XYPO of $!lab
+      !oldxypoarray = !oldxypo.split(' ')
+      !txtang = ADEG
+      if (!txtang EQ 90 or !txtang EQ -90 or !txtang EQ 270) then
+        if (!This.Dist.Val EQ 0) then
+          !newx = -1
+        else
+          !newx = !oldxypoarray[1].Real() + !This.Dist.Val
+        endif
+        !newxypo = !newx.String() & ' ' & !oldxypoarray[2]
+      elseif (!txtang EQ 0 or !txtang EQ 180) then
+        if (!This.Dist.Val EQ 0) then
+          !newy = 1
+        else
+          !newy = !oldxypoarray[2].Real() + !This.Dist.Val
+        endif
+        !newxypo = !oldxypoarray[1] & ' ' & !newy.String()
+      endif
+      if (defined(!newxypo)) then
+        XYPO $!newxypo
+        var !EXTENT EXTENT BTEX
+        var !EX split |$!EXTENT|
+        
+        ABSO
+        var !xypo XYPO
+        !xypoarray = !xypo.Split(' ')
+        !apof = APOF
+        !txtang = ADEG
+        var !ddnashpos SHPOS OF DDNA OF CE
+        !ddnashposarray = !ddnashpos.Split(' ')
+        if (!apof.Size() EQ 0) then
+          if (!txtang EQ 90) then
+            if (!ddnashposarray[4].Real() GT !xypoarray[4].Real()) then
+              !tmp1 = 0
+              !tmp2 = !EX[8].real() - !ddnashposarray[4].Real() + 3
+            else
+              !tmp1 = 0
+              !tmp2 = !EX[4].real() - !ddnashposarray[4].Real() - 3
+            endif
+          else
+            if (!ddnashposarray[2].Real() GT !xypoarray[2].Real()) then
+              !tmp1 = !EX[6].real() - !ddnashposarray[2].Real() + 3
+              !tmp2 = 0
+            else
+              !tmp1 = !EX[2].real() - !ddnashposarray[2].Real() - 3
+              !tmp2 = 0
+            endif
+          endif
+        else
+          if (!txtang EQ 90) then
+            if ((!ddnashposarray[4].Real() + !apof[2]) GT !xypoarray[4].Real()) then
+              !tmp1 = 0
+              !tmp2 = !EX[8].real() - !ddnashposarray[4].Real() + 3
+            else
+              !tmp1 = 0
+              !tmp2 = !EX[4].real() - !ddnashposarray[4].Real() - 3
+            endif
+          else
+            if ((!ddnashposarray[2].Real() + !apof[1]) GT !xypoarray[2].Real()) then
+              !tmp1 = !EX[6].real() - !ddnashposarray[2].Real() + 3
+              !tmp2 = 0
+            else
+              !tmp1 = !EX[2].real() - !ddnashposarray[2].Real() - 3
+              !tmp2 = 0
+            endif
+          endif
+        endif
+        
+        PREC DIST 0.001
+        LSHA BENT
+        BPOF $!tmp1 $!tmp2
+        if (!This.Dist.Val EQ 0) then
+          BPOF unset
+        endif
+      endif
+    ENDHANDLE
+  enddo
+endmethod
+
+define method .Close()
+  kill !!Offs
+endmethod

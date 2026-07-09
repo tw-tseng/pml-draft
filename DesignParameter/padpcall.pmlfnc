@@ -1,0 +1,36 @@
+define function !!padpcall()
+    !!myRefNo = refno
+    !myDNName = Name 
+    !myCTName = Rtext of DetRef of SpRef
+
+    !!myShowName = STRING()
+    !!myElemDesp = ARRAY()
+    !myDesignParaNum = REAL()
+   
+ $* Define Componment Showing Info. of Name 
+    if (substring(!myDNName,1,1) EQ '=' ) then 
+       !!myShowName = !myCTName
+    else
+       !!myShowName = !myDNName
+    endif    
+    
+    !!myElemDesp = Desp
+
+$*    !!alert.Message('DbRef : $!!myRefNo;  Type is: !!myRefNo.Type()')
+
+    !myDesignParaNum = !!padpcollect(!!myRefNo)
+    If (!myDesignParaNum GT 0 ) then
+       $!!myRefNo
+       !!paedpreplace(!!myRefNo)
+
+       if define(!!padpform3) then
+          kill !!padpform3
+       endif
+
+       pml reload form !!padpform3
+       show !!padpform3
+    Else
+         !!alert.Message('DP setting numbers: $!myDesignParaNum; Nothing to do.')
+    Endif    
+endfunction
+

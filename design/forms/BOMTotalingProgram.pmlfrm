@@ -1,0 +1,108 @@
+
+setup form !!BOMTotalingProgram
+    member .readname is string
+    member .typevalue is string
+    member .headingarrs is ARRAY
+    member .FILTERvalue is string
+	--at xmIN.load ymax.load + 0.2 
+	--button.load 'LOAD' call ' !this.run2 ( )'
+	--button.save 'SAVE' at xmax.load + 0.7 ymin.load call ' !this.run2 ( )'
+	--paragraph.savepath at xmax.save + 0.2 ymin.save width 27 lines 1
+	text  .title 'TITLE : TYPE SIZE DTXR QTY UNIT' width 30 scroll 200 string
+	text .TYPE      'Type(s) : ' at xmIN.title ymax.title + 0.2 width 51 scroll 150 string
+	text .FILTER    'With :    '  at xmIN.TYPE ymax.TYPE + 0.2 width 51 scroll 150 string
+    text .HIERARCHY 'Hierarchy:' at xmIN.FILTER ymax.FILTER + 0.2 width 46 scroll 200 string
+    button .DLIST   'CE' at xmAX.HIERARCHY + 0.6 yMIN.HIERARCHY call '!this.ButtonToJoin()'
+	button .RUN   'RUN' at xmIN.HIERARCHY yMAX.HIERARCHY + 0.6 call '!this.RunningList()'
+	button .cancel   'Cancel' at xmin.DLIST - 4 yMIN.RUN  call '!this.cancelpro()'
+	
+exit
+  
+  
+
+define method .RunningList()
+ !this.typevalue = !this.TYPE.val
+  !this.FILTERvalue = !this.FILTER.val
+  !titlevalue = !this.title.val
+ !this.headingarrs = !titlevalue.replace('(','!(').replace(')',')!').split('!')
+ 
+ !this.readname = !this.HIERARCHY.val
+ 
+ -----------↓↓↓↓↓↓↓determine whether the form is typed correctly↓↓↓↓↓↓↓↓------------
+ !rdn = true
+	if (!!BOMTotalingProgram.typevalue eq '') then
+		!!BOMTotalingProgram.typevalue = 'bran mem'
+		
+	else
+		var !kk coll all ($!!BOMTotalingProgram.typevalue)
+		handle any
+			!rdn = false
+			$p error - '$!!BOMTotalingProgram.typevalue' Wrong
+		endhandle
+	endif
+	
+	if (!!BOMTotalingProgram.FILTERvalue neq '') then
+		!!BOMTotalingProgram.FILTERvalue = 'with ' + !!BOMTotalingProgram.FILTERvalue
+		var !tut coll all bran mem $!!BOMTotalingProgram.FILTERvalue
+		handle any
+			!rdn = false
+			$p error - '$!!BOMTotalingProgram.FILTERvalue' wrong writing
+		endhandle
+	endif
+	
+	
+	if (!!BOMTotalingProgram.readname neq '') then
+		do !qqq from 1 to !!BOMTotalingProgram.readname.split().size()
+			!err = !!BOMTotalingProgram.readname.split().getindexed(!qqq)
+			$!err
+			handle any
+				!rdn = false
+				$p error - $!err value does not exist
+			
+			endhandle
+		enddo
+	else
+		!rdn = false
+		!!alert.Warning(|hierarchy cannont be empty.|)
+	endif
+	
+	
+	-------------------↑↑↑↑↑↑↑↑↑↑↑↑↑----------------------------
+  
+if (!rdn) then
+  kill !!Inspection
+  show !!Inspection
+ endif
+endmethod
+
+
+
+
+define method .ButtonToJoin()
+   var !coll name of ce
+   !readname1 = !this.HIERARCHY.val
+   if (!readname1 eq '') then
+		!this.HIERARCHY.val = !this.HIERARCHY.val & ' ' & !coll
+   else
+	   !HierarchyArrs = !readname1.split()
+	   
+	   !pp = true
+	   do  !r from 1 to !HierarchyArrs.size()
+			!hiArr = !HierarchyArrs.getindexed(!r)
+		   if (!hiArr eq !coll) then
+			!pp = false
+		   endif
+	   enddo
+	   if (!pp eq true) then
+			!this.HIERARCHY.val = !this.HIERARCHY.val & ' ' & !coll
+	   endif
+   endif
+   
+endmethod
+
+
+
+
+define method .cancelpro()
+kill !!BOMTotalingProgram
+endmethod

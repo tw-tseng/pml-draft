@@ -1,0 +1,391 @@
+
+import 'GridControl'
+handle any
+endhandle
+
+setup form !!Inspection resize
+  container .netFrame pmlNetControl 'NET' dock fill height 20 width 120
+  button .apply  'Export'            at x50 ymin  anchor r+t call '!this.ExportCSV()'
+	--button .search  'Search'            at xmax.apply + 2 ymin.apply  anchor r+t call '!this.GetAAA()'
+  member .columnHeadings    is ARRAY
+  member .attributeTable    is ARRAY
+  member .file              is STRING
+  using namespace 'Aveva.Core.Presentation'
+  member .dbCtrl is NETGRIDCONTROL
+  member .rows is array
+  member .columns is array
+  member .dbNames is array
+  member .dbarray is array
+exit
+
+define method .Inspection()
+  show !!Inspection
+  !this.GetSpco()
+endmethod
+
+
+define method .GetSpco()
+
+using namespace 'Aveva.Core.Presentation'
+  !this.dbCtrl = object NETGRIDCONTROL()
+  !this.netFrame.control = !this.dbCtrl.handle()
+ !strs = object array()
+ !this.dbarray.clear()
+	if (!this.dbNames.empty()) then
+	else
+		-- !this.dbNames.ClearGridData()
+		!this.dbNames.Clear()
+	endif	 
+	
+  --------------------------Freely add titles-------------
+  
+ 
+      !title = 'Inspection summary'
+	  !Heading[1] = 'TYPE'
+	  !Heading[2] = 'SIZE'
+	  !Heading[3] = 'DESC'
+	  !Heading[4] = 'QTY'
+	  !Heading[5] = 'UNITS'
+	  !n = 1
+	  !titleno = 0
+    do  !dd from 1 to !!BOMTotalingProgram.headingarrs.size()
+      --------------↓↓↓↓↓exclude values in brackets↓↓↓↓↓----------------
+  
+	    if (not !!BOMTotalingProgram.headingarrs.getindexed(!dd).matchwild (|(*)|)) then
+			do !ru from 1 to !!BOMTotalingProgram.headingarrs.getindexed(!dd).split().size()
+					if (!!BOMTotalingProgram.headingarrs.getindexed(!dd).split().getindexed(!ru) neq '') then
+					  !titleno = !n
+					  !Heading[!n + 5] = !!BOMTotalingProgram.headingarrs.getindexed(!dd).split().getindexed(!ru)
+					 
+					  !n = !n + 1
+					endif
+			enddo
+		elseif (!!BOMTotalingProgram.headingarrs.getindexed(!dd).matchwild (|(*)|)) then
+		    !titleno = !n
+			!Heading[!n + 5] = !!BOMTotalingProgram.headingarrs.getindexed(!dd).replace(|(|,'').replace(|)|,'')
+			 
+			  !n = !n + 1
+		
+	    endif
+	  
+    enddo
+   
+	var !mems coll all ($!!BOMTotalingProgram.typevalue) $!!BOMTotalingProgram.FILTERvalue for $!!BOMTotalingProgram.readname
+			handle any
+			elsehandle none
+			 !dbi = 1
+				do !mem values !mems
+				 var !REF REF of $!mem
+				 var !TYPE TYPE of $!mem
+						if (!type neq 'WELD') then
+							if (!TYPE eq 'TUBI') then
+								var !prev mtbe of $!mem 
+								handle any
+								elsehandle none  
+								 var !stype type of $!prev
+								  -----bran head tubi---------
+									if (!stype eq 'BRAN') then
+										 var !branname name of $!prev
+									
+										 var !mtoc mtoh of $!branname
+									else
+								 ----------tubi-----------
+										 var !mtoc mtot of $!prev
+									
+								
+									endif
+								 
+								endhandle
+						   --------------------------------
+							else
+								handle any
+								elsehandle none  
+								   var !mtoc mtoc of $!mem
+								endhandle
+							endif
+					   ------------------------------------------
+							if (!mtoc eq 'unset') then
+						   
+										if (!TYPE eq 'TUBI') then
+										  var !tubiltle ltle of $!mem
+										 
+										else
+										  !tubiltle = '1'
+										 
+										endif
+									!quanty = '1'
+									   var !p1bore p1bore of $!mem
+											handle any
+											elsehandle none
+												!p1 = !p1bore.string()
+											endhandle
+										var !p2bore p2bore of $!mem
+											handle any
+											elsehandle none
+											 !p2 = !p2bore.string()
+											endhandle
+									   var !p3bore p3bore of $!mem
+											handle any
+											elsehandle none
+												!p3 = !p3bore.string()
+											endhandle
+									
+									if (!type eq 'REDU') then
+									
+											!psize = !p1 + 'x' + !p2
+									elseif (!type eq 'OLET') then
+											!psize = !p1 + 'x' + !p3
+									elseif (!type eq 'TEE') then
+											if  (!p1 eq !p3) then
+												!psize = !p1
+											elseif(!p1 neq !p3) then
+												!psize = !p1 + 'x' + !p3
+											endif
+									elseif (!type eq 'FILT' or !type eq 'FLAN' or !type eq 'COUP' or !type eq 'INST' or !type eq 'VALV' or !type eq 'PCOM') then 
+											if  (!p1 eq !p2) then
+												!psize = !p1
+											elseif(!p1 neq !p2) then
+												!psize = !p1 + 'x' + !p2
+											endif		
+									else
+											!psize = !p1
+									endif
+									
+									 var !dtxr dtxr of $!mem
+									 handle any
+									   !dtxr = ''
+									 endhandle
+									 var !skey skey of $!mem
+									  handle any
+										!skey = ''
+									 endhandle
+							 ----↓↓↓↓↓↓二維陣列寫入的方法↓↓↓-----
+								 if (!skey eq 'TESO' or !skey eq 'TERF') then
+								 -------if it is STUB IN, no value is taken----------------------
+								 else
+										  !this.dbarray[$!dbi][1] = !type
+										  !this.dbarray[$!dbi][2] = !psize 
+										  !this.dbarray[$!dbi][3] = !dtxr
+										  !this.dbarray[$!dbi][4] = !tubiltle
+										  if (!type eq 'TUBI') then
+												!gunits0 = 'mm'
+										  else
+												!gunits0 = 'pcs'
+										  endif
+										 !this.dbarray[$!dbi][5] = !gunits0
+										
+										do !tc from 6 to !titleno + 5
+											var !dtitle $!Heading[$!tc] of $!mem
+												handle any
+													!dtitle = ' '
+												endhandle
+											!this.dbarray[$!dbi][!tc] = !dtitle
+										enddo
+										
+											 !dbi = !dbi + 1	
+										 
+								 endif
+						  endif
+					  endif	
+					 
+					  
+				enddo
+				
+			endhandle
+
+--------------------  ↓↓↓↓ summary ↓↓↓↓  ---------------------------
+
+--$(
+     !xxxarray = object array()
+     !x = 1
+	 !xxx = 1
+	 !ismto = true
+	 !xxx1 = !xxx + 1
+	 !cpqty = 0
+	do
+		
+							!ccon = true
+							!xc = 1
+							if (!this.dbarray.size() GT 1) then
+							-----------.SIZE()>1 就進行比對條件，相同條件進行加總-------	
+							
+								do
+									if (!xc gt !titleno) then
+										break
+									endif
+									
+									if (!this.dbarray[!xxx][!xc + 5] neq !this.dbarray[!xxx1][!xc + 5]) then
+										!ccon = false
+										break
+									endif
+									!xc = !xc + 1
+									
+								enddo
+								
+								if (!this.dbarray[!xxx][1] eq !this.dbarray[!xxx1][1] and !this.dbarray[!xxx][2] eq !this.dbarray[!xxx1][2] and !this.dbarray[!xxx][3] eq !this.dbarray[!xxx1][3] and !ccon eq true) then
+								
+									!ismto = false
+									if (!cpqty eq 0) then
+										!cpqty = !this.dbarray[!xxx][4].replace('mm','').real() + !this.dbarray[!xxx1][4].replace('mm','').real()
+										!xxxarray.append(!xxx)
+										!xxxarray.append(!xxx1)
+									--	$P $!XXX ????
+									--	$P $!XXX1 >>>
+									else  
+										!cpqty = !cpqty + !this.dbarray[!xxx1][4].replace('mm','').real()
+										!xxxarray.append(!xxx1)
+									--	$P $!XXX1 -----
+									endif
+									
+								elseif (!ismto eq true) then
+									!cpqty = !this.dbarray[!xxx][4].replace('mm','').real()
+									!xxxarray.append(!xxx)
+									!ismto = false
+								endif 
+							else
+								!cpqty = !this.dbarray[!xxx][4].replace('mm','').real()
+								!xxxarray.append(!xxx)
+								!ismto = false
+							    
+							endif
+						!xxxarray.unique()
+							
+			---------↓↓↓將加總後結果寫入grid ↓↓↓↓------
+				if (!xxx1 eq !this.dbarray.size()) then
+					!this.dbNames[$!x][1] = !this.dbarray[!xxx][1]
+					!this.dbNames[$!x][2] = !this.dbarray[!xxx][2]
+					!this.dbNames[$!x][3] = !this.dbarray[!xxx][3]
+					!this.dbNames[$!x][4] = !cpqty.string()
+					!this.dbNames[$!x][5] = !this.dbarray[!xxx][5]
+						do !f from 1 to !titleno
+						!this.dbNames[$!x][!f + 5] = !this.dbarray[!xxx][!f + 5]
+						enddo
+				!x = !x + 1
+				----------------↓↓↓刪除加總過的值↓↓↓---------------
+					
+					do !y from !xxxarray.size() to 1 by -1
+						!xxxarr = !xxxarray.getindexed(!y)
+					--	$P $!xxxarr
+						!this.dbarray.remove(!xxxarr)
+					enddo
+					!xxxarray.clear()
+				-----------------------------------
+					!cpqty = 0
+					!ismto = true
+				--	!NNN = !this.dbarray.size()
+					--		$P $!NNN SSSS
+				endif
+				if (!xxx1 LT !this.dbarray.size()) then
+					!xxx1 = !xxx1 + 1
+				elseif (!cpqty eq 0) then
+					!xxx1 = !xxx + 1
+				elseif (!this.dbarray.size() eq 1) then
+					!xxx1 = !xxx
+				endif				
+				if (!this.dbarray.size() eq 0) then
+					break
+				endif
+	enddo
+
+
+--$)
+--------------------------
+$(
+	!x = 1
+  
+	do  !xxx from 1 to !this.dbarray.size()
+	----↓↓↓↓↓↓二維陣列讀取的方法↓↓↓-----
+	$(
+	!gtype = !this.dbarray[!xxx][1]
+	!gsize = !this.dbarray[!xxx][2]
+	!gdesc = !this.dbarray[!xxx][3]
+	!gqty = !this.dbarray[!xxx][4]
+	!gunits = !this.dbarray[!xxx][5]
+		do !ii from 1 to !titleno
+						!dbtitleval[$!ii] = !this.dbarray[!xxx][!ii + 5]
+		enddo
+	
+	$)
+	
+	!ismto = true
+			if (!this.dbNames.empty()) then
+			--------   ↑↑↑ *.empty() array如果是一個空值為 true ---------
+			
+			else
+				
+					  do !bj from 1 to !this.dbNames.size()
+					  $(
+						   !cptype = !this.dbNames[!bj][1]
+						   !cpsize = !this.dbNames[!bj][2]
+						   !cpdesc = !this.dbNames[!bj][3]
+						   $)
+							!ccon = true
+							!xc = 1
+							
+							do
+								if (!xc gt !titleno) then
+									break
+								endif
+								--!cptitleval[$!xc] = !this.dbNames[!bj][!xc + 5]
+							--	if (!cptitleval[$!xc] neq !dbtitleval[$!xc]) then 
+								if (!this.dbNames[!bj][!xc + 5] neq !this.dbarray[!xxx][!xc + 5]) then
+									!ccon = false
+									break
+								endif
+								!xc = !xc + 1
+								
+							enddo
+							if (!this.dbarray[!xxx][1] eq !this.dbNames[!bj][1] and !this.dbarray[!xxx][2] eq !this.dbNames[!bj][2] and !this.dbarray[!xxx][3] eq !this.dbNames[!bj][3] and !ccon eq true) then
+								!cr = !bj
+								!ismto = false
+								!cpqty = !this.dbNames[!bj][4].replace('mm','').real()
+							endif 	  
+					  enddo
+				  
+				endif
+			---------↓↓↓第一筆寫入grid ↓↓↓↓------
+				if (!ismto eq true) then
+					!this.dbNames[$!x][1] = !this.dbarray[!xxx][1]
+					!this.dbNames[$!x][2] = !this.dbarray[!xxx][2]
+					!this.dbNames[$!x][3] = !this.dbarray[!xxx][3]
+					!this.dbNames[$!x][4] = !this.dbarray[!xxx][4]
+					!this.dbNames[$!x][5] = !this.dbarray[!xxx][5]
+						do !f from 1 to !titleno
+						--!gtitleval = !this.dbarray[!xxx][!f + 5]
+						--!this.dbNames[$!x][!f + 5] = !dbtitleval[$!f]
+						!this.dbNames[$!x][!f + 5] = !this.dbarray[!xxx][!f + 5]
+						enddo
+					
+					!x = !x + 1
+				else
+				   -- !cpqty = !cpqty + !gqty.replace('mm','').real()
+					!cpqty = !cpqty + !this.dbarray[!xxx][4].replace('mm','').real()
+					!this.dbNames[$!cr][4] = !cpqty.string()
+					
+				endif
+	enddo
+$)
+	
+---------------------------------------------	
+
+	 using namespace 'Aveva.Core.Presentation'
+    !nds = object NETDATASOURCE(!title, !Heading, !this.dbNames)
+    !this.dbCtrl.bindToDataSource(!nds)
+    !this.dbCtrl.columnExcelFilter(true)
+    !this.dbCtrl.outlookGroupStyle(false)
+    !this.dbCtrl.fixedHeaders(true)
+    !this.dbCtrl.fixedRows(true)
+    !this.dbCtrl.outlookGroupStyle(true)
+    !this.dbCtrl.gridHeight(1000.0)
+	
+endmethod
+
+
+
+
+define method .ExportCSV()
+!this.dbCtrl.savegridtoexcel('C:\temp\exportdata.xls')
+endmethod
+
+
+

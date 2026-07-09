@@ -1,0 +1,118 @@
+-- Description : Create component ref. for piping SPCO in paragon
+-- Module      : PARAGON
+-- Author      : TW Tseng
+-- Created     : 2024/10/02
+
+import 'GridControl'
+handle any
+endhandle
+
+setup form !!AteCompRef resize
+	container .netFrame pmlNetControl 'NET' dock fill height 20 width 120
+	button .apply  'CE'            at x50 ymin  anchor r+t call '!this.GetSpco()'
+	button .getsel 'Get Selection' at x55 ymin  anchor r+t call '!this.GetSel()'
+	button .selall 'Select All'    at x71 ymin  anchor r+t call '!this.SelAll()'
+  member .columnHeadings    is ARRAY
+  member .attributeTable    is ARRAY
+  member .file              is STRING
+  using namespace 'Aveva.Core.Presentation'
+  member .dbCtrl is NETGRIDCONTROL
+  member .rows is array
+  member .columns is array
+exit
+
+define method .AteCompRef()
+  show !!AteCompRef
+  !this.GetSpco()
+endmethod
+
+define method .SelAll()
+  !this.dbCtrl.selectAllRows()
+endmethod
+
+define method .GetSel()
+  do !a values !this.dbCtrl.GetSelectedRows()
+    $p $!a[1]
+  enddo  
+endmethod
+
+define method .GetSpco()
+  using namespace 'Aveva.Core.Presentation'
+  !this.dbCtrl = object NETGRIDCONTROL()
+  !this.netFrame.control = !this.dbCtrl.handle()
+  !title = 'Attributes'
+  !Heading[1] = 'Name'
+  !Heading[2] = 'Type'
+  !Heading[3] = 'P1'
+  !Heading[4] = 'P2'
+  !Heading[5] = 'P3'
+  !Heading[6] = 'Description'
+  !Heading[7] = 'Cmpref'
+  
+  var !spcos coll all spco for ce
+  if (!spcos.size() eq 0) then
+    !!alert.error('No SPCOs Found!')
+    !this.apply.active = false
+  else
+    !dbNames.delete()
+    handle any
+    endhandle
+    !dbNames[1][1] = ''
+    !dbNames[1][2] = ''
+    !dbNames[1][3] = ''
+    !dbNames[1][4] = ''
+    !dbNames[1][5] = ''
+    !dbNames[1][6] = ''
+    !dbi = 1
+    do !spco values !spcos
+      var !name name of $!spco
+      var !type gtype of catref of $!spco
+      var !p1bore p1bore of $!spco
+      var !p1conn p1conn of $!spco
+      !p1 = !p1bore & '-' & !p1conn
+      var !p2bore p2bore of $!spco
+      handle any
+        !p2 = ''
+      elsehandle none
+        if (!p2bore eq '0mm') then
+          !p2 = ''
+        else
+          var !p2conn p2conn of $!spco
+          !p2 = !p2bore & '-' & !p2conn
+        endif
+      endhandle
+      var !p3bore p3bore of $!spco
+      handle any
+        !p3 = ''
+      elsehandle none
+        if (!p3bore eq '0mm') then
+          !p3 = ''
+        else
+          var !p3conn p3conn of $!spco
+          !p3 = !p3bore & '-' & !p3conn
+        endif
+      endhandle
+      var !desc rtext of detref of $!spco
+      var !cmpref cmpref of $!spco
+      !dbNames[$!dbi][1] = !name
+      !dbNames[$!dbi][2] = !type
+      !dbNames[$!dbi][3] = !p1
+      !dbNames[$!dbi][4] = !p2
+      !dbNames[$!dbi][5] = !p3
+      !dbNames[$!dbi][6] = !desc
+      !dbNames[$!dbi][7] = !cmpref
+      !dbi = !dbi + 1
+    enddo
+  
+    using namespace 'Aveva.Core.Presentation'
+    !nds = object NETDATASOURCE(!title, !Heading, !dbNames)
+    !this.dbCtrl.bindToDataSource(!nds)
+    !this.dbCtrl.columnExcelFilter(true)
+    !this.dbCtrl.outlookGroupStyle(false)
+    !this.dbCtrl.fixedHeaders(true)
+    !this.dbCtrl.fixedRows(true)
+    !this.dbCtrl.outlookGroupStyle(true)
+    !this.dbCtrl.gridHeight(1000.0)
+  
+  
+endmethod

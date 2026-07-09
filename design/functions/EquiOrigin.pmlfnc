@@ -1,0 +1,28 @@
+define function !!EquiOrigin(!box is string)
+  var !currentOrigin pos wrt worl
+	$!box
+	var !targetOrigin P6 POS WRT WORL
+	owner
+--	$p $!currentOrigin
+--	$p $!targetOrigin	
+	!line = object line(object position(!currentOrigin), object position(!targetOrigin))
+	!dist = !line.length()
+	if (!dist neq 0) then
+		!dir = !line.direction().opposite()
+		var !mems coll members of ce
+		do !mem values !mems
+		  $!mem
+			var !type type
+			if (!type neq 'DPSE' ) then
+				!pv = object pointvector(!!ce.pos.wrt(world), !dir)
+				!pos = !pv.offset(!dist).position.wrt(owner)
+--				$p $!!ce.pos -> $!pos
+				!!ce.pos = !pos
+--				handle any
+--				endhandle
+			 endif
+		enddo
+		owner
+		pos $!targetOrigin	
+	endif
+endfunction

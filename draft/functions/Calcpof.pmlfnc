@@ -1,0 +1,62 @@
+define function !!Calcpof(!ref is DBREF) is REAL
+  $!ref
+  ABSO
+  var !xypo XYPO
+  !xypoarray = !xypo.Split(' ')
+  !apof = APOF
+  !txtang = ADEG
+  var !ddnashpos SHPOS OF DDNA OF CE
+  !ddnashposarray = !ddnashpos.Split(' ')
+  !result = 0
+  if (!apof.Size() EQ 0) then
+    if (!txtang EQ 90) then
+      if (!ddnashposarray[4].Real() GT !xypoarray[4].Real()) then
+        !result = 1
+      else
+        !result = 0
+      endif
+    else
+      if (!ddnashposarray[2].Real() GT !xypoarray[2].Real()) then
+        !result = 1
+      else
+        !result = 0
+      endif
+
+    endif
+  else
+    if (!txtang EQ 90) then
+      if ((!ddnashposarray[4].Real() + !apof[2]) GT !xypoarray[4].Real()) then
+        !result = 1
+      else
+        !result = 0
+      endif
+    else
+      if ((!ddnashposarray[2].Real() + !apof[1]) GT !xypoarray[2].Real()) then
+        !result = 1
+      else
+        !result = 0
+      endif
+
+    endif
+  endif
+  $!ref
+  if (!result NEQ 0) then
+    var !EXTENT EXTENT BTEX
+    var !EX split |$!EXTENT|
+    !p1 = !EX[1] & ' ' & !EX[2] & ' ' & !EX[3] & ' ' & !EX[4]
+    !p2 = !EX[5] & ' ' & !EX[6] & ' ' & !EX[7] & ' ' & !EX[8]
+    !result = !p1.Position().Distance(!p2.Position())
+  endif
+  return !result
+endfunction
+
+
+
+--  VNOT 1
+--  handle ANY
+--    LAYE
+--    NEW VNOT
+--  endhandle
+--  NEW STRA FPT $!ddnashpos TPT $!xypo
+--  !ang = ADEG
+--  DELETE STRA

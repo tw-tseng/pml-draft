@@ -1,0 +1,270 @@
+--------------------------------------------------------
+-- Function : Define arrange drawings for CSC project --
+--            1. support tag with ellipse border      --
+--            2. define vlayer for group in AutoCAD   --
+-- Auther   : tw tseng                                --
+-- Date     : 2024/02/01                              --
+--------------------------------------------------------
+
+define function !!GaCSC(!view is string)
+
+	----------------------------------
+	-- Define "Supportlayer" VLAYER --
+	----------------------------------
+	$!view
+	VLYSET 1
+	handle ANY
+	elsehandle NONE
+		!supportlayer = object dbref()
+		!instlayer = object dbref()
+		!valvlayer = object dbref()
+		!nozzlayer = object dbref()
+		var !mems coll mem of ce
+		do !mem values !mems
+			$!mem
+			var !ltitle LTITLE OF $!mem
+			if (!ltitle.eq('Supportlayer')) then
+				!supportlayer = ref
+			elseif (!ltitle.eq('INSTlayer')) then
+			  !instlayer = ref
+			elseif (!ltitle.eq('VALVlayer')) then
+			  !valvlayer = ref
+			elseif (!ltitle.eq('NOZZlayer')) then
+			  !nozzlayer = ref
+			endif
+		enddo		
+		if (!supportlayer.unset()) then
+			NEW VLAYER
+			LTITLE 'Supportlayer'
+			!supportlayer = ref
+		endif
+		if (!instlayer.unset()) then
+			NEW VLAYER
+			LTITLE 'INSTlayer'
+			!instlayer = ref
+		endif
+		if (!valvlayer.unset()) then
+			NEW VLAYER
+			LTITLE 'VALVlayer'
+			!valvlayer = ref
+		endif
+		if (!nozzlayer.unset()) then
+			NEW VLAYER
+			LTITLE 'NOZZlayer'
+			!nozzlayer = ref
+		endif
+
+		------------------------------
+		-- Delete "SupportTag" LAYE --
+		------------------------------
+		var !layes coll all LAYE for $!view
+		do !laye values !layes
+			var !laye name of $!laye
+			if (!laye.matchwild('*SupportTag')) then
+				$!laye
+				DELETE LAYE
+			endif
+		enddo
+		$!view
+		1
+		LAST
+		NEW LAYE NAME $!view/SupportTag
+		Lvisibility true
+		Font 1
+		Justification Left
+		Alignment Template
+		Tsiztx '2.5mm'
+		Chostx '6mm'
+		Asubtended 0degree
+		Pjustification Towards 
+		Oshttx '2mm'
+		Plcltx '0mm'
+		Doffset 25mm
+		Dmsptx '0mm'
+		Lleader true
+		Lframe true
+		Lshape Straight
+		Gboxtx '1mm'
+		Llcltx '0mm'
+		Xyscale 1 1
+		Xyposition 25mm 25mm 
+		Blnk false
+		Bmargin 0mm
+		Trsf Nulref
+		Txcolour Yellow 
+		NLStyle Solid 
+		NLColour Cyan 
+		FStyle Off 
+		FColour Grey 
+		LLStyle Solid 
+		LLColour Cyan 
+		LFStyle Solid 
+		LFColour Cyan 
+		DLStyle Solid 
+		DLColour Cyan 
+		PLStyle Solid 
+		PLColour Cyan 
+		MColour Cyan 
+		CHStyle Off 
+		CHColour Grey
+		
+		-------------------------
+		-- Create Support Tags --
+		-------------------------
+		$!view
+		var !limits Vwlimits of $!view
+		var !idln idln
+		!limits = !limits.replace('From ', '')
+		var !addes coll all adde for $!idln
+		var !remes coll all reme for $!idln
+		!add = ''
+		!rem = ''
+		if (!addes.size() gt 0) then
+			do !x from 1 to !addes.size()
+				var !idna idna of $!addes[$!x] 
+				!add = !add & ' ' & $!idna
+			enddo
+		endif
+			if (!remes.size() gt 0) then
+			do !x from 1 to !remes.size()
+				var !idna idna of $!remes[$!x] 
+				!rem = !rem & ' ' & $!idna
+			enddo
+		endif
+		if (!remes.size() gt 0) then
+			var !attas1 COLL ALL ATTA WITH P1 BORE GE 50 AND ISNAMED WITHIN $!limits for $!add EXCL $!rem
+			!!attas1 = !attas1
+		else
+			var !attas1 COLL ALL ATTA WITH P1 BORE GE 50 AND ISNAMED WITHIN $!limits for $!add
+		endif
+		
+		-----------------------
+		-- sort atta by name --
+		-----------------------
+		!attas = object array()
+		do !temp values !attas1
+		  var !tempn name of $!temp
+			if (not (matchwild(!tempn,'*W') OR matchwild(!tempn,'*X') OR matchwild(!tempn,'*Y') OR matchwild(!tempn,'*Z') )) then
+		    !attas.append(!tempn)
+			endif
+		enddo
+		!attas.sort()
+		
+		$!view/SupportTag
+		
+		!prelist = ''
+		!prepos  = object position('E0 N0 U0')
+		!j = 1
+		do !atta values !attas
+		  var !attan name of $!atta
+		  if (matchwild(!attan,'*_*'))then
+			  !pos = pos of $!atta
+			  if (!prelist eq '') then
+				  var !stext stext of $!atta
+					!prelist = !stext
+					!prepos = !pos
+					!preobj = !attan
+				else
+				  if (false) then
+					-- remove remark if list all attas in one position
+					-- if (!pos.distance(!prepos) le 1) then
+					  var !stext stext of $!atta
+						!prelist = !prelist & '#/' & !stext
+						!prepos = !pos
+						!preobj = !attan
+					else
+					
+					  ---------------------------------------
+					  -- check vertical or horizontal pipe --
+						---------------------------------------
+						var !p1di p1 dir of $!preobj
+						!p1dir = object direction(!p1di)
+						if (!p1dir.angle(object direction('U')) le 10 or !p1dir.angle(object direction('D')) le 10) then
+						  var !p1pos p1 u of $!preobj
+							if (!p1pos.matchwild('-*')) then
+							  !prelist = !prelist & '#/' & 'TOS-' & !p1pos.split('.').getindexed(1).replace('mm','')
+							else
+							  !prelist = !prelist & '#/' & 'TOS+' & !p1pos.split('.').getindexed(1).replace('mm','')
+							endif
+						endif
+					  
+						if (not (!prelist.matchwild('*unset*'))) then
+							NEW GLAB
+							DDNM $!preobj
+							Btext |$!prelist|
+							XYPOS 10 10
+							Cheitx '2.5mm'
+							Lframe false
+							Vlayrf $!supportlayer
+						endif
+						var !stext stext of $!atta
+						!prelist = !stext
+						!prepos = !pos
+						!preobj = !attan
+				  endif
+				endif
+			endif
+			!j = !j + 1
+		enddo
+		-----------------------
+		-- for the last atta --
+		-----------------------
+		if (!prelist neq '') then
+		  if (not (!prelist.matchwild('*unset*'))) then
+				NEW GLAB
+				!last = !attas[!attas.size()]
+				DDNM $!last
+				Btext |$!prelist|
+				XYPOS 10 10
+				Cheitx '2.5mm'
+				Lframe false
+				Vlayrf $!supportlayer
+			endif
+		endif
+	endhandle
+	
+	-------------------------------
+	-- define VLAYER for AutoCAD --
+	-------------------------------
+	
+	$!view/INST_Labs
+	handle any
+	elsehandle none
+		var !mems coll all SLAB for $!view/INST_Labs
+		do !mem values !mems
+		  $!mem
+			BLNK FALSE
+			Vlayrf $!instlayer
+		enddo
+	endhandle
+	$!view/VALV_Labs
+	handle any
+	elsehandle none
+		var !mems coll all SLAB for $!view/VALV_Labs
+		do !mem values !mems
+		  $!mem
+			BLNK FALSE
+			Vlayrf $!valvlayer
+		enddo
+	endhandle
+	$!view/NOZZ_Labs
+	handle any
+	elsehandle none
+		var !mems coll all SLAB for $!view/NOZZ_Labs
+		do !mem values !mems
+		  $!mem
+			BLNK FALSE
+			Vlayrf $!nozzlayer
+		enddo
+	endhandle
+	
+	-----------------------------
+	-- not used in CSC project --
+	-----------------------------
+	$!view/REDU_Labs
+	handle any
+	elsehandle none
+		DELETE LAYE
+	endhandle
+
+endfunction

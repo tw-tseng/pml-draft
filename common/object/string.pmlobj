@@ -1,0 +1,206 @@
+$(--H------------------------------------------------------------------------
+--H Company:     VE-Solutions GmbH
+--H------------------------------------------------------------------------
+--H
+--H Author:      Lars Leppin
+--H Date:        27.07.2005
+--H
+--H Description: extends the methods of the built in STRING object
+--H
+--H Revision:    A
+--H Revisor:     Lars Leppin
+--H Date:        07.12.2005
+--H Description: add the ToArray method
+--H
+--H Revision:    B
+--H Revisor:
+--H Date:
+--H Description:
+--H
+--H------------------------------------------------------------------------$)
+---------------------------------------------------------------------------
+--Method:       FillUp()
+--
+--Description:  fill the string up with the given number of characters at the given position
+--
+--Method Type:  Function
+--
+--Arguments:
+--  [#] [R/RW]  [Data Type] [Description]
+--   1   R       REAL        total lenght of the string
+--   2   R       STRING      fill character
+--   3   R       STRING      alignment (Left, Center, Right)
+--
+--Return:
+--              [Data Type] [Description]
+--               STRING      the modified string
+---------------------------------------------------------------------------
+
+define method .FillUp(!Length is REAL, !FillCharacter is STRING, !Align is STRING) is STRING
+
+  !Result =!this
+
+  do !I from 1 to !Length - !Result.Length()
+
+    --check if the string alreday the neccessary lenght
+    break if ( !Result.Length().Geq(!Length) )
+
+    --alignment LEFT (and alignment CENTRE)
+    if ( !Align.UpCase() inset ('L', 'LEFT', 'C', 'CENTRE') ) then
+      !Result = !Result & !FillCharacter.Substring(1, 1)
+    endif
+
+    --alignment RIGHT (and alignment CENTRE)
+    if ( !Align.UpCase() inset ('R', 'RIGHT', 'C', 'CENTRE') ) then
+      !Result = !FillCharacter.Substring(1, 1) & !Result
+    endif
+
+  enddo
+
+  if ( !Align.UpCase() inset ('R', 'RIGHT') ) then
+    return !Result.Substring(!Length * -1, !Length)
+  else
+    return !Result.Substring(1, !Length)
+  endif
+
+endmethod
+
+---------------------------------------------------------------------------
+--Method:       IsReal()
+--
+--Description: checks if string can be changed into a real
+--
+--Method Type:  Function
+--
+--Arguments:
+--  [#] [R/RW]  [Data Type] [Description]
+--
+--Return:
+--              [Data Type] [Description]
+--               BOOLEAN     true, if already a element with the same name exists
+---------------------------------------------------------------------------
+
+define method .IsReal() is BOOLEAN
+
+  !Real = !this.Real()
+  handle any
+    return false
+  elsehandle none
+    return true
+  endhandle
+
+endmethod
+
+---------------------------------------------------------------------------
+--Method:       NameExists()
+--
+--Description: checks if already a element with the same name exists
+--
+--Method Type:  Function
+--
+--Arguments:
+--  [#] [R/RW]  [Data Type] [Description]
+--
+--Return:
+--              [Data Type] [Description]
+--               BOOLEAN     true, if already a element with the same name exists
+---------------------------------------------------------------------------
+
+define method .NameExists() is BOOLEAN
+
+  --save the old position in hierachy
+  !OldRefe = !!CE
+
+  !!CE     = object DBREF(!this)
+  handle any
+    --restore the old position in hierachy
+    !!CE = !OldRefe
+    return false
+  elsehandle none
+    --restore the old position in hierachy
+    !!CE = !OldRefe
+    return !this.Trim().NEq('')
+  endhandle
+
+endmethod
+
+---------------------------------------------------------------------------
+--Method:       ToArray()
+--
+--Description:  convert the string into an array of single characters
+--
+--Method Type:  Function
+--
+--Arguments:
+-- [#] [R/RW]  [Data Type] [Description]
+--
+--Return:
+--             [Data Type] [Description]
+--              ARRAY       every array member contains a single character of the original string
+---------------------------------------------------------------------------
+
+define method .ToArray() is ARRAY
+
+  --init
+  !Result = object ARRAY()
+
+  --every charachter extents the size of the array by 1
+  do !I from 1 to !this.Length()
+    !Result.Append(!this.Substring(!I, 1))
+  enddo
+
+  return !Result
+
+endmethod
+
+---------------------------------------------------------------------------
+--Method:       VESObjReloadReq()
+--
+--Description:  check if a reload of the object is required. The standard object don't know this method and produce a error, that mean the reload of the extended object is required
+--
+--Method Type:  Procedure
+--
+--Arguments:
+-- [#] [R/RW]  [Data Type] [Description]
+--
+--Return:
+--             [Data Type] [Description]
+--
+---------------------------------------------------------------------------
+
+define method .VESObjReloadReq()
+
+  --dont remove this empty method
+
+endmethod
+
+---------------------------------------------------------------------------
+--Method:       ValidFileName()
+--
+--Description:  checks if the current string is a valid file name
+--
+--Method Type:  Function
+--
+--Arguments:
+-- [#] [R/RW]  [Data Type] [Description]
+--
+--Return:
+--             [Data Type] [Description]
+--              BOOLEAN     true, if the current string does not contain any critical symbol
+---------------------------------------------------------------------------
+
+define method .ValidFileName() is BOOLEAN
+
+  !InvalidString  = '" # $$ % * + / : < = > ? \ | ~ &'
+  !InvalidSymbols = !InvalidString.Split()
+
+  do !InvalidSymbol value !InvalidSymbols
+    if ( !this.Split(!InvalidSymbol).Size().Gt(1) ) then
+      return false
+    endif
+  enddo
+
+  return true
+
+endmethod
+

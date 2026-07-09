@@ -1,0 +1,63 @@
+define function !!padpcollect(!inRefNo is ANY) is REAL
+     !!myAryTitle = ARRAY()
+     !!myAryDVal = ARRAY()
+     !!myAryDiniVal = ARRAY()   $* ---- Stored Initial design value at form load
+
+
+     !!myAryDOrder = ARRAY()    $* ---- Sorted array by Data Number of Design Purpose; 
+                                $* ----        Elements Value are index of !myAryNumber
+     
+     !aryDatas = ARRAY()        $* ---- DataSet members DATA collection                              
+     !myAryValue = ARRAY()      
+     !myAryNumber = ARRAY()
+     !myAryDKey = ARRAY()
+     !myAryDefault = ARRAY()
+     !myAryExpression = ARRAY()
+     !myComponmentPA = ARRAY()           
+
+     !myCatRef = CatRef of SpRef
+     $!myCatRef
+     !myComponmentPA = Param      $* ---- Get current componment parameters ----
+     
+     !myDtRef = DtRef
+     $!myDtRef
+     Var !aryDatas Collect Members of CE
+
+     Do !idx From 1 to ArraySize(!aryDatas)
+          $!aryDatas[$!idx]
+          If Match(Purp,'DESP') EQ 1 then
+             !!myAryTitle[!idx] = Dtitle              
+             !myAryNumber[!idx] =  Number
+             !myAryDKey[!idx] = Dkey            
+             !myAryDefault[!idx] = Dproperty             
+             !myAryExpression[!idx] = Pproperty
+          EndIf      
+     EndDo
+         
+     !!myAryDOrder = !myAryNumber.SortedIndices()
+     
+     !myAryNumber.ReIndex(!!myAryDOrder)
+     !!myAryTitle.ReIndex(!!myAryDOrder)
+     !myAryDKey.ReIndex(!!myAryDOrder)
+     !myAryDefault.ReIndex(!!myAryDOrder)
+     !myAryExpression.ReIndex(!!myAryDOrder)
+               
+     !!myAryDOrder = !myAryNumber.SortedIndices()
+
+     Head                                            $* Go to DataSet position
+     !flagParam = '|' + '( ATTRIB PARA[' + '|'
+     
+     Do !idx Values !!myAryDOrder           
+           !checkParam = '|' + !myAryDefault[$!idx] + '|'
+           
+           If MATCH($!checkParam , $!flagParam) EQ 0 then 
+              !!myAryDVal[$!idx] = Rprop $!myAryDKey[$!idx] 
+           Else
+              $!myCatRef
+              !relayV = REPLACE(replace(!myAryDefault[$!idx] , '( ATTRIB ' , '') , ')' , '')
+              !!myAryDVal[$!idx] = $!relayV 
+           EndIf
+     EndDo
+
+     Return !!myAryTitle.Size()
+endfunction

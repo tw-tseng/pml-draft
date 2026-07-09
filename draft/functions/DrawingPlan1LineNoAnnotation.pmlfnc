@@ -1,0 +1,905 @@
+------------------------------------
+-- Function : Line No. Annotation --
+-- Auther   : tw tseng            --
+-- Date     : 2025/03/09          --
+------------------------------------
+
+import 'AteSortLineNo'
+handle any
+endhandle
+
+define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real, !boxYlen is real)
+	NEW LAYE $!name/SS/S1/V1/ateLINE_R$!!DrawingPlan1.rev
+	Purpose LINE
+	Lvisibility true
+	Font 1
+	Justification Left
+	Alignment Template
+	Tsiztx '3mm'
+	Chostx '6mm'
+	Asubtended 0degree
+	Pjustification Towards 
+	Oshttx '2mm'
+	Plcltx '0mm'
+	Doffset 25mm
+	Dmsptx '0mm'
+	Lleader true
+	Lframe true
+	Lshape Straight
+	Gboxtx '1mm'
+	Llcltx '0mm'
+	Xyscale 1 1
+	Xyposition 25mm 25mm 
+	Blnk false
+	Bmargin 0mm
+	Trsf Nulref
+	Txcolour Yellow 
+	NLStyle Solid 
+	NLColour Cyan 
+	FStyle Off 
+	FColour Grey 
+	LLStyle Solid 
+	LLColour Cyan 
+	LFStyle Solid 
+	LFColour Cyan 
+	DLStyle Solid 
+	DLColour Cyan 
+	PLStyle Solid 
+	PLColour Cyan 
+	MColour Cyan 
+	CHStyle Off 
+	CHColour Grey
+  Cheitx '3.00mm'
+	
+--	var !viewdirup    viewdir up
+--	var !viewdirleft  viewdir left
+	var !viewdirdown  viewdir down
+	var !viewdirright viewdir right
+	
+	!dirlist = 'right left down up'	
+	
+	------------------------------------------------------------------
+	-- !result is the array with th correct dimension attach points --
+	------------------------------------------------------------------
+	!result = object array()
+	!!DrawingPlan1.equiparray.clear()
+	do !jj from 1 to 4
+		!dir = !dirlist.part(!jj)
+		var !viewdir viewdir $!dir
+		!j = 1
+		!result.clear()
+
+		---------------------------------------------
+		-- TYPE 1 situation                        --
+		-- find pipes that cross right match line  --
+		---------------------------------------------
+		!types = object array()
+		if (!dir.eq('right')) then
+			!tempvl = !!DrawingPlan1.maxE - 10
+			!vlfm = 'E ' & $!tempvl & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
+		elseif (!dir.eq('left')) then
+			!tempvl = !!DrawingPlan1.minE + 10
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
+			!vlto = 'E ' & $!tempvl & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
+		elseif (!dir.eq('down')) then
+			!tempvl = !!DrawingPlan1.minN + 10
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl & ' U ' & $!!DrawingPlan1.maxU
+		elseif (!dir.eq('up')) then
+			!tempvl = !!DrawingPlan1.maxN - 10
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl & ' U ' & $!!DrawingPlan1.minU
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
+		endif
+
+		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		var !mems coll all bran members within $!vlfm to $!vlto
+		do !i from 1 to !mems.size()
+			!mem = !mems[$!i]
+			var !type type of $!mem
+			if (!type.matchwild('*TUB*')) then
+				var !mem mtbe of $!mems[$!i]
+			endif
+			var !check IDLN for $!mem
+	--      $p $!check
+			handle any
+	--      skip
+			elsehandle none
+				var !pipe namn of pipe of $!mem
+				if (!check.eqnocase('INCLUDED')) then
+					var !type type of $!mem
+					if (!type.eqnocase('BRAN')) then
+						var !memenupos hpos of $!mem
+					else
+						var !memenupos worpos of $!mem
+					endif
+					var !memshpos shpos of $!memenupos
+					----------------------------------------------------------------
+					-- y is the key of hashtable in .Net and cannot be duplicated --
+					-- so a small value needs to be added to identify it          --
+					----------------------------------------------------------------
+					!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
+					!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+					!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!y'
+					!result[!j] = !memstr
+					!j = !j + 1
+				endif
+			endhandle
+		enddo
+		
+		--------------------------------------------
+		-- sort !sortedtypes by y or x coordinate --
+		--------------------------------------------
+		using namespace 'Aveva.Core.Samples'
+		!obj = object AteSortLineNo()
+		if (!dir.eq('right') or !dir.eq('left')) then
+			!sortedtypes = !obj.method('y', !result)
+		else
+			!sortedtypes = !obj.method('x', !result)
+		endif
+		
+		-----------------------------------------------------------------------
+		-- remove the distance between type 2,3,4 and type1 is less then 4mm --
+		-----------------------------------------------------------------------
+		!newresult = object array()
+		do !i from 1 to !sortedtypes.size()
+			!del = true
+			do !ii from 1 to !newresult.size()
+				if (!dir.eq('right') or !dir.eq('left')) then
+					if (abs(!sortedtypes[!i].split('~').getindexed(1).real() - !newresult[!ii].split('~').getindexed(1).real()) le 1) then
+						!del = false
+					endif
+				else
+					if (abs(!sortedtypes[!i].split('~').getindexed(2).real() - !newresult[!ii].split('~').getindexed(2).real()) le 1) then
+						!del = false
+					endif
+				endif		
+			enddo
+			if (!del) then
+				!newresult.append(!sortedtypes[!i])
+			endif
+		enddo
+		!result = !newresult
+		
+		-------------------------------------------------------------
+		-- j is the index of collection for dimension attach point --
+		-- never initial it later                                  --
+		-------------------------------------------------------------
+		!j = 1
+
+		---------------------------------------------
+		-- TYPE 2a situation                       --
+		-- find pipes that cross upper match line  --
+		---------------------------------------------
+		if (!dir.eq('right')) then
+			!tempvl  = !!DrawingPlan1.maxU - 10
+			!tempvl1 = !!DrawingPlan1.maxE - !boxXlen * 0.33
+			!vlfm = 'E ' & $!tempvl1 & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
+		elseif (!dir.eq('left')) then
+			!tempvl  = !!DrawingPlan1.maxU - 10
+			!tempvl1 = !!DrawingPlan1.minE + !boxXlen * 0.33
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
+			!vlto = 'E ' & $!tempvl1 & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
+		elseif (!dir.eq('down')) then
+			!tempvl  = !!DrawingPlan1.maxU - 10
+			!tempvl1 = !!DrawingPlan1.minN + !boxYlen * 0.33
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl1 & ' U ' & $!!DrawingPlan1.maxU
+		elseif (!dir.eq('up')) then
+			!tempvl  = !!DrawingPlan1.maxU - 10
+			!tempvl1 = !!DrawingPlan1.maxN - !boxYlen * 0.33
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl1 & ' U ' & $!tempvl
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
+		endif
+
+		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		var !mems coll all bran members within $!vlfm to $!vlto
+		do !i from 1 to !mems.size()
+			!mem = !mems[$!i]
+			var !type type of $!mem
+			if (!type.matchwild('*TUB*')) then
+				var !mem mtbe of $!mems[$!i]
+			endif
+			var !check IDLN for $!mem
+	--      $p $!check
+			handle any
+	--      skip
+			elsehandle none
+				var !pipe namn of pipe of $!mem
+				if (!check.eqnocase('INCLUDED')) then
+					var !type type of $!mem
+					if (!type.eqnocase('BRAN')) then
+						var !memenupos hpos of $!mem
+					else
+						var !memenupos worpos of $!mem
+					endif
+					var !memshpos shpos of $!memenupos
+					!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
+					!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+					!memstr = !y & '~' & !x & '~type2a!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
+					!types[!j] = !memstr
+					!j = !j + 1
+				endif
+			endhandle
+		enddo
+		
+		---------------------------------------------
+		-- TYPE 2b situation                       --
+		-- find pipes that cross lower match line  --
+		---------------------------------------------
+		if (!dir.eq('right')) then
+			!tempvl  = !!DrawingPlan1.minU + 10
+			!tempvl1 = !!DrawingPlan1.maxE - !boxXlen * 0.33
+			!vlfm = 'E ' & $!tempvl1 & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl
+		elseif (!dir.eq('left')) then
+			!tempvl  = !!DrawingPlan1.minU + 10
+			!tempvl1 = !!DrawingPlan1.minE + !boxXlen * 0.33
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
+			!vlto = 'E ' & $!tempvl1 & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl
+		elseif (!dir.eq('down')) then
+			!tempvl  = !!DrawingPlan1.minU + 10
+			!tempvl1 = !!DrawingPlan1.minN + !boxYlen * 0.33
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl1 & ' U ' & $!tempvl
+		elseif (!dir.eq('up')) then
+			!tempvl  = !!DrawingPlan1.minU + 10
+			!tempvl1 = !!DrawingPlan1.maxN - !boxYlen * 0.33
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl1 & ' U ' & $!!DrawingPlan1.minU
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl
+		endif
+
+		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		var !mems coll all bran members within $!vlfm to $!vlto
+		do !i from 1 to !mems.size()
+			!mem = !mems[$!i]
+			var !type type of $!mem
+			if (!type.matchwild('*TUB*')) then
+				var !mem mtbe of $!mems[$!i]
+			endif
+			var !check IDLN for $!mem
+	--      $p $!check
+			handle any
+	--      skip
+			elsehandle none
+				var !pipe namn of pipe of $!mem
+				if (!check.eqnocase('INCLUDED')) then
+					var !type type of $!mem
+					if (!type.eqnocase('BRAN')) then
+						var !memenupos hpos of $!mem
+					else
+						var !memenupos worpos of $!mem
+					endif
+					var !memshpos shpos of $!memenupos
+					!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
+					!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+					!memstr = !y & '~' & !x & '~type2b!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
+					!types[!j] = !memstr
+					!j = !j + 1
+				endif
+			endhandle
+		enddo
+
+		------------------------------------
+		-- TYPE 3 situation               --
+		-- find elbows within view limit  --
+		------------------------------------
+		!tempvl  = !!DrawingPlan1.minU + 10
+		!tempvl1  = !!DrawingPlan1.maxU - 10
+		if (!dir.eq('right')) then
+			!tempvl2 = !!DrawingPlan1.maxE - !boxXlen * 0.33
+			!vlfm = 'E ' & $!tempvl2 & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
+		elseif (!dir.eq('left')) then
+			!tempvl2 = !!DrawingPlan1.minE + !boxXlen * 0.33
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
+			!vlto = 'E ' & $!tempvl2 & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
+		elseif (!dir.eq('down')) then
+			!tempvl2 = !!DrawingPlan1.minN + !boxYlen * 0.33
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl2 & ' U ' & $!tempvl1
+		elseif (!dir.eq('up')) then
+			!tempvl2 = !!DrawingPlan1.maxN - !boxYlen * 0.33
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl2 & ' U ' & $!tempvl
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
+		endif
+
+		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		var !mems coll all elbo within $!vlfm to $!vlto
+		do !i from 1 to !mems.size()
+			!mem = !mems[$!i]
+			var !check IDLN for $!mem
+	--      $p $!check
+			handle any
+	--      skip
+			elsehandle none
+				var !pipe namn of pipe of $!mem
+				if (!check.eqnocase('INCLUDED')) then
+					var !memenupos worpos of $!mem
+					var !memshpos shpos of $!memenupos
+					!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
+					!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+					!memstr = !y & '~' & !x & '~type3!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
+					!types[!j] = !memstr
+					!j = !j + 1
+				endif
+			endhandle
+		enddo
+		
+		----------------------------------------
+		-- find euqipments within view limit  --
+		----------------------------------------
+		if (!dir.eq('right')) then
+			!tempvl2 = !!DrawingPlan1.maxE - !boxXlen * 0.1
+			!vlfm = 'E ' & $!tempvl2 & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
+		elseif (!dir.eq('left')) then
+			!tempvl2 = !!DrawingPlan1.minE + !boxXlen * 0.1
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
+			!vlto = 'E ' & $!tempvl2 & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
+		elseif (!dir.eq('down')) then
+			!tempvl2 = !!DrawingPlan1.minN + !boxYlen * 0.1
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl2 & ' U ' & $!tempvl1
+		elseif (!dir.eq('up')) then
+			!tempvl2 = !!DrawingPlan1.maxN - !boxYlen * 0.1
+			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl2 & ' U ' & $!tempvl
+			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
+		endif
+		var !mems coll all equi with (not(matchwild(name, |*_DrawingPlan|))) within $!vlfm to $!vlto
+		do !i from 1 to !mems.size()
+			!mem = !mems[$!i]
+			var !check IDLN for $!mem
+			handle any
+			elsehandle none
+				var !equi namn of $!mem
+				if (!check.eqnocase('INCLUDED')) then
+					---------------------------------------------------------------
+					-- check if most volume of equipment is within view boundary --
+					---------------------------------------------------------------
+					var !wvol wvol of $!mem
+					!checkwvol = false
+					if (!dir.eq('right')) then
+						if (abs(!!DrawingPlan1.maxE - !wvol.part(1).real()) geq (10 / !!DrawingPlan1.vsca))  then
+							!checkwvol = true
+						endif
+					elseif (!dir.eq('left')) then
+						if (abs(!!DrawingPlan1.minE - !wvol.part(4).real()) geq (10 / !!DrawingPlan1.vsca))  then
+							!checkwvol = true
+						endif
+					elseif (!dir.eq('down')) then
+						if (abs(!!DrawingPlan1.minN - !wvol.part(5).real()) geq (10 / !!DrawingPlan1.vsca))  then
+							!checkwvol = true
+						endif
+					elseif (!dir.eq('up')) then
+						if (abs(!!DrawingPlan1.maxN - !wvol.part(2).real()) geq (10 / !!DrawingPlan1.vsca))  then
+							!checkwvol = true
+						endif
+					endif
+					if (!checkwvol) then
+						var !memenupos worpos of $!mem
+						!memenupos1 = object position(!memenupos)
+						-------------------------------------------------------
+						-- check if pos of equipment is within view boundary --
+						-------------------------------------------------------
+						!checkwvol = false
+						if (!dir.eq('right') or !dir.eq('left')) then
+							if (!memenupos1.north lt !!DrawingPlan1.maxN and !memenupos1.north gt !!DrawingPlan1.minN) then
+								!checkwvol = true
+							endif
+						elseif (!dir.eq('down') or !dir.eq('up')) then
+							if (!memenupos1.east lt !!DrawingPlan1.maxE and !memenupos1.east gt !!DrawingPlan1.minE) then
+								!checkwvol = true
+							endif
+						endif
+						if (!checkwvol) then
+							var !memshpos shpos of $!memenupos
+							!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
+							!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+							!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !equi
+							!result.append(!memstr)
+							!!DrawingPlan1.equiparray.append(!equi)
+						endif
+					endif
+				endif
+			endhandle
+		enddo		
+		
+		
+		-------------------------------------------
+		-- TYPE 4 situation                      --
+		-- find bran href/tref is unset and      --
+		-- hdir/tdir opposite to view direction  --
+		-- and hpos/tpos is within view limit    --
+		-------------------------------------------
+		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		var !mems coll all bran with unset(href) or unset(tref) within $!vlfm to $!vlto
+		do !i from 1 to !mems.size()
+			!mem = !mems[$!i]
+			var !pipe namn of pipe of $!mem
+			var !hdir hdir of $!mem
+			var !tdir tdir of $!mem
+			!hdir1 = object direction(!hdir)
+			!tref1 = object direction(!tdir)
+			if (!hdir1.opposite().eq(object direction(!viewdir))) then
+				var !memenupos hpos of $!mem
+				!memenupos1 = object position(!memenupos)
+				if (!memenupos1.east lt !!DrawingPlan1.maxE and !memenupos1.east gt !!DrawingPlan1.minE) then
+					if (!memenupos1.north lt !!DrawingPlan1.maxN and !memenupos1.north gt !!DrawingPlan1.minN) then
+						if (!memenupos1.up lt !!DrawingPlan1.maxU and !memenupos1.up gt !!DrawingPlan1.minU) then
+							var !memshpos shpos of $!memenupos
+							!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
+							!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+							!memstr = !y & '~' & !x & '~type4!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
+							!types[!j] = !memstr
+							!j = !j + 1
+						endif
+					endif
+				endif
+			endif
+			if (!tref1.opposite().eq(object direction(!viewdir))) then
+				var !memenupos tpos of $!mem
+				!memenupos1 = object position(!memenupos)
+				if (!memenupos1.east lt !!DrawingPlan1.maxE and !memenupos1.east gt !!DrawingPlan1.minE) then
+					if (!memenupos1.north lt !!DrawingPlan1.maxN and !memenupos1.north gt !!DrawingPlan1.minN) then
+						if (!memenupos1.up lt !!DrawingPlan1.maxU and !memenupos1.up gt !!DrawingPlan1.minU) then
+							var !memshpos shpos of $!memenupos
+							!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
+							!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+							!memstr = !y & '~' & !x & '~type4!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
+							!types[!j] = !memstr
+							!j = !j + 1
+						endif
+					endif
+				endif
+			endif
+		enddo
+		
+		$(
+		do !i from 1 to !types.size()
+			$p $!types[$!i]
+		enddo
+		$p >>>>>>>>>>>>>>>>>>
+		$)
+
+		---------------------------------------
+		-- sort !sortedtypes by y coordinate --
+		---------------------------------------
+		using namespace 'Aveva.Core.Samples'
+		!obj = object AteSortLineNo()
+		if (!dir.eq('right') or !dir.eq('left')) then
+			!sortedtypes = !obj.method('y', !types)
+		else
+			!sortedtypes = !obj.method('x', !types)
+		endif
+		
+		-----------------------------------------------------------------------
+		-- remove the distance between type 2,3,4 and type1 is less then 4mm --
+		-----------------------------------------------------------------------
+		!dels = object array()
+		do !i from 1 to !sortedtypes.size()
+			!del = false
+			do !ii from 1 to !result.size()
+				if (!dir.eq('right') or !dir.eq('left')) then
+					if (abs(!sortedtypes[!i].split('~').getindexed(1).real() - !result[!ii].split('~').getindexed(1).real()) le 4) then
+						!del = true
+					endif
+				else
+					if (abs(!sortedtypes[!i].split('~').getindexed(2).real() - !result[!ii].split('~').getindexed(2).real()) le 4) then
+						!del = true
+					endif
+				endif
+			enddo
+			if (!del) then
+				!dels.append(!i)
+			endif
+		enddo
+		do !i from !dels.size() to 1 by -1
+			!sortedtypes.remove(!dels[!i])
+		enddo
+		
+	$(
+		do !i from 1 to !sortedtypes.size()
+			$p $!sortedtypes[$!i]
+		enddo
+			$p -----------------------
+	$)
+		
+		-------------------------------------------------------
+		-- determin which dimension attach point is correct  --
+		-- when dimension left/right with same y coordinate  --
+		-- or up/down with same x coordinate                 --
+		-------------------------------------------------------
+		!temp1s = object array()
+		!i = 1
+		do !go
+			break if (!i gt !sortedtypes.size())		
+			!temp = !sortedtypes[!i]
+			!temp1s.clear()
+			!temp1s.append(!temp)
+			!ii = !i + 1
+			do !go1
+				break if (!ii gt !sortedtypes.size())
+				if (!dir.eq('right') or !dir.eq('left')) then
+					if (abs(!sortedtypes[!ii].split('~').getindexed(1).real() - !temp.split('~').getindexed(1).real()) le 4) then
+						!temp1s.append(!sortedtypes[!ii])
+						!ii = !ii + 1
+					else
+						break
+					endif
+				elseif (!dir.eq('down') or !dir.eq('up')) then
+					if (abs(!sortedtypes[!ii].split('~').getindexed(2).real() - !temp.split('~').getindexed(2).real()) le 4) then
+						!temp1s.append(!sortedtypes[!ii])
+						!ii = !ii + 1
+					else
+						break
+					endif
+				endif
+			enddo
+	$(
+			$p >>>>>>>>>>>>>>>>>
+			do !temp1 values !temp1s
+				$p $!temp1
+			enddo
+	$)
+			if (!dir.eq('right')) then
+				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'max', !temp1s, !viewdir))
+			elseif (!dir.eq('left')) then
+				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'min', !temp1s, !viewdir))
+			elseif (!dir.eq('down')) then
+				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'min', !temp1s, !viewdir))
+			elseif (!dir.eq('up')) then
+				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'max', !temp1s, !viewdir))
+			endif
+			
+			!i = !ii
+		enddo
+		
+		$!name/SS/S1/V1/ateLINE_R$!!DrawingPlan1.rev
+
+		NEW LDIM $!name/SS/S1/V1/ateLINE_$!dir_R$!!DrawingPlan1.rev
+		!ldimref = ce
+		Dtangle par
+	--		Dlcntmode 'on'-----------------------------------------------------------------------------------------------------
+		Tsiztx '2mm'
+		Dterid 8103
+		Fterid 8103
+		if (!dir.eq('right') or !dir.eq('left')) then
+			DIR $!viewdirdown
+		elseif (!dir.eq('down') or !dir.eq('up')) then
+			DIR $!viewdirright
+		endif
+
+		do !i from 1 to !result.size()
+			!resultl = !result[!i]
+			!mem = !resultl.split('~').getindexed(3).split('!').getindexed(4)
+			var !type type of $!mem
+			
+			if (!type.eqnocase('BRAN')) then
+				var !mempos hpos of $!mem
+				var !aod phod of $!mem
+				!bop = !mempos.position().up - !aod.real().value() * 0.5
+				!bopu = !bop.nint().value()
+				var !mempossh shpos of $!mempos
+			elseif (!type.eqnocase('EQUI')) then
+				var !mempos (pos of $!mem wrt worl)
+				var !mempossh shpos of $!mempos
+			else
+				var !mempos worpos of $!mem
+				var !aod aod of $!mem
+				!bop = !mempos.position().up - !aod.real().value() * 0.5
+				!bopu = !bop.nint().value()
+				var !mempossh shpos of $!mempos
+			endif
+
+			
+			!templine = object line(!mempossh.position(), !mempossh.position().offset(!viewdir.direction(), 1))
+			if (!dir.eq('right')) then
+				!intpt = !!DrawingPlan1.viewRlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			elseif (!dir.eq('left')) then
+				!intpt = !!DrawingPlan1.viewLlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			elseif (!dir.eq('down')) then
+				!intpt = !!DrawingPlan1.viewDlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			elseif (!dir.eq('up')) then
+				!intpt = !!DrawingPlan1.viewUlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			endif
+			var !temppos enupos of $!intpt
+			!attapos = object position(!temppos)
+			!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
+			if (!type.eqnocase('BRAN')) then
+				if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
+					if (!bopu.geq(0)) then
+						if (!dir.eq('right') or !dir.eq('down')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!bopu'
+						elseif (!dir.eq('left')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!bopu      '
+						elseif (!dir.eq('up')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL+$!bopu'
+						endif
+					else
+						if (!dir.eq('right') or !dir.eq('down')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!bopu'
+						elseif (!dir.eq('left')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!bopu      '
+						elseif (!dir.eq('up')) then	
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL$!bopu'
+						endif
+					endif
+				else
+					if (!dir.eq('right') or !dir.eq('down')) then
+						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)'
+					elseif (!dir.eq('left')) then
+						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)      '
+					elseif (!dir.eq('up')) then
+						NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:)'
+					endif
+				endif
+			elseif (!type.eqnocase('EQUI')) then
+				if (!dir.eq('right') or !dir.eq('down')) then
+					NEW DPOI POS $!attapos DDNA $!mem Pltxt '#EQUI(c2:)'
+				elseif (!dir.eq('left')) then
+					NEW DPOI POS $!attapos DDNA $!mem Pltxt '#EQUI(c2:)    '
+				elseif (!dir.eq('up')) then
+					NEW DPOI POS $!attapos DDNA $!mem Pltxt '    #EQUI(c2:)'
+				endif
+				Ptchtx '4mm'
+			else
+				if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
+					var !pabop abop of $!mem
+					var !plbop lbop of $!mem
+					if (abs(!pabop.position().up - !bop) le 5) then
+						if (!dir.eq('right') or !dir.eq('down')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PABOPU+'
+						elseif (!dir.eq('left')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PABOPU+      '
+						elseif (!dir.eq('up')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL#PABOPU+'
+						endif
+					else
+						if (!dir.eq('right') or !dir.eq('down')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PLBOPU+'
+						elseif (!dir.eq('left')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PLBOPU+      '
+						elseif (!dir.eq('up')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL#PLBOPU+'
+						endif
+					endif
+				else
+					if (!dir.eq('right') or !dir.eq('down')) then
+						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)'
+					elseif (!dir.eq('left')) then
+						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)      '
+					elseif (!dir.eq('up')) then
+						NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:)'
+					endif	
+				endif
+			endif
+		enddo		
+		------------------------------------------------
+		-- create dimension for grid                  --
+		-- !!DrawingPlan1.intersections including     --
+		-- intersection points between view and grids --
+		------------------------------------------------
+		do !intersection value !!DrawingPlan1.intersections
+			!checkpt = false
+			if (!intersection.split('-').getindexed(1).eqnocase('viewRlinesh') and !dir.eq('right')) then
+				!checkpt = true
+			elseif (!intersection.split('-').getindexed(1).eqnocase('viewLlinesh') and !dir.eq('left')) then
+				!checkpt = true
+			elseif (!intersection.split('-').getindexed(1).eqnocase('viewUlinesh') and !dir.eq('up')) then
+				!checkpt = true
+			elseif (!intersection.split('-').getindexed(1).eqnocase('viewDlinesh') and !dir.eq('down')) then
+				!checkpt = true
+			endif
+			if (!checkpt) then
+				!intpt = !intersection.split('-').getindexed(2).before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				var !temppos enupos of $!intpt
+				!attapos = object position(!temppos)
+				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
+				NEW DPOI POS $!attapos
+			endif
+		enddo
+		
+		---------------------------------
+		-- create dimension for limits --
+		---------------------------------
+		$!name/SS/S1/V1/ateLINE_$!dir_R$!!DrawingPlan1.rev
+		var !dpois coll all dpoi for ce
+		
+		if (!dir.eq('right')) then
+			var !temppos enupos of $!!DrawingPlan1.viewURsh
+		elseif (!dir.eq('left')) then
+			var !temppos enupos of $!!DrawingPlan1.viewULsh
+		elseif (!dir.eq('down')) then
+			var !temppos enupos of $!!DrawingPlan1.viewLLsh
+		elseif (!dir.eq('up')) then
+			var !temppos enupos of $!!DrawingPlan1.viewULsh
+		endif
+		
+		!attapos = object position(!temppos)
+		!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
+		!run = true
+		do !dpoi value !dpois
+			$!dpoi
+			var !temppos1 pos
+			!attapos1 = object position(!temppos1)
+			if (!attapos.distance(!attapos1).lt(5)) then
+				!run = false
+			endif
+		enddo
+		if (!run) then
+			NEW DPOI POS $!attapos
+		endif
+		
+		if (!dir.eq('right')) then
+			var !temppos enupos of $!!DrawingPlan1.viewLRsh
+		elseif (!dir.eq('left')) then
+			var !temppos enupos of $!!DrawingPlan1.viewLLsh
+		elseif (!dir.eq('down')) then
+			var !temppos enupos of $!!DrawingPlan1.viewLRsh
+		elseif (!dir.eq('up')) then
+			var !temppos enupos of $!!DrawingPlan1.viewURsh
+		endif
+		!attapos = object position(!temppos)
+		!run = true
+		do !dpoi value !dpois
+			$!dpoi
+			var !temppos1 pos
+			!attapos1 = object position(!temppos1)
+			if (!attapos.distance(!attapos1).lt(5)) then
+				!run = false
+			endif
+		enddo
+		if (!run) then
+			!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
+			NEW DPOI POS $!attapos
+		endif
+		
+		OWNER
+		SORT DIM
+		if (!dir.eq('right') or !dir.eq('up')) then
+			DOFFSET 15 $( (10 - $!!DrawingPlan1.griddist.val) $)
+		elseif (!dir.eq('left') or !dir.eq('down')) then
+			DOFFSET -15
+		endif
+		
+		----------------------------------------------------------
+		-- rotate text 90 degree when distance is less than 7mm --
+		----------------------------------------------------------
+		
+		$!name/SS/S1/V1/ateLINE_$!dir_R$!!DrawingPlan1.rev
+		!mcount = mcount
+		if (!mcount.gt(1)) then
+			do !x from 1 to !mcount - 1
+				$!x
+				var !x1pos pos
+				var !x1shpos shpos of $!x1pos
+				NEXT
+				var !x2pos pos
+				var !x2shpos shpos of $!x2pos
+				if (!dir.eq('right') or !dir.eq('left')) then
+					if (abs(!x1shpos.part(4).replace('mm','').real() - !x2shpos.part(4).replace('mm','').real()) le 7) then
+						Dtangle Horizontal
+						Dtoftx 'X 0mm Y 4mm'
+					else
+						Dtangle Vertical
+						Dtoftx 'X 0mm Y 2.2mm'
+					endif
+				else
+					if (abs(!x1shpos.part(2).replace('mm','').real() - !x2shpos.part(2).replace('mm','').real()) le 7) then
+						Dtangle Vertical
+						Dtoftx 'X 0mm Y 4mm'
+					else
+						Dtangle Horizontal
+						Dtoftx 'X 0mm Y 2.2mm'
+					endif
+				endif
+				OWNER
+			enddo
+		endif
+	enddo
+endfunction
+
+
+
+
+
+
+$(  
+
+
+	NEW DPPT ON $!mem Pltxt '#PIPE(c2:)'
+
+
+
+
+  var !mems coll all bran members within $!vlfm to $!vlto
+  do !i from 1 to !mems.size()
+    !mem = !mems[$!i]
+    -----------------------
+    -- refer to rcollect --
+    -----------------------
+    $* filter collection for those items that are in drawlist for view
+    if (!mem.matchwild('*ileave tube*')) then
+      $* check that IL TUB element exists
+      var !existcheck ref of $!mem
+      handle any $* IL TUB <1mm or does not exist
+        !component = !mem.after('of ')
+        var !nexttype type of next of $!component
+        handle any
+          skip
+        endhandle
+        if (nexttype.eqnocase('ATTA') then
+          var !atta ref of next $!component
+          var !mem 'ileave tube of ' & $!atta
+        endif
+      endhandle
+    endif
+    var !check IDLN for $!mem
+    handle any
+      skip
+    elsehandle none
+      if (!check.eqnocase('INCLUDED')) then
+        if (match(|$!ELEM|,|IL TUB|) neq 0) then
+          $* check if IL TUB crosses or is contained within 3d volume
+          CALLIBM UBOXCHECK $<$!ELEM$> $<$!LIMITS$>
+          if ($!!CDRTNSTATUS eq 1) then
+            $* assume it does not cross... do not append to array
+          else
+            if ($!!CDLNRTN) then
+              var !!CDCARTN append |$!ELEM|
+            else
+              $* $!ELEM does not pass through side/box volume
+            endif
+          endif
+        else
+          var !!CDCARTN append |$!ELEM|
+        endif
+      endif
+    endhandle
+  enddo
+
+
+
+
+
+
+  var !brans vscan for all bran
+  !pipes = object array()
+  do !bran values !brans
+    var !isnamed isname of owner of $!bran
+    if (!isnamed.boolean()) then
+      var !pipe name of pipe of $!bran
+      !pipes.append(!pipe)
+    endif
+  enddo
+  !pipes.unique().sort()
+--  q var !pipes.size()
+  do !pipe values !pipes
+    var !mems coll all bran members for $!pipe
+    do !i from 1 to !mems.size()
+      var !ref ref of $!mems[$!i]
+      var !found find $!ref
+      if (!found.eqnocase('found')) then
+        var !type type of $!ref
+--        $p $!type
+        var !pos worpos of $!ref
+        handle any
+--          $p $!pipe
+        elsehandle none
+          NEW LDIM
+  --        DPOS $!pos
+          DIR N
+          NEW DPOI POS $!pos DDNA $!ref Pltxt '#PIPE'
+          break
+        endhandle
+      endif
+    enddo    
+  enddo
+  
+	$p -----------
+  do !pipe values !pipes
+    $p $!pipe
+  enddo
+$)  

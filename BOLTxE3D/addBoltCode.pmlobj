@@ -1,0 +1,93 @@
+$(
+   pml rehash all
+   pml reload object ADDBOLTCODE
+   !obj = object ADDBOLTCODE()
+$)
+
+define object ADDBOLTCODE
+  member .formName is STRING
+  member .gridName is STRING
+  member .specName is STRING
+  member .specBolt is ARRAY
+  member .boltcommcode is STRING
+  member .pipeName is STRING
+  member .gridData is ARRAY
+  member .specBolts is ARRAY
+  member .dtabData is ARRAY
+endobject
+
+
+define method .addBoltCode()
+  !this.formName = '!!BoltsReport'
+  !this.gridName = '!!BoltsReport.dbCtrl'
+endmethod
+
+define method .getGridData()
+  !runCmd = !this.gridName & '.GetRows()'
+  !this.gridData = $!runCmd
+  handle any
+  endhandle
+endmethod
+
+define method .mngGridData()
+  !gridData = !this.gridData
+  if (!gridData.size() eq 0) then
+    !!alert.warning('The grid is empty')
+    return
+  endif
+
+  do !n from 1 to !gridData.size()
+     !gridRow = !gridData[!n]
+     !pipeName = '/' & !gridRow[3]
+     !pipNamn  = !gridRow[3]
+     !boltSize = !gridRow[5]
+     !boltLen  = !gridRow[6]
+     !boltcode  = !gridRow[7]
+     !pipeSpec = NAME of PSPEC of $!pipeName
+     !lastPartSpecBoltName = !boltcode.before(!boltLen)
+     $P $!pipeName $!pipeSpec $!boltcode $!lastPartSpecBoltName
+     !this.getBoltSpec(!pipeSpec, !lastPartSpecBoltName)
+     if (!this.dtabData.size() eq 1) then
+        !boltCode = !this.getBoltCode(!this.dtabData[1], !boltLen)
+        if (!boltCode ne '') then
+           !!BoltsReport.dbCtrl.SETCELLVALUE(!n, 8, !boltCode)
+           $P ---> !boltcode $!boltcode
+        endif
+     endif
+  enddo
+endmethod
+
+define method .getboltSpec(!specName is STRING, !boltPartName is STRING)
+ 
+  !dtabData = ARRAY()
+  !curSpecBolt = !specName & '/' & trim(!boltPartName)
+  !sbolName = name of BLTREF of $!curSpecBolt
+  !dtabName = name of Nstdblength of $!sbolName
+  !dati = !curSpecBolt & ' | ' & !sbolName & ' | ' & !dtabName
+  !dtabData.append(!dati)
+  !this.dtabData = !dtabData
+  
+endmethod
+
+define method .getBoltCode(!dTabData is STRING, !boltLen is STRING) is STRING
+  !boltCode = ''
+  !splitta = !dTabData.split('|')
+  !boltSpecName = trim(!splitta[1])
+  !sbolName     = trim(!splitta[2])
+  !dTabName     = trim(!splitta[3])
+  !ce = !!ce
+  $!dTabName
+  !allBLen = !!ce.Blength
+  !strCodes = :PNUM
+  !allBCode = !strCodes.split()
+  
+  do !n from 1 to !allBLen.size()
+     !curBlen = !allBLen[!n].string('d0').before('mm')
+     if (!curBlen eq !boltLen) then
+        !boltCode = !allBCode[!n]
+        break
+     endif
+  enddo
+  !!ce = !ce
+  return !boltCode
+endmethod

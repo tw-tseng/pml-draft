@@ -1,0 +1,997 @@
+setup form !!EQUIPCL
+  title 'EQUI Center Line'
+  path down
+  frame .frame1 'Create'
+    button .up  '  UP ' at XMIN.frame1 + 5 YMIN.frame1 + 0 call '!This.Apply(|up|)'
+    button .le  ' LEFT' at XMIN.up - 4     YMAX.up + 0.2   call '!This.Apply(|left|)'
+    button .ri  'RIGHT' at XMAX.up - 3     YMIN.le         call '!This.Apply(|right|)'
+    button .dn  ' DOWN' at XMIN.up         YMAX.le + 0.2   call '!This.Apply(|down|)'
+--    toggle .co  'Coordinate'
+  exit
+  path right
+  frame .frame2 'Modify'
+    path down
+    button .Delete '   Delete   ' call '!This.Del()'
+  exit
+  button .Cancel at XMAX.frame1 - 5 YMAX.frame1 + 0.2 call '!This.Close()'
+exit
+
+define method .EQUIPCL()
+--  !This.co.val = False
+endmethod
+
+define method .Apply(!namedir is string)
+  do
+    prompt off
+    prompt load escape |Identify EQUI for centrelines|
+    var !EQUI IDENTIFY EQUI @
+    handle ANY $* USER cancel
+      prompt on
+      prompt dismiss
+      break
+    elsehandle NONE
+      var !VIEW (NAME of VIEW )
+      handle ANY
+        !!Alert.Message('Not in DRAFT database.')
+        break
+      elsehandle NONE
+        var !DIR1  (DIR of VIEW )
+        !tmpdirarray = !Dir1.Split(' ')
+        !DIR = !tmpdirarray[1]
+
+        $* Get limits of EQUI element
+        var !ORIGIN array(POS of $!EQUI wrt /* )
+        var !CPOS split |$!ORIGIN|
+        var !WVOL WVOL of $!EQUI
+        var !WLIM split |$!WVOL|
+
+        $* Get VIEW information
+        var !VSCA (VSCA of $!VIEW )
+        var !OFFSET (2 / $!VSCA)
+        var !VIEWDIRU1 VIEWDIR U
+        var !VIEWDIRD1 VIEWDIR D
+        var !VIEWDIRL1 VIEWDIR L
+        var !VIEWDIRR1 VIEWDIR R
+        !viewdiruarray = !VIEWDIRU1.Split(' ')
+        !viewdirdarray = !VIEWDIRD1.Split(' ')
+        !viewdirlarray = !VIEWDIRL1.Split(' ')
+        !viewdirrarray = !VIEWDIRR1.Split(' ')
+        !VIEWDIRU = !viewdiruarray[1]
+        !VIEWDIRD = !viewdirdarray[1]
+        !VIEWDIRL = !viewdirlarray[1]
+        !VIEWDIRR = !viewdirrarray[1]
+        
+        $* Create TEXP to establish length of BTEX
+        $!VIEW/EQCL_Labs
+        handle ANY
+          $!VIEW
+          $!VIEW/REDU_Labs
+          handle ANY
+          endhandle
+          NEW LAYE $!VIEW/EQCL_Labs
+          Lvisibility true
+          Purpose LABF
+          Ucode mm  Distance  mm  Bore Nominal 
+          Font 1
+          Lterminator Off
+          Justification Left
+          Alignment Base
+          Dterminator Arrows
+          Tsize 2mm
+          Chosht 6mm
+          Asubtended 0
+          Pjustification Towards 
+          Overshoot 2mm
+          Plclearance 0mm
+          Doffset 25mm
+          Dmspacing 0mm
+  --        Direction E
+          Cheight 5mm
+          Lleader false
+          Lframe false
+          Lshape Straight
+          Gbox 0mm
+          Cspacing 0
+          Lspacing 0
+          Llclearance 0mm
+          Xyscale 1 1
+          Xyposition 10mm 10mm 
+          Bpoffset 0mm 0mm
+          Blnk true
+          Bmargin 0mm
+          Trsf unset
+          Fterminator Default
+          Pcode mms to 0 dpls  Inches to 1 dpls  Fractions to 32 ths  Angles to 1 dpls 
+          NLStyle Solid 
+          NLColour Cyan 
+          FStyle SolidFilled 
+          FColour Cyan 
+          Txcolour Green 
+          LLStyle Solid 
+          LLColour Cyan 
+          LFStyle Solid 
+          LFColour Cyan 
+          DLStyle Solid 
+          DLColour Grey 
+          PLStyle Solid 
+          PLColour Grey 
+          MStyle Off 
+          MColour Cyan 
+          CHStyle Off 
+          CHColour Grey 
+          ACDSTY unset
+          Posformat ENU
+          Grsystem Nulref
+          SpPurpose unset
+          Function unset
+        endhandle
+        
+        $* Set text for centrelines depending on view direction
+        if (|$!VIEWDIRR| eq |E| or |$!VIEWDIRR| eq |X|) then
+          var !BTEXU |#POSE<from $!EQUI, WRT WORL>|
+          var !WLIMR 4
+          var !TPOSR |$$!EPOS|
+        elseif (|$!VIEWDIRR| eq |W| or |$!VIEWDIRR| eq |-X|) then
+          var !BTEXU |#POSE<from $!EQUI, WRT WORL>|
+          var !WLIMR 1
+          var !TPOSR |$$!WPOS|
+        elseif (|$!VIEWDIRR| eq |N| or |$!VIEWDIRR| eq |Y|) then
+          var !BTEXU |#POSN<from $!EQUI, WRT WORL>|
+          var !WLIMR 5
+          var !TPOSR |$$!NPOS|
+        elseif (|$!VIEWDIRR| eq |S| or |$!VIEWDIRR| eq |-Y|) then
+          var !BTEXU |#POSN<from $!EQUI, WRT WORL>|
+          var !WLIMR 2
+          var !TPOSR |$$!SPOS|
+        elseif (|$!VIEWDIRR| eq |U| or |$!VIEWDIRR| eq |Z|) then
+          var !BTEXU |#POSU<from $!EQUI, WRT WORL>|
+          var !WLIMR 6
+          var !TPOSR |$$!UPOS|
+        elseif (|$!VIEWDIRR| eq |D| or |$!VIEWDIRR| eq |-Z|) then
+          var !BTEXU |#POSU<from $!EQUI, WRT WORL>|
+          var !WLIMR 3
+          var !TPOSR |$$!DPOS|
+        else
+          var !BTEXU |#POSU<from $!EQUI, WRT WORL>|
+          var !WLIMR 6
+          var !TPOSR |$$!UPOS|
+        endif
+        if (|$!VIEWDIRU| eq |E| or |$!VIEWDIRU| eq |X|) then
+          var !BTEXR |#POSE<from $!EQUI, WRT WORL>|
+          var !WLIMU 4
+          var !TPOSU |$$!EPOS|
+        elseif (|$!VIEWDIRU| eq |W| or |$!VIEWDIRU| eq |-X|) then
+          var !BTEXR |#POSE<from $!EQUI, WRT WORL>|
+          var !WLIMU 1
+          var !TPOSU |$$!WPOS|
+        elseif (|$!VIEWDIRU| eq |N| or |$!VIEWDIRU| eq |Y|) then
+          var !BTEXR |#POSN<from $!EQUI, WRT WORL>|
+          var !WLIMU 5
+          var !TPOSU |$$!NPOS|
+        elseif (|$!VIEWDIRU| eq |S| or |$!VIEWDIRU| eq |-Y|) then
+          var !BTEXR |#POSN<from $!EQUI, WRT WORL>|
+          var !WLIMU 2
+          var !TPOSU |$$!SPOS|
+        elseif (|$!VIEWDIRU| eq |U| or |$!VIEWDIRU| eq |Z|) then
+          var !BTEXR |#POSU<from $!EQUI, WRT WORL>|
+          var !WLIMU 6
+          var !TPOSU |$$!UPOS|
+        elseif (|$!VIEWDIRU| eq |D| or |$!VIEWDIRU| eq |-Z|) then
+          var !BTEXR |#POSU<from $!EQUI, WRT WORL>|
+          var !WLIMU 3
+          var !TPOSU |$$!DPOS|
+        else
+          var !BTEXR |#POSN<from $!EQUI, WRT WORL>|
+          var !WLIMU 5
+          var !TPOSU |$$!NPOS|
+        endif      
+        
+        NEW GLAB $!EQUI$!VIEW/CenL1
+        handle ANY
+          DELETE GLAB
+          handle ANY
+          endhandle
+          !validname = ISNAME OF $!EQUI
+          if (!validname) then
+            !!Alert.Message('Name $!EQUI$!VIEW/CenL1 already used.')
+          else
+            !!Alert.Message('EQUI name is null.')
+          endif
+        elsehandle NONE
+          DDNA $!EQUI
+--          if (!This.co.val) then
+          if (false) then
+            if (!namedir EQ 'up' or !namedir EQ 'down') then
+              !temp = '#EQUI(C2:)#/' & !BTEXU
+            else
+              !temp = '#EQUI(C2:)#/' & !BTEXR
+            endif
+            var !proj PROJ ID
+            if (!proj EQ 'CPT') then
+              !temp = !temp.Replace('ATE/','')
+            endif
+            Btext |$!temp|
+            ALIGN HBODY
+          else
+            var !proj PROJ ID
+            if (!proj EQ 'CPT') then
+              !temp = NAME OF $!EQUI
+              !temp = !temp.Replace('/ATE','').Substring(2)
+            else
+              !temp = '#EQUI(C2:)'
+            endif
+            Btext |$!temp|
+            ALIGN BBODY
+          endif
+          ABSO
+          var !CPOS1 SHPOS OF $!EQUI
+          AT $!CPOS1
+
+          var !EXTENT EXTENT BTEX
+          var !EX split |$!EXTENT|
+          var !TLENR cons dist X $!EX[2] Y $!EX[4] to X $!EX[6] Y $!EX[8]
+          var !TLENR ($!TLENR / $!VSCA)
+          
+          if (!WLIMR.real() le 3) then
+            var !WLIML !WLIMR + 3
+          else
+            var !WLIML !WLIMR - 3
+          endif
+          if (!WLIMU.real() le 3) then
+            var !WLIMD !WLIMU + 3
+          else
+            var !WLIMD !WLIMU - 3
+          endif
+
+--          if (!This.co.val) then
+          if (false) then
+            NEW GLAB $!EQUI$!VIEW/CenL2
+            DDNA $!EQUI
+            if (!namedir EQ 'up' or !namedir EQ 'down') then
+              var !proj PROJ ID
+              if (!proj EQ 'CPT') then
+                !BTEXR = !BTEXR.Replace('ATE/','')
+              endif
+              Btext |$!BTEXR|
+            else
+              var !proj PROJ ID
+              if (!proj EQ 'CPT') then
+                !BTEXU = !BTEXU.Replace('ATE/','')
+              endif
+              Btext |$!BTEXU|
+            endif
+            ALIGN BBODY
+            ABSO
+            var !EXTENT EXTENT BTEX
+            var !EX split |$!EXTENT|
+            var !TLENR cons dist X $!EX[2] Y $!EX[4] to X $!EX[6] Y $!EX[8]
+            var !TLENR ($!TLENR / $!VSCA)
+            
+            if (!WLIMR.real() le 3) then
+              var !WLIML !WLIMR + 3
+            else
+              var !WLIML !WLIMR - 3
+            endif
+            if (!WLIMU.real() le 3) then
+              var !WLIMD !WLIMU + 3
+            else
+              var !WLIMD !WLIMU - 3
+            endif
+            
+            ABSO
+            AT $!CPOS1
+
+          endif
+          
+          
+          $* Calculate positions for stra's and texp's
+          var !WLIM[1] ($!WLIM[1] - $!OFFSET mm )
+          var !WLIM[2] ($!WLIM[2] - $!OFFSET mm )
+          var !WLIM[3] ($!WLIM[3] - $!OFFSET mm )
+          var !WLIM[4] ($!WLIM[4] + $!OFFSET mm )
+          var !WLIM[5] ($!WLIM[5] + $!OFFSET mm )
+          var !WLIM[6] ($!WLIM[6] + $!OFFSET mm )
+
+          var !TLENU cons dist X $!EX[2] Y $!EX[4] to X $!EX[6] Y $!EX[8]
+          var !TLENU ($!TLENU / $!VSCA)
+          
+          var !coordinate coordinate
+          if(!coordinate eq 'XYZ') then
+            -- Position setting works only if the position starts with Z
+            -- for XYZ co-ordinate system
+            var !EPOS |Z $!CPOS[3] X $!WLIM[4] Y $!CPOS[2]|
+            var !WPOS |Z $!CPOS[3] X $!WLIM[1] Y $!CPOS[2]|
+            var !NPOS |Z $!CPOS[3] X $!CPOS[1] Y $!WLIM[5]|
+            var !SPOS |Z $!CPOS[3] X $!CPOS[1] Y $!WLIM[2]|
+            var !UPOS |Z $!WLIM[6] X $!CPOS[1] Y $!CPOS[2]|
+            var !DPOS |Z $!WLIM[3] X $!CPOS[1] Y $!CPOS[2]|
+          else
+            var !EPOS |E $!WLIM[4] N $!CPOS[2] U $!CPOS[3]|
+            var !WPOS |E $!WLIM[1] N $!CPOS[2] U $!CPOS[3]|
+            var !NPOS |E $!CPOS[1] N $!WLIM[5] U $!CPOS[3]|
+            var !SPOS |E $!CPOS[1] N $!WLIM[2] U $!CPOS[3]|
+            var !UPOS |E $!CPOS[1] N $!CPOS[2] U $!WLIM[6]|
+            var !DPOS |E $!CPOS[1] N $!CPOS[2] U $!WLIM[3]|
+          endif
+          
+          if (!namedir EQ 'up') then
+            if ($!WLIMU le 3) then
+              var !WLIM[$!WLIMU] ($!WLIM[$!WLIMU] - $!TLENU)
+            else
+              var !WLIM[$!WLIMU] ($!WLIM[$!WLIMU] + $!TLENU)
+            endif
+          elseif (!namedir EQ 'down') then
+            if ($!WLIMD le 3) then
+              var !WLIM[$!WLIMD] ($!WLIM[$!WLIMD] - $!TLENU)
+            else
+              var !WLIM[$!WLIMD] ($!WLIM[$!WLIMD] + $!TLENU)
+            endif
+          elseif (!namedir EQ 'left') then
+            if ($!WLIML le 3) then
+              var !WLIM[$!WLIML] ($!WLIM[$!WLIML] - $!TLENR)
+            else
+              var !WLIM[$!WLIML] ($!WLIM[$!WLIML] + $!TLENR)
+            endif
+          elseif (!namedir EQ 'right') then
+            if ($!WLIMR le 3) then
+              var !WLIM[$!WLIMR] ($!WLIM[$!WLIMR] - $!TLENR)
+            else
+              var !WLIM[$!WLIMR] ($!WLIM[$!WLIMR] + $!TLENR)
+            endif
+          endif
+          
+--          if (!This.co.val) then
+          if (false) then
+            if (!namedir EQ 'up') then
+              if ($!WLIMR le 3) then
+                var !WLIM[$!WLIMR] ($!WLIM[$!WLIMR] - $!TLENR)
+              else
+                var !WLIM[$!WLIMR] ($!WLIM[$!WLIMR] + $!TLENR)
+              endif
+            elseif (!namedir EQ 'down') then
+              if ($!WLIML le 3) then
+                var !WLIM[$!WLIML] ($!WLIM[$!WLIML] - $!TLENR)
+              else
+                var !WLIM[$!WLIML] ($!WLIM[$!WLIML] + $!TLENR)
+              endif
+            elseif (!namedir EQ 'left') then
+              if ($!WLIMU le 3) then
+                var !WLIM[$!WLIMU] ($!WLIM[$!WLIMU] - $!TLENU)
+              else
+                var !WLIM[$!WLIMU] ($!WLIM[$!WLIMU] + $!TLENU)
+              endif
+            elseif (!namedir EQ 'right') then
+              if ($!WLIMD le 3) then
+                var !WLIM[$!WLIMD] ($!WLIM[$!WLIMD] - $!TLENU)
+              else
+                var !WLIM[$!WLIMD] ($!WLIM[$!WLIMD] + $!TLENU)
+              endif
+            endif
+          endif
+          
+          if(!coordinate eq 'XYZ') then
+             Position setting works only if the position starts with Z
+             for XYZ co-ordinate system
+            var !EPOS1 |Z $!CPOS[3] X $!WLIM[4] Y $!CPOS[2]|
+            var !WPOS1 |Z $!CPOS[3] X $!WLIM[1] Y $!CPOS[2]|
+            var !NPOS1 |Z $!CPOS[3] X $!CPOS[1] Y $!WLIM[5]|
+            var !SPOS1 |Z $!CPOS[3] X $!CPOS[1] Y $!WLIM[2]|
+            var !UPOS1 |Z $!WLIM[6] X $!CPOS[1] Y $!CPOS[2]|
+            var !DPOS1 |Z $!WLIM[3] X $!CPOS[1] Y $!CPOS[2]|
+          else
+            var !EPOS1 |E $!WLIM[4] N $!CPOS[2] U $!CPOS[3]|
+            var !WPOS1 |E $!WLIM[1] N $!CPOS[2] U $!CPOS[3]|
+            var !NPOS1 |E $!CPOS[1] N $!WLIM[5] U $!CPOS[3]|
+            var !SPOS1 |E $!CPOS[1] N $!WLIM[2] U $!CPOS[3]|
+            var !UPOS1 |E $!CPOS[1] N $!CPOS[2] U $!WLIM[6]|
+            var !DPOS1 |E $!CPOS[1] N $!CPOS[2] U $!WLIM[3]|
+          endif
+
+          $* Create stra's
+          VNOT 1
+          handle ANY
+            NEW VNOT
+            Pkdistance 0.5
+            Adegrees 0
+            Ppdirection -1
+            Lvisibility true
+            Justification Left
+            Alignment Hbody
+            Font 24
+            Blnk true
+            Bmargin 0mm
+            Cheight 5mm
+            Cspacing 0
+            Lspacing 0
+            Txcolour 67
+            NLStyle Chained 
+            NLColour 20
+            FStyle Off 
+            FColour Cyan 
+            MStyle Off 
+            MColour Cyan 
+            ACDSTY unset
+          endhandle
+          if( !DIR.eq(|W|) or !DIR.eq(|E|) or !DIR.eq(|-X|) or !DIR.eq(|X|) ) then
+            NEW STRA $!EQUI$!VIEW/CenL3 FPT $!SPOS TPT $!NPOS
+            Tcode Endpoint
+            NEW STRA $!EQUI$!VIEW/CenL4 FPT $!DPOS TPT $!UPOS
+            Tcode Endpoint
+            !This.Reposition(!EQUI, !VIEW, !namedir, !VSCA, !DPOS, !UPOS, !SPOS, !NPOS, !DPOS1, !UPOS1, !SPOS1, !NPOS1, !DIR1)
+          elseif( !DIR.eq(|N|) or !DIR.eq(|S|) or !DIR.eq(|-Y|) or !DIR.eq(|Y|) ) then
+            NEW STRA $!EQUI$!VIEW/CenL3 FPT $!WPOS TPT $!EPOS
+            Tcode Endpoint
+            NEW STRA $!EQUI$!VIEW/CenL4 FPT $!DPOS TPT $!UPOS
+            Tcode Endpoint
+            !This.Reposition(!EQUI, !VIEW, !namedir, !VSCA, !WPOS, !EPOS, !DPOS, !UPOS, !WPOS1, !EPOS1, !DPOS1, !UPOS1, !DIR1)
+          elseif (!DIR.eq(|U|) or !DIR.eq(|D|) or !DIR.eq(|-Z|) or !DIR.eq(|Z|) ) then
+            NEW STRA $!EQUI$!VIEW/CenL3 FPT $!WPOS TPT $!EPOS
+            Tcode Endpoint
+            NEW STRA $!EQUI$!VIEW/CenL4 FPT $!SPOS TPT $!NPOS
+            Tcode Endpoint
+            !This.Reposition(!EQUI, !VIEW, !namedir, !VSCA, !WPOS, !EPOS, !SPOS, !NPOS, !WPOS1, !EPOS1, !SPOS1, !NPOS1, !DIR1)
+          else
+            NEW STRA $!EQUI$!VIEW/CenL3 FPT $!WPOS TPT $!EPOS
+            Tcode Endpoint
+            NEW STRA $!EQUI$!VIEW/CenL4 FPT $!SPOS TPT $!NPOS
+            Tcode Endpoint
+            NEW STRA $!EQUI$!VIEW/CenL5 FPT $!DPOS TPT $!UPOS
+            Tcode Endpoint
+            !This.Reposition(!EQUI, !VIEW, !namedir, !VSCA, !WPOS, !EPOS, !SPOS, !NPOS, !WPOS1, !EPOS1, !SPOS1, !NPOS1, !DIR1)
+          endif
+          
+          var !newpos SHPO @
+          HANDLE ANY
+          elsehandle NONE
+            $!EQUI$!VIEW/CenL1
+            XYPO $!newpos
+            $!EQUI$!VIEW/CenL2
+            handle ANY
+            elsehandle NONE
+              XYPO $!newpos
+            endhandle
+            $!EQUI$!VIEW/CenL3
+            handle ANY
+            elsehandle NONE
+              TCODE MID
+              MPT $!newpos
+            endhandle
+            $!EQUI$!VIEW/CenL4
+            handle ANY
+            elsehandle NONE
+              TCODE MID
+              MPT $!newpos
+            endhandle
+            $!EQUI$!VIEW/CenL5
+            handle ANY
+            elsehandle NONE
+              TCODE MID
+              MPT $!newpos
+            endhandle
+          endhandle
+
+          
+          
+          
+          
+          
+        endhandle
+        REFRESH
+      endhandle
+    endhandle
+  enddo
+endmethod
+
+define method .Reposition(!EQUI is String, !VIEW is String, !namedir is String, !VSCA is string, !WPOS is String, !EPOS is String, !SPOS is String, !NPOS is String, !WPOS1 is String, !EPOS1 is String, !SPOS1 is String, !NPOS1 is String, !DIR1 is String)
+   var !adeg3 ADEG OF $!EQUI$!VIEW/CenL3
+   var !adeg4 ADEG OF $!EQUI$!VIEW/CenL4
+   var !wpos2 SHPOS OF $!WPOS
+   var !epos2 SHPOS OF $!EPOS
+   var !spos2 SHPOS OF $!SPOS
+   var !npos2 SHPOS OF $!NPOS
+   var !wpos3 SHPOS OF $!WPOS1
+   var !epos3 SHPOS OF $!EPOS1
+   var !spos3 SHPOS OF $!SPOS1
+   var !npos3 SHPOS OF $!NPOS1
+   $!EQUI$!VIEW/CenL1
+   if (!namedir EQ 'up') then
+     !tmpadeg3 = !adeg3.Real() + 180
+     !tmpadeg4 = !adeg4.Real() + 180
+     if (!adeg3.Real().Between(50, 130)) then
+       ADEG $!adeg3
+       if (!DIR1 EQ 'D') then
+         AT $!epos2
+       endif
+       $!EQUI$!VIEW/CenL3
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     elseif (!tmpadeg3.Between(50, 130)) then
+       ADEG $!tmpadeg3
+       if (!DIR1 EQ 'D') then
+         AT $!wpos2
+       endif
+       $!EQUI$!VIEW/CenL3
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     elseif (!adeg4.Real().Between(50, 130)) then
+       ADEG $!adeg4
+       if (!DIR1 EQ 'D') then
+         AT $!npos2
+       endif
+       $!EQUI$!VIEW/CenL4
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     else
+       ADEG $!tmpadeg4
+       if (!DIR1 EQ 'D') then
+         AT $!spos2
+       endif
+       $!EQUI$!VIEW/CenL4
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     endif
+--     if (!This.co.val) then
+     if (false) then
+       $!EQUI$!VIEW/CenL2
+       if (!adeg3.Real().Abs().Between(0, 40)) then
+         ADEG $!adeg3
+         if (!DIR1 EQ 'D') then
+           AT $!epos2
+         endif
+         $!EQUI$!VIEW/CenL3
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       elseif (!adeg3.Real().Abs().Between(160, 180)) then
+         if (!adeg3.Real() GT 0) then
+           !tmpadeg3 = !adeg3.Real() - 180
+         else
+           !tmpadeg3 = !adeg3.Real() + 180
+         endif
+         ADEG $!tmpadeg3
+         if (!DIR1 EQ 'D') then
+           AT $!wpos2
+         endif
+         $!EQUI$!VIEW/CenL3
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       elseif (!adeg4.Real().Abs().Between(0, 40)) then
+         ADEG $!adeg4
+         if (!DIR1 EQ 'D') then
+           AT $!npos2
+         endif
+         $!EQUI$!VIEW/CenL4
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       else
+         if (!adeg4.Real() GT 0) then
+           !tmpadeg4 = !adeg4.Real() - 180
+         else
+           !tmpadeg4 = !adeg4.Real() + 180
+         endif
+         ADEG $!tmpadeg4
+         if (!DIR1 EQ 'D') then
+           AT $!spos2
+         endif
+         $!EQUI$!VIEW/CenL4
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       endif
+     endif
+   elseif (!namedir EQ 'down') then
+     !tmpadeg3 = !adeg3.Real() + 180
+     !tmpadeg4 = !adeg4.Real() + 180
+     if (!adeg3.Real() LT 0 and !adeg3.Real().ABS().Between(50, 130)) then
+       ADEG $!tmpadeg3
+       if (!DIR1 EQ 'D') then
+         AT $!epos3
+       endif
+       $!EQUI$!VIEW/CenL3
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     elseif (!adeg3.Real().ABS().Between(50, 130)) then
+       ADEG $!adeg3
+       if (!DIR1 EQ 'D') then
+         AT $!wpos3
+       endif
+       $!EQUI$!VIEW/CenL3
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     elseif (!adeg4.Real() LT 0 and !adeg4.Real().ABS().Between(50, 130)) then
+       ADEG $!tmpadeg4
+       if (!DIR1 EQ 'D') then
+         AT $!npos3
+       endif
+       $!EQUI$!VIEW/CenL4
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     else
+       ADEG $!adeg4
+       if (!DIR1 EQ 'D') then
+         AT $!spos3
+       endif
+       $!EQUI$!VIEW/CenL4
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     endif
+--     if (!This.co.val) then
+     if (false) then
+       $!EQUI$!VIEW/CenL2
+       if (!adeg3.Real().Abs().Between(0, 40)) then
+         ADEG $!adeg3
+         if (!DIR1 EQ 'D') then
+           AT $!wpos3
+         endif
+         $!EQUI$!VIEW/CenL3
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       elseif (!adeg3.Real().Abs().Between(160, 180)) then
+         if (!adeg3.Real() GT 0) then
+           !tmpadeg3 = !adeg3.Real() - 180
+         else
+           !tmpadeg3 = !adeg3.Real() + 180
+         endif
+         ADEG $!tmpadeg3
+         if (!DIR1 EQ 'D') then
+           AT $!epos3
+         endif
+         $!EQUI$!VIEW/CenL3
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       elseif (!adeg4.Real().Abs().Between(0, 40)) then
+         ADEG $!adeg4
+         if (!DIR1 EQ 'D') then
+           AT $!spos3
+         endif
+         $!EQUI$!VIEW/CenL4
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       else
+         if (!adeg4.Real() GT 0) then
+           !tmpadeg4 = !adeg4.Real() - 180
+         else
+           !tmpadeg4 = !adeg4.Real() + 180
+         endif
+         ADEG $!tmpadeg4
+         if (!DIR1 EQ 'D') then
+           AT $!npos3
+         endif
+         $!EQUI$!VIEW/CenL4
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       endif
+     endif
+   elseif (!namedir EQ 'left') then
+     if (!adeg3.Real().Abs().Between(160, 180)) then
+       if (!adeg3.Real() GT 0) then
+         !tmpadeg3 = !adeg3.Real() - 180
+       else
+         !tmpadeg3 = !adeg3.Real() + 180
+       endif
+       ADEG $!tmpadeg3
+       if (!DIR1 EQ 'D') then
+         AT $!epos3
+       endif
+       $!EQUI$!VIEW/CenL3
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     elseif (!adeg3.Real().Abs().Between(0, 30)) then
+       ADEG $!adeg3
+       if (!DIR1 EQ 'D') then
+         AT $!wpos3
+       endif
+       $!EQUI$!VIEW/CenL3
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     elseif (!adeg4.Real().Abs().Between(160, 180)) then
+       if (!adeg4.Real() GT 0) then
+         !tmpadeg4 = !adeg4.Real() - 180
+       else
+         !tmpadeg4 = !adeg4.Real() + 180
+       endif
+       ADEG $!tmpadeg4
+       if (!DIR1 EQ 'D') then
+         AT $!npos3
+       endif
+       $!EQUI$!VIEW/CenL4
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     else
+       ADEG $!adeg4
+       if (!DIR1 EQ 'D') then
+         AT $!spos3
+       endif
+       $!EQUI$!VIEW/CenL4
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     endif
+--     if (!This.co.val) then
+     if (false) then
+       $!EQUI$!VIEW/CenL2
+       if (!adeg3.Real() GT 0 and !adeg3.Real().Between(60, 120)) then
+         ADEG $!adeg3
+         if (!DIR1 EQ 'D') then
+           AT $!epos2
+         endif
+         $!EQUI$!VIEW/CenL3
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       elseif (!adeg3.Real().Abs().Between(60, 120)) then
+         if (!adeg3.Real() GT 0) then
+           !tmpadeg3 = !adeg3.Real() - 180
+         else
+           !tmpadeg3 = !adeg3.Real() + 180
+         endif
+         ADEG $!tmpadeg3
+         if (!DIR1 EQ 'D') then
+           AT $!wpos2
+         endif
+         $!EQUI$!VIEW/CenL3
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       elseif (!adeg4.Real() GT 0 and !adeg4.Real().Between(60, 120)) then
+         ADEG $!adeg4
+         if (!DIR1 EQ 'D') then
+           AT $!npos2
+         endif
+         $!EQUI$!VIEW/CenL4
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       else
+         if (!adeg4.Real() GT 0) then
+           !tmpadeg4 = !adeg4.Real() - 180
+         else
+           !tmpadeg4 = !adeg4.Real() + 180
+         endif
+         ADEG $!tmpadeg4
+         if (!DIR1 EQ 'D') then
+           AT $!spos2
+         endif
+         $!EQUI$!VIEW/CenL4
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       endif
+     endif
+   elseif (!namedir EQ 'right') then
+     if (!adeg3.Real().Abs().Between(0, 30)) then
+       ADEG $!adeg3
+       if (!DIR1 EQ 'D') then
+         AT $!epos2
+       endif
+       $!EQUI$!VIEW/CenL3
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     elseif (!adeg3.Real().Abs().Between(160, 180)) then
+       if (!adeg3.Real() GT 0) then
+         !tmpadeg3 = !adeg3.Real() - 180
+       else
+         !tmpadeg3 = !adeg3.Real() + 180
+       endif
+       ADEG $!tmpadeg3
+       if (!DIR1 EQ 'D') then
+         AT $!wpos2
+       endif
+       $!EQUI$!VIEW/CenL3
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     elseif (!adeg4.Real().Abs().Between(0, 30)) then
+       ADEG $!adeg4
+       if (!DIR1 EQ 'D') then
+         AT $!npos2
+       endif
+       $!EQUI$!VIEW/CenL4
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     else
+       if (!adeg4.Real() GT 0) then
+         !tmpadeg4 = !adeg4.Real() - 180
+       else
+         !tmpadeg4 = !adeg4.Real() + 180
+       endif
+       ADEG $!tmpadeg4
+       if (!DIR1 EQ 'D') then
+         AT $!spos2
+       endif
+       $!EQUI$!VIEW/CenL4
+       var !len LENGTH
+       !lenarray = !len.Split(' ')
+       !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--       TCODE MID
+--       LENGTH $!len1
+     endif
+--     if (!This.co.val) then
+     if (false) then
+       $!EQUI$!VIEW/CenL2
+       if (!adeg3.Real() LT 0 and !adeg3.Real().ABS().Between(60, 120)) then
+         if (!adeg3.Real() GT 0) then
+           !tmpadeg3 = !adeg3.Real() - 180
+         else
+           !tmpadeg3 = !adeg3.Real() + 180
+         endif
+         ADEG $!tmpadeg3
+         if (!DIR1 EQ 'D') then
+           AT $!epos3
+         endif
+         $!EQUI$!VIEW/CenL3
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       elseif (!adeg3.Real().Between(60, 120)) then
+         ADEG $!adeg3
+         if (!DIR1 EQ 'D') then
+           AT $!wpos3
+         endif
+         $!EQUI$!VIEW/CenL3
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       elseif (!adeg4.Real() LT 0 and !adeg4.Real().ABS().Between(60, 120)) then
+         if (!adeg4.Real() GT 0) then
+           !tmpadeg4 = !adeg4.Real() - 180
+         else
+           !tmpadeg4 = !adeg4.Real() + 180
+         endif
+         ADEG $!tmpadeg4
+         if (!DIR1 EQ 'D') then
+           AT $!npos3
+         endif
+         $!EQUI$!VIEW/CenL4
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       else
+         ADEG $!adeg4
+         if (!DIR1 EQ 'D') then
+           AT $!spos3
+         endif
+         $!EQUI$!VIEW/CenL4
+         var !len LENGTH
+         !lenarray = !len.Split(' ')
+         !len1 = !lenarray[1].Real() * !VSCA.Real() + 50
+--         TCODE MID
+--         LENGTH $!len1
+       endif
+     endif
+   endif
+endmethod
+
+
+define method .Del()
+  prompt off
+  prompt load escape |Identify a EQUI Name to Delete|
+  var !lab IDENTIFY GLAB @
+  handle ANY $* USER cancel
+    prompt on
+    prompt dismiss
+  elsehandle NONE
+    $!lab
+    var !VIEW (NAME of VIEW )
+    var !name NAME of $!lab
+    !chk = !VIEW & '/CenL'
+    if (!name.matchwild('*$!chk*')) then
+      !name1 = !name.before('/CenL')
+      $!name1/CenL1
+      handle ANY
+      elsehandle NONE
+        DELETE GLAB
+      endhandle
+      
+      $!name1/CenL2
+      handle ANY
+      elsehandle NONE
+        DELETE GLAB
+      endhandle
+      
+      $!name1/CenL3
+      handle ANY
+      elsehandle NONE
+        DELETE STRA
+      endhandle
+      
+      $!name1/CenL4
+      handle ANY
+      elsehandle NONE
+        DELETE STRA
+      endhandle
+      
+      $!name1/CenL5
+      handle ANY
+      elsehandle NONE
+        DELETE STRA
+      endhandle
+    endif
+    prompt on
+    prompt dismiss
+  endhandle
+endmethod
+
+define method .Close()
+  kill !!EQUIPCL
+endmethod
+

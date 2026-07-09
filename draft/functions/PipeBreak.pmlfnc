@@ -1,0 +1,51 @@
+define function !!PipeBreak()
+  !oldref = REF
+  VLYSET 1
+  handle ANY
+    !!Alert.Error('Not on VIEW level !')
+  elsehandle NONE
+	  !!LineNoLayer = object dbref()
+	  var !mems coll mem of ce
+		do !mem values !mems
+		  $!mem
+			var !ltitle LTITLE OF $!mem
+			if (!ltitle.eq('LineNo')) then
+				!!LineNoLayer = ref
+			endif
+		enddo		
+		if (!!LineNoLayer.unset()) then
+			NEW VLAYER
+			LTITLE 'LineNo'
+			!!LineNoLayer = ref
+			SHEE
+			var !views coll all view for ce
+			do !view values !views
+			  $!view
+				!viewname = NAME
+				$!viewname/LINE_Labs
+				handle ANY
+				elsehandle NONE
+				  var !mems coll all GLAB for ce
+					do !mem values !mems
+					  $!mem
+--					  var !btext BTEXT of $!mem
+--						if (!btext.matchwild('#<*')) then
+						  Vlayrf $!!LineNoLayer
+--						endif
+					enddo
+					$!viewname/LINE_Labs
+					VNOT 1
+					handle ANY
+					elsehandle NONE
+					  var !mems coll all STRA for ce
+					  do !mem values !mems
+					    $!mem
+						  Vlayrf $!!LineNoLayer
+					  enddo
+					endhandle
+				endhandle
+			enddo
+		endif
+	endhandle
+	$!oldref
+endfunction

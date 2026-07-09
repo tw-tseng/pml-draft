@@ -1,0 +1,78 @@
+!MacroFolderLocation = 'D:\Documents\Macro\BOLTxE3D' $* custom path name
+$(
+
+$)
+import 'GridControl'
+handle any
+endhandle
+Import 'pmlfilebrowser'
+handle any
+endhandle
+kill !!BoltsReport
+setup form !!BoltsReport resize
+	Title 'Piping Bolt Report'
+    bar
+		add |Help|  .support
+    exit
+	menu .support
+		add || |syscom '' |
+		add separator
+		add |About| |syscom '' |
+    exit
+	frame .outputFrame 'Report' anchor all at xmin ymin Width 20 Height 10
+	container .netFrame pmlNetControl 'NET' dock fill height 10 width 70
+	button .save 'Save' at x60 ymin anchor r+t call '$M /$!MacroFolderLocation\BoltsSave.e3d'
+	path right
+	button .generate 'Generate for CE' at x40 ymin anchor r+t call '$M /$!MacroFolderLocation\Bolts.e3d'
+	exit
+member .NameFile    is STRING
+member .area	is STRING
+member .modelname	is STRING
+
+member .columnHeadings    is ARRAY
+member .attributeTable    is ARRAY
+member .file              is STRING
+using namespace 'Aveva.Core.Presentation' $*
+member .dbCtrl is NETGRIDCONTROL
+member .rows is array
+member .columns is array
+member .folderLocation is String
+!this.folderLocation = !MacroFolderLocation
+exit
+show !!BoltsReport
+
+using namespace 'Aveva.Pdms.Presentation'
+
+!!BoltsReport.dbCtrl = object NETGRIDCONTROL()
+
+!!BoltsReport.netFrame.control = !!BoltsReport.dbCtrl.handle()
+
+$( !title = 'Attributes'
+
+!dbNames[1][1] = 'Row 1 colomn 1'
+!dbNames[1][2] = 'Row 1 colomn 2'
+!dbNames[1][3] = 'Row 1 colomn 3'
+!dbNames[1][4] = 'Row 1 colomn 4'
+!dbNames[2][1] = 'Row 2 colomn 1'
+!dbNames[2][2] = 'Row 2 colomn 2'
+!dbNames[2][3] = 'Row 2 colomn 3'
+!dbNames[2][4] = 'Row 2 colomn 4'
+
+!Heading[1] = 'Line Number'
+!Heading[2] = 'Size'
+!Heading[3] = 'Total'
+!Heading[4] = 'DiaInch'
+
+using namespace 'Aveva.Core.Presentation'
+!nds = object NETDATASOURCE(!title, !Heading, !dbNames)
+!!BoltsReport.dbCtrl.bindToDataSource(!nds)
+
+!!BoltsReport.dbCtrl.columnExcelFilter(true)
+!!BoltsReport.dbCtrl.outlookGroupStyle(false)
+!!BoltsReport.dbCtrl.fixedHeaders(true)
+!!BoltsReport.dbCtrl.fixedRows(true)
+!!BoltsReport.dbCtrl.outlookGroupStyle(true)
+!!BoltsReport.dbCtrl.gridHeight(1000.0)
+
+!!BoltsReport.generate.active = true
+$)

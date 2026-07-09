@@ -1,0 +1,46 @@
+define function !!paAutoWeldReadDef() is STRING
+   !FileInfo = '\\SVRE3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\design\AutoWeldDef.pawld'
+   !myReadFile = object File(|$!FileInfo|)
+   !myReadFile.Open('READ')
+
+   var !ActProjID PROJ ID
+   !ProjEndFlag = '<End Project Item Definition>'
+   !FindDef = False
+   !DataInfo = ''
+
+   Do
+      !LineRead = !myReadFile.ReadRecord()
+
+      If (!LineRead.Set() and (!FindDef eq False) ) then
+         If (|$!LineRead| eq |$!ActProjID|) then
+             -- !!alert.message(|$!LineRead|)
+             -- !DataInfo = ''
+             Do
+                  !LineRead = !myReadFile.ReadRecord()
+                  If (|$!LineRead| eq |$!ProjEndFlag|) then 
+                      Break
+                  Else
+                      !DataInfo = !DataInfo + !LineRead + '}'   
+                  EndIf
+                        
+             EndDo
+             !DataInfo=SubString(!DataInfo,1,!DataInfo.Length() - 1)      
+             !FindDef = True
+         EndIf
+
+      Else
+           Break
+      EndIf  
+   EndDo
+
+   !myReadFile.Close()   
+
+   -- q var local
+   -- If !FindDef then 
+   --     !!alert.message(|$!DataInfo|)
+   -- Else
+   --     !!alert.message('Project ID not found !')
+   -- EndIf
+
+   Return !DataInfo
+endfunction

@@ -1,0 +1,637 @@
+--------------------------------
+-- Function : Grid Annotation --
+-- Auther   : tw tseng        --
+-- Date     : 2025/01/08      --
+--------------------------------
+
+define function !!DrawingPlan1GridAnnotation(!name is string, !minE is real, !minN is real, !minU is real, !maxE is real, !maxN is real, !maxU is real)
+	NEW LAYE $!name/SS/S1/V1/ateGRID
+	Purpose GRIDA
+	Lvisibility true
+	Font 1
+	Justification Left
+	Alignment Template
+	Tsiztx '2.5mm'
+	Chostx '6mm'
+	Asubtended 0degree
+	Pjustification Towards 
+	Oshttx '2mm'
+	Plcltx '0mm'
+	Doffset 25mm
+	Dmsptx '0mm'
+	Lleader true
+	Lframe true
+	Lshape Straight
+	Gboxtx '1mm'
+	Llcltx '0mm'
+	Xyscale 1 1
+	Xyposition 25mm 25mm 
+	Blnk false
+	Bmargin 0mm
+	Trsf Nulref
+	Txcolour Yellow 
+	NLStyle Solid 
+	NLColour Cyan 
+	FStyle Off 
+	FColour Grey 
+	LLStyle Solid 
+	LLColour Cyan 
+	LFStyle Solid 
+	LFColour Cyan 
+	DLStyle Solid 
+	DLColour Cyan 
+	PLStyle Solid 
+	PLColour Cyan 
+	MColour Cyan 
+	CHStyle Off 
+	CHColour Grey
+	
+	----------------------------------------------
+	-- calculate view four corners coordination --
+	----------------------------------------------
+	$!name/SS/S1/V1
+	var !shxypos shxypos
+	var !size size
+	!viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5)
+	!viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5)
+	!viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5)
+	!viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5)
+	
+	var !viewUL enupos of $!viewULsh
+	var !viewUR enupos of $!viewURsh
+	var !viewLL enupos of $!viewLLsh
+	var !viewLR enupos of $!viewLRsh
+  
+  !viewULenu = object position(!viewUL)
+  !viewULenu.up = 0
+  !viewURenu = object position(!viewUR)
+  !viewURenu.up = 0
+  !viewLLenu = object position(!viewLL)
+  !viewLLenu.up = 0
+  !viewLRenu = object position(!viewLR)
+  !viewLRenu.up = 0
+  
+  !viewUline = object line(!viewULenu, !viewURenu)
+  !viewDline = object line(!viewLLenu, !viewLRenu)
+	!viewRline = object line(!viewLRenu, !viewURenu)
+	!viewLline = object line(!viewLLenu, !viewULenu)
+
+--  q var !viewUline.StartPosition
+--  q var !viewUline.EndPosition
+  
+--  $p $!viewUL
+--  $p $!viewUR
+--  $p $!viewLL
+--  $p $!viewLR
+
+
+  --------------------------------------------
+  -- get grids through drawing list         --
+	-- never get grids with a specific volume --
+	-- it may miss some grids                 --
+	--------------------------------------------
+  
+	!gridels = object array()
+  
+--  var !gridels coll all gridel within E $!minE N $!minN U -100000 to E $!maxE N $!maxN U 100000
+  
+	!temps = object array()
+	var !addes coll all adde for $!name/SS/DRAWLIST/DRWG
+	do !adde values !addes
+	  var !type type of idna of $!adde
+		if (!type.eq('REFGRD')) then
+		  var !idna idna of $!adde
+		  var !temps coll all gridel for $!idna
+ 			do !temp values !temps
+			  !gridels.append(!temp)
+			enddo
+ 		endif
+	enddo
+	
+--	q var !gridels.size()
+	
+	$!name/SS/S1/V1/ateGRID
+	do !gridel values !gridels
+	  var !gridpls coll all gridpl for $!gridel
+		var !refglns coll all refgln for $!gridpls[1]
+		do !refgln values !refglns
+		  var !p1pos p1 pos of $!refgln wrt worl
+		  var !p2pos p2 pos of $!refgln wrt worl
+		  var !p2dir p2 dir of $!refgln wrt worl
+$(      
+      $p $!p2dir
+		  var !p1pos p1 pos of $!refgln
+		  var !p2pos p2 pos of $!refgln
+		  var !p2dir p2 dir of $!refgln
+$)      
+      !p1posenu = object position(!p1pos)
+      !p1posenu.up = 0
+      !p2posenu = object position(!p2pos)
+      !p2posenu.up = 0
+      
+      !p12line = object line(!p1posenu, !p2posenu)
+
+$(			
+			if (!p2dir.direction().north.eq(1) or !p2dir.direction().north.eq(-1)) then
+			  -- orthogonal
+			else
+        -----------------
+        -- rotate view --
+        -----------------
+			  if (!!DrawingPlan1.gridorthogonal.val) then
+					$!name/SS/S1/V1
+--					!rangle = !p2dir.direction().angle(object direction('N'))
+--					Adegrees $!rangle
+					
+					!temp.delete()
+					handle any
+					endhandle
+					!temp = !!DrawingPlan1.boxXdir.angle(object direction('E'))
+					Adegrees $!temp
+					update design
+				endif
+			endif
+$)
+			
+			$!name/SS/S1/V1
+			var !viewdirU viewdir up
+			var !viewdirR viewdir right
+--			$p $!viewdirU
+      
+			$!name/SS/S1/V1/ateGRID
+			if (!p2dir.direction().angle(!viewdirU.direction()).lt(5) or !p2dir.direction().angle(!viewdirU.direction().opposite()).lt(5)) then
+			  ---------------
+			  -- grid is |
+			  ---------------
+				!griddir = 'u/d'
+			elseif (!p2dir.direction().angle(!viewdirR.direction()).lt(5) or !p2dir.direction().angle(!viewdirR.direction().opposite()).lt(5)) then
+			  ---------------
+			  -- grid is -
+			  ---------------
+				!griddir = 'l/r'
+			else
+			  ---------------------
+				-- none orthogonal --
+				---------------------
+			  !griddir = 'xxx'
+			endif
+			-------------------------------------------
+			-- check if grids are in view limitation --
+			-------------------------------------------
+			if (!griddir.eq('u/d')) then
+			  !inview = false
+				if (!p1pos.position().distance(!viewRline).lt(!viewULenu.distance(!viewURenu)) and !p1pos.position().distance(!viewLline).lt(!viewULenu.distance(!viewURenu))) then
+					if (!p12line.on(!viewUline.intersection(!p12line), true) or !p12line.on(!viewDline.intersection(!p12line), true)) then
+						!inview = true
+					else
+						if (!p1pos.position().distance(!viewUline).leq(!viewULenu.distance(!viewLRenu)) and !p1pos.position().distance(!viewDline).leq(!viewULenu.distance(!viewLRenu))) then
+							if (!p2pos.position().distance(!viewUline).leq(!viewULenu.distance(!viewLRenu)) and !p2pos.position().distance(!viewDline).leq(!viewULenu.distance(!viewLRenu))) then
+								!inview = true
+							endif
+						endif
+					endif
+				endif
+			  if (!inview) then
+			    if (!p2dir.direction().angle(!viewdirU.direction()).lt(5)) then
+            --------------------------------------------
+            -- !p1 is lower point, !p2 is upper point --
+            --------------------------------------------
+						
+						-----------------------------
+						-- create upper part slabs --
+						-----------------------------
+						NEW SLAB
+						DDNA $!refgln
+						TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+						Agside 'Top'
+--              q var !p12line.StartPosition
+--              q var !p12line.EndPosition
+						!intersection = !viewUline.intersection(!p12line)
+--              q var !intersection
+--              q var !p12line.on(!intersection, true)
+						NPPT 2
+						!offset = !p2posenu.distance(!intersection.offset(!viewdirU.direction(), 25 / !!DrawingPlan1.vsca)) * !!DrawingPlan1.vsca
+						if (!p12line.on(!intersection, true)) then
+							--------------------------------------------------------------
+							-- there is an intersection between !p12line and !viewUline --
+							--------------------------------------------------------------
+							var !p2possh shpos of $!p2posenu
+							!temppt = !intersection.offset(!viewdirU.direction(), 25 / !!DrawingPlan1.vsca)
+							var !intersectionsh shpos of $!temppt
+							if (!p2possh.part(4).real().value().geq(!intersectionsh.part(4).real().value())) then
+								!offset = !offset * -1
+							endif
+							XYPO 0 $!offset
+							APOF 0 ( $!offset - 22 )
+						else	
+							---------------------------------------------------------------------------------
+							-- there is not an intersection between !p12line and !viewUline                --
+							-- check if the distance between !p2posenu and !viewUline is larger than 100mm --
+							-- if YES, place slab 25mm above !p2posenu                                     --
+							-- if NO,  place slab 25mm above !viewUline                                    --
+							---------------------------------------------------------------------------------
+							if (!p2posenu.distance(!intersection) * !!DrawingPlan1.vsca geq 100) then
+								!offset = 25
+								XYPO 0 $!offset
+								APOF 0 3
+							else
+								XYPO 0 $!offset
+								APOF 0 3
+							endif
+						endif
+						
+						-----------------------------
+						-- create lower part slabs --
+						-----------------------------
+						NEW SLAB
+						DDNA $!refgln
+						TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+						Agside 'Bottom'
+						!intersection = !viewDline.intersection(!p12line)
+						NPPT 1
+						!offset = !p1posenu.distance(!intersection.offset(!viewdirU.direction().opposite(), 25 / !!DrawingPlan1.vsca)) * !!DrawingPlan1.vsca
+						if (!p12line.on(!intersection, true)) then
+							--------------------------------------------------------------
+							-- there is an intersection between !p12line and !viewDline --
+							--------------------------------------------------------------
+							var !p1possh shpos of $!p1posenu
+							!temppt = !intersection.offset(!viewdirU.direction().opposite(), 25 / !!DrawingPlan1.vsca)
+							var !intersectionsh shpos of $!temppt
+							if (!p1possh.part(4).real().value().geq(!intersectionsh.part(4).real().value())) then
+								!offset = !offset * -1
+							endif
+							XYPO 0 $!offset
+							APOF 0 ( $!offset + 22 )
+						else	
+							---------------------------------------------------------------------------------
+							-- there is not an intersection between !p12line and !viewDline                --
+							-- check if the distance between !p1posenu and !viewDline is larger than 100mm --
+							-- if YES, place slab 25mm below !p2posenu                                     --
+							-- if NO,  place slab 25mm below !viewDline                                    --
+							---------------------------------------------------------------------------------
+							if (!p1posenu.distance(!intersection) * !!DrawingPlan1.vsca geq 100) then
+								!offset = -25
+								XYPO 0 $!offset
+								APOF 0 3
+							else
+								!offset = !offset * -1
+								XYPO 0 $!offset
+								APOF 0 -3
+							endif
+						endif
+          else
+            --------------------------------------------
+            -- !p2 is lower point, !p1 is upper point --
+            --------------------------------------------
+          endif
+        endif
+			elseif (!griddir.eq('l/r')) then
+			  ---------------
+			  -- grid is -
+			  ---------------
+        !inview = false
+				if (!p1pos.position().distance(!viewUline).lt(!viewULenu.distance(!viewLLenu)) and !p1pos.position().distance(!viewDline).lt(!viewULenu.distance(!viewLLenu))) then
+					if (!p12line.on(!viewLline.intersection(!p12line), true) or !p12line.on(!viewRline.intersection(!p12line), true)) then
+						!inview = true
+					else
+						if (!p1pos.position().distance(!viewLline).leq(!viewULenu.distance(!viewURenu)) and !p1pos.position().distance(!viewRline).leq(!viewULenu.distance(!viewURenu))) then
+							if (!p2pos.position().distance(!viewLline).leq(!viewULenu.distance(!viewURenu)) and !p2pos.position().distance(!viewRline).leq(!viewULenu.distance(!viewURenu))) then
+								!inview = true
+							endif
+						endif
+					endif
+				endif
+			  if (!inview) then
+
+$(        q var !p2dir.direction()
+        q var !viewdirR.direction()
+        q var !p2dir.direction().angle(!viewdirR.direction())
+$)        
+          if (!p2dir.direction().angle(!viewdirR.direction()).lt(5)) then
+            ----------------
+            -- !p1 -> !p2 --
+            ----------------
+						
+						-----------------------------
+						-- create right part slabs --
+						-----------------------------
+						NEW SLAB
+						DDNA $!refgln
+						TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+						Agside 'Right'
+--              q var !p12line.StartPosition
+--              q var !p12line.EndPosition
+						!intersection = !viewRline.intersection(!p12line)
+--              q var !intersection
+--              q var !p12line.on(!intersection, true)
+						NPPT 2
+						!offset = !p2posenu.distance(!intersection.offset(!viewdirR.direction(), 25 / !!DrawingPlan1.vsca)) * !!DrawingPlan1.vsca
+						if (!p12line.on(!intersection, true)) then
+							--------------------------------------------------------------
+							-- there is an intersection between !p12line and !viewRline --
+							--------------------------------------------------------------
+							var !p2possh shpos of $!p2posenu
+							!temppt = !intersection.offset(!viewdirR.direction(), 25 / !!DrawingPlan1.vsca)
+							var !intersectionsh shpos of $!temppt
+							if (!p2possh.part(2).real().value().geq(!intersectionsh.part(2).real().value())) then
+								!offset = !offset * -1
+							endif
+							XYPO $!offset 0
+							APOF ( $!offset - 22 ) 0
+						else
+							---------------------------------------------------------------------------------
+							-- there is not an intersection between !p12line and !viewRline                --
+							-- check if the distance between !p2posenu and !viewRline is larger than 100mm --
+							-- if YES, place slab 25mm right to !p2posenu                                  --
+							-- if NO,  place slab 25mm right to !viewUline                                 --
+							---------------------------------------------------------------------------------
+							if (!p2posenu.distance(!intersection) * !!DrawingPlan1.vsca geq 100) then
+								!offset = 25
+								XYPO $!offset 0
+								APOF 3 0
+							else
+								XYPO $!offset 0
+								APOF 3 0
+							endif
+						endif
+						
+						-----------------------------
+						-- create left part slabs  --
+						-----------------------------
+						NEW SLAB
+						DDNA $!refgln
+						TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+						Agside 'Left'
+						!intersection = !viewLline.intersection(!p12line)
+						NPPT 1
+						!offset = !p1posenu.distance(!intersection.offset(!viewdirR.direction().opposite(), 25 / !!DrawingPlan1.vsca)) * !!DrawingPlan1.vsca
+						if (!p12line.on(!intersection, true)) then
+							--------------------------------------------------------------
+							-- there is an intersection between !p12line and !viewLline --
+							--------------------------------------------------------------
+							var !p1possh shpos of $!p1posenu
+							!temppt = !intersection.offset(!viewdirR.direction().opposite(), 25 / !!DrawingPlan1.vsca)
+							var !intersectionsh shpos of $!temppt
+							if (!p1possh.part(2).real().value().geq(!intersectionsh.part(2).real().value())) then
+								!offset = !offset * -1
+							endif
+							XYPO $!offset 0
+							APOF ( $!offset + 22 ) 0
+						else	
+							---------------------------------------------------------------------------------
+							-- there is not an intersection between !p12line and !viewLline                --
+							-- check if the distance between !p1posenu and !viewDline is larger than 100mm --
+							-- if YES, place slab 25mm left to !p2posenu                                   --
+							-- if NO,  place slab 25mm left to !viewDline                                  --
+							---------------------------------------------------------------------------------
+							if (!p1posenu.distance(!intersection) * !!DrawingPlan1.vsca geq 100) then
+								!offset = -25
+								XYPO $!offset 0
+								APOF 3 0
+							else
+								XYPO $!offset 0
+								APOF 3 0
+							endif
+						endif
+          else
+            ----------------
+            -- !p2 <- !p1 --
+            ----------------
+						
+						-----------------------------
+						-- create left part slabs --
+						-----------------------------
+						NEW SLAB
+						DDNA $!refgln
+						TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+						Agside 'Left'
+--              q var !p12line.StartPosition
+--              q var !p12line.EndPosition
+						!intersection = !viewLline.intersection(!p12line)
+--              q var !intersection
+--              q var !p12line.on(!intersection, true)
+						NPPT 2
+						!offset = !p2posenu.distance(!intersection.offset(!viewdirR.direction().opposite(), 25 / !!DrawingPlan1.vsca)) * !!DrawingPlan1.vsca
+						if (!p12line.on(!intersection, true)) then
+							--------------------------------------------------------------
+							-- there is an intersection between !p12line and !viewLline --
+							--------------------------------------------------------------
+							var !p2possh shpos of $!p2posenu
+							!temppt = !intersection.offset(!viewdirR.direction().opposite(), 25 / !!DrawingPlan1.vsca)
+							var !intersectionsh shpos of $!temppt
+							if (!p2possh.part(2).real().value().geq(!intersectionsh.part(2).real().value())) then
+								!offset = !offset * -1
+							endif
+							XYPO $!offset 0
+							APOF ( $!offset + 22 ) 0
+						else
+							---------------------------------------------------------------------------------
+							-- there is not an intersection between !p12line and !viewLline                --
+							-- check if the distance between !p2posenu and !viewLline is larger than 100mm --
+							-- if YES, place slab 25mm right to !p2posenu                                  --
+							-- if NO,  place slab 25mm right to !viewUline                                 --
+							---------------------------------------------------------------------------------
+							if (!p2posenu.distance(!intersection) * !!DrawingPlan1.vsca geq 100) then
+								!offset = -25
+								XYPO $!offset 0
+								APOF -3 0
+							else
+								!offset = !offset * -1
+								XYPO $!offset 0
+								APOF -3 0
+							endif
+						endif
+						
+						------------------------------
+						-- create right part slabs  --
+						------------------------------
+						NEW SLAB
+						DDNA $!refgln
+						TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+						Agside 'Right'
+						!intersection = !viewRline.intersection(!p12line)
+						NPPT 1
+						!offset = !p1posenu.distance(!intersection.offset(!viewdirR.direction(), 25 / !!DrawingPlan1.vsca)) * !!DrawingPlan1.vsca
+						if (!p12line.on(!intersection, true)) then
+							--------------------------------------------------------------
+							-- there is an intersection between !p12line and !viewRline --
+							--------------------------------------------------------------
+							var !p1possh shpos of $!p1posenu
+							!temppt = !intersection.offset(!viewdirR.direction(), 25 / !!DrawingPlan1.vsca)
+							var !intersectionsh shpos of $!temppt
+							if (!p1possh.part(2).real().value().geq(!intersectionsh.part(2).real().value())) then
+								!offset = !offset * -1
+							endif
+							XYPO $!offset 0
+							APOF ( $!offset - 22 ) 0
+						else	
+							---------------------------------------------------------------------------------
+							-- there is not an intersection between !p12line and !viewRline                --
+							-- check if the distance between !p1posenu and !viewDline is larger than 100mm --
+							-- if YES, place slab 25mm left to !p2posenu                                   --
+							-- if NO,  place slab 25mm left to !viewDline                                  --
+							---------------------------------------------------------------------------------
+							if (!p1posenu.distance(!intersection) * !!DrawingPlan1.vsca geq 100) then
+								!offset = 25
+								XYPO $!offset 0
+								APOF 3 0
+							else
+								XYPO $!offset 0
+								APOF 3 0
+							endif
+						endif
+          endif
+        endif
+			else
+			  -------------------------------------------------------------------------
+				-- none orthogonal grids                                               --
+				-- if a sloped grid has more two intersections within view limitation  --
+				-- which means the grid is inside the view                             --
+				-------------------------------------------------------------------------
+				!intersections = object array()
+				if (!viewUline.intersection(!p12line).north.geq(!viewLL.position().north.value()) and !viewUline.intersection(!p12line).north.leq(!viewUL.position().north.value())) then
+				  if (!viewUline.intersection(!p12line).east.geq(!viewLL.position().east.value()) and !viewUline.intersection(!p12line).east.leq(!viewLR.position().east.value())) then
+						!intersections.append('viewUline-' & !viewUline.intersection(!p12line).string())
+					endif
+				endif
+				if (!viewDline.intersection(!p12line).north.geq(!viewLL.position().north.value()) and !viewDline.intersection(!p12line).north.leq(!viewUL.position().north.value())) then
+				  if (!viewDline.intersection(!p12line).east.geq(!viewLL.position().east.value()) and !viewDline.intersection(!p12line).east.leq(!viewLR.position().east.value())) then
+						!intersections.append('viewDline-' & !viewDline.intersection(!p12line).string())
+					endif
+				endif
+				if (!viewLline.intersection(!p12line).north.geq(!viewLL.position().north.value()) and !viewLline.intersection(!p12line).north.leq(!viewUL.position().north.value())) then
+				  if (!viewLline.intersection(!p12line).east.geq(!viewLL.position().east.value()) and !viewLline.intersection(!p12line).east.leq(!viewLR.position().east.value())) then
+						!intersections.append('viewLline-' & !viewLline.intersection(!p12line).string())
+					endif
+				endif
+				if (!viewRline.intersection(!p12line).north.geq(!viewLL.position().north.value()) and !viewRline.intersection(!p12line).north.leq(!viewUL.position().north.value())) then
+				  if (!viewRline.intersection(!p12line).east.geq(!viewLL.position().east.value()) and !viewRline.intersection(!p12line).east.leq(!viewLR.position().east.value())) then
+						!intersections.append('viewRline-' & !viewRline.intersection(!p12line).string())
+					endif
+				endif
+				
+				if (!intersections.size().geq(2)) then
+				  !total = 0
+				  var !vside vside of $!p1posenu
+					if (!vside.part(3).eq('Inside')) then
+						NEW SLAB
+						DDNA $!refgln
+						NPPT 1
+						TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+						
+						!x = (!p1posenu.offset(!p2dir.direction().opposite(), 25 / !!DrawingPlan1.vsca).east - !p1posenu.east) * !!DrawingPlan1.vsca
+						!y = (!p1posenu.offset(!p2dir.direction().opposite(), 25 / !!DrawingPlan1.vsca).north - !p1posenu.north) * !!DrawingPlan1.vsca
+						!xap = (!p1posenu.offset(!p2dir.direction().opposite(), 3 / !!DrawingPlan1.vsca).east - !p1posenu.east) * !!DrawingPlan1.vsca
+						!yap = (!p1posenu.offset(!p2dir.direction().opposite(), 3 / !!DrawingPlan1.vsca).north - !p1posenu.north) * !!DrawingPlan1.vsca
+						
+						XYPO $!x $!y
+						APOF $!xap $!yap
+						
+						if (!p2dir.direction().angle(!viewdirU.direction()).lt(40) or !p2dir.direction().angle(!viewdiru.direction().opposite()).lt(40)) then
+						  Agside 'Bottom'
+						else
+							Agside 'Left'
+						endif
+						!total = !total + 1
+					endif
+					
+				  var !vside vside of $!p2posenu
+					if (!vside.part(3).eq('Inside')) then
+						NEW SLAB
+						DDNA $!refgln
+						NPPT 2
+						TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+						
+						!x = (!p2posenu.offset(!p2dir.direction(), 25 / !!DrawingPlan1.vsca).east - !p2posenu.east) * !!DrawingPlan1.vsca
+						!y = (!p2posenu.offset(!p2dir.direction(), 25 / !!DrawingPlan1.vsca).north - !p2posenu.north) * !!DrawingPlan1.vsca
+						!xap = (!p2posenu.offset(!p2dir.direction(), 3 / !!DrawingPlan1.vsca).east - !p2posenu.east) * !!DrawingPlan1.vsca
+						!yap = (!p2posenu.offset(!p2dir.direction(), 3 / !!DrawingPlan1.vsca).north - !p2posenu.north) * !!DrawingPlan1.vsca
+						
+						XYPO $!x $!y
+						APOF $!xap $!yap
+						
+						if (!p2dir.direction().angle(!viewdirU.direction()).lt(40) or !p2dir.direction().angle(!viewdiru.direction().opposite()).lt(40)) then
+						  Agside 'Top'
+						else
+							Agside 'Right'
+						endif
+						!total = !total + 1
+					endif
+					
+					----------------------------------------------------------------
+					-- there is an intersection between sloped grid and matchline --
+					----------------------------------------------------------------
+					do !intersection values !intersections
+						NEW SLAB
+						DDNA $!refgln
+					  if (!p1posenu.distance(!intersection.split('-').getindexed(2).position()) lt !p2posenu.distance(!intersection.split('-').getindexed(2).position())) then
+						  NPPT 1
+              !x = abs(!p1posenu.east  - !intersection.split('-').getindexed(2).position().offset(!p2dir.direction().opposite(), 25 / !!DrawingPlan1.vsca).east)  * !!DrawingPlan1.vsca
+              !y = abs(!p1posenu.north - !intersection.split('-').getindexed(2).position().offset(!p2dir.direction().opposite(), 25 / !!DrawingPlan1.vsca).north) * !!DrawingPlan1.vsca
+              !xap = abs(!p1posenu.east  - !intersection.split('-').getindexed(2).position().offset(!p2dir.direction().opposite(), 3 / !!DrawingPlan1.vsca).east)  * !!DrawingPlan1.vsca
+              !yap = abs(!p1posenu.north - !intersection.split('-').getindexed(2).position().offset(!p2dir.direction().opposite(), 3 / !!DrawingPlan1.vsca).north) * !!DrawingPlan1.vsca
+              if (!p1posenu.east.gt(!intersection.split('-').getindexed(2).position().offset(!p2dir.direction().opposite(), 25 / !!DrawingPlan1.vsca).east)) then
+                !x = !x * -1
+              endif
+              if (!p1posenu.north.gt(!intersection.split('-').getindexed(2).position().offset(!p2dir.direction().opposite(), 25 / !!DrawingPlan1.vsca).north)) then
+                !y = !y * -1
+              endif
+              if (!p1posenu.east.gt(!intersection.split('-').getindexed(2).position().offset(!p2dir.direction().opposite(), 3 / !!DrawingPlan1.vsca).east)) then
+                !xap = !xap * -1
+              endif
+              if (!p1posenu.north.gt(!intersection.split('-').getindexed(2).position().offset(!p2dir.direction().opposite(), 3 / !!DrawingPlan1.vsca).north)) then
+                !yap = !yap * -1
+              endif
+						else
+						  NPPT 2
+              !x = abs(!p2posenu.east  - !intersection.split('-').getindexed(2).position().offset(!p2dir.direction(), 25 / !!DrawingPlan1.vsca).east)  * !!DrawingPlan1.vsca
+              !y = abs(!p2posenu.north - !intersection.split('-').getindexed(2).position().offset(!p2dir.direction(), 25 / !!DrawingPlan1.vsca).north) * !!DrawingPlan1.vsca
+              !xap = abs(!p2posenu.east  - !intersection.split('-').getindexed(2).position().offset(!p2dir.direction(), 3 / !!DrawingPlan1.vsca).east)  * !!DrawingPlan1.vsca
+              !yap = abs(!p2posenu.north - !intersection.split('-').getindexed(2).position().offset(!p2dir.direction(), 3 / !!DrawingPlan1.vsca).north) * !!DrawingPlan1.vsca
+              if (!p2posenu.east.gt(!intersection.split('-').getindexed(2).position().offset(!p2dir.direction(), 25 / !!DrawingPlan1.vsca).east)) then
+                !x = !x * -1
+              endif
+              if (!p2posenu.north.gt(!intersection.split('-').getindexed(2).position().offset(!p2dir.direction(), 25 / !!DrawingPlan1.vsca).north)) then
+                !y = !y * -1
+              endif
+              if (!p2posenu.east.gt(!intersection.split('-').getindexed(2).position().offset(!p2dir.direction(), 3 / !!DrawingPlan1.vsca).east)) then
+                !xap = !xap * -1
+              endif
+              if (!p2posenu.north.gt(!intersection.split('-').getindexed(2).position().offset(!p2dir.direction(), 3 / !!DrawingPlan1.vsca).north)) then
+                !yap = !yap * -1
+              endif
+						endif
+            XYPO $!x $!y
+            APOF $!xap $!yap
+						TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+            if (!intersection.split('-').getindexed(1).eq('viewUline')) then
+              Agside 'Top'
+            elseif (!intersection.split('-').getindexed(1).eq('viewDline')) then
+              Agside 'Bottom'
+            elseif (!intersection.split('-').getindexed(1).eq('viewLline')) then
+              Agside 'Left'
+            else
+              Agside 'Right'
+            endif
+					enddo
+        endif
+			endif
+		enddo
+	enddo
+endfunction
+
+
+
+
+$(
+		  ------------------------------
+		  -- vertical grid for future --
+			------------------------------
+			!gridpldbref = object dbref(!gridpl)
+			!gridplpos = !gridpldbref.attribute('position').string()
+		  if (!gridplpos.part(5) eq 'U') then
+			  !idplane = !gridplpos.part(6).replace('mm','')
+			else
+			  !idplane = '-' & !gridplpos.part(6).replace('mm','')
+			endif
+$)

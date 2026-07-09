@@ -1,0 +1,20 @@
+--------------------------------------------
+-- Function : Exclude list for RMV export --
+-- Auther : tw tseng                      --
+-- Date   : 2022/12/24                    --
+--------------------------------------------
+define function !!NwdExcludeList()
+  var !proj proj id
+  if (!proj eq '400999DAC') then
+		!list = '/Instrument-valve-donot-show-CCP-SET'
+  elseif (!proj eq '400780') then
+		!list = '/Instrument-valve-donot-show_SET'
+  endif
+	
+	var !gpitems COLL ALL GPITEM FOR $!list
+	do !gpitem values !gpitems
+	  var !sitem SITEM OF $!gpitem
+		EXPORT EXCLUDE $!sitem
+	enddo
+endfunction
+

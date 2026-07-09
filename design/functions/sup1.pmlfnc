@@ -1,0 +1,110 @@
+-------------------------------------------------------------------------
+-- Function : Batch to IMPORT specific objects from dbflist text files --
+--          : run !!sup() to export objects earlier                    --
+-- Auther   : tw tseng                                                 --
+-- Date     : 20221230                                                 --
+-------------------------------------------------------------------------
+define function !!sup1()
+
+	
+	------------------------------------------------
+	-- divide mass text files to small text files --
+	------------------------------------------------
+--	!ff1 = object file('C:\TEMP\test.mac')
+--	!ff1.open('READ')
+--	!i = 1
+--	!j = 1
+--	do
+--	  !line =!ff1.readrecord()
+--	  if (!line.set()) then
+--		  if (!i eq 1) then
+--			  !ff = 'C:\TEMP\test' & !j & '.mac'
+--				!ff2 = object file(!ff)
+--				!ff2.open('WRITE')
+--				!ff2.writerecord(!line)
+--				!i = !i + 1
+--			elseif (!i eq 5000) then
+--				!ff2.writerecord(!line)
+--				!ff2.close()
+--			  !i = 1
+--				!j = !j + 1
+--			else
+--				!ff2.writerecord(!line)
+--			  !i = !i + 1
+--			endif
+--		else
+--		  break
+--		endif
+--	enddo
+--  !ff2.close()	
+--  !ff1.close()	
+
+	-----------------
+	-- export PIPE --
+	-----------------
+--	SYSCOM |dir /b C:\temp\*!*.txt > C:\temp\pipe.txt|	
+--	!ff1 = object file('C:\TEMP\pipe.TXT')
+--	!ff1.open('READ')
+--	!pipes =!ff1.readfile()
+--	do !i From 1 to !pipes.size()
+--		!pipename = '/' & !pipes[!i].split('!').getindexed(1)
+--		$!pipename
+--		handle any
+--		elsehandle none
+--		  UNLOCK ALL
+--		  DELETE PIPE
+--		  handle any
+--			endhandle
+--		endhandle
+--	enddo
+	
+--	do !i From 1 to !pipes.size()
+--		!zone = '/' & !pipes[!i].split('!').getindexed(2).replace('.txt', '')
+--		$!zone
+--		$M C:\TEMP\$!pipes[$!i]
+--		handle any
+--		endhandle
+--	enddo	
+--	!ff1.close()
+	
+	-----------------
+	-- export REST --
+	-----------------
+	!file1 = 'C:\TEMP\rest.TXT'
+	!ff1 = object file(!file1)
+	!ff1.open('READ')
+	!lines =!ff1.readfile()
+	do !i From 1 to !lines.size()
+		!line = !lines[!i]
+    !zone = '/' & !line.split('!').getindexed(2).replace('.txt', '')
+    $!zone
+    $M C:\temp\chu-1st\$!line
+    handle any
+    endhandle
+	enddo
+	!ff1.close()
+	
+	-----------------
+	-- export STRU --
+	-----------------
+--	!file1 = 'C:\TEMP\stru.TXT'
+--	!ff1 = object file(!file1)
+--	!ff1.open('READ')
+--	!attas =!ff1.readfile()
+--	do !i From 1 to !attas.size()
+--		!name = !attas[!i]
+--		/$!name/S
+--		handle any
+--		elsehandle none
+--		  DELETE STRU
+--		endhandle
+--		!zone = '/SUPPORT1_' & !name.split('_').getindexed(2)
+--		$!zone
+--		$M C:\TEMP\$!name-S.TXT
+--		handle any
+--		endhandle
+--		$p $!i		
+--	enddo
+--	!ff1.close()	
+	
+endfunction

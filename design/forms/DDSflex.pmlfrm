@@ -1,0 +1,1018 @@
+-- Définition du FORM
+-- Dialog dock size 40 12
+setup form !!DDSflex DIALOG resizable
+	
+		
+	!this.FORMTITLE = 'Flex 3D'
+	!this.FORMREVISION = '1.0'
+
+	-- Définition des gadgets
+	path right
+	text .flexNameTxt |Flexible:| anchor l+r+t  width 30 is STRING 
+	button .getCEBtn |Get CE| anchor r+t width 8 
+
+	-- button .icon at xmax+7 ymax+1 pixmap
+	para .sketch at x0 ymax+1 pixmap width 38 height 120
+
+	
+	para .paraGask at x0 ymax+5 text |Gasket Thickness:| width 12
+	text .gasketTh at xmax ymin width 3 is REAL 	
+	para .paraGask1 at xmax+1 ymin text |mm| width 3
+	para .paraDefl at x0 ymax text |Deflection:| width 12
+	text .deflection at xmax ymin width 3 is REAL 	
+	para .paraDefl1 at xmax+1 ymin text |mm     If Deflection > 0, DistP12 must be = DistP22 | width 35
+	para .paraDeflAng at x0 ymax text |Deflection angle:| width 12
+	text .deflAngle at xmax ymin width 3 is REAL 	
+	para .paraDeflAng1 at xmax+1 ymin text |°| width 3	
+	
+	
+	frame .p2Frm |P2| at x0 ymax
+	para .p2X at x1 ymax text |X:    --- mm| width 10
+	para .p2Y at x1 ymax text |Y:    --- mm| width 10
+	para .p2Z at x1 ymax text |Z:    --- mm| width 10
+	para .para1 at x1 ymax text |angle: | width 5	
+	para .p2XYZ text |X     Y    Z| width 10
+	button .getP2Btn |Get P2| at x1 ymax width 8	
+	exit
+	
+	frame .p13Frm |P13| at xmax+1 ymin
+	para .p13X at x1 ymax text |X:    --- mm| width 10
+	para .p13Y at x1 ymax text |Y:    --- mm| width 10
+	para .p13Z at x1 ymax text |Z:    --- mm| width 10
+	para .para2 at x1 ymax text |angle: | width 5	
+	para .p13XYZ text |X     Y    Z| width 10
+	numeric .lengthP12 |Dist P12| at x1 ymax range 0 10000 step 1 NDP 0 wid 3
+	numeric .cylLenP1  |L Cyl P1| at x1 ymax range 0 10000 step 1 NDP 0 wid 3
+	exit
+
+	frame .p23Frm |P23| at xmax+1 ymin
+	para .p23X at x1 ymax text |X:    --- mm| width 10
+	para .p23Y at x1 ymax text |Y:    --- mm| width 10
+	para .p23Z at x1 ymax text |Z:    --- mm| width 10
+	para .para3 at x1 ymax text |angle: | width 5	
+	para .p23XYZ text |X     Y    Z| width 10
+	numeric .lengthP22 |Dist P22| at x1 ymax range 0 5000 step 1 NDP 0 wid 3
+	numeric .cylLenP2  |L Cyl P2| at x1 ymax range 0 5000 step 1 NDP 0 wid 3
+	exit	
+	
+	frame .radiusFrm |Measured radius| at x0 ymax+1
+	para .radiusP12 at x1 ymin text |Radius P12:    --- mm| width 14
+	para .radiusP33 at xmin.p13Frm+1 ymin text |Radius P33:    --- mm| width 14
+	para .radiusP22 at xmin.p23Frm+1 ymin text |Radius P22:    --- mm| width 14	
+	exit	
+	
+	para .paraTotLen at x0 ymax+1 text |Requested total length:| width 15
+	text .flexTotLen at xmax ymin width 6 is REAL 	
+	para .paraTotLen1 at xmax+1 ymin text |(Attribute Height, appears on MTO of isometric)| width 30
+	
+	para .totalLength at x0 ymax text |Measured total length:    --- mm| width 23	
+	para .distP1P2 at x0 ymax text |Distance P1 - P2:    --- mm| width 23
+	button .clearAidBtn |Clear Aid| call |!this.clearAid()|at x0 ymax+1 width 8
+	
+	-- button .okBtn |OK| at x0 ymax+1 width 8 OK
+	-- button .applyBtn |Apply| at xmax+1 ymin width 8 Apply
+	button .dismissBtn |Dismiss| at xmax+1 ymin width 8 CANCEL
+	button .reloadBtn |RELOAD| at xmax+1 ymin width 8
+	
+	-- Déclaration des membres
+	member .nameFlex is STRING
+
+exit
+------------------------------------------------------------------------------------------------------
+-- Constructeur
+define method .DDSflex()
+
+-- Définition des callbacks
+!this.INITCALL = '!this.init()'
+-- !this.OKCALL = '!this.launch()'
+!this.CANCELCALL = ''
+-- !this.icon.addPixmap(!!pml.getPathname('qm35.png'))
+
+var !server evar SERVER
+--!nameFile = !server & '\APPLICATIONS\E3D2.1.0\DIFF-PW\pml\pmllib\design\Forms\DDSflex.png'
+!this.sketch.addPixmap('\\SVRE3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1/icons/DDSflex.png')
+-- !this.sketch.addPixmap(!!pml.getPathName(|Dellwo.png|))
+
+!this.flexNameTxt.CALLBACK = '!this.checkText('
+!this.gasketTh.Val = 3
+!this.deflection.Val = 0
+!this.deflAngle.Val = 0
+
+!this.lengthP12.CALLBACK = '!this.checkOffset('
+!this.lengthP22.CALLBACK = '!this.checkOffset('
+!this.cylLenP1.CALLBACK = '!this.checkOffset('
+!this.cylLenP2.CALLBACK = '!this.checkOffset('
+!this.gasketTh.CALLBACK = '!this.checkOffset('
+!this.deflection.CALLBACK = '!this.checkOffset('
+!this.deflAngle.CALLBACK = '!this.checkOffset('
+!this.flexTotLen.CALLBACK = '!this.checkTotLen('
+
+!this.getCEBtn.CALLBACK = '!this.getCE(TRUE)'
+!this.getP2Btn.CALLBACK = '!this.getPpoint()'
+!this.reloadBtn.CALLBACK = '!this.reload()'
+-- !this.ApplyBtn.CALLBACK = '!this.launch()'
+
+
+
+-- !roptArray = ARRAY()
+
+endmethod
+
+------------------------------------------------------------------------------------------------------
+-- Initialisation du Form
+define method .init()
+	
+--	!this.useReg()
+
+	!this.initialData()
+	
+	!this.getCE(FALSE)
+	
+endmethod
+
+------------------------------------------------------------------------------------------------------
+-- Controle du texte entré par l'utilisateur
+define method .checkText(!gadget is GADGET, !event is STRING)
+
+	if (!event EQ 'SELECT') then
+	
+		!text = !gadget.VAL
+		!textDbref = object DBREF(!text)
+		handle ANY
+			-- Cet objet n'existe pas
+			!!alert.error (|This object $!text does not exist|)
+			!this.init()	
+			return
+		endhandle
+		if (!text EQ '') then
+			!this.init()	
+			return
+		endif
+		
+		if (!textDbref.catref.namn.split('-')[1] NEQ 'FLEXHOSE') then
+			-- Ce n'est pas un FLEX
+			!!alert.warning (|This object $!text is not a FLEX|)
+			!this.init()	
+
+		else
+			!!ce = !textDbref
+			!this.getCE(FALSE)
+		
+		endif
+	
+	
+	
+	endif
+
+endmethod
+
+------------------------------------------------------------------------------------------------------
+-- Controle du texte entré par l'utilisateur
+define method .checkOffset(!gadget is GADGET, !event is STRING)
+
+	if (!event EQ 'SELECT') then
+	
+		!text = !gadget.VAL
+		handle ANY
+			-- Ce n'est pas un réel
+			!!alert.warning (|This is not a real number|)		
+			!gadget.VAL = 5	
+		endhandle
+			
+	endif
+
+-- On charge le dernier desparam (Gasket thickness).  Si les desparam ne sont pas alloués, on prend la valeur
+-- du form
+!thickness = !this.gasketTh.val
+!!flex.desp[20] = !thickness
+handle any
+	!!flex.desp[21] = 2 * !!flex.catref.param[1]
+	!!flex.desp[22] = 2 * !!flex.catref.param[1]
+	!this.getCe(FALSE)
+endhandle	
+
+!!flex.desp[17] = !this.deflection.val
+!!flex.desp[18] = !this.deflAngle.val	
+!!flex.desp[21] = !this.cylLenP1.val
+!!flex.desp[22] = !this.cylLenP2.val
+
+!checkLine = !!posP1.line(!!posP2)
+IF (!!dirP1.angle(!checkLine.direction()) LE 0.1deg) OR (!!dirP1.angle(!checkLine.direction()) GE 179.9deg) then
+	if !this.deflection.val EQ 0 then
+		!!offsetP12 = !!cylLen1
+		!!offsetP22 = !!cylLen2
+	else
+		!!offsetP12 = !!cylLen1 + !!flex.catref.param[1]
+		!!offsetP22 = !!cylLen2 + !!flex.catref.param[1]
+	endif
+	!this.lengthP12.val = !!offsetP12
+	!this.lengthP22.val = !!offsetP22
+	-- $P P1 and P2 are aligned
+ENDIF	
+
+!!cylLen1 = !this.cylLenP1.val
+!!cylLen2 = !this.cylLenP2.val
+
+-- !!offsetP12 must be greater than !!cylLen1
+IF (!this.lengthP12.val LE !!cylLen1) then
+	!this.lengthP12.val = !!cylLen1 + !!flex.catref.param[1]
+	!!offsetP12 = !!cylLen1 + !!flex.catref.param[1]
+	$P DIST P12 must be greater than L Cyl P1
+ENDIF
+
+-- !!offsetP2 must be greater than !!cylLen2
+IF (!this.lengthP22.val  LE !!cylLen2) then
+	!this.lengthP22.val = !!cylLen2 + !!flex.catref.param[1]
+	!!offsetP22 = !!cylLen2 + !!flex.catref.param[1]
+	$P DIST P22 must be greater than L Cyl P2
+ENDIF
+
+!this.calcAllPoint()
+!this.refreshInput()
+
+endmethod
+
+------------------------------------------------------------------------------------------------------
+-- Controle de la longueur totale entrée par l'utilisateur et calcul des paramètres dans la limite
+-- de la géométrie possible
+define method .checkTotLen(!gadget is GADGET, !event is STRING)
+
+	if (!event EQ 'SELECT') then
+	
+		!oldValue = !this.flexTotLen.VAL
+		!LenReq = !gadget.VAL
+		handle ANY
+			-- Ce n'est pas un réel
+			!!alert.warning (|This is not a real number|)		
+			!gadget.VAL = !oldValue	
+		endhandle		
+	endif
+
+	-- On charge le dernier desparam (Gasket thickness).  Si les desparam ne sont pas alloués, on prend la valeur
+	-- du form
+	!thickness = !this.gasketTh.val
+	!!flex.desp[20] = !thickness
+	handle any
+		!this.getCe(FALSE)
+	endhandle	
+	
+	-- Contrôle si la longueur demandée est inférieure à P1-P2
+	IF (!LenReq LT !!dist - 1) THEN
+		!!alert.message(|The requested length is smaller than the distance P1-P2|)
+		!gadget.VAL = !oldValue
+		-- !!flex.height = !!LLtot.int()
+		return
+	ENDIF
+
+	-- Contrôle si P110 et P2 sont alignés.  Si oui, on n'augmente pas lengthP12 et lengthP22
+	!checkLine = !!posP110.line(!!posP2)
+	IF (!!dirP110.angle(!checkLine.direction()) LE 0.1deg) OR (!!dirP110.angle(!checkLine.direction()) GE 179.9deg) then
+		!align = 0.25
+		if !this.deflection.val EQ 0 then
+			!!offsetP12 = !!cylLen1
+			!!offsetP22 = !!cylLen2
+		else
+			!!offsetP12 = !!cylLen1 + !!flex.catref.param[1]
+			!!offsetP22 = !!cylLen2 + !!flex.catref.param[1]
+		endif
+		!this.lengthP12.val = !!offsetP12
+		!this.lengthP22.val = !!offsetP22
+		$P P110 and P2 are aligned
+	ELSE
+		!align = 1	
+	ENDIF	
+	
+	-- Initialisation de la comparaison
+	!!LLtot = 0
+	!!flex.height = !LenReq	
+	!limit = 1000
+	DO !n FROM 1 TO 10000
+		-- !startLen = !align * !n + 2 * !!flex.catref.param[1] + !!flex.catref.param[1]
+		!startLen = !align * !n + !!cylLen1
+		!this.lengthP12.val = !startLen.int()
+		!startLen = !align * !n + !!cylLen2
+		!this.lengthP22.val = !startLen.int()
+		!this.deflection.val = !n
+		!!flex.desp[17] = !this.deflection.val
+		!deltaBef = ABS(!LenReq - !!LLtot)
+		-- $P deltaBef $!deltaBef $!LenReq  $!!LLtot
+		!this.calcAllPoint()
+		!deltaAft = ABS(!LenReq - !!LLtot)
+		IF (!deltaAft GE !deltaBef) THEN
+			-- $P L totale if 2 $!!LLtot  n= $!n $!deltaAft $!deltaBef
+			BREAK
+		ENDIF
+	
+	-- $P L totale $!!LLtot
+	
+		!this.refreshInput()	
+	
+		IF !n EQ !limit THEN
+			!answer = !!alert.confirm(|You reached |& $!limit &|mm deflection(P33), do you want to continue ?|)
+			IF !answer EQ 'YES' then
+				!limit = !limit + 1000
+			ELSE
+				BREAK
+			ENDIF
+		ENDIF
+	ENDDO
+	
+endmethod
+
+------------------------------------------------------------------------------------------------------
+-- Rafraichit les données initiale du form
+define method .initialData()
+	!this.flexNameTxt.val = ''
+	!this.p2X.val = |X:    --- mm|
+	!this.p2Y.val = |Y:    --- mm|
+	!this.p2Z.val = |Z:    --- mm|
+	!this.p2XYZ.val = |X     Y     Z|
+	!this.p13X.val = |X:    --- mm|
+	!this.p13Y.val = |Y:    --- mm|
+	!this.p13Z.val = |Z:    --- mm|
+	!this.p13XYZ.val = |X     Y     Z|
+	!this.lengthP12.val = 0
+	!this.cylLenP1.val = 0
+	!this.radiusP12.val = |Radius P12:    --- mm|
+	!this.p23X.val = |X:    --- mm|
+	!this.p23Y.val = |Y:    --- mm|
+	!this.p23Z.val = |Z:    --- mm|
+	!this.p23XYZ.val = |X     Y     Z|
+	!this.lengthP22.val = 0
+	!this.cylLenP2.val = 0	
+	!this.lengthP22.ACTIVE = TRUE
+	!this.radiusP22.val = |Radius P22:    --- mm|
+	!this.radiusP33.val = |Radius P33:    --- mm|	
+	!this.flexTotLen.val = 0
+	!this.totalLength.val = |Measured total length:    --- mm|	
+	!this.distP1P2.val = |Distance P1 - P2:    --- mm|	
+	!this.getP2Btn.ACTIVE = FALSE
+	!this.deflection.ACTIVE = FALSE
+	!this.gasketTh.ACTIVE = FALSE
+	!this.deflAngle.ACTIVE = FALSE	
+	-- !this.okBtn.ACTIVE = FALSE
+	-- !this.applyBtn.ACTIVE = FALSE
+endmethod
+
+------------------------------------------------------------------------------------------------------
+-- Rafraichit les données du form
+define method .refreshInput()
+	!this.flexNameTxt.val = !!flex.name
+	!this.p2X.val = |X: | + !!flex.desp[1].int().string()
+	!this.p2Y.val = |Y: | + !!flex.desp[2].int().string()
+	!this.p2Z.val = |Z: | + !!flex.desp[3].int().string()
+	!this.p2XYZ.val = |X | + !!flex.desp[4].value().int().string() + | Y | + !!flex.desp[5].value().int().string() + | Z|
+	!this.p13X.val = |X: | + !!flex.desp[6].int().string()
+	!this.p13Y.val = |Y: | + !!flex.desp[7].int().string()
+	!this.p13Z.val = |Z: | + !!flex.desp[8].int().string()
+	!this.p13XYZ.val = |X | + !!flex.desp[9].value().int().string() + | Y | + !!flex.desp[10].value().int().string() + | Z|
+	-- !this.lengthP12.val = 0
+	!this.p23X.val = |X: | + !!flex.desp[11].int().string()
+	!this.p23Y.val = |Y: | + !!flex.desp[12].int().string()
+	!this.p23Z.val = |Z: | + !!flex.desp[13].int().string()
+	!this.p23XYZ.val = |X | + !!flex.desp[14].value().int().string() + | Y | + !!flex.desp[15].value().int().string() + | Z|
+
+	if !!offsetP12 EQ !!cylLen1 THEN
+		!this.radiusP12.val = |Radius P12:    --- mm|
+	ELSE
+		!this.radiusP12.val = |Radius P12: | + !!RR12.int().string()
+	ENDIF
+	if !!offsetP22 EQ !!cylLen2 THEN
+		!this.radiusP22.val = |Radius P22:    --- mm|
+	ELSE
+		!this.radiusP22.val = |Radius P22: | + !!RR22.int().string()
+	ENDIF	
+	
+	if !this.deflection.val NE 0 then
+		!this.radiusP33.val = |Radius P33: | + !!RR33.int().string()
+		!this.lengthP22.ACTIVE = FALSE
+		!this.cylLenP2.ACTIVE = FALSE
+	else
+		!this.radiusP33.val = |Radius P33:    --- mm|
+		!this.lengthP22.ACTIVE = TRUE
+		!this.cylLenP2.ACTIVE = TRUE
+	endif
+	!this.deflection.val = !!flex.desp[17].int()
+	!this.deflAngle.val = !!flex.desp[18].int()
+
+	!this.flexTotLen.val = !!flex.height
+	!this.totalLength.val = |Measured total length: | + !!LLTot.int().string()	
+	!this.distP1P2.val = |Distance P1 - P2:      | + !!dist.int().string()
+	!this.getP2Btn.ACTIVE = TRUE
+	!this.deflection.ACTIVE = TRUE
+	!this.gasketTh.ACTIVE = TRUE
+	!this.deflAngle.ACTIVE = TRUE		
+	-- !this.okBtn.ACTIVE = TRUE
+	-- !this.applyBtn.ACTIVE = TRUE
+endmethod
+
+
+-------------------------------------------------------------------------------------------------------
+-- Récupère le CE
+define method .getCE(!showError is BOOLEAN)
+
+-- Contrôle si le CE est un FLEX
+!!flex = !!ce
+!flexStyle = NAME OF CATREF
+HANDLE ANY
+	if (!showError) then
+		!this.initialData()
+		!!alert.Error(|Place the CE on a flexible hose element|)
+	endif
+	return
+ENDHANDLE
+
+-- Erreur si on ne sélectionne pas un PCOM dont le CATREF commence par FLEX
+if ( Not(!flexStyle.MatchWild('/FLEX*'))) then
+	if (!showError) then
+		!this.initialData()
+		!!alert.Error(|Place the CE on a 3D flexible hose element|)
+	endif
+	return
+endif
+
+-- Par défaut, le flexible n'a pas de coude fixe en P1
+!!elb = FALSE
+
+-- Calcule la longueur du cylindre d'entrée (la valeur doit être identique à celle de Paragon)
+-- !!cylLen1 = 2 * !!flex.catref.param[1]
+-- !!cylLen2 = 2 * !!flex.catref.param[1]
+
+
+-- Lit les positions et directions des points P1, P110, P2, P13 et P23
+var !posP1Str POS P1 OF $!!flex WRT /*
+!!posP1 = !posP1Str.position()
+var !dirP1Str DIR P1 OF $!!flex WRT /*
+!!dirP1 = !dirP1Str.direction()
+var !posP110Str POS P110 OF $!!flex WRT /*
+handle any
+	-- Il n'y a pas de coude fixe en P1
+	!!posP110 = !!posP1
+	!!dirP110 = !!dirP1
+elsehandle NONE
+	-- Il y a un coude en P1
+	!!elb = TRUE
+	!!posP110 = !posP110Str.position()
+	var !dirP110Str DIR P110 OF $!!flex WRT /*
+	!!dirP110 = !dirP110Str.direction()
+endhandle
+var !posP2Str POS P2 OF $!!flex WRT /*
+!!posP2 = !posP2Str.position()
+var !dirP2Str DIR P2 OF $!!flex WRT /*
+!!dirP2 = !dirP2Str.direction()
+var !posP13Str POS P13 OF $!!flex WRT /*
+!!posP13 = !posP13Str.position()
+var !dirP13Str DIR P13 OF $!!flex WRT /*
+!!dirP13 = !dirP13Str.direction()
+var !posP23Str POS P23 OF $!!flex WRT /*
+!!posP23 = !posP23Str.position()
+var !dirP23Str DIR P23 OF $!!flex WRT /*
+!!dirP23 = !dirP23Str.direction()
+
+-- On charge le dernier desparam (Gasket thickness).  Si les desparam ne sont pas alloués, on prend la valeur
+-- du form
+!thickness = !!flex.desp[20].int()
+!!flex.desp[20] = !thickness
+handle any
+$P desparam are not yet allocated.  The default values are now set.
+!thickness = !this.gasketTh.val
+!!cylLen1 = 2 * !!flex.catref.param[1]
+!!cylLen2 = 2 * !!flex.catref.param[1]
+desp n22 $!!cylLen2
+desp n21 $!!cylLen1
+desp n20 $!thickness
+endhandle
+!this.gasketTh.val = !!flex.desp[20].int()
+!this.cylLenP1.val = !!flex.desp[21]
+!this.cylLenP2.val = !!flex.desp[22]
+!!cylLen1 = !!flex.desp[21]
+!!cylLen2 = !!flex.desp[22]
+
+
+-- Lit les valeurs de déflection
+!this.deflection.val = !!flex.desp[17].int()
+!this.deflAngle.val = !!flex.desp[18].int()
+
+-- Si l'attribut Height = 0, c'est lors de la création du PCOM, on force donc la valeur à PARAM[2]
+IF !!flex.height EQ 0 THEN
+	!!flex.height = !!flex.catref.param[2]
+ENDIF
+
+-- Si les desparam viennent d'être créés, il faut calculer les 5 premiers
+!!DX = !!posP2.wrt(!!flex).east
+!!DY = !!posP2.wrt(!!flex).north
+!!DZ = !!posP2.wrt(!!flex).up
+!!flex.desp[1] = !!DX
+!!flex.desp[2] = !!DY
+!!flex.desp[3] = !!DZ
+
+!!DYZ = ASIN(!!dirP2.wrt(!!flex).up)
+!hZP2 = COS(ABS(!!DYZ))
+IF !hZP2 EQ 0 THEN
+	!!DXY = 0
+ELSE
+	!!DXY = !this.angleXYZ(!!dirP2.wrt(!!flex).east / !hZP2, !!dirP2.wrt(!!flex).north / !hZP2)
+ENDIF
+
+!!flex.desp[4] = !!DXY
+!!flex.desp[5] = !!DYZ
+
+-- Contrôle si P110 et P2 sont alignés.  Si oui, offsets réduits par rapport au cylindre d'entrée
+!checkLine = !!posP110.line(!!posP2)
+IF (!!dirP110.angle(!checkLine.direction()) LE 0.1deg) OR (!!dirP110.angle(!checkLine.direction()) GE 179.9deg) then
+	if !this.deflection.val EQ 0 then
+		!!offsetP12 = !!cylLen1
+		!!offsetP22 = !!cylLen2
+		!this.lengthP12.val = !!offsetP12
+		!this.lengthP22.val = !!offsetP22
+		$P P1 (or P110 for FLEX + ELBOW) and P2 are aligned
+		!this.calcAllPoint()
+		!this.refreshInput()
+		return
+	endif
+ENDIF
+
+-- Calcule les offsets
+!lineP110P12 = !!posP110.line(!!posP13)
+!lineP110P12 = !lineP110P12.direction(!!dirP110.opposite())
+!lineP13P12 = !!posP13.line(!!posP110)
+!lineP13P12 = !lineP13P12.direction(!!dirP13.opposite())
+
+!lineP2P22 = !!posP2.line(!!posP23)
+!lineP2P22 = !lineP2P22.direction(!!dirP2.opposite())
+
+!lineP23P22 = !!posP23.line(!!posP2)
+!lineP23P22 = !lineP23P22.direction(!!dirP23.opposite())
+
+!!posP12 = !lineP110P12.intersection(!lineP13P12)
+!!posP22 = !lineP2P22.intersection(!lineP23P22)
+
+!!offsetP12 = !!posP110.distance(!!posP12)
+!!offsetP22 = !!posP2.distance(!!posP22)
+!this.lengthP12.val = !!offsetP12
+!this.lengthP22.val = !!offsetP22
+
+!this.calcAllPoint()
+!this.refreshInput()
+
+endmethod
+-------------------------------------------------------------------------------------------------------
+-- Récupère le ppoint à connecter en P2
+define method .getPpoint() is STRING
+
+-- On charge le dernier desparam (Gasket thickness).  Si les desparam ne sont pas alloués, on prend la valeur
+-- du form
+!thickness = !this.gasketTh.val
+!!flex.desp[20] = !thickness
+handle any
+	!this.getCe(FALSE)
+endhandle	
+
+-- Demande de sélection du point P2
+VAR !x PICK PPOINT
+
+--Direction de P2
+var !dirP2Str DIR $!x[1] WRT /*
+!!dirP2 = !dirP2Str.direction().opposite()
+
+--Position de P2
+var !posP2Str POS $!x[1] WRT /*
+!!posP2 = !posP2Str.position().offset(!!dirP2, - !this.gasketTH.Val)
+
+!!DX = !!posP2.wrt(!!flex).east
+!!DY = !!posP2.wrt(!!flex).north
+!!DZ = !!posP2.wrt(!!flex).up
+!!flex.desp[1] = !!DX
+!!flex.desp[2] = !!DY
+!!flex.desp[3] = !!DZ
+
+!!DYZ = ASIN(!!dirP2.wrt(!!flex).up)
+!hZP2 = COS(ABS(!!DYZ))
+IF !hZP2 EQ 0 THEN
+	!!DXY = 0
+ELSE
+	!!DXY = !this.angleXYZ(!!dirP2.wrt(!!flex).east / !hZP2, !!dirP2.wrt(!!flex).north / !hZP2)
+ENDIF
+
+!!flex.desp[4] = !!DXY
+!!flex.desp[5] = !!DYZ
+
+-- Contrôle si P110 et P2 sont alignés.  Si oui, offsets réduits par rapport au cylindre d'entrée
+!checkLine = !!posP110.line(!!posP2)
+IF (!!dirP110.angle(!checkLine.direction()) LE 0.1deg) OR (!!dirP110.angle(!checkLine.direction()) GE 179.9deg) then
+	if !this.deflection.val NE 0 then
+		!!offsetP12 = !!cylLen1 + !!flex.catref.param[1]
+		!!offsetP22 = !!cylLen2 + !!flex.catref.param[1]
+	else
+		!!offsetP12 = !!cylLen1
+		!!offsetP22 = !!cylLen2
+	endif
+	!this.lengthP12.val = !!offsetP12
+	!this.lengthP22.val = !!offsetP22
+	$P P110 and P2 are aligned
+	!this.calcAllPoint()
+	!this.refreshInput()
+	return
+ENDIF
+
+!!offsetP12 = !!cylLen1 + !!flex.catref.param[1]
+!!offsetP22 = !!cylLen2 + !!flex.catref.param[1]
+!this.lengthP12.val = !!offsetP12
+!this.lengthP22.val = !!offsetP22
+
+!this.calcAllPoint()
+!this.refreshInput()
+
+endmethod
+
+
+-------------------------------------------------------------------------------------------------------
+-- Calcule les positions et directions des points P13 et P23
+define method .calcAllPoint()
+
+
+-- !!cylLen1 = 300
+-- !!cylLen2 = 300
+-- !!flex.desp[21] = !!cylLen1
+-- !!flex.desp[22] = !!cylLen2
+
+-- Définit les position et direction des points P1 et P110
+var !posP1Str POS P1 OF $!!flex WRT /*
+!!posP1 = !posP1Str.position()
+var !dirP1Str DIR P1 OF $!!flex WRT /*
+!!dirP1 = !dirP1Str.direction()
+
+var !posP100Str POS P100 OF $!!flex WRT /*
+handle any
+	-- Il n'y a pas de coude fixe en P1
+	!!posP100 = !!posP1
+	!!dirP100 = !!dirP1
+elsehandle NONE
+	-- Il y a un coude en P1
+	!!posP100 = !posP100Str.position()
+	var !dirP100Str DIR P100 OF $!!flex WRT /*
+	!!dirP100 = !dirP100Str.direction()
+endhandle
+
+var !posP110Str POS P110 OF $!!flex WRT /*
+handle any
+	-- Il n'y a pas de coude fixe en P1
+	!!posP110 = !!posP1
+	!!dirP110 = !!dirP1
+elsehandle NONE
+	-- Il y a un coude en P1
+	!!posP110 = !posP110Str.position()
+	var !dirP110Str DIR P110 OF $!!flex WRT /*
+	!!dirP110 = !dirP110Str.direction()
+endhandle
+
+!!posP11 = !!posP110.offset(!!dirP110, - !!cylLen1)
+!!dirP11 = !!dirP110
+
+-- Définit les position et direction des points P21
+!!dirP21 = !!dirP2
+!!posP21 = !!posP2.offset(!!dirP2, - !!cylLen2)
+
+-- AID CLEAR ALL
+!!aidLine(1,!!posP1,!!posP2)
+
+!!dist = !!posP1.distance(!!posP2)
+
+-- Contrôle si la déflection est non nulle
+-- Dans ce cas, les 2 offsets P12 et P22 doivent être égaux
+if !this.deflection.val NE 0 then
+	!!offsetP12 = !this.lengthP12.val
+	!!offsetP22 = !!offsetP12
+	!!cylLen1 = !this.cylLenP1.val
+	!!cylLen2 = !!cylLen1
+	!this.lengthP22.val = !!offsetP12
+	!this.cylLenP2.val = !!cylLen2
+	!this.lengthP22.ACTIVE = FALSE
+	!this.cylLenP2.ACTIVE = FALSE
+else	
+	!!offsetP12 = !this.lengthP12.val
+	!!offsetP22 = !this.lengthP22.val
+	!this.lengthP22.ACTIVE = TRUE
+endif
+
+-- Calcule les deux points de construction P12 et P22
+!!posP12 = !!posP110.offset(!!dirP110.opposite(), !!offsetP12)
+!!posP22 = !!posP2.offset(!!dirP2.opposite(), !!offsetP22)
+
+-- Calcule la ligne entre P12 et P22
+!lineP12P22 = !!posP12.line(!!posP22)
+!dirLineP12P22 = !lineP12P22.direction().wrt(!!flex)
+
+-- Calcule le point P33
+
+!!posP33 = !!posP12.MidPoint(!!posP22)
+
+!deflPlane = OBJECT Plane()
+!deflPlane = !lineP12P22.Plane()
+
+-- On contrôle si le X local de $!!flex est presque perpendiculaire à P110P2
+-- Dans ce cas, la projection de !!dirP33 sur !deflPlane est indeterminé
+!lineP110P2 = !!posP110.line(!!posP2)
+!dirLineP110P2 = !lineP110P2.direction().wrt(!!flex)
+!dpRef = ' X WRT ' & $!!flex
+!angRef = !dirLineP110P2.angle(!dpRef.direction())
+-- $P angle = $!angRef
+
+IF (!angRef LE 85deg) OR (!angRef GE 95deg) then
+!dP33 =  '-Z ' & $!this.deflAngle.val & ' Y WRT ' & $!!flex
+ELSE
+!dP33 =  'X ' & $!this.deflAngle.val & ' Y WRT ' & $!!flex
+ENDIF
+
+!!dirP33 = !dp33.direction()
+-- $P dirP33 $!!dirP33 $!dirLineP12P22
+
+-- !arrowP33 = object ARROW()
+-- !arrowP33.dir = !!dirP33
+-- !arrowP33.pos = !!posP33
+-- !!drawAidArrow (2, !arrowP33 )
+
+!!dirP33 = !!dirP33.Projected(!deflPlane)
+-- $P dirP33after $!!dirP33 $!dirLineP12P22
+
+-- !arrowP33.dir = !!dirP33
+-- !!drawAidArrow (10, !arrowP33 )
+
+!!offsetP33 = !this.deflection.val
+!!posP33 = !!posP33.offset(!!dirP33, !!offsetP33)
+!!aidLine(1,!!posP12,!!posP33)
+!!aidLine(1,!!posP33,!!posP22)
+
+-- Calcule les lignes entre P12 et P33 et entre P22 et P33
+!lineP12P33 = !!posP12.line(!!posP33)
+!dirLineP12P33 = !lineP12P33.direction().wrt(!!flex)
+!lineP33P22 = !!posP33.line(!!posP22)
+!dirLineP33P22 = !lineP33P22.direction().wrt(!!flex)
+
+-- Calcule P13 et P23
+!!posP13 = !!posP12.offset(!lineP12P33.direction(), !!offsetP12 - !!cylLen1)
+!!posP23 = !!posP22.offset(!lineP33P22.direction().opposite(), !!offsetP22 - !!cylLen2)
+!!dirP13 = !lineP12P33.direction()
+!!dirP23 = !lineP33P22.direction().opposite()
+
+!qq = !!posP13.distance(!!posP33)
+!ww = !!posP33.distance(!!posP23)
+
+!!aidSphere(99, !!posP13, 5)
+!!aidSphere(99, !!posP23, 5)
+
+-- Contrôle si P13 et P23 sont alignés.  Si oui, la longueur du cylindre est calculée et !!LL33 est nulle, sinon elle est nulle
+-- et !!LL33 est calculée.
+!checkLine = !!posP13.line(!!posP23)
+IF (!!dirP13.angle(!checkLine.direction()) LE 0.01deg) OR (!!dirP13.angle(!checkLine.direction()) GE 179.99deg) then
+	!!flex.desp[16] = !!posP13.distance(!!posP23)
+	!!LL33 = 0
+	!!RR33 = 9999999
+ELSE
+	!!flex.desp[16] = 0
+	-- Calcule la longueur et le rayon de l'arc en P33
+	!!LL33 = !this.arcLength(!!posP13, !!posP33, !!posP23)
+	!!RR33 = !this.arcRadius(!!posP13, !!posP33, !!posP23)
+ENDIF
+
+if !!elb then
+	-- Calcule la distance entre P1 et P100
+		!!LLCAM = !!posP1.distance(!!posP100)
+	
+	-- $P !!LLCAM = $!!LLCAM
+	
+	-- Calcule la longueur et le rayon de l'arc entre P100 et P110
+	!PV100 = OBJECT pointVector(!!posP100,!!dirP100)
+	!PV110 = OBJECT pointVector(!!posP110,!!dirP110)
+	!!posELB = !PV100.intersection(!PV110)
+	!!LLELB = !this.arcLength(!!posP100, !!posELB, !!posP110)
+	!!RRELB = !this.arcRadius(!!posP100, !!posELB, !!posP110)
+	
+	-- $P arc length $!!LLELB mm and radius $!!RRELB
+else
+	!!LLCAM = 0
+	!!LLELB = 0
+endif
+	
+-- Calcule la longueur et le rayon de l'arc en P12
+!!LL12 = !this.arcLength(!!posP11, !!posP12, !!posP13)
+!!RR12 = !this.arcRadius(!!posP11, !!posP12, !!posP13)
+
+-- Calcule la longueur et le rayon de l'arc en P22
+!!LL22 = !this.arcLength(!!posP21, !!posP22, !!posP23)
+!!RR22 = !this.arcRadius(!!posP21, !!posP22, !!posP23)
+
+-- Applique les positions et directions au FLEX
+!!TX = !!posP13.wrt(!!flex).east
+!!TY = !!posP13.wrt(!!flex).north
+!!TZ = !!posP13.wrt(!!flex).up
+!!flex.desp[6] = !!TX
+!!flex.desp[7] = !!TY
+!!flex.desp[8] = !!TZ
+
+!!TYZ = ASIN(!!dirP13.wrt(!!flex).up)
+!hZP13 = COS(ABS(!!TYZ))
+IF !hZP13 EQ 0 THEN
+	!!TXY = 0
+ELSE
+	!!TXY = !this.angleXYZ(!!dirP13.wrt(!!flex).east / !hZP13, !!dirP13.wrt(!!flex).north / !hZP13)
+ENDIF
+
+!!flex.desp[9] = !!TXY
+!!flex.desp[10] = !!TYZ
+
+!!VX = !!posP23.wrt(!!flex).east
+!!VY = !!posP23.wrt(!!flex).north
+!!VZ = !!posP23.wrt(!!flex).up
+!!flex.desp[11] = !!VX
+!!flex.desp[12] = !!VY
+!!flex.desp[13] = !!VZ
+
+--Draw aids
+
+-- !arrowP1 = object ARROW()
+-- !arrowP1.dir = !!dirP1
+-- !arrowP1.pos = !!posP1
+-- !!drawAidArrow (10, !arrowP1 )
+
+-- !arrowP13 = object ARROW()
+-- !arrowP13.dir = !!dirP13
+-- !arrowP13.pos = !!posP13
+-- !!drawAidArrow (11, !arrowP13 )
+
+!!aidLine(1,!!posP110,!!posP12)
+
+!!aidLine(1,!!posP11,!!posP1)
+
+!!aidLine(1,!!posP12,!!posP22)
+!!aidLine(1,!!posP22,!!posP2)
+
+!!aidSphere(99, !!posP11, 10)
+!!aidSphere(99, !!posP21, 10)
+
+
+!!VYZ = ASIN(!!dirP23.wrt(!!flex).up)
+!hZP23 = COS(ABS(!!VYZ))
+IF !hZP23 EQ 0 THEN
+	!!VXY = 0
+ELSE
+	!!VXY = !this.angleXYZ(!!dirP23.wrt(!!flex).east / !hZP23, !!dirP23.wrt(!!flex).north / !hZP23)
+ENDIF
+
+!!flex.desp[14] = !!VXY
+!!flex.desp[15] = !!VYZ
+
+
+
+-- Calcule la longueur totale du flexible
+!!LLTot = !!LLCAM + !!LLELB + !!cylLen1 + !!LL12 + !!LL33 + !!flex.desp[16] + !!LL22 + !!cylLen2
+-- $P Somme $!!LLTot = $!!LLCAM + $!!LLELB + $!!cylLen1 + $!!LL12 + $!!LL33 + $!!flex.desp[16] + $!!LL22 + $!!cylLen2
+
+endmethod
+
+-------------------------------------------------------------------------------------------------------
+-- Calcule la longueur d'un arc à partir de 3 positions
+define method .arcLength(!P1 is POSITION, !P2 is POSITION, !P3 is POSITION) is REAL
+
+!angExt = !P2.angle(!P1, !P3)
+handle any
+	!length = 0
+	return !length
+endhandle
+!angInt = 180 - !angExt
+-- $P angle int $!angInt
+
+
+IF !angInt NE 0 THEN
+	!radius = !P1.distance(!P2) / tangent(!angInt / 2)
+	!length = 2 * PI * !radius * !angInt / 360
+	-- $P longueur $!length
+	return !length
+ELSE
+	!length = !P1.distance(!P3)
+	-- $P the 3 points are aligned !
+	return !length
+ENDIF
+
+
+endmethod
+
+-------------------------------------------------------------------------------------------------------
+-- Calcule le rayon d'un arc à partir de 3 positions
+define method .arcRadius(!P1 is POSITION, !P2 is POSITION, !P3 is POSITION) is REAL
+
+!angExt = !P2.angle(!P1, !P3)
+handle any
+	!radius = 0
+	return !radius
+endhandle
+!angInt = 180 - !angExt
+-- $P angle int $!angInt
+
+
+IF !angInt NE 0 THEN
+	!radius = !P1.distance(!P2) / tangent(!angInt / 2)
+	-- $P rayon $!radius
+	return !radius
+ELSE
+	!radius = 99999999999
+	-- $P the 3 points are aligned !
+	return !radius
+ENDIF
+
+
+endmethod
+
+-------------------------------------------------------------------------------------------------------
+-- Calcule l'angle sur 360° à partir du cos et sin
+define method .angleXYZ(!cos is REAL, !sin is REAL) is REAL
+
+!c = !cos
+!s = !sin
+IF ABS(!cos) ge 1 then
+	!c = !cos.NINT().real()
+ENDIF
+IF ABS(!sin) ge 1 then
+	!s = !sin.NINT().real()
+ENDIF
+
+IF POW(!c,2) gt 0.25 then
+	!a = ACOS(!c)
+	IF !s GE 0 THEN
+		return !a
+	ELSE
+		return 360 - !a
+	ENDIF
+ELSE
+	!a = ASIN(!s)
+	IF !c LT 0 THEN
+		return 180 - !a
+	ELSEIF !s LT 0 THEN
+		return 360 + !a
+	ELSE
+		return !a
+	ENDIF
+ENDIF
+endmethod
+
+-------------------------------------------------------------------------------------------------------
+-- AID CLEAR ALL
+define method .clearAid()
+	AID CLEAR ALL
+endmethod
+
+-- ----------------------------------------------------------------------------------------------------
+-- Register the 200 last uses
+define method .useReg()
+
+-- Gather the data to save to the log file
+!project = current project
+!projectName = !project.string().before('000')
+var !userName login
+!dateTime = object DATETIME()
+!dateTime.datetime()
+var !server evar SERVER
+!nameFile = !server & '\APPLICATIONS\LOG\' & !this & |.log|
+!sessionData = !projectName & ' ' & !userName & ' ' & !datetime
+
+-- -- Teste si le fichier log existe ou non
+!output = object FILE ('$!nameFile')
+if !output.exists() eq false then
+-- Création du fichier
+	!text = object ARRAY()
+	!text[1] = '0'
+	!output.WriteFile('OVERWRITE',!text)
+	!output.close()
+endif
+
+-- Get the existing data and add the current data, limiting to 200 entries
+!input = object FILE ('$!nameFile')
+!text = object ARRAY()
+!text = !input.ReadFile()
+!n = !text[1].real() + 1
+!text.append(!sessionData)
+if !text.size() GT 201 then
+	!text.deleteTO(!text.size() - 200)
+endif
+!text[1] = !n.string()
+
+-- Save the data to the file
+!output.WriteFile('OVERWRITE',!text)
+handle any
+	return
+endhandle
+!output.close()
+
+endmethod
+
+-------------------------------------------------------------------------------------------------------
+-- Reload the form
+define method .reload()
+
+
+PML RELOAD FORM !!DDSflex
+show !!DDSflex
+
+
+endmethod
+

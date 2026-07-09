@@ -1,0 +1,225 @@
+setup form !!padpform3 dialog docking
+     $* ==========================================================
+     $* KILL !!formName +----- @ OutSide, for every time Loading Form definitions.
+     $* ========================================================== 
+         title 'Componment Design Parameters Form'
+         Path RIGHT
+         paragraph .FormDesp width 45
+         paragraph .DPNums text |Total design parameters: | width 32
+
+         Path DOWN 
+         frame .frmprocess |Information & Wroked area| at XMIN form YMAX+1 
+                  LIST .lstDP |Details Design Parameters| anchor ALL columnS single zerosel width 80 height 12
+                  toggle .tgRealOnly 'Real value only'
+                  paragraph .DPDesp text |Select Design Parameter to modify| width 30 
+                  Path RIGHT                  
+                  TEXT .txtDP AT XMAX - SIZE YMIN is STRING
+                  BUTTON .btnINPUT |Preview| AT XMAX.frmprocess - SIZE YMIN anchor R+B tooltip 'Modify current value'
+         exit
+         
+         BUTTON .btnCANCEL |Discard| At XMIN.frmprocess YMAX.frmprocess + size tooltip 'Abort parameters change !' CANCEL
+         BUTTON .btnRESET |iReset| At XMAX.frmprocess - SIZE YMAX.frmprocess + size tooltip 'Recall Initial Values.'
+     
+         member .myaryCombination is ARRAY
+         member .myaryDesp is ARRAY
+         member .myValidReal is BOOLEAN
+exit
+
+define method .padpform3()
+      !this.lstDP.CallBack = |!this.lstActCallB(|
+      !this.btnINPUT.CallBack = |!this.btnTempory(!this.lstDP)|
+      !this.txtDP.CallBack = |!this.RealAnay(!this.lstDP)|
+      !this.btnRESET.CallBack = |!this.btnVInitial()|
+    $*  !this.txtDP.ValidateCall = |!this.txtReal(|
+
+      !this.myDataInitial()
+      
+endmethod
+
+define method .myDataInitial()
+   !totalDPs = !!myAryTitle.Size()
+
+   $* LIST Heading and datasetting
+      !myHead[1] = 'No'
+      !myHead[2] = 'Parameter description'
+      !myHead[3] = 'DP value'
+
+      !this.lstDP.SetHeadings(!myHead)
+      
+   $* Order, Description and Value array combinition: aryCombination
+      !idxno = 0.0
+      Do !idx Values !!myAryDOrder
+         !idxno = !idxno + 1 
+       $*  !Row$!idx[1] = String($!idx)
+       $*  !Row$!idx[2] = !!myAryTitle[$!idx]
+       $*  !Row$!idx[3] = String(!!myAryDVal[$!idx])
+
+         !Row$!idx[1] = String($!idxno)   
+         !Row$!idx[2] = !!myAryTitle[$!idx]
+         !Row$!idx[3] = String(!!myAryDVal[$!idx])
+
+         !this.myaryCombination[!idx] = !Row$!idx
+      EndDo
+
+   $* LIST data relation 
+      !this.FormDesp.Val = !!myShowName 
+      !this.DPNums.Val = |Total design parameters: $!totalDPs .|
+      !this.lstDP.SetRows(!this.myaryCombination)
+      !this.txtDP.Active = False
+      !this.btnINPUT.Active = False
+
+   $*   !this.KeyBoardFocus = !this.lstDP
+   $*   !this.lstDP.VAL = 1
+   $*   !this.lstDP.SetFocus()
+endmethod
+
+define method .lstActCallB(!list is GADGET, !event is STRING)
+          if (!event EQ 'SELECT') then 
+              !seleRow = !list.PickedField
+              !this.DPDesp.VAL = !this.myaryCombination[$!seleRow][2]
+              !this.txtDP.VAL = !this.myaryCombination[$!seleRow][3]
+              !this.txtDP.Active = True
+              !this.btnINPUT.Active = True                                      
+          elseif (!event EQ 'UNSELECT') then
+             $* !!alert.Message('UnSelect List Item' )
+          else 
+             $* !!alert.Message('I don't what happen !')
+          endif
+endmethod
+
+define method .btnTempory(!list is GADGET)
+    $*  !!alert.Message(STRING(!this.txtDP.VAL))
+          !seleRow = !list.PickedField
+          !this.myaryCombination[$!seleRow][3] = !this.txtDP.VAL
+          !this.lstDP.SetRows(!this.myaryCombination)
+          !this.lstDP.VAL = $!seleRow
+          !this.lstDP.SetFocus()
+
+          !myScript = 0
+          Do !idx Values !!myAryDOrder
+             !myScript = !myScript + 1
+             If (!myScript EQ !seleRow) then
+                !!myAryDVal[$!idx] = REAL(!this.txtDP.VAL)
+                Break
+             EndIf
+          EndDo
+
+          !!padpmodelupd(!!myRefNo,!!myAryDVal)
+endmethod
+
+define method .btnVInitial() 
+    !!myAryDVal = !!myAryDiniVal
+
+ $* Order, Description and Value array combinition: aryCombination
+    Do !idx Values !!myAryDOrder
+       !Row$!idx[1] = String($!idx)
+       !Row$!idx[2] = !!myAryTitle[$!idx]
+       !Row$!idx[3] = String(!!myAryDVal[$!idx])
+
+       !this.myaryCombination[!idx] = !Row$!idx
+    EndDo
+ 
+    !lastSeleRow = !this.lstDP.PickedField
+
+    !this.lstDP.SetRows(!this.myaryCombination)
+
+    !this.lstDP.SetFocus()
+    !this.lstDP.VAL = !lastSeleRow
+    !this.DPDesp.VAL = !this.myaryCombination[$!lastSeleRow][2]
+    !this.txtDP.VAL = !this.myaryCombination[$!lastSeleRow][3]
+
+    !this.txtDP.SetFocus()
+
+    !!padpmodelupd(!!myRefNo,!!myAryDiniVal)
+
+endmethod
+
+
+define method .RealAnay(!list is GADGET)
+          if (!this.txtDP.val.Unset() ) then 
+             !!alert.Warning('Invalid input ! empty!!!')
+          else      
+             if (!this.tgRealOnly.Val) then         
+                !dotCounter = 0
+                !strValide = Trim(!this.txtDP.VAL)
+
+                If (Length(!strValide) EQ 0 ) then 
+                   $* !!alert.Message('Must have Real value !') 
+                   !this.myValidReal = FALSE 
+                Else
+                   Do !cidx From 1 to Length(!strValide)
+                         If Substring(!strValide, $!cidx, 1) EQ '.' then 
+                            !dotCounter = !dotCounter  + 1
+                            if !dotCounter GT 1 then 
+                               !this.myValidReal = FALSE 
+                               Break
+                            endif
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '0'  then
+                                 !this.myValidReal = TRUE
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '1'  then
+                                 !this.myValidReal = TRUE 
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '2'  then
+                                 !this.myValidReal = TRUE                            
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '3'  then
+                                 !this.myValidReal = TRUE
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '4'  then
+                                 !this.myValidReal = TRUE
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '5'  then
+                                 !this.myValidReal = TRUE
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '6'  then
+                                 !this.myValidReal = TRUE
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '7'  then
+                                 !this.myValidReal = TRUE
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '8'  then
+                                 !this.myValidReal = TRUE
+                         elseIf Substring(!strValide, $!cidx, 1) EQ '9'  then
+                                 !this.myValidReal = TRUE
+                         Else
+                                 !this.myValidReal = FALSE
+                         EndIf
+   
+                         Break If (Not !this.myValidReal )
+                   EndDo
+                Endif
+
+                If (Not !this.myValidReal ) then
+                   !!alert.Message('Must be Real value !') 
+                
+                   !list.SetFocus()
+                   !seleRow = !list.PickedField
+                   !this.txtDP.VAL= !this.myaryCombination[$!seleRow][3]
+                   !this.txtDP.SetFocus()  
+                Else 
+                   !this.txtDP.VAL = STRING(Real(!this.txtDP.VAL))
+                   !this.txtDP.SetFocus()  
+                 $* ---  !this.btnTempory(!this.lstDP)
+                 $*  !!alert.Message('Check current display value info.')                 
+                Endif     
+             else
+              $* ---  !!alert.message('String type input.')
+             endif  
+          endif
+endmethod
+
+define method .txtReal(!textIn is GADGET, !action is STRING)
+          onError goLabel /Errors
+          label /Errors
+          
+          Handle ANY
+               !!alert.Message('Real value only !')
+          EndHandle 
+
+          if (!textIn.val.Unset() ) then 
+             !!alert.Message('Must input real value!')
+
+             !this.lstDP.SetFocus()
+             !seleRow = !this.lstDP.PickedField
+
+         !!alert.Message('Selected row: $!seleRow; Value $!!aryCombination[$!seleRow][3]; $!textIn.Name() ')
+
+             !textIn.Val = REAL(!!aryCombination[$!seleRow][3])
+             !this.lstDP.SetFocus()
+          endif
+endmethod 
+
+

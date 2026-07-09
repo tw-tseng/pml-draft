@@ -1,0 +1,2276 @@
+--------------------------------------------------
+-- Copyright ATOMTECH Ltd 2024                  --
+--                                              --
+-- Function : Create GA Drawings in DRAW        --
+-- Author   : Tseng                             --
+-- Date     : 2024/10/18                        --
+--------------------------------------------------
+
+import 'AteSortLineNo'
+handle any
+endhandle
+import 'PMLFileBrowser'
+handle any
+endhandle
+
+layout form !!DrawingPlan1 dialog dock
+	!this.formTitle = 'Drawing Options'
+	
+	frame .tabset tabset
+		frame .drawings 'Drawing' width 40
+			frame .hiera
+				list   .files1 'All'    multiple width 25 height 10
+				button .addce  ' >'     at xmax.files1+0.4 ymin.files1+1 width 3 call '!This.selectce()'
+				button .addall '>>'     at xmin.addce  ymax.addce+0.6  width 3 call '!This.selectall()'
+				button .remce  ' <'     at xmin.addce  ymax.addall+0.6 width 3 call '!This.removece()'
+				button .remall '<<'     at xmin.addce  ymax.remce+0.6  width 3 call '!This.removeall()'
+				list   .files  'In Use' at xmax.addce+0.5 ymin.files1 multiple width 25 height 10
+        
+        
+--				button .import 'Import'     at xmin.addce  ymax.addce+0.2  width 12 call '!This.importfile()'
+--				button .export 'Export'     at xmin.addce  ymax.import+0.2 width 12 call '!This.exportfile()'
+--				button .sort   'Sort  '     at xmin.addce  ymax.export+0.2 width 12 call '!This.sortce()'
+			exit
+			text .dest     'Destination'     at xmin.hiera ymax.hiera+0.5 width 33 is string 
+			button .desbut 'CE'              at xmax.dest+0.1 ymin.dest width 6 call '!This.desce()'
+			button .apply  'Create Drawings' at xmin.dest ymax.dest+0.5 width 23 call '!This.Apply()'
+			button .Cancel 'Cancel'          at xmax.apply+15 ymin.apply width 12 call '!This.Close()'
+		exit
+		frame .viewframe 'View' width 40
+			text .frametext 'Backing Sheet'   tagwidth 12 width 38 is string 
+			button .framebutn 'CE' width 5 call |!This.typepick('BACK', 'frametext')|
+			paragraph .framepara at xmax.framebutn+0.5 ymin.framebutn+0.1 text 'BACK'
+			toggle .gridorthogonal at xmin.frametext ymax.frametext+0.1 'Rotate View to Orthogonal'
+			toggle .portrait at xmin ymax+0.1 'Portrait to Landscape'
+			button .canvas  'Pick Canvas Size' at xmin.portrait ymax.portrait+0.1 width 15 call |!This.canvaspick()|
+			paragraph .canvasp at xmax.canvas+1 ymin.canvas text 'X unset Y unset' width 25
+			toggle .openshee at xmin.canvas ymax.canvas+0.1   'Open SHEE after finish'
+			toggle .delshee  at xmin.openshee ymax.openshee+0.1 'Overwrite Existing DRWG'
+			
+			button .save   'Save'   at xmin.delshee   ymax.delshee+2 width 6 call '!This.Save()'
+			button .load   'Load'   at xmax.save+0.8  ymin.save        width 6 call '!This.Load()'
+
+		exit
+		frame .info 'BorderText' width 40
+			text .dwgnopos  'Dwg.No. position'                                       tagwidth 15 width 10 is string
+			text .dwgnohei  'Text height'     at xmax.dwgnopos+2  ymin.dwgnopos      tagwidth 10 width 5 is string
+			text .scalepos  'Scale position'  at xmin.dwgnopos    ymax.dwgnopos      tagwidth 15 width 10 is string
+			text .scalehei  'Text height'     at xmax.scalepos+2  ymin.scalepos      tagwidth 10 width 5 is string
+			text .revpos    'Rev position'    at xmin.dwgnopos    ymax.scalepos      tagwidth 15 width 10 is string
+			text .revhei    'Text height'     at xmax.revpos+2    ymin.revpos        tagwidth 10 width 5 is string
+			text .title1pos 'Title1 position' at xmin.revpos      ymax.revpos+0.2    tagwidth 15 width 10 is string 
+			text .title1hei 'Text height'     at xmax.title1pos+2 ymin.title1pos     tagwidth 10 width 5 is string 
+			text .title2pos 'Title2 position' at xmin.revpos      ymax.title1pos+0.2 tagwidth 15 width 10 is string 
+			text .title2hei 'Text height'     at xmax.title2pos+2 ymin.title2pos     tagwidth 10 width 5 is string 
+			text .title3pos 'Title3 position' at xmin.revpos      ymax.title2pos+0.2 tagwidth 15 width 10 is string 
+			text .title3hei 'Text height'     at xmax.title3pos+2 ymin.title3pos     tagwidth 10 width 5 is string 
+			text .name1pos  'Name1 position'  at xmin.revpos      ymax.title3pos+0.2 tagwidth 15 width 10 is string 
+			text .name1hei  'Text height'     at xmax.name1pos+2  ymin.name1pos      tagwidth 10 width 5 is string 
+			text .name2pos  'Name2 position'  at xmin.revpos      ymax.name1pos+0.2  tagwidth 15 width 10 is string 
+			text .name2hei  'Text height'     at xmax.name2pos+2  ymin.name2pos      tagwidth 10 width 5 is string 
+			text .name3pos  'Name3 position'  at xmin.revpos      ymax.name2pos+0.2  tagwidth 15 width 10 is string 
+			text .name3hei  'Text height'     at xmax.name3pos+2  ymin.name3pos      tagwidth 10 width 5 is string 
+			text .date1pos  'Date1 position'  at xmin.revpos      ymax.name3pos+0.2  tagwidth 15 width 10 is string 
+			text .date1hei  'Text height'     at xmax.date1pos+2  ymin.date1pos      tagwidth 10 width 5 is string 
+			text .date2pos  'Date2 position'  at xmin.revpos      ymax.date1pos+0.2  tagwidth 15 width 10 is string 
+			text .date2hei  'Text height'     at xmax.date2pos+2  ymin.date2pos      tagwidth 10 width 5 is string 
+			text .date3pos  'Date3 position'  at xmin.revpos      ymax.date2pos+0.2  tagwidth 15 width 10 is string 
+			text .date3hei  'Text height'     at xmax.date3pos+2  ymin.date3pos      tagwidth 10 width 5 is string 
+		exit
+		frame .fra 'Keyplan'
+			text .keytext1 'Lower Left Paper Coord.' tagwidth 22 width 27 is string 
+			button .keybutn1 'Pick' at xmax.keytext1+0.4 ymin.keytext1 width 5 call |!This.keyplanpick()|				
+			text .keytext2 'Lower Left Model Coord.  E'  tagwidth 22 at xmin.keytext1 ymax.keytext1+0.1 width 11 is string 
+			text .keytext3 'N' at xmax.keytext2+2 ymin.keytext2 width 11 is string 
+			text .keytext4 'Keyplan Scale'  tagwidth 22 at xmin.keytext2 ymax.keytext2+0.1 width 27 is string
+			text .keytext5 'Keyplan Y axis is'  tagwidth 22 at xmin.keytext2 ymax.keytext4+0.1 width 27 is string
+		exit
+		frame .gridframe 'Grid'
+			text .griddist 'Distance'    tagwidth 10 width 6 is real
+			text .gridgap  'Gap'         tagwidth 10 at xmin.griddist ymax.griddist+0.1 width 6 is real
+			text .gridhei  'Text Height' tagwidth 10 at xmin.gridgap  ymax.gridgap+0.1  width 6 is real
+			text .griddia  'Diameter'    tagwidth 10 at xmin.gridhei  ymax.gridhei+0.1  width 6 is real
+--			para .sketch at xmax.griddist+2 ymin.griddist pixmap width 5 height 5
+		exit
+		frame .anno 'Annotation'
+			text .annotext  'Text Height' tagwidth 12 width 40 is string
+			toggle .autoplace at xmin.annotext ymax.annotext+0.1  'Automatic Label Placement'
+			frame .instframe 'Instrument' at xmin.annotext ymax.autoplace+0.1
+				toggle .insttog  'Create Label'
+				text .insttext1 'Inst Rule'   tagwidth 12 at xmin.insttog ymax.insttog+0.1 width 40 is string
+				text .insttext2 'Inst Format' tagwidth 12 at xmin.insttog ymax.insttext1+0.1 width 40 is string
+				text .insttext3 'Diameter'    tagwidth 12 at xmin.insttog ymax.insttext2+0.1 width 40 is real
+	$(		-- for template reference	
+				button .instbutn 'CE' at xmax.insttext2+0.4 ymin.insttext2 width 5 call |!This.typepick('SYTM', 'insttext2')|
+				paragraph .instpara at xmax.instbutn+0.5 ymin.instbutn+0.1 text 'SYTM'
+	$)			
+			exit
+			frame .nozzframe 'Nozzle' at xmin.annotext ymax.instframe+0.1
+				toggle .nozztog  'Create Label'
+				text .nozztext1 'Nozz Rule'   tagwidth 12 at xmin.nozztog ymax.nozztog+0.1  width 40 is string
+				text .nozztext2 'Nozz Format' tagwidth 12 at xmin.nozztog ymax.nozztext1+0.1 width 40 is string
+			exit
+			frame .valvframe 'Valve' at xmin.annotext ymax.nozzframe+0.1
+				toggle .valvtog  'Create Label'
+				text .valvtext1 'Valv Rule'   tagwidth 12 at xmin.valvtog ymax.valvtog+0.1 width 40 is string
+				text .valvtext2 'Valv Format' tagwidth 12 at xmin.valvtog ymax.valvtext1+0.1 width 40 is string
+			exit
+			frame .suptframe 'Support' at xmin.annotext ymax.valvframe+0.1
+				toggle .supttog  'Create Label'
+				toggle .supttog1 'Flat Oval Frame'
+			exit
+			frame .userframe 'User Defined' at xmin.annotext ymax.suptframe+0.1
+				toggle .usertog 'Create Label'
+				text .usertext1 'Rule'   tagwidth 12 at xmin.usertog ymax.usertog+0.1 width 40 is string
+				text .usertext2 'Format' tagwidth 12 at xmin.usertog ymax.usertext1+0.1 width 40 is string
+			exit
+			frame .reduframe 'Reducer/Red.Tee' at xmin.annotext ymax.userframe+0.1
+				toggle .redutog 'Create Label'
+				paragraph .redupara at xmax.redutog+35 ymin.redutog text ' '
+			exit
+		exit
+	exit
+	
+	member .vsca is real
+  member .viewULsh is string
+  member .viewURsh is string
+  member .viewLLsh is string
+  member .viewLRsh is string
+  
+  member .viewUlinesh is line
+  member .viewDlinesh is line
+  member .viewRlinesh is line
+  member .viewLlinesh is line
+  
+  member .maxE is real
+	member .minE is real
+	member .maxN is real
+	member .minN is real
+	member .maxU is real
+	member .minU is real
+	
+	member .intersections is array
+	member .canvassize is string
+	member .equiparray is array   $( array for equipments are dimensioned $)
+	member .userevar is string    $( for path of text file  $)
+	member .rev is string         $( for revision  $)
+	member .supttmp is string     $( for support callout template  $)
+	
+
+exit
+
+-------------
+-- initial --
+-------------
+define method .DrawingPlan1()
+  !this.frametext.val = |/TT/DRA/PRJ/BACKS/MET/BLACKA1_TEST|
+  !this.griddist.val = 50
+  !this.gridgap.val = 3
+  !this.gridhei.val = 3
+  !this.griddia.val = 10
+	!this.openshee.val = true
+	!this.delshee.val = true
+	!this.annotext.val = |3|
+	!this.autoplace.val=TRUE
+	!this.insttog.val=TRUE
+	!this.insttext1.val = |ALL INST WITH ISNAMED|
+	!this.insttext2.val = |#NAME(P-:1)(C2:)#/#NAME(P-2:)(C2:)|
+--	!this.insttext2.val = |/DRA/PRJ/ADP/SCHED/LOCAL/NAME_CIRC|
+	!this.insttext3.val = 10
+	!this.nozztog.val = TRUE
+	!this.nozztext1.val = |ALL NOZZ WITH ISNAMED|
+	!this.nozztext2.val = |"#NAME(P/2:)(C2:)"|
+	!this.valvtog.val = TRUE
+	!this.valvtext1.val = |ALL VALV WITH ISNAMED|
+	!this.valvtext2.val = |#NAME(C2:)|
+	!this.supttog.val = TRUE
+	!this.supttog1.val = TRUE
+	!this.usertog.val = FALSE
+	!this.usertext1.val=||
+	!this.usertext2.val=||
+	!this.redutog.val = false
+	if !this.userevar.eq('') then
+		!this.userevar = 'c:\temp\'
+	endif
+	!this.dest.active = false
+	------------------------------------------
+	-- select the first REGI as destination --
+	------------------------------------------
+	if !this.dest.val.eq('') then
+		!ce = ref
+		worl
+		dept 1
+		regi 1
+		var !ref ref
+		!this.dest.val = |$!ref|
+		$!ce
+	endif
+	!this.apply.active = false	
+	!this.dwgnopos.val = '700,55'
+	!this.dwgnohei.val = '3'
+	!this.scalepos.val = '740,29'
+	!this.scalehei.val = '3'
+	!this.revpos.val = '670,55'
+	!this.revhei.val = '3'
+	!this.title1pos.val = '585,60'
+	!this.title1hei.val = '3'
+	!this.title2pos.val = '585,55'
+	!this.title2hei.val = '3'
+	!this.title3pos.val = '585,50'
+	!this.title3hei.val = '3'
+	!this.keytext1.val = 'X 720 y 70'
+	!this.keytext2.val = '-322000'
+	!this.keytext3.val = '289000'
+	!this.keytext4.val = '0.0025'
+	!this.keytext5.val = 'N'
+	
+	!this.AllBoxes()
+	
+--	!this.sketch.addPixmap(!!pml.getPathname('grid.png'))
+endmethod
+
+-----------------------------------
+-- search all boxes for drawings --
+-----------------------------------
+define method .AllBoxes()
+	var !projid proj id
+	var !equis coll all equi with (matchwild(name of site, |/$!projid_DrawingPlanBox|))
+	!str = object array()
+	do !equi values !equis
+		var !equi namn of $!equi
+		if !str.find(!equi).size().eq(0) then
+			!str.append(!equi)
+		endif
+	enddo
+	!str.sort()
+	!this.files1.dtext = !str
+endmethod
+
+----------------------------
+-- Add CE to drawing list --
+----------------------------
+define method .selectce()
+	!strs1 = !this.files1.selection()
+	!strs = !this.files.dtext
+	if !strs1.size().gt(0) then
+		!strs.appendarray(!strs1)
+		!strs.sort()
+		!this.files.dtext = !strs
+		do !str1 values !strs1
+			!this.files1.clear(!str1)
+		enddo
+	endif
+	
+	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
+		!this.apply.active = true
+	else
+		!this.apply.active = false
+	endif
+endmethod
+
+-----------------------------
+-- Add all to drawing list --
+-----------------------------
+define method .selectall()
+	!strs1 = !this.files1.dtext
+	!strs = !this.files.dtext
+	if !strs1.size().gt(0) then
+		!strs.appendarray(!strs1)
+		!strs.sort()
+		!this.files.dtext = !strs
+		!this.files1.clear()
+	endif
+	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
+		!this.apply.active = true
+	else
+		!this.apply.active = false
+	endif
+endmethod
+
+-------------------------------
+-- Remove CE to drawing list --
+-------------------------------
+define method .removece()
+	!strs = !this.files.selection()
+	if !strs.size().gt(0) then
+		do !str values !strs
+			!this.files.clear(!str)
+		enddo
+		!strs1 = !this.files1.dtext
+		!strs1.appendarray(!strs)
+		!strs1.sort()
+		!this.files1.dtext = !strs1
+	endif
+	
+	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
+		!this.apply.active = true
+	else
+		!this.apply.active = false
+	endif
+endmethod
+
+--------------------------------
+-- Remove all to drawing list --
+--------------------------------
+define method .removeall()
+	!strs = !this.files.dtext
+	if !strs.size().gt(0) then
+		!this.files.clear()		
+		!strs1 = !this.files1.dtext
+		!strs1.appendarray(!strs)
+		!strs1.sort()
+		!this.files1.dtext = !strs1
+	endif
+	
+	!this.apply.active = false
+endmethod
+
+--------------------------------------
+-- main program of drawing creation --
+--------------------------------------
+define method .Apply()
+	$!this.dest.val
+	do !equistr values !this.files.dtext
+		if !equistr.substring(1,1).eqnocase('=') then
+			var !boxs coll all box for $!equistr
+			var !texts coll all text for $!equistr
+		else
+			var !boxs coll all box for /$!equistr
+			var !texts coll all text for /$!equistr
+		endif
+		!this.rev = ''
+		!title1 = ''
+		!title2 = ''
+		!title3 = ''
+		do !text values !texts
+			var !stext stext of $!text
+			if !stext.matchwild('rev:*') then
+				!this.rev = !stext.after('rev:')
+			elseif !stext.matchwild('title1:*') then
+				!title1 = !stext.after('title1:')
+			elseif !stext.matchwild('title2:*') then
+				!title2 = !stext.after('title2:')
+			elseif !stext.matchwild('title3:*') then
+				!title3 = !stext.after('title3:')
+			endif
+		enddo
+		
+		!name = '/' & !equistr
+		!box = !boxs[1]
+		!this.intersections = object array()
+		new drwg
+		handle any
+			!!alert.error('cannot create DRWG under this level')
+		elsehandle none
+			delete drwg
+			$!name/SS_R$!this.rev
+			handle any
+				!del = 'none'
+			elsehandle none
+	--		  !del = !!alert.confirm('Overwrite Existing DRWG?')
+				!del = 'YES'
+			endhandle
+			if (!del eq 'YES') then
+				if (!this.delshee.val) then
+					!order = order
+					delete drwg
+				else
+					------------------------- for future
+				endif
+			endif
+			
+			$!this.dest.val
+			handle any
+				-------------------
+				-- ce is deleted --
+				-------------------
+				if (!order neq 1) then
+					!order = !order - 1
+					$!order
+				endif
+			endhandle
+			if (!del neq 'NO') then
+				new drwg $!name/SS_R$!this.rev
+				size 841 594
+				new liby $!name/SS/LIBY_R$!this.rev
+				new pllb $!name/SS/S1/V1/PLANES_R$!this.rev
+				new dllb $!name/SS/DRAWLIST_R$!this.rev
+				new idli $!name/SS/DRAWLIST/DRWG_R$!this.rev
+				
+				--------------------------
+				-- calculate box limits --
+				--------------------------
+				
+				$!box
+				var !boxPos worpos
+				var !wvol wvol
+				var !boxXlen xlength
+				var !boxYlen ylength
+				var !boxZlen zlength
+				var !ori ori wrt worl
+				!boxXdir = !ori.orientation().xdir()
+				!boxYdir = !ori.orientation().ydir()
+				
+				$!name/SS/DRAWLIST/DRWG_R$!this.rev
+				-------------------------------------
+				-- if box is slope, not orthogonal --
+				-- extend limits for drawing list  --
+				-------------------------------------
+				!minE = !wvol.part(1).replace('mm', '').real()
+				!minN = !wvol.part(2).replace('mm', '').real()
+				!minU = !wvol.part(3).replace('mm', '').real()
+				!maxE = !wvol.part(4).replace('mm', '').real()
+				!maxN = !wvol.part(5).replace('mm', '').real()
+				!maxU = !wvol.part(6).replace('mm', '').real()				
+				add all zone within E $!minE N $!minN U $!minU to E $!maxE N $!maxN U $!maxU
+				add all REFGRD within E $!minE N $!minN U $!minU to E $!maxE N $!maxN U $!maxU
+				
+				
+				!efpla = object direction()
+				!nfpla = object direction()
+				if min(abs(!boxYdir.angle(object direction('E'))), abs(!boxYdir.angle(object direction('W')))) lt min(abs(!boxYdir.angle(object direction('N'))), abs(!boxYdir.angle(object direction('S')))) then
+					!efpla1 = !boxYdir
+					!nfpla1 = !boxXdir
+					!elen = !boxYlen
+					!nlen = !boxXlen
+				else
+					!efpla1 = !boxXdir
+					!nfpla1 = !boxYdir
+					!elen = !boxXlen
+					!nlen = !boxYlen
+				endif
+				if abs(!efpla1.angle(object direction('E'))) lt abs(!efpla1.angle(object direction('W'))) then
+          !efpla = !efpla1
+				else
+          !efpla = !efpla1.opposite()
+				endif				
+				if abs(!nfpla1.angle(object direction('N'))) lt abs(!nfpla1.angle(object direction('S'))) then
+          !nfpla = !nfpla1
+				else
+          !nfpla = !nfpla1.opposite()
+				endif
+        $p $!efpla $!nfpla
+				
+				--------------------------------------
+				-- add 0.025 for decimal precistion --
+				--------------------------------------				
+				!maxE1 = !boxPos.position().offset(!efpla,                !elen.real()  * 0.5 + 0.025).east
+				!minE1 = !boxPos.position().offset(!efpla.opposite(),     !elen.real() * 0.5 + 0.025).east
+				!maxN1 = !boxPos.position().offset(!nfpla,                !nlen.real()  * 0.5 + 0.025).north
+				!minN1 = !boxPos.position().offset(!nfpla.opposite(),     !nlen.real()  * 0.5 + 0.025).north
+				!maxU = !boxPos.position().offset(object direction('U'), !boxZlen.real() * 0.5 + 0.025).up
+				!minU = !boxPos.position().offset(object direction('D'), !boxZlen.real() * 0.5 + 0.025).up
+				!maxE = max(!maxE1, !minE1)
+				!minE = min(!maxE1, !minE1)
+				!maxN = max(!maxN1, !minN1)
+				!minN = min(!maxN1, !minN1)
+				
+				limits E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU
+				!lim = limits
+				!this.maxE = !maxE
+				!this.minE = !minE
+				!this.maxN = !maxN
+				!this.minN = !minN
+				!this.maxU = !maxU
+				!this.minU = !minU  
+				$p $!minE $!minN $!minU $!maxE $!maxN $!maxU
+				
+				!thpoE = !boxPos.position().east
+				!thpoN = !boxPos.position().north
+				!thpoU = !boxPos.position().up
+				
+				!thpoEforN = !boxPos.position().offset(!nfpla,            !nlen.real() * 0.5).east
+				!thpoEforS = !boxPos.position().offset(!nfpla.opposite(), !nlen.real() * 0.5).east
+				!thpoNforR = !boxPos.position().offset(!efpla,            !elen.real() * 0.5).north
+				!thpoNforL = !boxPos.position().offset(!efpla.opposite(), !elen.real() * 0.5).north
+        
+        $p $!thpoEforN $!thpoEforS $!thpoNforR $!thpoNforL
+				
+				$!name/SS/S1/V1/PLANES_R$!this.rev
+				
+				new fpla $!name/SS/S1/V1/TOUP_R$!this.rev
+				position E $!thpoE N $!thpoN U $!maxU
+				norm D
+				end
+				new fpla $!name/SS/S1/V1/TONP_R$!this.rev
+				position E $!thpoEforN N $!maxN U $!thpoU
+				!temp = !nfpla.opposite().string().before('WRT')
+				norm $!temp
+				end
+				new fpla $!name/SS/S1/V1/TOEP_R$!this.rev
+				position E $!maxE N $!thpoNforR U $!thpoU
+				!temp = !efpla.opposite().string().before('WRT')
+				norm $!temp
+				end
+				new fpla $!name/SS/S1/V1/FRUP_R$!this.rev
+				position E $!thpoE N $!thpoN U $!minU
+				norm U
+				end
+				new fpla $!name/SS/S1/V1/FRNP_R$!this.rev
+				position E $!thpoEforS N $!minN U $!thpoU
+				!temp = !nfpla.string().before('WRT')
+				norm $!temp
+				end
+				new fpla $!name/SS/S1/V1/FREP_R$!this.rev
+				position E $!minE N $!thpoNforL U $!thpoU
+				!temp = !efpla.string().before('WRT')
+				norm $!temp
+				end
+				
+				------------------------------------------
+				-- create instrument template reference --
+				------------------------------------------
+				$!name/SS/LIBY_R$!this.rev
+				new lalb $!name/SS/LALB_R$!this.rev
+				new sytm $!name/SS/LALB/NAME_CIRC_R$!this.rev
+				XYPS X 0mm Y 0mm
+				JUST Centre
+				ALIGN Hbody
+				FONT 1
+				CHEITX '3mm'
+				CSPATX '0'
+				LSPATX '0'
+				TXCOLO 1
+				NLSTYL Solid
+				NLCOLO 1
+				LLSTYL Solid
+				LLCOLO 1
+				FSTYLE Off
+				FCOLOUR 1
+				MCOLOUR 1
+				LZCOLO 1
+				LZLSTY Solid
+				LZVIS true
+				LZPRIN true
+				
+				NEW CIRCLE
+				Origin Centre Offset X 0mm Y 0mm
+				DIAM 10mm
+				NLSTYL Solid
+				NLCOLO 5
+				FSTYLE Off
+				FCOLOUR 1
+				
+				NEW TEXTPRIMITIVE
+				Origin Offset X 0mm Y 0mm
+				FONT 1
+				CHEITX '1.5mm'
+				CSPATX '0'
+				LSPATX '0'
+				JUST Centre
+				ALIGN Hbody
+				BTEX |$!this.insttext2.val|
+				TXCOLO 5
+				
+				new shee $!name/SS/S1_R$!this.rev
+				IDLN $!name/SS/DRAWLIST/DRWG_R$!this.rev
+				if (!this.frametext.val.neq('')) then
+					bsrf $!this.frametext.val
+				endif
+				new view $!name/SS/S1/V1_R$!this.rev
+				lframe false
+				thposition E $!thpoE N $!thpoN U $!thpoU
+				Direction D
+				Onposition 0mm 0mm
+				Arctolerance 15
+				Vtype Global HLine
+				Idlname $!name/SS/DRAWLIST/DRWG_R$!this.rev
+				
+				!temp.delete()
+				handle any
+				endhandle
+				!temp = !efpla.angle(object direction('E'))
+				if !temp.eq(0) then
+				
+				else
+					Adegrees $!temp
+				endif
+				
+				-------------------------------
+				-- Rotate View to Orthogonal --
+				-------------------------------
+				if (!!DrawingPlan1.gridorthogonal.val) then
+				endif
+				
+				
+				
+
+				------------------------------------------
+				-- reprensetation rules and hatch rules --
+				------------------------------------------
+				rrsf /TT/DRA/PRJ/REPRW/GEN/PIPE
+				hrsf /TT/DRA/PRJ/HRUL/PIPE/Hatch-Gen
+				
+				Crsf Nulref
+				Agmode 'OFF'
+				
+				-----------------------------------------
+				-- for A1 border,                      --
+				-- the max. view size is 500mm x 400mm --
+				-----------------------------------------
+				if (!!DrawingPlan1.canvassize.unset()) then
+					!tempsize1 = 500
+					!tempsize2 = 400
+				else
+					!tempsize1 = abs(!!DrawingPlan1.canvassize.part(6).real() - !!DrawingPlan1.canvassize.part(2).real())
+					!tempsize2 = abs(!!DrawingPlan1.canvassize.part(8).real() - !!DrawingPlan1.canvassize.part(4).real())
+				endif
+				
+				if (!boxXlen.real() gt !boxYlen.real()) then
+					!ratio = !boxXlen.real() / !tempsize1
+				else
+					!ratio = !boxYlen.real() / !tempsize2
+				endif
+	--      $p $!ratio
+				$(
+				--------------------------
+				-- redundant view scale --
+				--------------------------
+				if (!ratio le 1) then
+					!this.vsca = 1
+				elseif (!ratio le 2) then
+					!this.vsca = 0.5
+				elseif (!ratio le 3) then
+					!this.vsca = 0.33333333
+				elseif (!ratio le 5) then
+					!this.vsca = 0.2
+				elseif (!ratio le 10) then
+					!this.vsca = 0.1
+				elseif (!ratio le 20) then
+					!this.vsca = 0.05
+				elseif (!ratio le 25) then
+					!this.vsca = 0.04
+				$)	
+				if (!ratio le 33) then
+					!this.vsca = 0.03333333
+				elseif (!ratio le 50) then
+					!this.vsca = 0.02
+				elseif (!ratio le 100) then
+					!this.vsca = 0.01
+				elseif (!ratio le 150) then
+					!this.vsca = 0.00666666
+				elseif (!ratio le 200) then
+					!this.vsca = 0.005
+				elseif (!ratio le 250) then
+					!this.vsca = 0.004
+				elseif (!ratio le 500) then
+					!this.vsca = 0.002
+				elseif (!ratio le 750) then
+					!this.vsca = 0.00133333
+				elseif (!ratio le 1000) then
+					!this.vsca = 0.001
+				elseif (!ratio le 1500) then
+					!this.vsca = 0.00066666
+				elseif (!ratio le 2000) then
+					!this.vsca = 0.0005
+				elseif (!ratio le 2500) then
+					!this.vsca = 0.0004
+				elseif (!ratio le 3000) then
+					!this.vsca = 0.00033333
+				elseif (!ratio le 3500) then
+					!this.vsca = 0.00028571
+				elseif (!ratio le 4000) then
+					!this.vsca = 0.00025
+				elseif (!ratio le 5000) then
+					!this.vsca = 0.0002
+				elseif (!ratio le 10000) then
+					!this.vsca = 0.0001
+				endif
+				!sizeX = !elen.real() * !this.vsca
+				!sizeY = !nlen.real() * !this.vsca
+				size $!sizeX $!sizeY
+				
+				--------------------------------------
+				-- assume center of view is 357,315 --
+				--------------------------------------
+				if (!!DrawingPlan1.canvassize.unset()) then
+					xyposition X 357 Y 315
+				else
+					!p1 = object position('X ' & !!DrawingPlan1.canvassize.part(2) & ' Y ' & !!DrawingPlan1.canvassize.part(4))
+					!p2 = object position('X ' & !!DrawingPlan1.canvassize.part(6) & ' Y ' & !!DrawingPlan1.canvassize.part(8))
+					!mid = !p1.midpoint(!p2).string()
+					!mid1 = 'X ' & !mid.part(2) & ' Y ' & !mid.part(4)
+					xyposition $!mid1
+				endif
+				
+				NLStyle Solid 
+				NLColour 147 
+				Lvisibility true
+				Vgaplength 2mm
+				Smode Standard
+				
+	--      $p |E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU|
+				
+				:CDLIMITS |FROM E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU|
+				handle any
+				endhandle
+	--			:CDLIMITS |E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU|
+				vsca $!this.vsca
+				
+				new vsec $!name/SS/S1/V1/TOUP/VSEC_R$!this.rev
+				plrf $!name/SS/S1/V1/TOUP_R$!this.rev
+				end
+				new vsec $!name/SS/S1/V1/TONP/VSEC_R$!this.rev
+				plrf $!name/SS/S1/V1/TONP_R$!this.rev
+				end
+				new vsec $!name/SS/S1/V1/TOEP/VSEC_R$!this.rev
+				plrf $!name/SS/S1/V1/TOEP_R$!this.rev
+				end
+				new vsec $!name/SS/S1/V1/FRUP/VSEC_R$!this.rev
+				plrf $!name/SS/S1/V1/FRUP_R$!this.rev
+				end
+				new vsec $!name/SS/S1/V1/FRNP/VSEC_R$!this.rev
+				plrf $!name/SS/S1/V1/FRNP_R$!this.rev
+				end
+				new vsec $!name/SS/S1/V1/FREP/VSEC_R$!this.rev
+				plrf $!name/SS/S1/V1/FREP_R$!this.rev
+				end
+				
+				----------------------------------------------
+				-- calculate view four corners coordination --
+				----------------------------------------------
+				$!name/SS/S1/V1_R$!this.rev
+				var !shxypos shxypos
+				var !size size
+				
+				---------------------------
+				-- portrait to landscape --
+				---------------------------
+				if !this.portrait.val and !size.part(1).real().value().lt(!size.part(2).real().value()) then
+					$!name/SS/S1/V1_R$!this.rev
+					RCODE LEFT
+					--------------------------------
+					-- label may rotate 90 degree --
+					--------------------------------
+				endif
+				
+				var !size size						
+				--------------------------------------
+				-- add 0.025 for decimal precistion --
+				--------------------------------------
+				var !rcode rcode
+				if !rcode.eqnocase('up') then
+					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+					!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+					!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+				else
+					------------------
+					-- rcode = left --
+					------------------
+					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+					!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+					!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+				endif
+				!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
+				!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
+				!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
+				!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
+				
+				$!name/SS/S1/V1_R$!this.rev
+				update design
+				1
+				last
+				---------------------
+				-- grid annotation --
+				---------------------
+				!!DrawingPlan1GridAnnotation(!name)      
+				
+				$!name/SS/S1/V1_R$!this.rev
+				1
+				last
+				
+				-------------------------
+				-- line no. annotation --
+				-------------------------
+$(				$!name/SS/S1/V1_R$!this.rev
+				1
+				last
+				!!DrawingPlan1LineNoAnnotation(!name, !boxXlen.real(), !boxYlen.real())
+				--------------------------
+				-- equipment annotation --
+				--------------------------
+				$!name/SS/S1/V1_R$!this.rev
+				1
+				last
+				!!DrawingPlan1EquiAnnotation(!name, !minE.string(), !minN.string(), !minU.string(), !maxE.string(), !maxN.string(), !maxU.string())   
+$)				
+				-------------------------------------------
+				-- highlight the drawing area in keyplan --
+				-------------------------------------------
+				$!name/SS/S1/V1_R$!this.rev
+				!vlims = !!ce.vlimits
+				!vname = !!ce.name
+				var !viewshposs[1] shpos of E $!vlims[1] N $!vlims[2]
+				var !viewshposs[2] shpos of E $!vlims[1] N $!vlims[5]
+				var !viewshposs[3] shpos of E $!vlims[4] N $!vlims[5]
+				var !viewshposs[4] shpos of E $!vlims[4] N $!vlims[2]
+				new note
+				if (!this.keytext1.val neq '' and !this.keytext2.val neq '' and !this.keytext3.val neq '' and !this.keytext4.val neq '' and !this.keytext5.val neq '') then
+					$!name/SS/S1/V1_R$!this.rev
+					!vlims = !!ce.vlimits
+					!vname = !!ce.name
+					var !viewshposs[1] shpos of E $!vlims[1] N $!vlims[2]
+					var !viewshposs[2] shpos of E $!vlims[1] N $!vlims[5]
+					var !viewshposs[3] shpos of E $!vlims[4] N $!vlims[5]
+					var !viewshposs[4] shpos of E $!vlims[4] N $!vlims[2]
+					note 1
+					new outl lclosed true fstyle SystemStyle 3 NLColour cyan FColour cyan
+					!!ce.PrBlnkFlag = |false|
+					do !i from 1 to !viewshposs.size()
+						!viewshpos = !viewshposs[!i]					
+						!offx1 = !this.keytext1.val.split().getindexed(2)
+						!offy1 = !this.keytext1.val.split().getindexed(4)
+						
+						if (!i.eq(1)) then
+							!offx2 = 0
+							!offy2 = 0
+							!subx = !viewshpos.part(2).real() / !this.vsca * !this.keytext4.val.real()
+							!suby = !viewshpos.part(4).real() / !this.vsca * !this.keytext4.val.real()
+						else
+							!offx2 = !viewshpos.part(2).real() / !this.vsca * !this.keytext4.val.real() - !subx
+							!offy2 = !viewshpos.part(4).real() / !this.vsca * !this.keytext4.val.real() - !suby
+						endif
+
+						!offx3 = (!vlims[1].real() - !this.keytext2.val.real()) * !this.keytext4.val.real()
+						!offy3 = (!vlims[2].real() - !this.keytext3.val.real()) * !this.keytext4.val.real()
+						
+						new VRTX at X ($!offx1 + $!offx2 + $!offx3) Y ($!offy1 + $!offy2 + $!offy3)
+					enddo
+				endif
+				
+				-----------------------------
+				-- fill border information --
+				-----------------------------				
+				if not(!this.dwgnopos.val.eqnocase('')) and not(!this.dwgnohei.val.eqnocase('')) then
+					!posx = !this.dwgnopos.val.split(',').getindexed(1)
+					!posy = !this.dwgnopos.val.split(',').getindexed(2)
+					new texp btext |$!equistr| origin x $!posx y $!posy cheitx |$!this.dwgnohei.val| alig base just left txcolour yellow font 1
+				endif
+				if not(!this.rev.eqnocase('')) and not(!this.revpos.val.eqnocase('')) and not(!this.revhei.val.eqnocase('')) then
+					!posx = !this.revpos.val.split(',').getindexed(1)
+					!posy = !this.revpos.val.split(',').getindexed(2)
+					new texp btext |$!this.rev| origin x $!posx y $!posy cheitx |$!this.revhei.val| alig base just left txcolour yellow font 1
+				endif
+				if not(!title1.eqnocase('')) and not(!this.title1pos.val.eqnocase('')) and not(!this.title1hei.val.eqnocase('')) then
+					!posx = !this.title1pos.val.split(',').getindexed(1)
+					!posy = !this.title1pos.val.split(',').getindexed(2)
+					new texp btext |$!title1| origin x $!posx y $!posy cheitx |$!this.title1hei.val| alig base just left txcolour yellow font 1
+				endif
+				if not(!title2.eqnocase('')) and not(!this.title2pos.val.eqnocase('')) and not(!this.title2hei.val.eqnocase('')) then
+					!posx = !this.title2pos.val.split(',').getindexed(1)
+					!posy = !this.title2pos.val.split(',').getindexed(2)
+					new texp btext |$!title2| origin x $!posx y $!posy cheitx |$!this.title2hei.val| alig base just left txcolour yellow font 1
+				endif
+				if not(!title3.eqnocase('')) and not(!this.title3pos.val.eqnocase('')) and not(!this.title3hei.val.eqnocase('')) then
+					!posx = !this.title3pos.val.split(',').getindexed(1)
+					!posy = !this.title3pos.val.split(',').getindexed(2)
+					new texp btext |$!title3| origin x $!posx y $!posy cheitx |$!this.title3hei.val| alig base just left txcolour yellow font 1
+				endif
+
+				
+				---------------------
+				-- draw match line --
+				---------------------
+				!!DrawingPlan1MatchLine(!name, !equistr)
+				
+				-----------------------------------------------------------------------------
+				-- label placement automatically                                           --
+				-- 1. pml write label info. in D:\Documents\Python\WriteLabelToText.txt    --
+				-- 2. python read the file and find blank space for each                   --
+				-- 3. python write blank space info. in D:\Documents\Python\LabelSpace.txt --
+				-- 4. pml read the file and reposition labels to blank space               --
+				-----------------------------------------------------------------------------
+				!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+				if !ff.exists() then
+					!ff.deletefile()
+				endif
+				LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF 'D:\Documents\Python\BlankPos1.dxf'	
+				
+				----------------------------
+				-- reducer, rt annotation --
+				----------------------------
+				if (!this.redutog.val) then
+					$!name/SS/S1/V1_R$!this.rev
+					1
+					last
+					!this.ReduAnnotation(!name)
+				endif
+
+				-----------------------
+				-- nozzle annotation --
+				-----------------------
+				if (!this.nozztog.val) then
+					$!name/SS/S1/V1_R$!this.rev
+					1
+					last
+					!this.NozzleAnnotation(!name)
+				endif
+
+				-----------------------
+				-- valve annotation --
+				-----------------------
+				if (!this.valvtog.val) then
+					$!name/SS/S1/V1_R$!this.rev
+					1
+					last
+					!this.ValveAnnotation(!name)
+				endif
+				
+				---------------------------
+				-- instrument annotation --
+				---------------------------
+				if (!this.insttog.val) then
+					$!name/SS/S1/V1_R$!this.rev
+					1
+					last
+					!this.InstAnnotation(!name)
+				endif
+				
+				------------------------
+				-- support annotation --
+				------------------------
+				if (!this.supttog.val) then
+					$!name/SS/S1/V1_R$!this.rev
+					1
+					last
+					!this.SuptAnnotation(!name)
+				endif
+				
+				syscom |D:\Documents\Python\dist\BlankPos.exe|
+				
+				!ff = object file('D:\Documents\Python\LabelSpace.txt')
+				if !ff.exists() then
+					!ff.open('read')
+					!lines =!ff.readfile()
+					do !i From 1 to !lines.size()
+						!slab = !lines[!i].part(1)
+						$!slab
+						var !apos ( pos of ddna of $!slab wrt worl )
+						var !apos1 shpos of $!apos
+						if !rcode.eqnocase('up') then
+							!newx = !lines[!i].part(2).real() - !apos1.part(2).replace('mm', '').real()
+							!newy = !lines[!i].part(3).real() - !apos1.part(4).replace('mm', '').real()
+						else
+							----------------
+							-- rcode left --
+							----------------
+							!newx = !lines[!i].part(3).real() - !apos1.part(4).replace('mm', '').real()
+							!newy = ( !lines[!i].part(2).real() - !apos1.part(2).replace('mm', '').real()) * -1
+							Adegrees 270
+						endif
+						XYPO $!newx $!newy
+						--------------------------------------------------
+						-- change label connect point to make leader is --
+						-- from attachment point to label center point  --
+						--------------------------------------------------
+						if !lines[!i].part(8).eqnocase('box') then
+							--------------------------------
+							-- create label text boundary --
+							--------------------------------
+							!tboxLD = 'x ' & str(!lines[!i].part(2).real() - !lines[!i].part(6).real() * 0.5) & ' y ' & str(!lines[!i].part(3).real() - !lines[!i].part(7).real() * 0.5)
+							!tboxRD = 'x ' & str(!lines[!i].part(2).real() + !lines[!i].part(6).real() * 0.5) & ' y ' & str(!lines[!i].part(3).real() - !lines[!i].part(7).real() * 0.5)
+							!tboxLU = 'x ' & str(!lines[!i].part(2).real() - !lines[!i].part(6).real() * 0.5) & ' y ' & str(!lines[!i].part(3).real() + !lines[!i].part(7).real() * 0.5)
+							!tboxRU = 'x ' & str(!lines[!i].part(2).real() + !lines[!i].part(6).real() * 0.5) & ' y ' & str(!lines[!i].part(3).real() + !lines[!i].part(7).real() * 0.5)
+							!tboxL = object line()
+							!tboxL.startposition = !tboxLD.position()
+							!tboxL.endposition = !tboxLU.position()
+							!tboxR = object line()
+							!tboxR.startposition = !tboxRD.position()
+							!tboxR.endposition = !tboxRU.position()
+							!tboxU = object line()
+							!tboxU.startposition = !tboxLU.position()
+							!tboxU.endposition = !tboxRU.position()
+							!tboxD = object line()
+							!tboxD.startposition = !tboxLD.position()
+							!tboxD.endposition = !tboxRD.position()
+							!labell = object line()
+							!labelltemp = 'x ' & !lines[!i].part(2) & ' y ' & !lines[!i].part(3)
+							!labell.startposition = !labelltemp.position()
+							!labelltemp = 'x ' & !apos1.part(2).replace('mm', '') & ' y ' & !apos1.part(4).replace('mm', '')
+							!labell.endposition = !labelltemp.position()
+							--------------------------------------------------------------------------------------
+							-- check intersections between label boundary and leader line are on label boundary --
+							-- sort the distance between attachment point and intersections and get the minimun --
+							--------------------------------------------------------------------------------------
+							!tboxp = object array()
+							!tempp = !labell.intersection(!tboxL)
+							handle any
+								-- for parellel condition --
+							elsehandle none
+								if !tboxL.on(!tempp, true) then
+									!tboxp.append(!apos1.position().distance(!tempp).string().replace('mm', '') & '~' & !tempp & '~' & !lines[!i].part(2) & ' ' & !lines[!i].part(3) & '!x!x!x!x!x')
+								endif
+							endhandle
+							!tempp = !labell.intersection(!tboxR)
+							handle any
+								-- for parellel condition --
+							elsehandle none
+								if !tboxR.on(!tempp, true) then
+									!tboxp.append(!apos1.position().distance(!tempp).string().replace('mm', '') & '~' & !tempp & '~' & !lines[!i].part(2) & ' ' & !lines[!i].part(3) & '!x!x!x!x!x')
+								endif
+							endhandle
+							!tempp = !labell.intersection(!tboxU)
+							handle any
+								-- for parellel condition --
+							elsehandle none
+								if !tboxU.on(!tempp, true) then
+									!tboxp.append(!apos1.position().distance(!tempp).string().replace('mm', '') & '~' & !tempp & '~' & !lines[!i].part(2) & ' ' & !lines[!i].part(3) & '!x!x!x!x!x')
+								endif
+							endhandle
+							!tempp = !labell.intersection(!tboxD)
+							handle any
+								-- for parellel condition --
+							elsehandle none
+								if !tboxD.on(!tempp, true) then
+									!tboxp.append(!apos1.position().distance(!tempp).string().replace('mm', '') & '~' & !tempp & '~' & !lines[!i].part(2) & ' ' & !lines[!i].part(3) & '!x!x!x!x!x')
+								endif
+							endhandle
+							using namespace 'Aveva.Core.Samples'
+							!obj = object AteSortLineNo()
+							!sortedtypes = !obj.method('y', !tboxp)
+							!newx = !sortedtypes[1].split('~').getindexed(2).part(2).replace('mm', '').real() - !sortedtypes[1].split('~').getindexed(3).split('!').getindexed(1).part(1).real()
+							!newy = !sortedtypes[1].split('~').getindexed(2).part(4).replace('mm', '').real() - !sortedtypes[1].split('~').getindexed(3).split('!').getindexed(1).part(2).real()
+							cpoftx |$!newx $!newy|
+						endif
+					enddo
+					!ff.close()
+				endif
+				
+				---------------------------
+				-- flow arrow annotation --
+				---------------------------
+				$!name/SS/S1/V1_R$!this.rev
+				1
+				last
+				!!DrawingPlan1FlowAnnotation(!name)
+				
+				----------------
+				-- open sheet --
+				----------------
+				if (!!DrawingPlan1.openshee.val) then
+					$!name/SS/S1/V1_R$!this.rev
+					!!cmsys.executecommand('AVEVA.Draw.OpenSheetByCE')
+				endif
+			endif
+		endhandle
+	enddo
+endmethod
+
+define method .NozzleAnnotation(!name is string)
+	NEW LAYE $!name/SS/S1/V1/ateNOZZ_R$!this.rev
+	Purpose NOZZ
+	Lvisibility true
+	Ucode mm  Distance  mm  Bore Nominal 
+	Font 1
+	Lterminator Off
+	Justification Centre
+	Alignment Hbody
+	Dterminator Arrows
+	Tsize 2mm
+	Chosht 6mm
+	Asubtended 0
+	Pjustification Towards 
+	Overshoot 2mm
+	Plclearance 0mm
+	Doffset 25mm
+	Dmspacing 0mm
+	Cheight 3mm
+	Lleader true
+	Lframe false
+	Lshape Straight
+	Gbox 0mm
+	Cspacing 0
+	Lspacing 0
+	Llclearance 0mm
+	Xyscale 1 1
+	Xyposition 10mm 10mm 
+	Bpoffset 0mm 0mm
+	Blnk true
+	Bmargin 0mm
+	Trsf unset
+	Fterminator Default
+	Pcode mms to 0 dpls  Inches to 1 dpls  Fractions to 32 ths  Angles to 1 dpls 
+	NLStyle Solid 
+	NLColour Cyan 
+	FStyle SolidFilled 
+	FColour Cyan 
+	Txcolour yellow 
+	LLStyle Solid 
+	LLColour Cyan 
+	LFStyle Solid 
+	LFColour Cyan 
+	DLStyle Solid 
+	DLColour Grey 
+	PLStyle Solid 
+	PLColour Grey 
+	MStyle Off 
+	MColour Cyan 
+	CHStyle Off 
+	CHColour Grey 
+	ACDSTY unset
+	Posformat ENU
+	Grsystem Nulref
+	SpPurpose unset
+	Function unset	
+	
+	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+	!ff.open('append')
+
+	var !nozzs coll $!this.nozztext1.val within E $!this.minE N $!this.minN U $!this.minU TO E $!this.maxE N $!this.maxN U $!this.maxU
+	do !nozz values !nozzs
+		NEW GLAB
+		DDNA $!nozz
+		Btext |$!this.nozztext2.val|
+		Justification Centre
+		Alignment Hbody
+		ABSO
+		var !apos ( pos of $!nozz wrt worl )
+		var !apos1 shpos of $!apos
+		AT $!apos1
+		XYPO 5 5
+		
+		------------------------------------------------------------------
+		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+		------------------------------------------------------------------
+		var !label ref
+		!shposx = !apos1.part(2).replace('mm', '')
+		!shposy = !apos1.part(4).replace('mm', '')
+		var !chei chei
+		if !chei.eqnocase('ByVStyle') then
+			var !chei chei of owner
+		endif
+		var !exbtext exbtext
+		!height = !chei.replace('mm', '').real() + 0.5
+		!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
+		
+		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
+	enddo
+	!ff.close()
+endmethod
+
+---------------------------------------
+-- Select CE for drawing destination --
+---------------------------------------
+define method .desce()
+	!ce = name
+	new drwg
+	handle any
+		!this.dest.val = ''
+		!!alert.error('Cannot create DEPT under this level')
+	elsehandle none
+		delete drwg
+		$!ce
+		!this.dest.val = !ce
+	endhandle
+	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
+		!this.apply.active = true
+	else
+		!this.apply.active = false
+	endif
+endmethod
+
+----------------------------------------------------
+-- Export contents of drawing list into text file --
+----------------------------------------------------
+define method .exportfile()
+	using namespace 'Aveva.Core.Presentation'
+	!browser = object PMLFILEBROWSER('OPEN')	
+	!browser.show( !this.userevar, '*.txt', 'Text file', false, 'txt files (*.txt)|*.txt', 2)
+	if (!browser.file() neq '') then
+	  !this.userevar = !browser.file()
+	  !filedata = object file(!this.userevar)
+		!filedata.writefile('OVERWRITE', !this.files.dtext)
+		!filedata.close()
+	endif
+endmethod
+
+----------------------------------------------------
+-- Import contents of text file into drawing list --
+----------------------------------------------------
+define method .importfile()
+	using namespace 'Aveva.Core.Presentation'
+	!browser = object PMLFILEBROWSER('OPEN')	
+	!browser.show( !this.userevar, '*.txt', 'Text file', false, 'txt files (*.txt)|*.txt', 2)
+	if (!browser.file() neq '') then
+	  !this.userevar = !browser.file()
+	  !filedata = object file(!this.userevar)
+		!filedata.open('READ')
+		!lines = !filedata.readfile()
+		if !lines.set() then
+			!str = !this.files.dtext
+      do !x from 1 to !lines.size()
+	      !line = !lines[!x]
+				if !line.neq('') then
+					if !line.substring(1,1).neq('/') and !line.substring(1,1).neq('=') then
+						!line = '/' & !line						
+					endif
+					var !type type of $!line
+					if !type.eqnocase('BOX') or !type.eqnocase('TEXT') or !type.eqnocase('EQUI') then
+						var !site name of site of $!line
+						if !site.matchwild('*_DrawingPlanBox') then
+							var !equi namn of equi of $!line
+							if !str.find(!equi).size().eq(0) then
+								!str.append(!equi)
+								!this.files.dtext = !str
+							endif
+						endif
+					else
+						var !equis coll all equi for ce
+						do !equi values !equis
+							var !site name of site of $!equi
+							if !site.matchwild('*_DrawingPlanBox') then
+								var !equi namn of $!equi
+								if !str.find(!equi).size().eq(0) then
+									!str.append(!equi)
+									!this.files.dtext = !str
+								endif
+							endif
+						enddo
+					endif
+			  endif
+			enddo
+		endif
+		!filedata.close()
+	endif
+	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
+		!this.apply.active = true
+	else
+		!this.apply.active = false
+	endif
+endmethod
+
+-----------------------------------
+-- sort contents of drawing list --
+-----------------------------------
+define method .sortce()
+	!str = !this.files.dtext
+	!str.sort()
+	!this.files.dtext = !str
+endmethod
+
+---------------------------------
+-- Save options in a text file --
+---------------------------------
+define method .Save()
+	var !login login
+	var !projid proj id
+	import 'pmlfilebrowser'
+	handle any
+	endhandle
+	using namespace 'Aveva.Core.Presentation'
+	!browser = object PMLFILEBROWSER('Save')
+	!browser.show('c:\temp\', |$!login_$!projid|, 'Filename', false ,' text files (*.txt)|*.txt' , 2)
+	!file = !browser.file()
+	if (!file neq '') then
+		!ff = object file(!file)
+		!ff.open('overwrite')
+		!ff.writerecord('!this.gridorthogonal.val' & '=' & !this.gridorthogonal.val)
+		!ff.writerecord('!this.portrait.val' & '=' & !this.portrait.val)
+		!ff.writerecord('!this.canvasp.val' & '=|' & !this.canvasp.val & '|')
+		!ff.writerecord('!this.openshee.val' & '=' & !this.openshee.val)
+		!ff.writerecord('!this.delshee.val' & '=' & !this.delshee.val)
+		!ff.writerecord('!this.frametext.val' & '=|' & !this.frametext.val & '|')
+		!ff.writerecord('!this.keytext1.val' & '=|' & !this.keytext1.val & '|')
+		!ff.writerecord('!this.keytext2.val' & '=|' & !this.keytext2.val & '|')
+		!ff.writerecord('!this.keytext3.val' & '=|' & !this.keytext3.val & '|')
+		!ff.writerecord('!this.keytext4.val' & '=|' & !this.keytext4.val & '|')
+		!ff.writerecord('!this.griddist.val' & '=' & !this.griddist.val)
+		!ff.writerecord('!this.gridgap.val' & '=' & !this.gridgap.val)
+		!ff.writerecord('!this.gridhei.val' & '=' & !this.gridhei.val)
+		!ff.writerecord('!this.griddia.val' & '=' & !this.griddia.val)
+		!ff.writerecord('!this.annotext.val' & '=|' & !this.annotext.val & '|')
+		!ff.writerecord('!this.autoplace.val' & '=' & !this.autoplace.val)
+		!ff.writerecord('!this.insttog.val' & '=' & !this.insttog.val)
+		!ff.writerecord('!this.insttext1.val' & '=' & !this.insttext1.val)
+		!ff.writerecord('!this.insttext2.val' & '=|' & !this.insttext2.val & '|')
+		!ff.writerecord('!this.insttext3.val' & '=' & !this.insttext3.val)
+		!ff.writerecord('!this.nozztog.val' & '=' & !this.nozztog.val)
+		!ff.writerecord('!this.nozztext1.val' & '=' & !this.nozztext1.val)
+		!ff.writerecord('!this.nozztext2.val' & '=|' & !this.nozztext2.val & '|')
+		!ff.writerecord('!this.valvtog.val' & '=' & !this.valvtog.val)
+		!ff.writerecord('!this.valvtext1.val' & '=' & !this.valvtext1.val)
+		!ff.writerecord('!this.valvtext2.val' & '=|' & !this.valvtext2.val & '|')
+		!ff.writerecord('!this.supttog.val' & '=' & !this.supttog.val)
+		!ff.writerecord('!this.supttog1.val' & '=' & !this.supttog1.val)
+		!ff.writerecord('!this.usertog.val' & '=' & !this.usertog.val)
+		!ff.writerecord('!this.usertext1.val' & '=' & !this.usertext1.val)
+		!ff.writerecord('!this.usertext2.val' & '=|' & !this.usertext2.val & '|')
+		!ff.writerecord('!this.redutog.val' & '=' & !this.redutog.val)
+		!ff.close()
+	endif
+endmethod
+
+-----------------------------------
+-- Load options from a text file --
+-----------------------------------
+define method .Load()
+	import 'pmlfilebrowser'
+	handle any
+	endhandle
+	using namespace 'Aveva.Core.Presentation'
+	!browser = object PMLFILEBROWSER('Open')
+	!browser.show('c:\temp\', '', 'Filename', true ,' text files (*.txt)|*.txt' , 1)
+	!file = !browser.file()
+	if (!file neq '') then
+		!ff = object file(!file)
+		!ff.open('read')
+		!lines =!ff.readfile()
+		do !i From 1 to !lines.size()
+			!line = !lines[!i]
+			!option = !line.split('=').getindexed(1)
+			!val = !line.split('=').getindexed(2)
+			handle any
+			elsehandle none
+				$!option = $!val
+				-------------------------------------------------------------------------------------------------------------------------------
+			endhandle
+		enddo
+		!ff.close()
+	endif
+endmethod
+
+define method .typepick(!type1 is string, !gedget is string)
+	!ce = ce
+	var !type type of $!ce
+	if (!type.eqnocase(!type1)) then
+		var !name name of $!ce
+		!option = '!this.' & |$!gedget| & '.val'
+		$!option = |$!name|
+	else
+		!!alert.error('You must be at a ' & !type1 & ', to set this reference')
+	endif
+endmethod
+
+define method .canvaspick()
+	var !size rshpos @
+	handle any
+	elsehandle none
+		!size1 = !size.replace('mm', '')
+		!!DrawingPlan1.canvassize = 'X ' & !size1.part(2).real().string('D0') & ' Y ' & !size1.part(4).real().string('D0') & ' X ' & !size1.part(6).real().string('D0') & ' Y ' & !size1.part(8).real().string('D0')
+		!!DrawingPlan1.canvasp.val = !!DrawingPlan1.canvassize
+	endhandle
+endmethod
+
+define method .keyplanpick()
+	var !size1 shpo @
+	handle any
+		prompt on
+		prompt dismiss
+		break
+	elsehandle none
+		!!DrawingPlan1.keytext1.val = 'X ' & !size1.replace('mm', '').part(2).real().string('D0') & ' Y ' & !size1.replace('mm', '').part(4).real().string('D0')
+	endhandle
+endmethod
+
+define method .ValveAnnotation(!name is string)
+	NEW LAYE $!name/SS/S1/V1/ateVALV_R$!this.rev
+	Purpose VALV
+	Lvisibility true
+	Ucode mm  Distance  mm  Bore Nominal 
+	Font 1
+	Lterminator Off
+	Justification Centre
+	Alignment Hbody
+	Dterminator Arrows
+	Tsize 2mm
+	Chosht 6mm
+	Asubtended 0
+	Pjustification Towards 
+	Overshoot 2mm
+	Plclearance 0mm
+	Doffset 25mm
+	Dmspacing 0mm
+	Cheight 3mm
+	Lleader true
+	Lframe false
+	Lshape Straight
+	Gbox 0mm
+	Cspacing 0
+	Lspacing 0
+	Llclearance 0mm
+	Xyscale 1 1
+	Xyposition 10mm 10mm 
+	Bpoffset 0mm 0mm
+	Blnk true
+	Bmargin 0mm
+	Trsf unset
+	Fterminator Default
+	Pcode mms to 0 dpls  Inches to 1 dpls  Fractions to 32 ths  Angles to 1 dpls 
+	NLStyle Solid 
+	NLColour Cyan 
+	FStyle SolidFilled 
+	FColour Cyan 
+	Txcolour yellow 
+	LLStyle Solid 
+	LLColour Cyan 
+	LFStyle Solid 
+	LFColour Cyan 
+	DLStyle Solid 
+	DLColour Grey 
+	PLStyle Solid 
+	PLColour Grey 
+	MStyle Off 
+	MColour Cyan 
+	CHStyle Off 
+	CHColour Grey 
+	ACDSTY unset
+	Posformat ENU
+	Grsystem Nulref
+	SpPurpose unset
+	Function unset
+	
+	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+	!ff.open('append')
+
+	var !valvs coll $!this.valvtext1.val within E $!this.minE N $!this.minN U $!this.minU TO E $!this.maxE N $!this.maxN U $!this.maxU
+	do !valv values !valvs
+		NEW GLAB
+		DDNA $!valv
+		Btext |$!this.valvtext2.val|
+		Justification Centre
+		Alignment Hbody
+		ABSO
+		var !apos ( pos of $!valv wrt worl )
+		var !apos1 shpos of $!apos
+		AT $!apos1
+		XYPO 5 5
+		
+		------------------------------------------------------------------
+		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+		------------------------------------------------------------------
+		var !label ref
+		!shposx = !apos1.part(2).replace('mm', '')
+		!shposy = !apos1.part(4).replace('mm', '')
+		var !chei chei
+		if !chei.eqnocase('ByVStyle') then
+			var !chei chei of owner
+		endif
+		var !exbtext exbtext
+		!height = !chei.replace('mm', '').real() + 0.5
+		!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
+		
+		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
+	enddo
+	!ff.close()
+endmethod
+
+define method .ReduAnnotation(!name is string)
+	NEW LAYE $!name/SS/S1/V1/ateREDU_R$!this.rev
+	Purpose REDU
+	Lvisibility true
+	Ucode mm  Distance  mm  Bore Nominal 
+	Font 1
+	Lterminator Off
+	Justification Centre
+	Alignment Hbody
+	Dterminator Arrows
+	Tsize 2mm
+	Chosht 6mm
+	Asubtended 0
+	Pjustification Towards 
+	Overshoot 2mm
+	Plclearance 0mm
+	Doffset 25mm
+	Dmspacing 0mm
+	Cheight 3mm
+	Lleader true
+	Lframe false
+	Lshape Straight
+	Gbox 0mm
+	Cspacing 0
+	Lspacing 0
+	Llclearance 0mm
+	Xyscale 1 1
+	Xyposition 10mm 10mm 
+	Bpoffset 0mm 0mm
+	Blnk true
+	Bmargin 0mm
+	Trsf unset
+	Fterminator Default
+	Pcode mms to 0 dpls  Inches to 1 dpls  Fractions to 32 ths  Angles to 1 dpls 
+	NLStyle Solid 
+	NLColour Cyan 
+	FStyle SolidFilled 
+	FColour Cyan 
+	Txcolour yellow 
+	LLStyle Solid 
+	LLColour Cyan 
+	LFStyle Solid 
+	LFColour Cyan 
+	DLStyle Solid 
+	DLColour Grey 
+	PLStyle Solid 
+	PLColour Grey 
+	MStyle Off 
+	MColour Cyan 
+	CHStyle Off 
+	CHColour Grey 
+	ACDSTY unset
+	Posformat ENU
+	Grsystem Nulref
+	SpPurpose unset
+	Function unset
+	
+	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+	!ff.open('append')
+
+	var !redus vscan for all (redu tee)
+	do !redu values !redus
+		!redu = !redu.part(2)
+		var !pdir p1 dir of $!redu
+		---------------------------------------------------
+		-- only tag tee/reducer for horizontal direction --
+		---------------------------------------------------
+		if not(!pdir.direction().eq(object direction('U')) or !pdir.direction().eq(object direction('D'))) then
+			var !type type of $!redu
+			!btext = ''
+			if (!type.eqnocase('REDU')) then
+				!btext = '#P1BOR<FROM ' & !redu & '>x' & '#P2BOR<FROM ' & !redu & '> RC'
+			else
+				var !p1bore p1 bore of $!redu
+				var !p3bore p3 bore of $!redu
+				if (!p1bore.neq(!p3bore)) then
+					!btext = '#P1BOR<FROM ' & !redu & '>x' & '#P3BOR<FROM ' & !redu & '> RT'
+				endif
+			endif
+			if (!btext neq '') then
+				NEW GLAB
+				DDNA $!redu
+				BTEXT |$!btext|
+				Justification Centre
+				Alignment Hbody
+				ABSO
+				var !apos ( pos of $!redu wrt worl )
+				var !apos1 shpos of $!apos
+				AT $!apos1
+				XYPO 10 10
+				
+				------------------------------------------------------------------
+				-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+				------------------------------------------------------------------
+				var !label ref
+				!shposx = !apos1.part(2).replace('mm', '')
+				!shposy = !apos1.part(4).replace('mm', '')
+				var !chei chei
+				if !chei.eqnocase('ByVStyle') then
+					var !chei chei of owner
+				endif
+				var !exbtext exbtext
+				!height = !chei.replace('mm', '').real() + 0.5
+				!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
+				
+				!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
+
+			endif
+		endif
+	enddo
+	!ff.close()
+
+endmethod
+
+define method .InstAnnotation(!name is string)
+	NEW LAYE $!name/SS/S1/V1/ateINST_R$!this.rev
+	Purpose INST
+	Lvisibility true
+	Ucode mm  Distance  mm  Bore Nominal 
+	Font 1
+	Lterminator Off
+	Justification Left
+	Alignment Base
+	Dterminator Arrows
+	Tsize 2mm
+	Chosht 6mm
+	Asubtended 0
+	Pjustification Towards 
+	Overshoot 2mm
+	Plclearance 0mm
+	Doffset 25mm
+	Dmspacing 0mm
+	Cheight 3mm
+	Lleader true
+	Lframe false
+	Lshape Straight
+	Gbox 0mm
+	Cspacing 0
+	Lspacing 0
+	Llclearance 0mm
+	Xyscale 1 1
+	Xyposition 10mm 10mm 
+	Bpoffset 0mm 0mm
+	Blnk true
+	Bmargin 0mm
+	Trsf unset
+	Fterminator Default
+	Pcode mms to 0 dpls  Inches to 1 dpls  Fractions to 32 ths  Angles to 1 dpls 
+	NLStyle Solid 
+	NLColour Cyan 
+	FStyle SolidFilled 
+	FColour Cyan 
+	Txcolour yellow 
+	LLStyle Solid 
+	LLColour Cyan 
+	LFStyle Solid 
+	LFColour Cyan 
+	DLStyle Solid 
+	DLColour Grey 
+	PLStyle Solid 
+	PLColour Grey 
+	MStyle Off 
+	MColour Cyan 
+	CHStyle Off 
+	CHColour Grey 
+	ACDSTY unset
+	Posformat ENU
+	Grsystem Nulref
+	SpPurpose unset
+	Function unset
+	
+	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+	!ff.open('append')
+	var !insts coll $!this.insttext1.val within E $!this.minE N $!this.minN U $!this.minU TO E $!this.maxE N $!this.maxN U $!this.maxU
+	do !inst values !insts
+		NEW SLAB
+		DDNA $!inst
+		tmrf $!name/SS/LALB/NAME_CIRC_R$!this.rev
+		Font 1
+		Blnk true
+		Bmargin 0mm
+		Xyscale 1 1
+		Cheitx '3mm'
+		Lvisibility true
+		Txcolour Yellow
+		LLColour Cyan
+		LFColour Cyan
+		Alignment Hbody
+		ABSO
+		var !apos ( pos of $!inst wrt worl )
+		var !apos1 shpos of $!apos
+		AT $!apos1
+		XYPO 15 15
+		
+		------------------------------------------------------------------
+		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+		------------------------------------------------------------------
+		var !label ref
+		!shposx = !apos1.part(2).replace('mm', '')
+		!shposy = !apos1.part(4).replace('mm', '')
+		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' 10 10 circle')
+	enddo
+	!ff.close()
+endmethod
+
+
+---------------------------------------------------------------------------
+-- create a grid label based on intersection between grid and view frame --
+---------------------------------------------------------------------------
+define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, !p1possh is string, !p2possh is string, !refgln is string)
+	!framedir = object direction()
+	!griddir = object direction()
+	!nppt = 0
+	if (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewUlinesh')) then
+		!framedir = object direction('N')
+		!agside = 'Top'
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewDlinesh')) then
+		!framedir = object direction('S')
+		!agside = 'Bottom'
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewLlinesh')) then
+		!framedir = object direction('W')
+		!agside = 'Left'
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewRlinesh')) then
+		!framedir = object direction('E')
+		!agside = 'Right'
+	endif
+
+	if (!framedir.angle(!p12linesh.direction()).leq(!framedir.angle(!p12linesh.direction().opposite()))) then
+		!griddir = !p12linesh.direction()
+	else
+		!griddir = !p12linesh.direction().opposite()
+	endif
+	if (!p1possh.position().distance(!this.intersections.getindexed(!i).split('-').getindexed(2).position()).leq(!p2possh.position().distance(!this.intersections.getindexed(!i).split('-').getindexed(2).position()))) then
+		!nppt = 1
+		!npptp = !p1possh.position()
+	else
+		!nppt = 2
+		!npptp = !p2possh.position()
+	endif
+
+	!x = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.griddist.val).east - !npptp.east)
+	!y = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.griddist.val).north - !npptp.north)
+	!xap = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.gridgap.val).east - !npptp.east)
+	!yap = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.gridgap.val).north - !npptp.north)
+	
+	NEW SLAB
+	DDNA $!refgln
+	NPPT $!nppt
+	TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+	XYPO $!x $!y
+	APOF $!xap $!yap
+	Agside |$!agside|
+endmethod
+
+----------------------------------------------------
+-- create a grid label based on end point of grid --
+----------------------------------------------------
+define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is string, !thatpossh is string, !refgln is string, !nppt is real)
+	if (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewUlinesh')) then
+		!agside = 'Top'
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewDlinesh')) then
+		!agside = 'Bottom'
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewLlinesh')) then
+		!agside = 'Left'
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewRlinesh')) then
+		!agside = 'Right'
+	endif
+
+	---------------------------------------------------------------------------------
+	-- check if distance between !thispossh and view frame is larger than 100mm    --
+	-- if YES, create grid label that extends 25mm from !thispossh                 --
+	-- otherwise extends 25mm from intersection between !p12linesh and view frame  --
+	---------------------------------------------------------------------------------
+	!line = object line(!thatpossh.position(), !thispossh.position())
+	!dir = !line.direction()
+	if (!thispossh.position().distance(!this.intersections.getindexed(!i).split('-').getindexed(2).position()).geq(100)) then
+	  !x = !thispossh.position().offset(!dir, !this.griddist.val).east - !thispossh.position().east
+	  !y = !thispossh.position().offset(!dir, !this.griddist.val).north - !thispossh.position().north
+		!xap = !thispossh.position().offset(!dir, !this.gridgap.val).east - !thispossh.position().east
+		!yap = !thispossh.position().offset(!dir, !this.gridgap.val).north - !thispossh.position().north
+	else
+		!x = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.griddist.val).east - !thispossh.position().east
+		!y = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.griddist.val).north - !thispossh.position().north
+		!xap = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.gridgap.val).east - !thispossh.position().east
+		!yap = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.gridgap.val).north - !thispossh.position().north
+	endif
+
+	NEW SLAB
+	DDNA $!refgln
+	NPPT $!nppt
+	TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+	XYPO $!x $!y
+	APOF $!xap $!yap
+	Agside |$!agside|
+endmethod
+
+------------------------------------------------------------------------
+-- check which one is correct when dimension attach point(s) are near --
+-- called by !!DrawingPlan1LineNoAnnotation()                         --
+------------------------------------------------------------------------
+define method .CheckDimensionAttachPoint(!checkxy is string, !maxmin is string, !checkxys is array, !viewdir is string) is string
+	using namespace 'Aveva.Core.Samples'
+	!obj = object AteSortLineNo()		
+	!answers = !obj.method(!checkxy, !checkxys)
+$(		
+	$p <<<<<<<<<<<<<<<<<<<<<<<<<<<<
+	do !answer values !answers
+		$p $!answer
+	enddo
+$)		
+	
+	!checkok = false
+	if (!maxmin.eq('max')) then
+		do !i from !answers.size() to 1 by -1
+			!answer = !answers[!i]
+			!mem = !answer.split('!').getindexed(4)
+			var !type type of $!mem
+			!viewdir1 = object direction(!viewdir)
+			if (!type.eqnocase('BRAN')) then
+				var !hdir hdir of $!mem  $( <<<<<<<<<<<<<<<<<<<<<<<<< check tail direction later >>>>>>>>>>>>>>>>>>>>> $)
+				!hdir1 = object direction(!hdir)
+				if (!hdir1.angle(!viewdir1).abs().leq(40) or !hdir1.opposite().angle(!viewdir1).abs().leq(40)) then
+					!checkok = true
+					break
+				endif
+			elseif (!type.eqnocase('EQUI')) then
+				!checkok = fasle
+				break
+			else
+				var !p1dir p1dir of $!mem
+				!p1dir1 = object direction(!p1dir)
+				if (!p1dir1.angle(!viewdir1).abs().leq(40) or !p1dir1.opposite().angle(!viewdir1).abs().leq(40)) then
+					!checkok = true
+					break
+				endif
+				if (not (!checkok)) then
+					var !p2dir p2dir of $!mem
+					!p2dir1 = object direction(!p2dir)
+					if (!p2dir1.angle(!viewdir1).abs().leq(40) or !p2dir1.opposite().angle(!viewdir1).abs().leq(40)) then
+						!checkok = true
+						break
+					endif
+				endif
+			endif
+		enddo
+		if (!checkok) then
+			!answer = !answer & '!y'
+		else
+			!answer = !answers.last() & '!n'
+		endif
+	elseif (!maxmin.eq('min')) then
+		do !i from 1 to !answers.size()
+			!answer = !answers[!i]
+			!mem = !answer.split('!').getindexed(4)
+			var !type type of $!mem
+			!viewdir1 = object direction(!viewdir)
+			if (!type.eqnocase('BRAN')) then
+				var !hdir hdir of $!mem  $( <<<<<<<<<<<<<<<<<<<<<<<<< check tail direction later >>>>>>>>>>>>>>>>>>>>> $)
+				!hdir1 = object direction(!hdir)
+				if (!hdir1.angle(!viewdir1).abs().leq(40) or !hdir1.opposite().angle(!viewdir1).abs().leq(40)) then
+					!checkok = true
+					break
+				endif
+			elseif (!type.eqnocase('EQUI')) then
+				!checkok = fasle
+				break
+			else
+				var !p1dir p1dir of $!mem
+				!p1dir1 = object direction(!p1dir)
+				if (!p1dir1.angle(!viewdir1).abs().leq(40) or !p1dir1.opposite().angle(!viewdir1).abs().leq(40)) then
+					!checkok = true
+					break
+				endif
+				if (not (!checkok)) then
+					var !p2dir p2dir of $!mem
+					!p2dir1 = object direction(!p2dir)
+					if (!p2dir1.angle(!viewdir1).abs().leq(40) or !p2dir1.opposite().angle(!viewdir1).abs().leq(40)) then
+						!checkok = true
+						break
+					endif
+				endif
+			endif
+		enddo
+		if (!checkok) then
+			!answer = !answer & '!y'
+		else
+			!answer = !answers.first() & '!n'
+		endif
+	endif
+	return !answer
+endmethod
+
+-----------------------------------------------------------------------
+-- the sum of all angles between a point and all vertices of a shape --
+-- is 360 degrees, which means that the point is inside the shape    --
+-----------------------------------------------------------------------
+define method .CheckInsideView(!pt is string, !viewpt1 is string, !viewpt2 is string, !viewpt3 is string, !viewpt4 is string) is boolean
+	!viewpts = object array()
+	!viewpts.append(!viewpt1)
+	!viewpts.append(!viewpt2)
+	!viewpts.append(!viewpt3)
+	!viewpts.append(!viewpt4)
+	!angle = 0
+	do !i from 1 to 4
+		!line1 = object line(object position(!pt), object position(!viewpts[!i]))
+		if (!i eq 4) then
+			!line2 = object line(object position(!pt), object position(!viewpts[1]))
+		else
+			!line2 = object line(object position(!pt), object position(!viewpts[!i + 1]))
+		endif
+		!angle = !angle + !line1.direction().angle(!line2.direction())
+	enddo
+	if (!angle leq 360) then
+		return true
+	else
+		return false
+	endif
+endmethod
+
+define method .Close()
+   kill !!DrawingPlan1
+endmethod
+
+---------------------------------------------------
+-- to text match line words and draw match lines --
+---------------------------------------------------
+define method .MachLineCode()
+	var !tempp1 enupos of $!!DrawingPlan1.viewULsh                                            $( old = $!!DrawingPlan1.viewURsh $)
+	!tempp2 = object position(!tempp1)
+	!tempp2.up = !!DrawingPlan1.minU + 50
+	!tempp3 = !tempp2.offset(!tempdirr.direction(), 50).offset(!tempdiru.direction(), 50)			$( old = !tempdird.direction() $)
+	var !tempp4 enupos of $!!DrawingPlan1.viewURsh                                            $( old = $!!DrawingPlan1.viewLRsh $)
+	!tempp5 = object position(!tempp4)
+	!tempp6 = !tempp5.offset(!tempdirl.direction(), 50).offset(!tempdiru.direction(), 50)     $( old = !tempdirr.direction() $)
+	!tempp6.up = !!DrawingPlan1.maxU - 50
+	var !boxes coll all box within $!tempp3 to $!tempp6 for /$!projid_DrawingPlanBox exclude /$!equistr
+	handle any
+		---------------------------
+		-- for unnamed equipment --
+		---------------------------
+		var !boxes coll all box within $!tempp3 to $!tempp6 for /$!projid_DrawingPlanBox exclude $!equistr
+	endhandle						
+	!chks = object array()
+	do !box values !boxes
+		-------------------------------------------------------
+		-- get ppoints which direction equal viewdir up/down --
+		-------------------------------------------------------
+		var !isnamed isnamed of equi of $!box
+		if !isnamed.boolean() then
+			var !tempe namn of equi of $!box
+		else
+			!tempe = ''
+		endif
+		do !j from 1 to 6
+			var !boxp$!j (p$!j dir of $!box wrt worl)
+			!boxpd$!j = object direction(!boxp$!j)
+			
+			if !tempdirl.direction().eq(!boxpd$!j) or !tempdirr.direction().eq(!boxpd$!j) then         $( old = !tempdiru !tempdird $)
+				var !chk (p$!j pos of $!box wrt worl)
+				var !chksh shpos of $!chk
+				
+				if !chksh.part(2).replace('mm', '').real().geq(!!DrawingPlan1.viewURsh.part(2).real() - 5 ) then
+					!chks.append(!box & '!' & !!DrawingPlan1.viewURsh.part(2) & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+				elseif !chksh.part(2).replace('mm', '').real().leq(!!DrawingPlan1.viewULsh.part(2).real() + 5 ) then
+					!chks.append(!box & '!' & !!DrawingPlan1.viewULsh.part(2) & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+				else
+					!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+				endif
+$(						
+				if !chksh.part(4).replace('mm', '').real().geq(!!DrawingPlan1.viewURsh.part(4).real() - 5 ) then
+					!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !!DrawingPlan1.viewURsh.part(4) & '!' & !tempe & '!' & !j)
+				elseif !chksh.part(4).replace('mm', '').real().leq(!!DrawingPlan1.viewLRsh.part(4).real() + 5 ) then
+					!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !!DrawingPlan1.viewLRsh.part(4) & '!' & !tempe & '!' & !j)
+				else
+					!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+				endif
+$)						
+				
+			endif
+		enddo
+	enddo
+	note 1
+	if !chks.size().gt(0) then
+		!exists = object array()
+		using namespace 'Aveva.Core.Samples'
+		!obj = object AteSort()
+		---------------------------------------------------------------
+		-- AteSort argument2 indicates                               --
+		--   true  = sort by field1 + field2 (ref of box + x coord.) --
+		--   false = sort by field1 + field3 (ref of box + y coord.) --
+		---------------------------------------------------------------
+		!sortedtypes = !obj.method1(!chks, true)                         $( old = false $)
+		do !i from 1 to !sortedtypes.size()
+			if !i.modulo(2).eq(1) then
+				!tempt = ''
+				if !i.eq(1) then
+					---------------------------
+					-- the maximun distance  --
+					-- write all information --
+					---------------------------
+					if !viewdir.direction().eq(object direction('E')) or !viewdir.direction().eq(object direction('W')) or !viewdir.direction().eq(object direction('N')) or !viewdir.direction().eq(object direction('S')) then
+						if !rcode.eqnocase('up') then
+							if !sortedtypes[!i].split('!').getindexed(5).eqnocase('') then
+								if !!DrawingPlan1.minN.gt(0) then                                                    $( old = !!DrawingPlan1.minE $)
+									!tempt = 'MATCH LINE N' & !!stringRoundUpValue($!!DrawingPlan1.maxN, !format)      $( old = E !!DrawingPlan1.minE $)
+								else
+									!tempt = 'MATCH LINE S' & !!stringRoundUpValue($!!DrawingPlan1.maxN * -1, !format) $( old = W !!DrawingPlan1.minE $)
+								endif
+							else
+								if !!DrawingPlan1.minN.gt(0) then                                                    $( old = !!DrawingPlan1.minE $)
+									!tempt = 'MATCH LINE N' & !!stringRoundUpValue($!!DrawingPlan1.maxN, !format) & ' SEE ' & !sortedtypes[!i].split('!').getindexed(5)      $( old = E !!DrawingPlan1.minE $)
+								else
+									!tempt = 'MATCH LINE S' & !!stringRoundUpValue($!!DrawingPlan1.maxN * -1, !format) & ' SEE ' & !sortedtypes[!i].split('!').getindexed(5) $( old = W !!DrawingPlan1.minE $)
+								endif
+							endif
+						else
+							-------------------
+							-- !rcode = left --
+							-------------------
+							if !sortedtypes[!i].split('!').getindexed(5).eqnocase('') then
+								if !!DrawingPlan1.minE.gt(0) then                                                          $( old = !!DrawingPlan1.minN $)
+									!tempt = 'MATCH LINE E' & !!stringRoundUpValue($!!DrawingPlan1.minE, !format)            $( old = N !!DrawingPlan1.minN $)
+								else
+									!tempt = 'MATCH LINE W' & !!stringRoundUpValue($!!DrawingPlan1.minE * -1, !format)       $( old = S !!DrawingPlan1.minN $)
+								endif
+							else
+								if !!DrawingPlan1.minE.gt(0) then                                                          $( old = !!DrawingPlan1.minN $)
+									!tempt = 'MATCH LINE E' & !!stringRoundUpValue($!!DrawingPlan1.minE, !format) & ' SEE ' & !sortedtypes[!i].split('!').getindexed(5)       $( old = N !!DrawingPlan1.minN $)
+								else
+									!tempt = 'MATCH LINE W' & !!stringRoundUpValue($!!DrawingPlan1.minE * -1, !format) & ' SEE ' & !sortedtypes[!i].split('!').getindexed(5)  $( old = S !!DrawingPlan1.minN $)
+								endif
+							endif
+						endif
+					elseif not(!sortedtypes[!i].split('!').getindexed(5).eqnocase('')) then
+						!tempt = 'MATCH LINE SEE ' & !sortedtypes[!i].split('!').getindexed(5)
+					endif
+				else
+					if not(!sortedtypes[!i].split('!').getindexed(5).eqnocase('')) then
+						!tempt = 'SEE ' & !sortedtypes[!i].split('!').getindexed(5)
+					endif
+				endif
+				if not(!tempt.eqnocase('')) then
+					!posx = !sortedtypes[!i].split('!').getindexed(3).real() + (!sortedtypes[!i + 1].split('!').getindexed(3).real() - !sortedtypes[!i].split('!').getindexed(3).real()) * 0.5
+					!posy = !!DrawingPlan1.viewURsh.part(4).real() + 1
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center txcolour yellow font 1    $( old = 90  tbody $)
+--							!posx = !!DrawingPlan1.viewURsh.part(2).real() + 1
+--							!posy = !sortedtypes[!i].split('!').getindexed(4).real() + (!sortedtypes[!i + 1].split('!').getindexed(4).real() - !sortedtypes[!i].split('!').getindexed(4).real()) * 0.5
+--							new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| alig tbody just center txcolour yellow font 1
+				endif
+			endif
+			------------------------------------------------------------------
+			-- to draw a match line if position is not on the border corner --
+			------------------------------------------------------------------
+			!exist = false
+			$( old = 4 !!DrawingPlan1.viewURsh.part(4) !!DrawingPlan1.viewLRsh.part(4)  $)
+			if not( abs(!sortedtypes[!i].split('!').getindexed(3).real() - !!DrawingPlan1.viewULsh.part(2).real()) leq 5 or abs(!sortedtypes[!i].split('!').getindexed(3).real() - !!DrawingPlan1.viewURsh.part(2).real()) leq 5) then
+--					if not( abs(!sortedtypes[!i].split('!').getindexed(4).real() - !!DrawingPlan1.viewURsh.part(4).real()) leq 5 or abs(!sortedtypes[!i].split('!').getindexed(4).real() - !!DrawingPlan1.viewLRsh.part(4).real()) leq 5) then
+				-----------------------------------------
+				-- check if the match line is existing --
+				-----------------------------------------
+				do !j from 1 to !exists.size()
+					if abs(!exists[!j].real() - !sortedtypes[!i].split('!').getindexed(3).real()) leq 5 then           $( old = 4 $)
+						!exist = true
+					endif
+				enddo
+			else
+				!exist = true
+			endif
+			if not(!exist) then
+				!exists.append(!sortedtypes[!i].split('!').getindexed(3))           $( old = 4 $)
+				!newx = !sortedtypes[!i].split('!').getindexed(3)
+				!newy = !!DrawingPlan1.viewURsh.part(4)
+				new stra fpt x $!newx y $!newy length 10 adegrees 90 NLStyle 201 NLColour Magenta    $( old = 0 $)
+--						!newx = !!DrawingPlan1.viewURsh.part(2)
+--						!newy = !sortedtypes[!i].split('!').getindexed(4)
+--						new stra fpt x $!newx y $!newy length 10 adegrees 0 NLStyle 201 NLColour Magenta
+			endif
+			$p $!sortedtypes[$!i]
+		enddo
+	else
+		!tempt = ''
+		if !viewdir.direction().eq(object direction('E')) or !viewdir.direction().eq(object direction('W')) or !viewdir.direction().eq(object direction('N')) or !viewdir.direction().eq(object direction('S')) then
+			if !rcode.eqnocase('up') then
+				if !!DrawingPlan1.minN.gt(0) then                                                    $( old = !!DrawingPlan1.minE $)
+					!tempt = 'MATCH LINE N' & !!stringRoundUpValue($!!DrawingPlan1.maxN, !format)      $( old = E !!DrawingPlan1.minE $)
+				else
+					!tempt = 'MATCH LINE S' & !!stringRoundUpValue($!!DrawingPlan1.maxN * -1, !format) $( old = W !!DrawingPlan1.minE $)
+				endif
+			else
+				if !!DrawingPlan1.minE.gt(0) then                                                          $( old = !!DrawingPlan1.minN $)
+					!tempt = 'MATCH LINE E' & !!stringRoundUpValue($!!DrawingPlan1.minE, !format)            $( old = N !!DrawingPlan1.minN $)
+				else
+					!tempt = 'MATCH LINE W' & !!stringRoundUpValue($!!DrawingPlan1.minE * -1, !format)       $( old = S !!DrawingPlan1.minN $)
+				endif
+			endif
+		endif
+		if not(!tempt.eqnocase('')) then
+			!posx = (!!DrawingPlan1.viewURsh.part(2).real() - !!DrawingPlan1.viewULsh.part(2).real()) * 0.5
+			!posy = !!DrawingPlan1.viewURsh.part(4).real() + 1
+			new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center txcolour yellow font 1
+--					!posx = !!DrawingPlan1.viewURsh.part(2).real() + 1
+--					!posy = !!DrawingPlan1.viewLRsh.part(4).real() + (!!DrawingPlan1.viewURsh.part(4).real() - !!DrawingPlan1.viewLRsh.part(4).real()) * 0.5
+--					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| alig tbody just center txcolour yellow font 1
+		endif
+	endif
+endmethod
+
+define method .SuptAnnotation(!name is string)
+	NEW LAYE $!name/SS/S1/V1/ateSUPT_R$!this.rev
+	Purpose SUPT
+	Lvisibility true
+	Ucode mm  Distance  mm  Bore Nominal 
+	Font 1
+	Lterminator Off
+	Justification Left
+	Alignment Base
+	Dterminator Arrows
+	Tsize 2mm
+	Chosht 6mm
+	Asubtended 0
+	Pjustification Towards 
+	Overshoot 2mm
+	Plclearance 0mm
+	Doffset 25mm
+	Dmspacing 0mm
+	Cheight 3mm
+	Lleader true
+	Lframe false
+	Lshape Straight
+	Gbox 0mm
+	Cspacing 0
+	Lspacing 0
+	Llclearance 0mm
+	Xyscale 1 1
+	Xyposition 10mm 10mm 
+	Bpoffset 0mm 0mm
+	Blnk true
+	Bmargin 0mm
+	Trsf unset
+	Fterminator Default
+	Pcode mms to 0 dpls  Inches to 1 dpls  Fractions to 32 ths  Angles to 1 dpls 
+	NLStyle Solid 
+	NLColour Cyan 
+	FStyle SolidFilled 
+	FColour Cyan 
+	Txcolour yellow 
+	LLStyle Solid 
+	LLColour Cyan 
+	LFStyle Solid 
+	LFColour Cyan 
+	DLStyle Solid 
+	DLColour Grey 
+	PLStyle Solid 
+	PLColour Grey 
+	MStyle Off 
+	MColour Cyan 
+	CHStyle Off 
+	CHColour Grey 
+	ACDSTY unset
+	Posformat ENU
+	Grsystem Nulref
+	SpPurpose unset
+	Function unset
+  
+  if not(!this.supttog1.val) then
+    $!name/SS/LALB_R$!this.rev
+    handle any
+      $!name/SS/LIBY_R$!this.rev
+      new lalb $!name/SS/LALB_R$!this.rev
+    endhandle
+    new sytm $!name/SS/LALB/NAME_SUPT_R$!this.rev
+    XYPS X 0mm Y 0mm
+    JUST Centre
+    ALIGN Hbody
+    FONT 1
+    CHEITX '3mm'
+    CSPATX '0'
+    LSPATX '0'
+    TXCOLO 1
+    NLSTYL Solid
+    NLCOLO 1
+    LLSTYL Solid
+    LLCOLO 1
+    FSTYLE Off
+    FCOLOUR 1
+    MCOLOUR 1
+    LZCOLO 1
+    LZLSTY Solid
+    LZVIS true
+    LZPRIN true
+    NEW TEXTPRIMITIVE
+    Origin Offset X 0mm Y 0mm
+    FONT 1
+    CHEITX '1.5mm'
+    CSPATX '0'
+    LSPATX '0'
+    JUST Centre
+    ALIGN Hbody
+    BTEX |#STEX|
+    TXCOLO 5
+    !this.supttmp = |$!name/SS/LALB/NAME_SUPT_R$!this.rev|
+  endif
+	
+	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+	!ff.open('append')
+	var !insts coll all atta with isnamed within E $!this.minE N $!this.minN U $!this.minU TO E $!this.maxE N $!this.maxN U $!this.maxU
+	do !inst values !insts
+    $!name/SS/S1/V1/ateSUPT_R$!this.rev
+		NEW SLAB
+		DDNA $!inst
+		!ce = ref
+		var !stext stext of $!inst
+		if !this.supttog1.val then
+			!this.SuptAnnotation(!name, !stext)
+			!height = !this.annotext.val.real() * 1.2
+			!width = !stext.length() * !this.annotext.val.real() * 0.6 + !this.annotext.val.real() * 1.2
+			$!ce
+		else
+			!height = !this.annotext.val.real()
+			!width = !stext.length() * !this.annotext.val.real() * 0.6
+		endif
+		tmrf $!this.supttmp
+		Font 1
+		Blnk true
+		Bmargin 0mm
+		Xyscale 1 1
+		Cheitx '3mm'
+		Lvisibility true
+		Txcolour Yellow
+		LLColour Cyan
+		LFColour Cyan
+		Alignment Hbody
+		ABSO
+		var !apos ( pos of $!inst wrt worl )
+		var !apos1 shpos of $!apos
+		AT $!apos1
+		XYPO 15 15
+		
+		------------------------------------------------------------------
+		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+		------------------------------------------------------------------
+		var !label ref
+		!shposx = !apos1.part(2).replace('mm', '')
+		!shposy = !apos1.part(4).replace('mm', '')
+		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
+	enddo
+	!ff.close()
+endmethod
+
+---------------------------------------
+-- create support template reference --
+---------------------------------------
+define method .SuptAnnotation(!name is string, !stext is string)
+	$!name/SS/LIBY_R$!this.rev
+	$!name/SS/LALB_R$!this.rev
+	handle any
+		new lalb $!name/SS/LALB_R$!this.rev
+	endhandle
+	!slen = !stext.length()
+	$!name/SS/LALB/NAME_SUPT$!slen_R$!this.rev
+	handle any
+		new sytm $!name/SS/LALB/NAME_SUPT$!slen_R$!this.rev
+		XYPS X 100mm Y 100mm
+		JUST Centre
+		ALIGN Hbody
+		FONT 1
+		CHEITX |$!this.annotext.val|
+		CSPATX '0'
+		LSPATX '0'
+		TXCOLO 1
+		NLSTYL Solid
+		NLCOLO 1
+		LLSTYL Solid
+		LLCOLO 1
+		FSTYLE Off
+		FCOLOUR 1
+		MCOLOUR 1
+		LZCOLO 1
+		LZLSTY Solid
+		LZVIS true
+		LZPRIN true
+		
+		!fptx = !slen * !this.annotext.val.real() * -0.33 + 100
+		!fpty = !this.annotext.val.real() * 0.6 + 100
+		!tpty = !this.annotext.val.real() * -0.6 + 100
+		!thptx = !slen * !this.annotext.val.real() * -0.33 - !this.annotext.val.real() * 0.5 + 100
+		
+		NEW ARC
+		FPT X $!fptx Y $!fpty 
+		TPT X $!fptx Y $!tpty 
+		THPT X $!thptx Y 100
+		
+		!fptx1 = !slen * !this.annotext.val.real() * 0.33 + 100
+		!fpty1 = !this.annotext.val.real() * -0.6 + 100
+		!tpty1 = !this.annotext.val.real() * 0.6 + 100
+		!thptx1 = !slen * !this.annotext.val.real() * 0.33 + !this.annotext.val.real() * 0.5 + 100
+		
+		NEW ARC
+		FPT X $!fptx1 Y $!fpty1
+		TPT X $!fptx1 Y $!tpty1 
+		THPT X $!thptx1 Y 100
+		
+		NEW STRA FPT X $!fptx Y $!fpty TPT X $!fptx1 Y $!tpty1
+		NEW STRA FPT X $!fptx Y $!tpty TPT X $!fptx1 Y $!fpty1
+		
+		NEW TEXTPRIMITIVE
+		Origin Offset X 0mm Y 0mm
+		FONT 1
+		CHEITX '1.5mm'
+		CSPATX '0'
+		LSPATX '0'
+		JUST Centre
+		ALIGN Hbody
+		BTEX |#STEX|
+		TXCOLO 5
+	endhandle
+	!this.supttmp = |$!name/SS/LALB/NAME_SUPT$!slen_R$!this.rev|
+endmethod

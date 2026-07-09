@@ -1,0 +1,43 @@
+--------------------------------------------------------------
+-- Function : Mark a specific string on a specific position --
+--          : for Event Driven Graphic                      --
+-- Auther   : tw tseng                                      --
+-- Date     : 2024.07.09                                    --
+---------------------------------------------------------------
+
+define function !!MarkText(!pos is position, !str1 is string)
+	!posw = !pos.wrt(WORL)
+	AID CLEAR ALL
+	if (!str1 eq 'Start Position') then
+	  !!DrawingPlan.fretext.val = !posw.east.string('D4')
+	  !!DrawingPlan.frntext.val = !posw.north.string('D4')
+	  !!DrawingPlan.frutext.val = !posw.up.string('D4')
+		!!DrawingPlan.tobt.active = true
+    !!DrawingPlan.pointSt = !posw
+		AID TEXT |Start Position| AT $!pos
+    if (!!DrawingPlan.pointEn.set()) then
+      if (!!DrawingPlan.fretext.val.real() eq !!DrawingPlan.toetext.val.real() or !!DrawingPlan.frntext.val.real() eq !!DrawingPlan.tontext.val.real() or !!DrawingPlan.frutext.val.real() eq !!DrawingPlan.toutext.val.real()) then
+        !!DrawingPlan.create.active = false
+        !!DrawingPlan.delete.active = false
+      else
+        !!DrawingPlan.create.active = true
+        !!DrawingPlan.delete.active = true
+      endif
+      AID TEXT |End Position| AT $!!DrawingPlan.pointEn
+    endif
+	else
+	  !!DrawingPlan.toetext.val = !posw.east.string('D4')
+	  !!DrawingPlan.tontext.val = !posw.north.string('D4')
+	  !!DrawingPlan.toutext.val = !posw.up.string('D4')
+		if (!!DrawingPlan.fretext.val.real() eq !!DrawingPlan.toetext.val.real() or !!DrawingPlan.frntext.val.real() eq !!DrawingPlan.tontext.val.real() or !!DrawingPlan.frutext.val.real() eq !!DrawingPlan.toutext.val.real()) then
+			!!DrawingPlan.create.active = false
+			!!DrawingPlan.delete.active = false
+		else
+			!!DrawingPlan.create.active = true
+			!!DrawingPlan.delete.active = true
+		endif
+    !!DrawingPlan.pointEn = !posw
+    AID TEXT |Start Position| AT $!!DrawingPlan.pointSt
+    AID TEXT |End Position| AT $!pos
+	endif
+endfunction

@@ -1,0 +1,204 @@
+--------------------------------
+-- Function : Grid Annotation --
+-- Auther   : tw tseng        --
+-- Date     : 2025/01/08      --
+--------------------------------
+define function !!DrawingPlan1GridAnnotation(!name is string)
+	NEW LAYE $!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
+	Purpose GRIDA
+	Lvisibility true
+	Font 1
+	Justification Left
+	Alignment Template
+	Tsiztx '5mm'
+	Chostx '6mm'
+	Asubtended 0degree
+	Pjustification Towards 
+	Oshttx '2mm'
+	Plcltx '0mm'
+	Doffset 25mm
+	Dmsptx '0mm'
+	Lleader true
+	Lframe true
+	Lshape Straight
+	Gboxtx '1mm'
+	Llcltx '0mm'
+	Xyscale 1 1
+	Xyposition 25mm 25mm 
+	Blnk false
+	Bmargin 0mm
+	Trsf Nulref
+	Txcolour Yellow 
+	NLStyle Solid 
+	NLColour Cyan 
+	FStyle Off 
+	FColour Grey 
+	LLStyle Chained 
+	LLColour Cyan 
+	LFStyle Solid 
+	LFColour Cyan 
+	DLStyle Solid 
+	DLColour Cyan 
+	PLStyle Solid 
+	PLColour Cyan 
+	MColour Cyan 
+	CHStyle Off 
+	CHColour Grey
+  Cheitx '4.00mm'
+	
+	----------------------------------------------
+	-- calculate view four corners coordination --
+	----------------------------------------------
+	$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+--	var !shxypos shxypos
+--	var !size size
+	
+  -------------------------------------
+  -- collect grids from drawing list --
+	-- never from a specific volume    --
+	-- it may miss some grids          --
+	-------------------------------------
+  
+	!gridels = object array()
+  
+	!temps = object array()
+	var !addes coll all adde for $!name/SS/DRAWLIST/DRWG_R$!!DrawingPlan1.rev
+	do !adde values !addes
+	  var !type type of idna of $!adde
+		if (!type.eq('REFGRD')) then
+		  var !idna idna of $!adde
+		  var !temps coll all gridel for $!idna
+ 			do !temp values !temps
+			  !gridels.append(!temp)
+			enddo
+ 		endif
+	enddo
+	
+	$!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
+	do !gridel values !gridels
+	  var !gridpls coll all gridpl for $!gridel
+		var !refglns coll all refgln for $!gridpls[1]
+		do !refgln values !refglns
+		  var !p1pos p1 pos of $!refgln wrt worl
+		  var !p2pos p2 pos of $!refgln wrt worl
+		  var !p2dir p2 dir of $!refgln wrt worl
+      
+      !p1posenu = object position(!p1pos)
+      !p1posenu.up = 0
+      !p2posenu = object position(!p2pos)
+      !p2posenu.up = 0      
+      !p12line = object line(!p1posenu, !p2posenu)
+      
+      var !p1possh shpos of $!p1posenu
+      var !p2possh shpos of $!p2posenu
+      !p12linesh = object line(!p1possh.position(), !p2possh.position())
+			!p1dirsh = !p1possh.position().direction(!p2possh.position())
+			
+			$p $!p1dirsh
+
+			$!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
+			--------------------------------------------------------------------------
+			-- check if grids are in view volume                                    --
+			-- step 1. find out intersction points between view frame and grid line --
+			--         ignore grids that less than two intersection points          --
+			-- step 2. check intersection point is on bounded grid line             --
+			-- step 3. there are three conditions for grid lines                    --
+			--------------------------------------------------------------------------
+			if (!!DrawingPlan1.viewUlinesh.intersection(!p12linesh).east.geq(!!DrawingPlan1.viewLLsh.position().east.value()) and !!DrawingPlan1.viewUlinesh.intersection(!p12linesh).east.leq(!!DrawingPlan1.viewLRsh.position().east.value())) then
+				!!DrawingPlan1.intersections.append('viewUlinesh-' & !!DrawingPlan1.viewUlinesh.intersection(!p12linesh).string())
+			endif
+			handle any
+			  -- for parellel condition --
+			endhandle
+			if (!!DrawingPlan1.viewDlinesh.intersection(!p12linesh).east.geq(!!DrawingPlan1.viewLLsh.position().east.value()) and !!DrawingPlan1.viewDlinesh.intersection(!p12linesh).east.leq(!!DrawingPlan1.viewLRsh.position().east.value())) then
+				!!DrawingPlan1.intersections.append('viewDlinesh-' & !!DrawingPlan1.viewDlinesh.intersection(!p12linesh).string())
+			endif
+			handle any
+			  -- for parellel condition --
+			endhandle
+      if (!!DrawingPlan1.viewLlinesh.intersection(!p12linesh).north.geq(!!DrawingPlan1.viewLLsh.position().north.value()) and !!DrawingPlan1.viewLlinesh.intersection(!p12linesh).north.leq(!!DrawingPlan1.viewULsh.position().north.value())) then
+				!!DrawingPlan1.intersections.append('viewLlinesh-' & !!DrawingPlan1.viewLlinesh.intersection(!p12linesh).string())
+      endif
+			handle any
+			  -- for parellel condition --
+			endhandle
+      if (!!DrawingPlan1.viewRlinesh.intersection(!p12linesh).north.geq(!!DrawingPlan1.viewLLsh.position().north.value()) and !!DrawingPlan1.viewRlinesh.intersection(!p12linesh).north.leq(!!DrawingPlan1.viewULsh.position().north.value())) then
+				!!DrawingPlan1.intersections.append('viewRlinesh-' & !!DrawingPlan1.viewRlinesh.intersection(!p12linesh).string())
+      endif
+			handle any
+			  -- for parellel condition --
+			endhandle
+			
+			!!DrawingPlan1.intersections.unique()
+			
+			!total = 0
+			if (!!DrawingPlan1.intersections.size().geq(2)) then
+				if (!p12linesh.on(!!DrawingPlan1.intersections.getindexed(1).split('-').getindexed(2).position(), true)) then
+				  !total = !total + 1
+				endif
+				if (!p12linesh.on(!!DrawingPlan1.intersections.getindexed(2).split('-').getindexed(2).position(), true)) then
+				  !total = !total + 1
+				endif
+			endif
+			
+			!framedir = object direction()
+			!griddir = object direction()
+			!nppt = 0
+			-----------------------------------------------------------
+			-- !total = 2 which means the grid is inside view limits --
+			-- there are two intersection points with view frame     --
+			-----------------------------------------------------------
+			if (!total.eq(2)) then
+				do !i from 1 to !!DrawingPlan1.intersections.size()
+				  !!DrawingPlan1.CreateGridSymbolwithIntersection(!i, !p12linesh, !p1possh, !p2possh, !refgln)
+				enddo
+			endif
+			
+			-----------------------------------------------------------
+			-- !total = 1 which means the grid is inside view limits --
+			-- there is one intersection point between view frame    --
+			-- and one of end point of grid is inside view limits    --
+			-----------------------------------------------------------
+			if (!total.eq(1)) then
+				if (!p12linesh.on(!!DrawingPlan1.intersections.getindexed(1).split('-').getindexed(2).position(), true)) then
+				  !i = 1
+					!ii = 2
+				else
+				  !i = 2
+					!ii = 1
+				endif
+				!!DrawingPlan1.CreateGridSymbolwithIntersection(!i, !p12linesh, !p1possh, !p2possh, !refgln)
+				
+				-------------------------------------------------
+				-- check which end point is inside view limits --
+				-------------------------------------------------
+				if (!p1possh.position().east.gt(!!DrawingPlan1.viewULsh.position().east) and !p1possh.position().east.lt(!!DrawingPlan1.viewURsh.position().east) and !p1possh.position().north.gt(!!DrawingPlan1.viewLLsh.position().north) and !p1possh.position().north.lt(!!DrawingPlan1.viewULsh.position().north)) then
+					!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p1possh, !p2possh, !refgln, 1)
+				else
+					!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p2possh, !p1possh, !refgln, 2)
+				endif
+			endif
+			
+			----------------------------------------------------------------------------------
+			-- !total = 0 which means the entire grid line is inside or outside view limits --
+			-- therefore check if both end points are inside view limits                    --
+			----------------------------------------------------------------------------------
+			if (!total.eq(0)) then
+				if (!p1possh.position().east.gt(!!DrawingPlan1.viewULsh.position().east) and !p1possh.position().east.lt(!!DrawingPlan1.viewURsh.position().east) and !p1possh.position().north.gt(!!DrawingPlan1.viewLLsh.position().north) and !p1possh.position().north.lt(!!DrawingPlan1.viewULsh.position().north)) then
+					if (!p1possh.position().distance(!!DrawingPlan1.intersections.getindexed(1).split('-').getindexed(2).position()).lt(!p2possh.position().distance(!!DrawingPlan1.intersections.getindexed(1).split('-').getindexed(2).position()))) then
+						!!DrawingPlan1.CreateGridSymbol(1, !p12linesh, !p1possh, !p2possh, !refgln, 1)
+						!!DrawingPlan1.CreateGridSymbol(2, !p12linesh, !p2possh, !p1possh, !refgln, 2)
+					else
+						!!DrawingPlan1.CreateGridSymbol(2, !p12linesh, !p1possh, !p2possh, !refgln, 1)
+						!!DrawingPlan1.CreateGridSymbol(1, !p12linesh, !p2possh, !p1possh, !refgln, 2)
+					endif
+				endif
+			endif
+$(			
+			do !a value !!DrawingPlan1.intersections
+			  $p $!a
+			enddo
+$)			
+		enddo
+	enddo
+endfunction

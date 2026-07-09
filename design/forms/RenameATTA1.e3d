@@ -1,0 +1,296 @@
+!MacroFolderLocation = 'C:\Users\egg\Desktop' $* custom path name
+$(
+$m C:\Users\egg\Desktop\RenameATTA1.e3d
+/0150CB01_WCH_0025_C_200420
+lineno and atta name is different 
+/0010CB06_COG_2000_N_061608
+simple pipe
+/0150CB01_CG_0080_N_200535
+/0150CB01_CG_0080_N_200258
+$)
+import 'GridControl'
+handle any
+endhandle
+Import 'pmlfilebrowser'
+handle any
+endhandle
+kill !!RenameATTA1
+setup form !!RenameATTA1 resize
+	container .netFrame pmlNetControl 'NET' dock fill height 10 width 70
+	button .apply 'Apply' at x40 ymin anchor r+t call '$M $!MacroFolderLocation\RenameATTA2.e3d'
+  member .columnHeadings    is ARRAY
+  member .attributeTable    is ARRAY
+  member .file              is STRING
+  using namespace 'Aveva.Core.Presentation' $*
+  member .dbCtrl is NETGRIDCONTROL
+  member .rows is array
+  member .columns is array
+  member .folderLocation is String
+  !this.folderLocation = !MacroFolderLocation
+exit
+show !!RenameATTA1
+using namespace 'Aveva.Pdms.Presentation'
+!!RenameATTA1.dbCtrl = object NETGRIDCONTROL()
+!!RenameATTA1.netFrame.control = !!RenameATTA1.dbCtrl.handle()
+!title = 'Attributes'
+!Heading[1] = 'Type'
+!Heading[2] = 'Old Name'
+!Heading[3] = 'New Name'
+!Heading[4] = 'New Name Status'
+PIPE
+handle any
+  !!alert.error('Please select PIPE !')
+  !!RenameATTA1.apply.active = false
+elsehandle none
+  !!dbNames.delete()
+  handle any
+  endhandle
+  var !pname name
+  if (!pname.split('_').size() ge 5) then
+    !!dbNames[1][1] = ''
+    !!dbNames[1][2] = ''
+    !!dbNames[1][3] = ''
+    !!dbNames[1][4] = ''
+    var !brannum mem bran count
+    !dbi = 1
+    !serial = 1
+    !prevname = ''
+    -- determine button of 'apply' is enable -- 
+    !chkduplicateall = false
+    do !i to $!brannum
+      bran $!i
+      var !mcount mcount
+      
+      ----------
+      -- atta --
+      ----------
+      do !j to $!mcount
+        if (!j eq 1) then
+          1
+          handle any
+            break
+          endhandle
+        else
+          next
+          handle any
+            break
+          endhandle
+        endif
+        var !type type
+        if (!type eq 'ATTA' and isnamed) then
+          var !oldname name          
+          ------------------------------
+          -- define new name for atta --
+          ------------------------------
+          if (!oldname.split('_').size() ge 6) then
+            if (!prevname eq '') then
+              -- do nothing --
+            elseif (!prevname.split('_').getindexed(6).substring(1,3) eq !oldname.split('_').getindexed(6).substring(1,3)) then
+              -- do nothing --
+            else
+              !serial = !serial + 1
+            endif            
+            if (!serial le 9) then
+              !serialno = '00' & !serial.string()
+            elseif (!serial le 99) then
+              !serialno = '0' & !serial.string()
+            else
+              !serialno = !serial.string()
+            endif
+            if (!oldname.split('_').size() eq 6) then
+              -- general support --
+              !newname = !pname & '_' & !serialno & !oldname.split('_').getindexed(6).substring(4)
+            else
+              -- special support --
+              !newname = !pname & '_' & !serialno & !oldname.split('_').getindexed(6).substring(4) & '_' & !oldname.split('_').getindexed(7)
+            endif
+            
+            ---------------------------
+            -- check duplicated atta --
+            ---------------------------
+            !chkduplicateitem = 'Ok'
+            var !chkno coll all atta with name eq |$!newname|
+            if (!chkno.size() eq 0) then
+              -- no duplicate atta --
+            elseif (!chkno.size() eq 1) then
+              var !chkpipe name of pipe of $!newname
+              if (!chkpipe eq !pname) then
+                -- no duplicate atta --
+              else
+                -- a duplicate atta in other pipe
+                !chkduplicateitem = 'Error'
+                !chkduplicateall = true
+              endif
+            else
+              !chkduplicateitem = 'Error'
+              !chkduplicateall = true
+            endif
+            !!dbNames[$!dbi][1] = !type
+            !!dbNames[$!dbi][2] = !oldname
+            !!dbNames[$!dbi][3] = !newname
+            !!dbNames[$!dbi][4] = !chkduplicateitem 
+            !dbi = !dbi + 1
+            !prevname = !oldname
+          endif
+        endif
+      enddo
+    enddo
+    
+    !attai = !dbi - 1
+    ----------
+    -- rest --
+    ----------    
+    do !i to !attai
+      $!!dbNames[$!i][2]/RE
+      handle any
+      elsehandle none
+        var !type type
+        var !oldname name 
+        !newname = !!dbNames[$!i][3] & '/RE'
+        !chkduplicateitem = 'Ok'
+        var !chkno coll all rest with name eq |$!newname|
+        if (!chkno.size() ge 2) then
+          -- duplicate rest
+          !chkduplicateitem = 'Error'
+          !chkduplicateall = true
+        endif
+        !!dbNames[$!dbi][1] = !type
+        !!dbNames[$!dbi][2] = !oldname
+        !!dbNames[$!dbi][3] = !newname
+        !!dbNames[$!dbi][4] = !chkduplicateitem 
+        !dbi = !dbi + 1
+        
+        var !mcount mcount
+        do !j to $!mcount
+          if (!j eq 1) then
+            1
+            handle any
+              break
+            endhandle
+          else
+            next
+            handle any
+              break
+            endhandle
+          endif
+          var !type type
+          if (!type eq 'HANG') then
+            var !oldname name 
+            !newname = !!dbNames[$!i][3] & '/H' & !j
+            !chkduplicateitem = 'Ok'
+            var !chkno coll all hang with name eq |$!newname|
+            if (!chkno.size() ge 2) then
+              -- duplicate hang
+              !chkduplicateitem = 'Error'
+              !chkduplicateall = true
+            endif
+            !!dbNames[$!dbi][1] = !type
+            !!dbNames[$!dbi][2] = !oldname
+            !!dbNames[$!dbi][3] = !newname
+            !!dbNames[$!dbi][4] = !chkduplicateitem 
+            !dbi = !dbi + 1
+          endif
+        enddo
+      endhandle
+    enddo
+    
+    ----------
+    -- stru --
+    ----------    
+    do !i to !attai
+      $!!dbNames[$!i][2]/S
+      handle any
+      elsehandle none
+        var !type type
+        var !oldname name 
+        !newname = !!dbNames[$!i][3] & '/S'
+        !chkduplicateitem = 'Ok'
+        var !chkno coll all stru with name eq |$!newname|
+        if (!chkno.size() ge 2) then
+          -- duplicate stru
+          !chkduplicateitem = 'Error'
+          !chkduplicateall = true
+        endif
+        !!dbNames[$!dbi][1] = !type
+        !!dbNames[$!dbi][2] = !oldname
+        !!dbNames[$!dbi][3] = !newname
+        !!dbNames[$!dbi][4] = !chkduplicateitem 
+        !dbi = !dbi + 1
+        
+        var !mcount mcount
+        do !j to $!mcount
+          $!j
+          var !type type
+          if (!type eq 'FRMW') then
+            var !oldname name
+            if (!mcount.real() eq 1) then
+              !newname = !!dbNames[$!i][3] & '/FRMW'
+            else
+              !newname = !!dbNames[$!i][3] & '/FRMW' & !j
+            endif
+            !chkduplicateitem = 'Ok'
+            var !chkno coll all frmw with name eq |$!newname|
+            if (!chkno.size() ge 2) then
+              -- duplicate frmw
+              !chkduplicateitem = 'Error'
+              !chkduplicateall = true
+            endif
+            !!dbNames[$!dbi][1] = !type
+            !!dbNames[$!dbi][2] = !oldname
+            !!dbNames[$!dbi][3] = !newname
+            !!dbNames[$!dbi][4] = !chkduplicateitem 
+            !dbi = !dbi + 1
+            !frmw = ce
+            
+            
+            var !mcountk mcount
+            do !k to $!mcountk
+              var !type type
+                            $p $!type
+              if (!type eq 'SBFR') then
+                var !oldname name
+                            $p $!oldname
+
+                !newname = !!dbNames[$!i][3] & '/SBFR' & !k
+                !chkduplicateitem = 'Ok'
+                var !chkno coll all sbfr with name eq |$!newname|
+                if (!chkno.size() ge 2) then
+                  -- duplicate sbfr
+                  !chkduplicateitem = 'Error'
+                  !chkduplicateall = true
+                endif
+                !!dbNames[$!dbi][1] = !type
+                !!dbNames[$!dbi][2] = !oldname
+                !!dbNames[$!dbi][3] = !newname
+                !!dbNames[$!dbi][4] = !chkduplicateitem 
+                !dbi = !dbi + 1
+              endif
+              $!frmw
+            enddo
+          endif
+        enddo
+      endhandle
+    enddo
+
+    
+    using namespace 'Aveva.Core.Presentation'
+    !nds = object NETDATASOURCE(!title, !Heading, !!dbNames)
+    !!RenameATTA1.dbCtrl.bindToDataSource(!nds)
+    !!RenameATTA1.dbCtrl.columnExcelFilter(true)
+    !!RenameATTA1.dbCtrl.outlookGroupStyle(false)
+    !!RenameATTA1.dbCtrl.fixedHeaders(true)
+    !!RenameATTA1.dbCtrl.fixedRows(true)
+    !!RenameATTA1.dbCtrl.outlookGroupStyle(true)
+    !!RenameATTA1.dbCtrl.gridHeight(1000.0)
+
+    if (!chkduplicateall) then
+      !!RenameATTA1.apply.active = false
+    else
+      !!RenameATTA1.apply.active = true
+    endif
+    $!pname
+  else
+    !!alert.error('Line No. error !')
+  endif
+  
+endhandle

@@ -1,0 +1,26 @@
+define function !!TDSCtrlC( !command is string )
+
+IMPORT 'D:\Documents\Macro\TDSCtrlC\tdsObjects'
+handle ANY
+-- Importing the same dll 2 times will cause error
+$P 
+endhandle 
+
+using namespace 'TDSOBJECTS'
+
+!t = object TDSCLIPBOARD()
+handle ANY 
+	--Just in case the error is not due to importing dll again
+	--But other error 
+	return 
+endhandle 
+--Use old style assignment to assign output of the command pass to it to a string 
+var !strC $!command 
+handle ANY 
+$P $!command not valid for the element 
+return 
+endhandle 
+
+!t.CopyToClipboard( !strC )
+
+endfunction 

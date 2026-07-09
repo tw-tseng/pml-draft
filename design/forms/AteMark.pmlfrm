@@ -1,0 +1,131 @@
+-------------------------------------------
+-- Copyright ATOMTECH Ltd 2024           --
+--                                       --
+-- Function : Mark function              --
+-- Author   : IT department of ATOMTECH  --
+-- Date     : 2024/08/14                 --
+-------------------------------------------
+
+setup form !!AteMark 
+title 'Mark Tools'
+  path down
+	list .attr 'Attribute' width 25 height 15
+	list .object  'Object ' at xmax.attr +2 ymin.attr width 25 height 15
+	text .attr1   'Attribute Syntax'       at xmin.attr ymax.object+.2 width 40 is string
+	text .object1 ' Object Syntax  '       at xmin.attr1 ymax.attr1+.2 width 40 is string
+	frame .frame1           at xmin.attr ymax.object1+.2
+    paragraph .para text 'Syntax' width 55
+	exit
+  button .Apply  'Apply'      at xmin.attr+2 ymax.frame1+.5 call '!This.Apply()'
+  button .Clear  'Unmark All' at xmax.Apply+2 ymax.frame1+.5 call '!This.Unmark()'
+  button .Close  'Close'      at xmax.Clear+2 ymax.frame1+.5 call '!This.Close()'
+exit
+
+define method .attrclick()
+	if (|$!this.attr| eq 'NAME' or |$!this.attr| eq 'NAMN' or |$!this.attr| eq 'STEXT' or |$!this.attr| eq 'MTOC') then
+	  !str = '(' + |$!this.attr| + ')'
+	elseif (|$!this.attr| eq 'POS U') then
+	  !str = |('EL.' + (STR(WORPOS[3])))|
+	elseif (|$!this.attr| eq 'BOP U') then
+	  !str = |('BOP EL.' + (STR(WORPOS[3] - AOD * 0.5)))|
+	elseif (|$!this.attr| eq 'DESP') then	
+		!str = |(IFT(NOT(UNSET(DESP)), STR(DESP[1]) ,'--'))|
+	else
+	  !str = '(STR(' + |$!this.attr| + '))'
+	endif	
+  !this.attr1.val = !str
+	!This.textclick()
+endmethod
+
+define method .objectclick()
+	if (|$!this.object| eq 'ALL BRAN MEM') then
+	  !this.object1.val = |ALL BRAN MEM WITH TYPE NEQ 'BRAN' AND TYPE NEQ 'TUBI'|
+	else
+	  !this.object1.val = |$!this.object|
+	endif
+
+	!This.textclick()
+endmethod
+
+define method .textclick()
+	!this.para.val = 'MARK WITH ' + |$!this.attr1.val| + ' ' + |$!this.object1.val|
+	if (|$!this.attr1.val| eq '' or |$!this.object1.val| eq '') then
+	  !this.Apply.active = false
+	else
+	  !this.Apply.active = true
+	endif
+endmethod
+
+define method .AteMark()
+  !attrList[1] = 'ANGLE' 
+  !attrList[2] = 'BOP U'
+  !attrList[3] = 'CREF' 
+  !attrList[4] = 'DESP' 
+  !attrList[5] = 'INTH' 
+  !attrList[6] = 'ISPE' 
+  !attrList[7] = 'LSTU' 
+  !attrList[8] = 'MTOC' 
+  !attrList[9] = 'NAME' 
+  !attrList[10] = 'NAMN' 
+  !attrList[11] = 'POS' 
+  !attrList[12] = 'POS U' 
+  !attrList[13] = 'SPREF' 
+  !attrList[14] = 'STEXT' 
+	!this.attr.dtext = !attrList
+	
+	!objectList[1] = 'ALL BEND' 
+  !objectList[2] = 'ALL ATTA' 
+  !objectList[3] = 'ALL BRAN' 
+  !objectList[4] = 'ALL BRAN MEM' 
+  !objectList[5] = 'ALL CAP' 
+  !objectList[6] = 'ALL CLOS' 
+  !objectList[7] = 'ALL COUP' 
+  !objectList[8] = 'ALL CROS' 
+  !objectList[9] = 'ALL ELBO' 
+  !objectList[10] = 'ALL FBLI' 
+  !objectList[11] = 'ALL FILT' 
+  !objectList[12] = 'ALL FLAN' 
+  !objectList[13] = 'ALL FTUB' 
+  !objectList[14] = 'ALL INST' 
+  !objectList[15] = 'ALL OLET' 
+  !objectList[16] = 'ALL PCOM' 
+  !objectList[17] = 'ALL REDU' 
+  !objectList[18] = 'ALL TEE' 
+  !objectList[19] = 'ALL TRAP' 
+  !objectList[20] = 'ALL UNIO' 
+  !objectList[21] = 'ALL VALV' 
+  !objectList[22] = 'ALL WELD' 
+  !objectList[23] = 'ALL EQUI' 
+  !objectList[24] = 'ALL NOZZ' 
+  !objectList[25] = 'ALL GENSEC' 
+  !objectList[26] = 'ID@' 
+	!this.object.dtext = !objectList
+	
+	!this.attr.callback          = |!This.attrclick()|
+	!this.object.callback        = |!This.objectclick()|
+	!this.attr1.callback         = |!This.textclick()|
+	!this.object1.callback       = |!This.textclick()|
+	
+	!this.attr.select('Dtext','NAMN')
+	!this.object.select('Dtext','ALL BRAN')
+	!This.attrclick()
+	!This.objectclick()
+	!This.textclick()
+	
+endmethod
+
+define method .Apply()
+	$P $!this.para.val
+  $!this.para.val
+	handle any
+	elsehandle none
+	endhandle
+endmethod
+
+define method .Unmark()
+  UNMARK ALL
+endmethod
+
+define method .Close()
+   kill !!AteMark
+endmethod

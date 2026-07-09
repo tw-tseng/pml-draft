@@ -1,0 +1,159 @@
+$(
+
+$)
+!FolderLoc = !!BoltsReport.folderLocation
+!BoltstempLoc = '$!FolderLoc\_temp'
+!BOLTFILELocName = '$!BoltstempLoc\BOLTFILE_'
+var !timdate clock
+var !sp split|$!timdate|
+var !modelname '$!sp[1]-$!sp[2]-$!sp[3]'
+!date = !modelname
+
+ISODRAFTMODE
+handle any
+EXIT
+endhandle
+syscom |mkdir $!BoltstempLoc & del $!BoltstempLoc\*.* /Y|
+
+!selection = !!ce
+var !type type
+if (!type.eq('WORL')) then
+  !CeNamn = 'WORL'
+  var !pipes collect all pipe with type eq 'PIPE'
+else
+  !CeNamn = !!ce.namn
+	var !pipes collect all pipe with type eq 'PIPE' for $!selection
+endif
+
+!pipsiz = !pipes.size()
+
+!fileObj = object file('$!BoltstempLoc')
+!fileList = !fileObj.files()
+!total = !fileList.size()
+
+if ($!total gt 0) then
+	do !a values !filelist
+		!a.deletefile()
+	enddo
+endif
+
+do !a from 1 to $!pipsiz
+  MESS /$!FolderLoc\mess over
+  BOLTFILE /$!BOLTFILELocName$!a OVER
+  BOLTREPORT $!pipes[$!a]
+enddo
+
+EXIT
+
+!file = object file('$!FolderLoc\summary.txt')
+handle any
+	return error 1 'Please restart PDMS Design because program can not access bolt file'
+endhandle
+!filedir = object file('$!BoltstempLoc')
+!dirfiles = !filedir.files()
+!filecount = !dirfiles.size()
+!newfilarr = array()
+do !a from 1 to $!filecount
+	!filenamn = !dirfiles[$!a].string()
+	!reqfile = object file('$!filenamn')
+	!reqlinearr = !reqfile.readfile(100000)
+	!reqlinarrsiz = !reqlinearr.size()
+	do !c from 1 to $!reqlinarrsiz
+		if (matchwild('$!reqlinearr[$!c]','*PIPELINE*')) then
+			!lineno = !reqlinearr[$!c].split(' ').last()
+			var !site name of site of /$!lineno
+			handle any
+			  !site = 'XXX'
+			endhandle
+			var !zone name of zone of /$!lineno
+			handle any
+			  !zone = 'XXX'
+			endhandle
+		endif
+	enddo
+	do !b from 1 to $!reqlinarrsiz
+		!linesize = !reqlinearr[$!b].split('	').size()
+		!rowsiz = !reqlinearr[$!b].empty()
+		if (matchwild('$!reqlinearr[$!b]','*Page*') or matchwild('$!reqlinearr[$!b]','*Bltrefs*') OR matchwild('$!reqlinearr[$!b]','*branch*') OR matchwild('$!reqlinearr[$!b]','*found*') or (!linesize eq 0) or !rowsiz or matchwild('$!reqlinearr[$!b]','*PIPING SPEC*') or matchwild('$!reqlinearr[$!b]','*BATCH REF*') or matchwild('$!reqlinearr[$!b]','*N.S*') OR matchwild('$!reqlinearr[$!b]','*BOLT DESCRIPTION*') or matchwild('$!reqlinearr[$!b]','*---*') or matchwild('$!reqlinearr[$!b]','*BRANCH*') or matchwild('$!reqlinearr[$!b]','*PIPELINE*') or matchwild('$!reqlinearr[$!b]','*non-standard*') or matchwild('$!reqlinearr[$!b]','*QTY')) then
+			skip
+		else
+
+			!rows = '$!site      $!zone      $!lineno      $!reqlinearr[$!b]'
+			!newfilarr.append(!rows)
+		endif
+	enddo
+enddo
+!file.writefile('OVERWRITE',!newfilarr)
+!file.close()
+!newfile = object file('$!FolderLoc\summary.txt')
+
+if (!newfile.exists()) then
+
+else
+   !!alert.message('No Output created')
+   return
+endif
+
+!newbltrep = object file('$!FolderLoc\NEWBOLTREPFILE.TXT')
+!newbltreplin = array()
+!ExportData =  array()
+!lin = !newfile.readfile(100000)
+
+!headdata = 'SITE;ZONE;LINE;DESCRIPTIONS;BOLT SIZE;BOLT LENGTH;COMMODITY;QTY FAB;QTY EREC;MARK'
+!Headings = !headdata.split(';')
+!!BoltsReport.columns = !Headings
+
+do !a from 1 to !lin.size()
+  
+	!newdata[$!a] = !lin[$!a].replace(' ','^').replace('^^^^^^^^^^','>').replace('^^^^^^^^^','>').replace('^^^^^^^^','>').replace('^^^^^^^','>').replace('^^^^^^','>').replace('^^^^^','>').replace('^^^^','>').replace('^^^','>').replace('^^','>').replace('>>>>',';').replace('>>>',';').replace('>>',';').replace('>',';').replace('^',' ').split(';')
+enddo
+
+!f = 1
+!check = !newdata.size()
+handle (2,751)  
+return error 1 'No Bolts '
+endhandle
+!u = 1
+!resultData =  array()
+
+!flag =  true
+do !b from 1 to !newdata.size() by 1
+		!bnsa = !newdata[$!b].size()
+		if (!bnsa GT 4) then
+			!resultData[$!u] = !newdata[$!b]
+			!flagAdd = !u
+			!u = !u + 1
+		else
+			!resultData[$!flagAdd][4] = '$!resultData[$!flagAdd][4]$!newdata[$!b][4]'
+		endif
+enddo
+
+do !dataExp values !resultData
+--	!lnno = !dataExp[3]
+--	if (!dataExp[4].split(' ').size() eq 1) then
+--		!dataExp[4] = 'NO DESCRIPTION'
+--	else
+--		!conv = !dataExp[4]
+--		!dataExp[4] = AFTER('$!conv',' ')
+--	endif
+	!ExportData[$!f] = !dataExp
+	!f = !f + 1
+enddo
+
+!!BoltsReport.rows = !ExportData
+
+!title = 'Attributes'
+using namespace 'Aveva.Core.Presentation' $*
+!nds = object NETDATASOURCE(!title, !Headings, !ExportData)
+!!BoltsReport.dbCtrl.bindToDataSource(!nds)
+
+!!BoltsReport.dbCtrl.columnExcelFilter(true)
+!!BoltsReport.dbCtrl.outlookGroupStyle(false)
+!!BoltsReport.dbCtrl.fixedHeaders(true)
+!!BoltsReport.dbCtrl.fixedRows(true)
+!!BoltsReport.dbCtrl.outlookGroupStyle(true)
+!!BoltsReport.dbCtrl.gridHeight(1000.0)
+
+!!BoltsReport.generate.active = true
+!!BoltsReport.outputFrame.tag = 'Report for $!CeNamn'
+

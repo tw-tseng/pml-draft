@@ -1,0 +1,43 @@
+----------------------------
+-- main program of rename --
+----------------------------
+if (!!dbNames[1][1] neq '') then
+  var !lock lock of $!!dbNames[1][2]
+  if (!lock eq 'true') then
+    $!!dbNames[1][2]
+    pipe
+    unlock all ce
+  endif
+  
+  ------------------------------------------
+  -- rename all old names to suffix -temp --
+  ------------------------------------------
+  do !i to !!dbNames.size()
+    $!!dbNames[$!i][2]
+    if (!!dbNames[$!i][2].substring(1,1) eq '/') then
+      name $!!dbNames[$!i][2]-temp
+    else
+      name /$!!dbNames[$!i][2]-temp
+    endif
+    
+  enddo
+  
+  -------------------------
+  -- rename to new names --
+  -------------------------
+  do !i to !!dbNames.size()
+    if (!!dbNames[$!i][2].substring(1,1) eq '/') then
+      $!!dbNames[$!i][2]-temp
+    else
+      /$!!dbNames[$!i][2]-temp
+    endif
+    name $!!dbNames[$!i][3]
+  enddo
+  !!RenameATTA1.apply.active = false
+  
+  if (!lock eq 'true') then
+    $!!dbNames[1][3]
+    pipe
+    lock all ce
+  endif
+endif

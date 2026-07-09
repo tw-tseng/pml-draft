@@ -1,0 +1,129 @@
+---------------------------------------------------
+-- Function : Import ATTA to ATE for CSC project --
+-- Date     : 2021/11/13                         --
+-- Author   : tw tseng                           --
+---------------------------------------------------
+
+define function !!ImportATTAtoATE()
+  var !project PROJECT CODE
+--  if (!project eq 'DAC') then
+	  !file = 'C:\TEMP\DAC_ATTA.TXT'
+		!efile = 'C:\TEMP\ATTA-ALL-ERROR.TXT'
+--  else
+--	  !file = 'D:\Projects\BatchExportNWD\BAA\BAA_ATTA.TXT'
+--		!efile = 'D:\Projects\BatchExportNWD\BAA\BAA_ATTA_error.TXT'
+--  endif
+	!ff = object file(!file)
+	!ff.open('READ')
+	!eff = object file(!efile)
+	!eff.open('OVERWRITE')
+	
+	!attas =!ff.readfile()
+	do !i From 1 to !attas.size()
+	  !line = !attas[!i]
+		if (!line.length() gt 100) then
+		endif
+		!eleName  = !line.split(';')[1]
+		!eleSPREF = !line.split(';')[2]
+		!eleLstu  = !line.split(';')[3]
+		!eleCref  = !line.split(';')[4]
+		!eleChuPos= !line.split(';')[5]
+		!eleStex  = !line.split(';')[6]
+		!elePrev  = !line.split(';')[7]
+		
+		$!eleName
+		handle any
+		  ----------------
+		  -- a new atta --
+			----------------
+		  $!elePrev
+		  handle any
+		    !eff.writerecord(!eleName & ' prev object ' & !elePrev & ' is not found!')
+		  elsehandle none
+		    NEW ATTA NAME $!eleName SPREF $!eleSPREF LSTU $!eleLstu STEXT |$!eleStex| SPKB TRUE
+				var !preType TYPE of $!elePrev
+				if (!preType eq 'ATTA') then
+					$!elePrev
+					SPKB TRUE
+					$!eleName
+				endif
+				CONN
+        handle any
+          !eff.writerecord('Error - ' & !eleName & ' conn is error!')
+        elsehandle none
+          !AtePos = POS
+          !ChuPos = Object Position(!eleChuPos)
+          -- check if the same position
+          !dis = !AtePos.distance(!ChuPos)
+          if (!dis gt 0.5) then
+            if (!preType eq 'BRAN') then
+              POS PA DIST $!dis FROM PH
+            else
+              POS PA DIST $!dis FROM PL OF PREV
+            endif
+          endif
+          CREF $!eleCref
+          handle any
+ --           !eff.writerecord('Error - ' & !eleName & ' cref ' & !eleCref & ' is not found!')
+          endhandle
+          
+          !AtePos = POS
+          !dis = !AtePos.distance(!ChuPos)
+          if (!dis gt 0.5) then
+            !eff.writerecord('Error - ' & !eleName & ' position error!')
+          else
+            !eff.writerecord('NEW - ' & !eleName)
+          endif
+        endhandle
+		  endhandle
+		elsehandle none
+		  ---------------------
+		  -- a existing atta --
+			---------------------
+			STEXT |$!eleStex|
+			
+			!AtePos = POS
+			!ChuPos = Object Position(!eleChuPos)
+			-- check if the same position
+			!dis = !AtePos.distance(!ChuPos)
+			if (!dis gt 0.5) then
+				var !preType TYPE of $!elePrev
+        handle any
+          !eff.writerecord(!eleName & ' prev object ' & !elePrev & ' is not found!')
+        elsehandle none
+          if (!preType eq 'BRAN') then
+            CONN
+            !AtePos = POS
+            !dis = !AtePos.distance(!ChuPos)
+            POS PA DIST $!dis FROM PH
+          else
+            if (!preType eq 'ATTA') then
+              $!elePrev
+              SPKB TRUE
+              $!eleName
+            endif
+            CONN
+            !AtePos = POS
+            !dis = !AtePos.distance(!ChuPos)
+            POS PA DIST $!dis FROM PL OF PREV
+          endif
+          !eff.writerecord('MODIFY POS- ' & !eleName)
+        endhandle
+			endif
+			
+			CREF $!eleCref
+			handle any
+--				!eff.writerecord('Error - ' & !eleName & ' cref ' & !eleCref & ' is not found!')
+			endhandle
+
+			!AtePos = POS
+			!dis = !AtePos.distance(!ChuPos)
+			if (!dis gt 0.5) then
+				!eff.writerecord('Error - ' & !eleName & ' position error!')
+			endif
+		endhandle		
+	enddo
+	
+	!ff.close()
+	!eff.close()
+endfunction

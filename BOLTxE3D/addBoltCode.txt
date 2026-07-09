@@ -1,0 +1,3 @@
+   !obj = object ADDBOLTCODE()
+   !obj.getGridData()
+   !obj.mngGridData()

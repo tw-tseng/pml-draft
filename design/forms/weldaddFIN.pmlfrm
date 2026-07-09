@@ -1,0 +1,1281 @@
+-- There are 2 functions in program
+-- There are 2 functions in program
+-- 1. connect point between 2 different line in iso drawing, lack a weld 
+-- 2. Add 6M Weld/Coupling
+-- Auther : TW Tseng 2008/01/02
+-- Revised by Master in 2023/01/13
+
+setup form !!WELDADDFIN
+  title 'Add Weld < List in File version >'
+  path down
+  text .dist   'Cutting Length :' width 6 is Real
+  rgroup .WeldLocation '< Weld Type >' horizontal 
+       add tag 'Field Weld' select 'FWN'
+       add tag 'Shop Weld' select 'SWN'
+  exit  
+  button .DelWeld 'Del Old Welds       ' call '!This.DelWeld()'
+  button .OK      'Del Old && Add Welds' call '!This.Apply()'
+  button .Cancel  'Cancel : File List Mode  ' call '!This.Close()' CANCEL
+  member .checkaddweld is boolean
+  member .wldn is real
+  member .ceref is string
+  member .premem is string
+  member .weldDefRead is string
+  member .weldArySpec is ARRAY
+  member .weldArySchMtl is ARRAY
+exit
+
+define method .WELDADDFIN()
+  !this.dist.Active = True
+  !this.DelWeld.Active = True
+  !this.OK.Active = True
+  !this.Cancel.Active = True
+  
+  !this.dist.val = 6000
+  !this.weldDefRead = !!paAutoWeldReadDef()
+  
+  if ( !this.weldDefRead.Length() gt 0) then 
+     -- !!alert.message(|$!this.weldDefRead|)
+     !this.weldArySpec = !!paAutoWeldArySpec(!this.weldDefRead)
+               
+     $(    
+         Do !AryElement Values !this.weldArySpec 
+              $P $!AryElement
+         EndDo
+         
+             !youmeAllSpecStr = 'Hello world ! '            
+
+--         !!alert.message(|$!youmeAllSpecStr|)              
+         $P --- |!this.weldArySpec| ---
+         q var !this.weldArySpec
+         $P === |$!this.weldArySpec| ===
+         q var !this.weldArySpec.Size()   
+         
+         Do !theIdx From 1 to !this.weldArySpec.Size() By 3
+              !youmeAllSpecStr = !youmeAllSpecStr + !this.weldArySpec[$!theIdx] + ' , '
+         EndDo
+         
+--         !!alert.message(|$!youmeAllSpecStr|)              
+     $)              
+  else
+     !!alert.error('UnDefined weld spec occure !')
+       !this.dist.Active = False
+       !this.DelWeld.Active = False
+       !this.OK.Active = False
+       !this.Cancel.Active = True     
+  endif 
+  
+endmethod
+
+define method .DelWeld()
+  ----- Delete WELDs and COUPs -------
+  VAR !delweldarray COLL ALL WELD WITH ( :WDEL EQ TRUE ) FOR CE
+  VAR !delcouparray COLL ALL COUP WITH ( :WDEL EQ TRUE ) FOR CE
+  do !delweldent values !delweldarray
+    $!delweldent
+    DELETE WELD
+  enddo
+  do !delcoupent values !delcouparray
+    $!delcoupent
+    DELETE COUP
+  enddo
+endmethod
+
+define method .Apply()
+  PREC DIST 0.01
+	var !proj proj code
+  var !ce REF
+  !this.ceref = !ce.string()
+  var !cetype TYPE
+--  if (!cetype eq 'SITE' or !cetype eq 'ZONE' or !cetype eq 'PIPE' ) then
+  if (true ) then
+    ----------------------------------
+    -- add 6M/12M weld main program --
+    ----------------------------------
+    !WELDDIST = !this.dist.val
+    VAR!WELDTYPE |WELD|
+    
+    ----- Delete WELDs and COUPs -------
+    VAR !delweldarray COLL ALL WELD WITH ( :WDEL EQ TRUE ) FOR $!ce
+    VAR !delcouparray COLL ALL COUP WITH ( :WDEL EQ TRUE ) FOR $!ce
+    do !delweldent values !delweldarray
+      $!delweldent
+      DELETE WELD
+    enddo
+    do !delcoupent values !delcouparray
+      $!delcoupent
+      DELETE COUP
+    enddo
+
+    var !allpipe coll all pipe for $!this.ceref
+    if (!allpipe.size() gt 0) then
+      do !pipece values !allpipe
+        $!pipece
+
+        VAR!BRANNUM MEM BRAN COUNT
+        $* ADD WELD OR COUPLING
+        DO !I TO $!BRANNUM
+           $!pipece
+           BRAN $!I
+--           !ISBEND = FALSE
+--           VAR !BENDREF ||
+           VAR!BRANREF REF
+           VAR!PTYPE |HEAD|
+           VAR!PBORE HBOR
+           VAR!PREF REF
+           VAR!PPSPE PSPE
+           VAR!TYPE TYPE
+           DO !J
+              IF (|$!PTYPE| EQ |HEAD|) THEN
+                 1
+                 HANDLE ANY
+                    BREAK
+                 ENDHANDLE
+                 VAR!PTYPE |HEADP|
+              ELSE
+                 NEX
+                 HANDLE ANY
+                    BREAK
+                 ENDHANDLE
+              ENDIF
+              VAR!BORE P2 BORE
+--							handle any
+--							  VAR!BORE P1 BORE
+--							endhandle
+              VAR!TYPE TYPE
+              VAR!REF REF
+              VAR!PSPE SPRE
+           
+              IF (|$!PTYPE| EQ |HEADP|) THEN
+                 VAR!DIST CONS DIST PA OF $!REF TO PH
+              ELSE
+                 VAR!DIST CONS DIST PA OF $!REF TO PL OF $!PREF
+              ENDIF
+       
+          $(    
+              !haveFindedSpec = !!paAutoWeldFindSpec(!PPSPE,!this.weldArySpec)              
+--              !!alert.message(|$!haveFindedSpec|)              
+--              !!alert.message(|End Spec find.|)                            
+          $)   
+                                        
+              IF ($!DIST GT $!WELDDIST) THEN
+                  !!haveFindedSpec = !!paAutoWeldFindSpec(!PPSPE,!this.weldArySpec)              
+                  !myAryMaxSizeStype = ARRAY()
+                   
+                  If (!!haveFindedSpec.Length() EQ 0) then
+                     --  !myWarningStr = |$!myLostProjID| + ','  + |$!PPSPE| + ',' + |$!myLostDateTime|                  
+                     var !myLostProjID PROJ ID
+                     var !myLostDateTime CLOCK
+                  
+                     !myWarningStr = |$!myLostProjID , $!PPSPE , $!myLostDateTime|
+--                     !!alert.message(|$!myWarningStr|)                                                      $* Log warning information to File
+                  Else
+                     !!theAryMaxSizeStype = !!haveFindedSpec.Split(',')                     
+                     !myMaxBore = Real(|$!!theAryMaxSizeStype[1]|)
+                     !myCoupStype =!!theAryMaxSizeStype[2]
+
+                     If ($!BORE LEQ $!myMaxBore) Then
+                        VAR !WELDTYPE |COUP|
+                        VAR!STYP 'SEL WI STYP |$!myCoupStype|'
+												if (!proj eq 'BAA' or !proj eq 'DAC') then
+												  if (!PPSPE eq '/0150CB04') then
+													  VAR!STYP 'SEL WI MTOC ON'
+													endif
+												endif
+                     Else
+                        VAR !WELDTYPE |WELD|  
+
+                        if (!this.WeldLocation.selection() eq 'FWN') then 
+                             !wldLocation = 'FWN'
+                        else
+                             !wldLocation = 'SWN'
+                        endif     
+
+                        VAR !STYP 'SEL WI STYP |$!wldLocation|'
+                        if (!proj eq 'BAA' or !proj eq 'DAC') then
+												  VAR !STYP 'SEL WI ALLO TRUE'
+												endif												
+                     EndIf
+                     
+
+                    $(   
+--                        !!alert.message(|$!myCoupStype|)
+                        !theTestValue = !myMaxBore + 0.8
+--                        !!alert.message(|$!theTestValue|)                     
+                    $)                                                       
+                  EndIf
+                  
+                                    
+                 IF (|$!PTYPE| EQ |HEADP|) THEN
+                    PREV
+                    HANDLE ANY
+                      HEAD
+                      VAR!TYPE TYPE
+                    ENDHANDLE
+                    if ($!PBORE gt 0) then
+                      NEW $!WELDTYPE $!STYP
+                      if ( !WELDTYPE eq 'WELD' ) then
+                        :WTYPE 'BW'
+                        var !wsize P1 BORE
+                        :WSIZE |$!wsize|
+                        :WDEL TRUE                         
+                        var !pspec SPRE
+                        !this.WeldData(!pspec, !wsize)
+                      else
+                        :WDEL TRUE
+                      endif                      
+                      
+                      ORI
+                      CONN
+                      Handle ANY
+                        FCONN
+                      endHandle
+                      POS PA DIST $!WELDDIST FROM PH
+                      VAR!TYPE TYPE
+                      VAR!BORE PL BORE
+                      VAR!REF REF
+                      VAR!PSPE SPRE
+                    endif
+                 ELSE
+                    PREV
+$P $!WELDTYPE $!STYP
+                    NEW $!WELDTYPE $!STYP
+ 
+                    Handle ANY
+                    EndHandle
+                    if ( !WELDTYPE eq 'WELD' ) then
+                      :WTYPE 'BW'
+                      var !wsize P1 BORE
+                      :WSIZE |$!wsize|
+                      :WDEL TRUE            
+                      var !pspec SPRE
+                      !this.WeldData(!pspec, !wsize)
+                    else
+                      :WDEL TRUE
+                    endif
+                    ORI
+                    CONN
+                    HANDLE ANY
+                      FCONN
+                    ENDHANDLE
+                    POS PA DIST $!WELDDIST FROM PL OF $!PREF
+                    VAR!TYPE TYPE
+                    VAR!BORE PL BORE
+                    VAR!REF REF
+                    VAR!PSPE SPRE
+                 ENDIF
+              ENDIF         $* Weld Distance Lt condition
+              
+              if (!TYPE neq 'BRAN') then
+                var !spref SPREF
+                IF (|$!TYPE| NEQ |ATTA| AND |$!TYPE| NEQ |OLET| and !spref.match('SOL') le 0 and !spref.match('TOL') le 0 and !spref.match('TTO') le 0 and !spref.match('WOL') le 0 and !spref.match('STUB') le 0 and !spref.match('PAD') le 0 and !spref.match('NW-') le 0 and !spref.match('UBR-') le 0 and !spref.match('DES') le 0 AND |$!TYPE| NEQ |PTAP|) THEN
+                  IF (|$!TYPE| EQ |BEND| ) THEN
+                    IF (!spref.match('MITER') GT 0) THEN
+                      VAR!PTYPE |$!TYPE|
+                      VAR!PBORE ($!BORE)
+                      VAR!PREF |$!REF|
+                    ENDIF
+                  ELSE
+                    VAR!PTYPE |$!TYPE|
+                    VAR!PBORE ($!BORE)
+                    VAR!PREF |$!REF|
+                  ENDIF
+                ENDIF 
+              endif
+              
+           ENDDO
+           
+           $!PREF
+           VAR!CHECKTYPE TYPE
+           BRAN $!I
+           --------------------------------------------------------------
+           --  Caculate distance from branch tail to specific fitting  --
+           --------------------------------------------------------------
+                      
+           IF (|$!CHECKTYPE| EQ |BRAN| ) THEN
+              VAR!DIST CONS DIST PT TO PH
+           ELSE
+--                 VAR!DIST CONS DIST PT TO PL OF $!PREF
+           ENDIF
+           
+           IF ($!DIST GT $!WELDDIST and $!PBORE gt 0) THEN                                                                        
+               If (!!haveFindedSpec.Length() EQ 0) then
+--                  !!alert.message(|Second DIST fits condition.|)                                                      $* Log warning information to File
+               Else
+                  !myMaxBore = Real(|$!!theAryMaxSizeStype[1]|)
+                  !myCoupStype =!!theAryMaxSizeStype[2]
+
+                  If ($!BORE LEQ $!myMaxBore) Then
+                     VAR !WELDTYPE |COUP|
+                     VAR!STYP 'SEL WI STYP |$!myCoupStype|'
+										 if (!proj eq 'BAA' or !proj eq 'DAC') then
+											 if (!PPSPE eq '/0150CB04') then
+												 VAR!STYP 'SEL WI MTOC ON'
+											 endif
+										 endif
+                  Else
+                     VAR !WELDTYPE |WELD|
+
+                     if (!this.WeldLocation.selection() eq 'FWN') then 
+                          !wldLocation = 'FWN'
+                     else
+                          !wldLocation = 'SWN'
+                     endif     
+
+                     VAR !STYP 'SEL WI STYP |$!wldLocation|'
+                        if (!proj eq 'BAA' or !proj eq 'DAC') then
+												  VAR !STYP 'SEL WI ALLO TRUE'
+												endif	
+									EndIf                                                      
+               EndIf               
+                             
+               LAS MEM
+               HANDLE ANY
+               ENDHANDLE
+                                        
+               NEW $!WELDTYPE $!STYP
+               if ( !WELDTYPE eq 'WELD' ) then
+                 :WTYPE 'BW'
+                 var !wsize P1 BORE
+                 :WSIZE |$!wsize|
+                 :WDEL TRUE                
+                 var !pspec SPRE
+                 !this.WeldData(!pspec, !wsize)
+               else
+                 :WDEL TRUE
+               endif
+               ORI
+               CONN
+               handle any
+                 FCONN
+               endhandle
+              
+               POS PA DIST $!WELDDIST FROM PL OF $!PREF
+               HANDLE ANY
+                 POS PA DIST $!WELDDIST FROM PH
+               ENDHANDLE
+           ELSE    
+    --           !!alert.warning(|Less length for weld progress !|)
+           ENDIF                                       $* Weld length condition
+        ENDDO
+      ENDDO
+    ENDIF
+
+    
+    FOR
+    ---------------------------
+    -- add weld main program --
+    ---------------------------
+    var !allbranA coll all bran for $!this.ceref
+    do !branA values !allbranA
+      var !allmem coll all bran mem for $!branA
+      if (!allmem.size() gt 0) then
+        !findfirstmem = false
+        !tempxxx = 0
+        !this.premem = '' 
+        do !xxx from 1 to !allmem.size()
+          if (!tempxxx lt !xxx) then
+            !mem = !allmem[!xxx]
+            var !memtype type of $!mem
+            handle any
+              -- some TUBI is gone after add weld
+              !memtype = 'TUBI'
+            endhandle
+            
+            !chkrun = false
+            if (!memtype eq 'ATTA') then
+              !chkrun = false
+            elseif (!memtype eq 'BEND') then
+              var !memspre spref of $!mem
+              if (!memspre.match('MITER') gt 0) then
+                !chkrun = true
+              else
+                !chkrun = false
+              endif
+            else
+              !chkrun = true
+            endif
+            
+            if (!chkrun) then
+--            if (not (!memtype eq 'ATTA' or !memtype eq 'BEND')) then
+              !getprevalue = false
+              var !mempabore pa bore of $!mem
+              handle any
+                !getprevalue = true
+              endhandle
+              if ( !getprevalue ) then
+                !mempabore = !premempabore
+                !mempaconn = 'TUB'
+                !memplbore = !prememplbore
+                !memplconn = 'TUB'
+              else
+                var !mempaconn pa conn of $!mem
+                var !memplbore pl bore of $!mem
+                handle any
+                  var !memplbore pa bore of $!mem
+                endhandle
+                var !memplconn pl conn of $!mem
+                handle any
+                  var !memplconn pa conn of $!mem
+                endhandle
+              endif
+              !premempabore = !mempabore
+              !premempaconn = !mempaconn
+              !prememplbore = !memplbore
+              !prememplconn = !memplconn
+              -----------------------------------------------------------------
+              -- find out 1st valid component and estimate href connect type --
+              -----------------------------------------------------------------
+              if (!findfirstmem eq false) then
+                !findfirstmem = true
+                var !href HREF of $!branA
+                var !hreftype type of $!href
+                handle any
+                  !hreftype = 'unset'
+                endhandle
+                if (!hreftype eq 'unset') then
+                  !href = 'Nulref'
+                  !hreftype = 'unset'
+                else
+                  if (!hreftype eq 'BRAN') then
+                    var !allhrefmem coll all bran mem for $!href
+                    var !connref ref of tref of $!href
+                    if (!allhrefmem.size() gt 0) then
+                      if (!connref eq 'unset' or !connref eq !branA) then
+                        !href = !allhrefmem.last()
+                        var !hreftype type of $!href
+                        !dir = 'prev'
+                      else
+                        !href = !allhrefmem.first()
+                        var !hreftype type of $!href
+                        !dir = 'next'
+                      endif
+--                      if (!hreftype eq 'ATTA' or !hreftype eq 'BEND') then
+                      if (!hreftype eq 'ATTA') then
+                        if (!dir eq 'next') then
+                          do !x from 1 to !allhrefmem.size()
+                            !href = !allhrefmem[!x]
+                            var !hreftype type of $!href
+                            if (not (!hreftype eq 'ATTA' or !hreftype eq 'BEND')) then
+--                            if (not (!hreftype eq 'ATTA')) then
+                              break
+                            endif
+                          enddo
+                        else
+                          do !x from !allhrefmem.size() to 1 by -1
+                            !href = !allhrefmem[!x]
+                            var !hreftype type of $!href
+                            if (not (!hreftype eq 'ATTA' or !hreftype eq 'BEND')) then
+--                            if (not (!hreftype eq 'ATTA')) then
+                              break
+                            endif
+                          enddo
+                        endif
+                      endif
+                    else
+                      !href = 'Nulref'
+                      !hreftype = 'unset'
+                    endif
+                  endif
+                  if (!hreftype eq 'unset') then
+                    !hrefconn = 'unset'
+                  else                  
+                    var !hrefp4bore p4 bore of $!href
+                    handle any
+                      !hrefp4bore = 'unset'
+                    endhandle
+                    var !hrefp3bore p3 bore of $!href
+                    handle any
+                      !hrefp3bore = 'unset'
+                    endhandle
+                    var !hrefp2bore p2 bore of $!href
+                    handle any
+                      !hrefp2bore = 'unset'
+                    endhandle
+                    var !hrefp1bore p1 bore of $!href
+                    -- only for non-standard branch --
+                    handle any
+                      var !hrefp1bore bore of $!href
+                    endhandle
+                    if ( !mempabore eq !hrefp4bore ) then
+                      var !hrefconn p4 conn of $!href
+                    elseif ( !mempabore eq !hrefp3bore ) then
+                      var !hrefconn p3 conn of $!href
+                    else
+                      if ( !hrefp1bore neq !hrefp2bore ) then
+                        if ( !mempabore eq !hrefp2bore ) then
+                          var !hrefconn p2 conn of $!href
+                        else
+                          var !hrefconn p1 conn of $!href
+                          -- only for non-standard branch --
+                          handle any
+                            var !hrefconn dconn of $!href
+                          endhandle
+                        endif
+                      else
+                        if ( defined(!dir) ) then
+                          if (!dir eq 'next') then
+                            if ( !hreftype eq 'NOZZ' ) then
+                              var !hrefconn p1 conn of $!href
+                            else
+                              var !hrefconn pa conn of $!href
+                            endif
+                          else
+                            var !hrefconn pl conn of $!href
+                            handle any
+                              if ( !hreftype eq 'NOZZ' ) then
+                                var !hrefconn p1 conn of $!href
+                              else
+                                var !hrefconn pa conn of $!href
+                              endif
+                            endhandle
+                          endif
+                        else
+                          var !hrefconn pl conn of $!href
+                          handle any
+                            if ( !hreftype eq 'NOZZ' ) then
+                              var !hrefconn p1 conn of $!href
+                            else
+                              var !hrefconn pa conn of $!href
+                            endif
+                          endhandle
+                        endif
+                      endif
+                    endif
+                  endif
+                  !this.checkaddweld = false
+                  !this.doaddweld(!branA, !mempaconn, !memtype, !href, !hrefconn, !hreftype, 'href')
+                endif
+              endif
+                            
+--              if (not (!memtype eq 'BEND')) then
+                                        
+              ------------------------------------------------------------------
+              -- find out next component one by one and estimate connect type --
+              ------------------------------------------------------------------
+              !findlastmem = false
+              !tempxxx = !xxx
+              if ( !xxx eq !allmem.size() ) then
+                !findlastmem = true
+              else
+                do
+                  if ( !tempxxx eq !allmem.size() ) then
+                    !findlastmem = true
+                  endif
+                  if (!findlastmem eq false) then
+                    !nextmem = !allmem[!tempxxx + 1]
+                    var !nextmemtype type of $!nextmem
+                    
+                    !chkrun = false
+                    if (!nextmemtype eq 'ATTA') then
+                      !chkrun = true
+                    elseif (!nextmemtype eq 'BEND') then
+                      var !memspre spref of $!nextmem
+                      if (!memspre.match('MITER') gt 0) then
+                        !chkrun = false
+                      else
+                        !chkrun = true
+                      endif
+                    else
+                      !chkrun = false
+                    endif
+                    
+                    if (!chkrun) then
+                    
+                    --if (!nextmemtype eq 'ATTA' or !nextmemtype eq 'BEND') then
+                      !tempxxx = !tempxxx + 1
+                    else
+                      var !nextmempaconn pa conn of $!nextmem
+                      !this.checkaddweld = false
+                      !this.doaddweld(!mem, !memplconn, !memtype, !nextmem, !nextmempaconn, !nextmemtype, 'normal')
+                      if (!memtype eq 'FLAN' or !nextmemtype eq 'FLAN') then
+                        var !memspre spref of $!mem
+                        handle any
+                          !memspre = ''
+                        endhandle
+                        var !nextmemspre spref of $!nextmem
+                        handle any
+                          !nextmemspre = ''
+                        endhandle
+                        if (!memspre.match('FSO-') gt 0 or !nextmemspre.match('FSO-') gt 0) then
+                          !this.doaddweld(!mem, !memplconn, !memtype, !nextmem, !nextmempaconn, !nextmemtype, 'normal')
+                        endif
+                      endif
+                      !findlastmem = true
+                    endif
+                  endif
+                  if ( !findlastmem) then
+                    break
+                  endif
+                enddo
+              endif
+                            
+--              endif                            
+              ---------------------------------------------
+              -- find out tref and estimate connect type --
+              ---------------------------------------------
+              if ( !findlastmem and !tempxxx eq !allmem.size() ) then
+                var !tref TREF of $!branA
+                var !treftype type of $!tref
+                handle any
+                  !treftype = 'unset'
+                endhandle
+                if (!treftype eq 'unset') then
+                  !tref = 'Nulref'
+                  !treftype = 'unset'
+                else
+                  if (!treftype eq 'BRAN') then
+                    var !alltrefmem coll all bran mem for $!tref
+                    var !connref ref of href of $!tref
+                    if (!alltrefmem.size() gt 0) then
+                      if (!connref eq 'unset' or !connref eq !branA) then
+                        !tref = !alltrefmem.first()
+                        var !treftype type of $!tref
+                        !dir = 'next'
+                      else
+                        !tref = !alltrefmem.last()
+                        var !treftype type of $!tref
+                        !dir = 'prev'
+                      endif
+                      if (!treftype eq 'ATTA' or !treftype eq 'BEND') then
+--                      if (!treftype eq 'ATTA') then
+                        if (!dir eq 'next') then
+                          do !x from 1 to !alltrefmem.size()
+                            !tref = !alltrefmem[!x]
+                            var !treftype type of $!tref
+                            if (not (!treftype eq 'ATTA' or !treftype eq 'BEND')) then
+--                            if (not (!treftype eq 'ATTA')) then
+                              break
+                            endif
+                          enddo
+                        else
+                          do !x from !alltrefmem.size() to 1 by -1
+                            !tref = !alltrefmem[!x]
+                            var !treftype type of $!tref
+                            if (not (!treftype eq 'ATTA' or !treftype eq 'BEND')) then
+--                            if (not (!treftype eq 'ATTA')) then
+                              break
+                            endif
+                          enddo
+                        endif
+                      endif
+                    else
+                      !href = 'Nulref'
+                      !hreftype = 'unset'
+                    endif
+                  endif
+                  if (!treftype eq 'unset') then
+                    !trefconn = 'unset'
+                  else
+                    
+                    var !trefp4bore p4 bore of $!tref
+                    handle any
+                      !trefp4bore = 'unset'
+                    endhandle
+                    var !trefp3bore p3 bore of $!tref
+                    handle any
+                      !trefp3bore = 'unset'
+                    endhandle
+                    var !trefp2bore p2 bore of $!tref
+                    handle any
+                      !trefp2bore = 'unset'
+                    endhandle
+                    var !trefp1bore p1 bore of $!tref
+                    ----------------------------------
+                    -- only for non-standard branch --
+                    ----------------------------------
+                    handle any
+                      var !trefp1bore bore of $!tref
+                    endhandle
+                    
+                    if ( !memplbore eq !trefp4bore ) then
+                      var !trefconn p4 conn of $!tref
+                    elseif ( !memplbore eq !trefp3bore ) then
+                      var !trefconn p3 conn of $!tref
+                    else
+                      if ( !trefp1bore neq !trefp2bore ) then
+                        if ( !memplbore eq !trefp2bore ) then
+                          var !trefconn p2 conn of $!tref
+                        else
+                          var !trefconn p1 conn of $!tref
+                          ----------------------------------
+                          -- only for non-standard branch --
+                          ----------------------------------
+                          handle any
+                            var !trefconn dconn of $!tref
+                          endhandle
+                        endif
+                      else
+                        if ( defined(!dir) ) then
+                          if (!dir eq 'next') then
+                            if ( !treftype eq 'NOZZ' ) then
+                              var !trefconn p1 conn of $!tref
+                            else
+                              var !trefconn pa conn of $!tref
+                            endif
+                          else
+                            var !trefconn pl conn of $!tref
+                            handle any
+                              if ( !treftype eq 'NOZZ' ) then
+                                var !trefconn p1 conn of $!tref
+                              else
+                                var !trefconn pa conn of $!tref
+                              endif
+                            endhandle
+                          endif
+                        else
+                          var !trefconn pa conn of $!tref
+                          handle any
+                            if ( !treftype eq 'NOZZ' ) then
+                              var !trefconn p1 conn of $!tref
+                            else
+                              var !trefconn pl conn of $!tref
+                            endif
+                          endhandle
+                        endif
+                      endif
+                    endif
+
+                  endif
+                  !this.checkaddweld = false
+                  var !trefbran owner of $!tref
+                  $!mem
+                  handle any
+--                  $P !this.premem = $!this.premem
+--                  $P !memplconn = $!memplconn
+--                  $P !memtype = $!memtype
+--                  $P !trefbran = $!trefbran
+--                  $P !trefconn = $!trefconn
+--                  $P !treftype = $!treftype
+                    !this.doaddweld(!this.premem, !memplconn, !memtype, !trefbran, !trefconn, !treftype, 'tref')
+                    break
+                  endhandle
+--                  $P $!mem
+--                  $P $!memplconn
+--                  $P $!memtype
+--                  $P $!trefbran
+--                  $P $!trefconn
+--                  $P $!treftype
+                  !this.doaddweld(!mem, !memplconn, !memtype, !trefbran, !trefconn, !treftype, 'tref')
+                endif
+              endif
+            endif
+            
+          endif
+        enddo
+      endif
+    enddo
+    
+    ---------------------------
+    -- modify WLDN attribute --
+    ---------------------------
+    !file = Object file('C:\temp\Weld.Inspec.Report.txt')
+    !file.open('APPEND')
+    var !pipearray coll all pipe for $!ce
+    if ( !pipearray.size() gt 0 ) then
+      do !thispipe values !pipearray
+        var !branarray coll all bran for $!thispipe
+        if ( !branarray.size() gt 0 ) then
+          --------------------------------------------
+          -- find out max. wldn in existing welding --
+          --------------------------------------------
+          !wldn = 0
+          var !tempweldarray coll all weld for $!thispipe
+          if ( !tempweldarray.size() gt 0 ) then
+            $!thispipe
+            !tempweldcount = !tempweldarray.size()
+            WMAX $!tempweldcount
+            
+            ----------------------------
+            -- keep existing weld no. --
+            ----------------------------
+            !tempwldnarray = array()
+            var !tempweldarray COLL ALL WELD WITH ( :WLOCK EQ TRUE ) for $!thispipe
+            if (!tempweldarray.size() gt 0) then
+              do !tempweld values !tempweldarray
+                var !tempwldn wldn of $!tempweld
+                !tempwldnarray.append(!tempwldn.real())
+              enddo
+            endif
+            !tempwldnarray.sort()
+          endif
+          !brannamearray = array()
+          do !branref values !branarray
+            var !branname NAME of $!branref
+            !brannamearray.append(!branname)
+          enddo
+          !bransortarray = !brannamearray.sort()
+          do !bran values !bransortarray
+            $!bran
+            !cont = true
+            WELD 1
+            handle any
+              !cont = false
+            endhandle
+            var !lineno NAME OF OWNER OF OWNER
+            !lineno = !lineno.Substring(2)
+            if ( !cont ) then
+              !wlock = :WLOCK
+              if (not(!wlock)) then
+                !wldn = !wldn + 1
+                if (!tempwldnarray.size() gt 0) then
+                  do !tempwldnarrayi values !tempwldnarray
+                    if (!tempwldnarrayi eq !wldn) then
+                      !wldn = !wldn + 1
+                    endif
+                  enddo
+                endif
+                WLDN $!wldn
+              endif
+              ------------------------------------------------------------------------
+              -- Update existing weld data due to the existing weld data is empty   --
+              ------------------------------------------------------------------------
+              !wdel = :WDEL
+              if (not ( !wdel )) then
+                var !pspec SPRE
+                var !wsize P1 BORE
+                !this.WeldData(!pspec, !wsize)
+                var !tempwtype :WTYPE
+                if (!tempwtype.Length() eq 0) then
+                  :WTYPE 'BW'
+                endif
+              endif
+              
+              var !tmpwldn WLDN
+              var !wsize :WSIZE
+              var !wsch  :WSCH
+              var !wtype :WTYPE
+              var !wspec :WSPEC
+              var !wmat  :WMAT
+              !wstring = !lineno & ';' & !tmpwldn & ';' & !wsize & ';' & !wsch & ';' & !wtype & ';' & !wspec & ';' & !wmat
+              !file.writerecord(!wstring)
+           endif
+            do
+              WELD NEXT
+              handle any
+                break
+              endhandle
+              !wlock = :WLOCK
+              if (not(!wlock)) then
+                !wldn = !wldn + 1
+                if (!tempwldnarray.size() gt 0) then
+                  do !tempwldnarrayi values !tempwldnarray
+                    if (!tempwldnarrayi eq !wldn) then
+                      !wldn = !wldn + 1
+                    endif
+                  enddo
+                endif
+                WLDN $!wldn
+              endif
+              ------------------------------------------------------------------------
+              -- Update existing weld data due to the existing weld data is empty   --
+              ------------------------------------------------------------------------
+              !wdel = :WDEL
+              if (not ( !wdel )) then
+                var !pspec SPRE
+                var !wsize P1 BORE
+                !this.WeldData(!pspec, !wsize)
+                var !tempwtype :WTYPE
+                if (!tempwtype.Length() eq 0) then
+                  :WTYPE 'BW'
+                endif
+                var !rtext RTEXT OF DETREF OF SPREF OF CE
+                :WTYPE |$!rtext|
+              endif
+
+              var !tmpwldn WLDN
+              var !wsize :WSIZE
+              var !wsch  :WSCH
+              var !wtype :WTYPE
+              var !wspec :WSPEC
+              var !wmat  :WMAT
+              !wstring = !lineno & ';' & !tmpwldn & ';' & !wsize & ';' & !wsch & ';' & !wtype & ';' & !wspec & ';' & !wmat
+              !file.writerecord(!wstring)
+            enddo
+          enddo
+        endif
+      enddo
+    endif
+    !file.close()
+    
+  else
+    !!alert.error('Only for Site, Zone, Pipe !')
+  endif
+  
+  $!this.ceref
+--  !this.close()
+endmethod
+
+
+define method .doaddweld(!ent1 is string, !conn1 is string, !type1 is string, !ent2 is string, !conn2 is string, !type2 is string , !status is string)
+  var !proj proj code
+  if (!this.WeldLocation.selection() eq 'FWN') then
+      !wldPosition = 'FWN'
+  else
+      !wldPosition = 'SWN'
+  endif
+       
+  if ( !conn1 eq 'BWP' or !conn1 eq 'BWD' or !conn2 eq 'BWP' or !conn2 eq 'BWD' or !conn1 eq 'BW' or !conn2 eq 'BW') then
+    !this.checkaddweld = true
+    !weldtype = 'BW'
+  elseif ( !conn1 eq 'SWM' or !conn1 eq 'SWF' or !conn1 eq 'SMW' or !conn1 eq 'SFW' or !conn2 eq 'SWM' or !conn2 eq 'SWF' or !conn2 eq 'SMW' or !conn2 eq 'SFW') then
+    !this.checkaddweld = true
+    !weldtype = 'SW'
+  elseif ( !conn1 eq 'SCM' or !conn1 eq 'SCF' or !conn1 eq 'SMC' or !conn1 eq 'SFC' or !conn2 eq 'SCM' or !conn2 eq 'SCF' or !conn2 eq 'SMC' or !conn2 eq 'SFC') then
+    var !projnumber PROJ NUMBER
+    if (!projnumber eq 'PET') then
+      !this.checkaddweld = false
+    else
+      !this.checkaddweld = true
+      !weldtype = 'SC'
+    endif
+  endif
+  if ( !conn1 eq 'TUB' and !conn2 eq 'TUB') then
+    if ( !type1 eq 'TUBI' and !type2 eq 'TUBI' ) then
+      !this.checkaddweld = false
+    else
+      !this.checkaddweld = true
+      !weldtype = 'SW'
+    endif
+  endif
+  if ( !type1 eq 'WELD' or !type2 eq 'WELD' or !type1 eq 'ATTA' or !type2 eq 'ATTA' ) then
+    !this.checkaddweld = false
+  endif
+  
+  if (!type1 eq 'BEND') then
+    !bendtube = ITLE of ileave tube of $!ent1
+    handle any
+      !bendtube = 0
+    endhandle
+    if (not(!status eq 'href' or !status eq 'tref')) then
+      if (!bendtube le 0) then
+        !this.checkaddweld = false
+      endif
+    endif
+  endif
+  
+  --------------
+  -- add weld --
+  --------------
+  if ( !this.checkaddweld eq true ) then
+    if ( !status eq 'href') then
+      if (!type2 eq 'TUBI') then
+        $!ent2
+				if (!proj eq 'BAA' or !proj eq 'DAC') then
+				  NEW WELD SEL WI ALLO TRUE
+				else
+				  NEW WELD SEL WI STYP |$!wldPosition|
+				endif
+        
+        :WTYPE |$!weldtype|
+        var !wsize P1 BORE
+        :WSIZE |$!wsize|
+        :WDEL TRUE
+        var !pspec SPRE
+        !this.WeldData(!pspec, !wsize)
+        CONN TO PT
+        handle any
+          DELETE WELD
+          $!ent2
+        endhandle
+      else
+        var !ent2spref spref of $!ent2
+        handle any
+          !ent2spref = 'nulref'
+        endhandle
+        $!ent1
+        if (!proj eq 'BAA' or !proj eq 'DAC') then
+				  NEW WELD SEL WI ALLO TRUE
+				else
+				  NEW WELD SEL WI STYP |$!wldPosition|
+				endif
+        if ( !type1 eq 'TUBI' and !ent2spref.MatchWild('*STUB*') ) then
+          :WTYPE 'IW'
+          var !wsize P1 BORE
+          :WSIZE |$!wsize|
+          :WDEL TRUE
+          var !pspec SPRE
+          !this.WeldData(!pspec, !wsize)
+        else
+          :WTYPE |$!weldtype|
+          var !wsize P1 BORE
+          :WSIZE |$!wsize|
+          :WDEL TRUE
+          var !pspec SPRE
+          !this.WeldData(!pspec, !wsize)
+        endif
+        CONN TO PH
+        handle any
+          DELETE WELD
+          $!ent1
+        endhandle
+      endif
+    elseif ( !status eq 'tref') then
+      if (!type2 eq 'TUBI') then
+        $!ent2
+        if (!proj eq 'BAA' or !proj eq 'DAC') then
+				  NEW WELD SEL WI ALLO TRUE
+				else
+				  NEW WELD SEL WI STYP |$!wldPosition|
+				endif
+        :WTYPE |$!weldtype|
+        var !wsize P1 BORE
+        :WSIZE |$!wsize|
+        :WDEL TRUE
+        var !pspec SPRE
+        !this.WeldData(!pspec, !wsize)
+        CONN TO PH
+        handle any
+          DELETE WELD
+          $!ent2
+        endhandle
+      else
+        var !ent2spref spref of $!ent2
+        handle any
+          !ent2spref = 'nulref'
+        endhandle
+        $!ent1
+        handle ANY
+          -----------------------------------------
+          -- there is no any member under a BRAN --
+          -----------------------------------------
+        endhandle
+        if (!proj eq 'BAA' or !proj eq 'DAC') then
+				  NEW WELD SEL WI ALLO TRUE
+				else
+				  NEW WELD SEL WI STYP |$!wldPosition|
+				endif
+        if ( !type1 eq 'TUBI' and !ent2spref.MatchWild('*STUB*') ) then
+          :WTYPE 'IW'
+          var !wsize P1 BORE
+          :WSIZE |$!wsize|
+          :WDEL TRUE
+          var !pspec SPRE
+          !this.WeldData(!pspec, !wsize)
+          CONN TO PT
+          handle any
+            DELETE WELD
+            $!ent1
+          endhandle
+        else        
+          CONN TO PT
+          handle any
+            DELETE WELD
+            $!ent1
+          elsehandle NONE
+            -----------------
+            -- out of spec --
+            -----------------
+              var !ent1spec spec of spref of $!ent1
+              var !cespec spec of spref of ce
+              if (!ent1spec neq !cespec) then
+                var !cespref spref
+                var !celstu lstu
+                if (!cespref.occurs('/') le 2) then
+                  !newspref = !ent1spec & '/' & !cespref.split('/').getindexed(3)
+                else
+                  !newspref = !ent1spec & '/' & !cespref.split('/').getindexed(3) & '/' & !cespref.split('/').getindexed(4)
+                endif
+                if (!celstu.occurs('/') le 2) then
+                  !newlstu = !ent1spec & '/' & !celstu.split('/').getindexed(3)
+                else
+                  !newlstu = !ent1spec & '/' & !celstu.split('/').getindexed(3) & '/' & !celstu.split('/').getindexed(4)
+                endif
+                SPREF $!newspref
+                LSTU $!newlstu
+              endif
+            :WTYPE |$!weldtype|
+            var !wsize P1 BORE
+            :WSIZE |$!wsize|
+            :WDEL TRUE
+            var !pspec SPRE
+            !this.WeldData(!pspec, !wsize)
+          endhandle
+        endif
+        
+      endif
+    else
+      if ( !type1 eq 'TUBI') then
+        var !ent2spref spref of $!ent2
+        handle any
+          !ent2spref = 'nulref'
+        endhandle
+        if ( !ent2spref.MatchWild('*SOL*') or !ent2spref.MatchWild('*TOL*') or !ent2spref.MatchWild('*TTO*') or !ent2spref.MatchWild('*WOL*') or !ent2spref.MatchWild('*STUB*') or !ent2spref.MatchWild('*CHS*') or !ent2spref.MatchWild('*CHT*') or !ent2spref.MatchWild('*CHR*') or !ent2spref.MatchWild('*NW-*') or !ent2spref.MatchWild('*UBR-*') or !ent2spref.MatchWild('*DES*')) then
+        else
+          $!ent2
+          BACK
+					if (!proj eq 'BAA' or !proj eq 'DAC') then
+						NEW WELD SEL WI ALLO TRUE
+					else
+						NEW WELD SEL WI STYP |$!wldPosition|
+					endif
+          -----------------
+          -- out of spec --
+          -----------------
+          if (!ent2spref eq 'nulref') then
+          else
+            var !ent2spec spec of spref of $!ent2
+            var !cespec spec of spref of ce
+            if (!ent2spec neq !cespec) then
+              var !cespref spref
+              var !celstu lstu
+              if (!cespref.occurs('/') le 2) then
+                !newspref = !ent2spec & '/' & !cespref.split('/').getindexed(3)
+              else
+                !newspref = !ent2spec & '/' & !cespref.split('/').getindexed(3) & '/' & !cespref.split('/').getindexed(4)
+              endif
+              if (!celstu.occurs('/') le 2) then
+                !newlstu = !ent2spec & '/' & !celstu.split('/').getindexed(3)
+              else
+                !newlstu = !ent2spec & '/' & !celstu.split('/').getindexed(3) & '/' & !celstu.split('/').getindexed(4)
+              endif
+              SPREF $!newspref
+							handle any
+							endhandle
+							LSTU $!newlstu
+							handle any
+							endhandle
+            endif
+          endif
+					CONN
+					handle any
+						FCONN 
+					endhandle
+					:WTYPE |$!weldtype|
+					var !wsize P1 BORE
+					:WSIZE |$!wsize|
+					:WDEL TRUE
+					var !pspec SPRE
+					!this.WeldData(!pspec, !wsize)
+          FOR
+        endif
+      else
+        var !ent1spref spref of $!ent1
+        handle any
+          !ent1spref = 'nulref'
+        endhandle
+        if ( !ent1spref.MatchWild('*STUB*') ) then
+        else
+          $!ent1
+					if (!proj eq 'BAA' or !proj eq 'DAC') then
+						NEW WELD SEL WI ALLO TRUE
+					else
+						NEW WELD SEL WI STYP |$!wldPosition|
+					endif
+          -----------------
+          -- out of spec --
+          -----------------
+          if (!ent1spref eq 'nulref') then
+          else
+            var !ent1spec spec of spref of $!ent1
+            var !cespec spec of spref of ce
+            if (!ent1spec neq !cespec) then
+              var !cespref spref
+              var !celstu lstu
+              if (!cespref.occurs('/') le 2) then
+                !newspref = !ent1spec & '/' & !cespref.split('/').getindexed(3)
+              else
+                !newspref = !ent1spec & '/' & !cespref.split('/').getindexed(3) & '/' & !cespref.split('/').getindexed(4)
+              endif
+              if (!celstu.occurs('/') le 2) then
+                !newlstu = !ent1spec & '/' & !celstu.split('/').getindexed(3)
+              else
+                !newlstu = !ent1spec & '/' & !celstu.split('/').getindexed(3) & '/' & !celstu.split('/').getindexed(4)
+              endif
+              SPREF $!newspref
+							handle any
+							endhandle
+              LSTU $!newlstu
+ 							handle any
+							endhandle
+           endif
+          endif
+          CONN
+          handle any
+            FCONN
+          endhandle
+          if ( !ent1spref.MatchWild('*SOL*') or !ent1spref.MatchWild('*TOL*') or !ent1spref.MatchWild('*TTO*') or !ent1spref.MatchWild('*WOL*') or !ent1spref.MatchWild('*CHS*') or !ent1spref.MatchWild('*CHT*') or !ent1spref.MatchWild('*CHR*') or !ent1spref.MatchWild('*NW-*') or !ent1spref.MatchWild('*UBR-*') or !ent1spref.MatchWild('*DES*')) then
+            :WTYPE 'IW'
+            var !wsize PPBOR 3 OF $!ent1spref
+            -- only for non-standard branch
+            handle any
+              var !wsize PPBOR 2 OF $!ent1spref
+            endhandle
+            :WSIZE |$!wsize|
+            :WDEL TRUE
+            var !pspec SPRE
+            !this.WeldData(!pspec, !wsize)
+          else
+            :WTYPE |$!weldtype|
+            var !wsize P1 BORE
+            :WSIZE |$!wsize|
+
+            :WDEL TRUE
+            var !pspec SPRE
+            !this.WeldData(!pspec, !wsize)
+          endif
+          var !tempref ref
+          !this.premem = 'ileave tube of ' & $!tempref
+        endif
+      endif
+    endif
+  endif
+  
+--  !file = Object file('C:\temp\Weld.Inspec.Report.txt')
+--  !file.open('APPEND')
+--  !wstring = !lineno & ';' &  & ';' &  & ';' &  & ';' &  & ';' &  & ';' &           !wtype
+--  !wstring = !this.checkaddweld & ';' & !ent1 & ';' & !ent2 & ';' & !conn1 & ';' & !conn2 & ';' & !type1 & ';' & !type2
+--  !file.writerecord(!wstring)
+--  !file.close()
+  
+endmethod
+
+define method .WeldData(!pspec is string , !pbore is string)
+    !myWeldSchMtl = !!paAutoWeldSchReadDef()    
+    
+    !pspecAry = !pspec.SPLIT('/')
+    !mySPEC = !pspecAry[2]
+    !psize = !pbore.real()    
+    :WSIZE |$!psize|    
+    :WSPEC |$!mySPEC|
+    
+    If (!myWeldSchMtl.LENGTH() LEQ 0) Then
+       :WSCH |XXXX|
+       :WMAT |XXXX|      
+    Else
+       !this.WeldArySchMtl = !!paAutoWeldSchArySpec(!myWeldSchMtl)
+       !myWeldSchMtlInfo = !!paAutoWeldSchFindSpec(!pspec , REAL(!pbore) , !this.WeldArySchMtl)
+       !myResultSchMtlARY = !myWeldSchMtlInfo.SPLIT(',')
+       
+       :WSCH |$!myResultSchMtlARY[1]|
+       :WMAT |$!myResultSchMtlARY[2]|        
+    EndIf
+endmethod
+
+define method .WeldDataOLD(!pspec is string, !pbore is string)
+  !pspecarray = !pspec.split('/')
+  !pspecarray1 = !pspec.split('-')
+  !pspec = !pspecarray[2]
+  !psize = !pbore.real()
+  :WSIZE |$!psize|
+  :WSPEC |$!pspec|
+    
+  ------------------------------------------
+  if (!pspec.Matchwild('JO1') or !pspec.Matchwild('CN1') or !pspec.Matchwild('LN1') or !pspec.Matchwild('LO2') or !pspec.Matchwild('HF1') or !pspec.Matchwild('XI4')) then
+    !wdel = :WDEL
+    if (!psize ge 50 and !wdel) then
+      !tmpsize = !pspecarray1.Last()
+      SPREF /$!pspec/WELD-S-$!tmpsize
+--      :TYPE 'SHOP WELD'
+    else
+--      :TYPE 'FIELD WELD'
+    endif
+  endif 
+  -------------------------------------------  
+endmethod
+
+define method .Close()
+  handle any
+  endhandle
+  kill !!WELDADDFIN
+endmethod

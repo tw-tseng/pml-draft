@@ -1,0 +1,91 @@
+--------------------------------------------
+-- Function : Find out all test valves
+--            and mark in ":STEXT" attribute
+-- Date     : 2023/12/27
+-- Auther   : tw tseng 
+--------------------------------------------
+define function !!TestValve()
+	!ceref = REF
+	var !proj proj code
+	if (!proj eq 'DAC') then
+	  !xref = '/NWD_GROUPWORL'
+	else
+	endif
+	$!xref
+	
+	handle any
+	  !!alert.warning('No correct GPWL found!')
+	elsehandle none
+	  if (!!alert.confirm('Run test valve process?') eq 'YES') then
+		  !result = object file('c:\temp\TestValve.txt')
+			!result.open('overwrite')
+		  var !valvs coll all valv with MATCHWILD(TYPE OF NEXT,'GASK') AND MATCHWILD(TYPE OF NEXT OF NEXT,'FBLI') AND NOT ISNAMED and ( p1 bore eq 15mm or p1 bore eq 20mm or p1 bore eq 25mm ) and matchwild(dtxr,'*Gate*') for ce
+			do !valv values !valvs
+			  $!valv
+				!okcla = okcla
+				!lock = lock
+				var !ref ref
+				if (!okcla) then
+				  if (!lock) then
+					  unlock ce
+					endif
+					var !dir from p1 to p1 of next
+					handle any
+					  var !dir from p1 to p2 of next
+					endhandle
+					!dirr = object direction(!dir)
+					!ang = !dirr.angle(object direction('U'))
+					if (!ang le 10) then
+					  :STEXT 'TEST VENT'
+						!result.writerecord(!ref & ' :STEXT -> TEST VENT')
+					else
+					  if ((matchwild(name of pipe,'*CSL*')) or (matchwild(name of pipe,'*CSM*'))) then
+						else
+					    :STEXT 'TEST DRAIN'
+					    !result.writerecord(!ref & ' :STEXT -> TEST DRAIN')
+						endif
+					endif
+					if (!lock) then
+					  lock ce
+					endif
+				else
+					!result.writerecord(!ref & ' is claimed by other!')
+				endif
+			enddo
+			$!xref
+		  var !valvs coll all valv with MATCHWILD(TYPE OF NEXT,'FTUB') AND MATCHWILD(TYPE OF NEXT OF NEXT,'CAP') AND NOT ISNAMED and ( p1 bore eq 15mm or p1 bore eq 20mm or p1 bore eq 25mm ) and matchwild(dtxr,'*Ball*') for ce
+			do !valv values !valvs
+			  $!valv
+				!okcla = okcla
+				!lock = lock
+				var !ref ref
+				if (!okcla) then
+				  if (!lock) then
+					  unlock ce
+					endif
+					var !dir from p1 to p1 of next
+					handle any
+					  var !dir from p1 to p2 of next
+					endhandle
+					!dirr = object direction(!dir)
+					!ang = !dirr.angle(object direction('U'))
+					if (!ang le 10) then
+					  :STEXT 'TEST VENT'
+						!result.writerecord(!ref & ' :STEXT -> TEST VENT')
+					else
+					  :STEXT 'TEST DRAIN'
+						!result.writerecord(!ref & ' :STEXT -> TEST DRAIN')
+					endif
+					if (!lock) then
+					  lock ce
+					endif
+				else
+					!result.writerecord(!ref & ' is claimed by other!')
+				endif
+			enddo
+			
+			!result.close()
+		endif
+$P <<<<< TEST VALVE COMPLETED >>>>>
+	endhandle
+endfunction

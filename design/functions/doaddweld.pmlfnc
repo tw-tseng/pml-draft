@@ -1,0 +1,295 @@
+define function !!doaddweld(!ent1 is string, !conn1 is string, !type1 is string, !ent2 is string, !conn2 is string, !type2 is string , !status is string ,!checkaddweld is boolean)
+   !wldPosition = 'FWN'
+       
+  if ( !conn1 eq 'BWP' or !conn1 eq 'BWD' or !conn2 eq 'BWP' or !conn2 eq 'BWD' or !conn1 eq 'BW' or !conn2 eq 'BW') then
+    !checkaddweld = true
+    !weldtype = 'BW'
+  elseif ( !conn1 eq 'SWM' or !conn1 eq 'SWF' or !conn1 eq 'SMW' or !conn1 eq 'SFW' or !conn2 eq 'SWM' or !conn2 eq 'SWF' or !conn2 eq 'SMW' or !conn2 eq 'SFW') then
+    !checkaddweld = true
+    !weldtype = 'SW'
+  elseif ( !conn1 eq 'SCM' or !conn1 eq 'SCF' or !conn1 eq 'SMC' or !conn1 eq 'SFC' or !conn2 eq 'SCM' or !conn2 eq 'SCF' or !conn2 eq 'SMC' or !conn2 eq 'SFC') then
+    var !projnumber PROJ NUMBER
+    if (!projnumber eq 'PET') then
+      !checkaddweld = false
+    else
+      !checkaddweld = true
+      !weldtype = 'SC'
+    endif
+  endif
+  if ( !conn1 eq 'TUB' and !conn2 eq 'TUB') then
+    if ( !type1 eq 'TUBI' and !type2 eq 'TUBI' ) then
+      !checkaddweld = false
+    else
+      !checkaddweld = true
+      !weldtype = 'SW'
+    endif
+  endif
+  if ( !type1 eq 'WELD' or !type2 eq 'WELD' or !type1 eq 'ATTA' or !type2 eq 'ATTA' ) then
+    !checkaddweld = false
+  endif
+  
+  if (!type1 eq 'BEND') then
+    !bendtube = ITLE of ileave tube of $!ent1
+    handle any
+      !bendtube = 0
+    endhandle
+    if (not(!status eq 'href' or !status eq 'tref')) then
+      if (!bendtube le 0) then
+        !checkaddweld = false
+      endif
+    endif
+  endif
+  
+  --------------
+  -- add weld --
+  --------------
+  if ( !checkaddweld eq true ) then
+    if ( !status eq 'href') then
+      if (!type2 eq 'TUBI') then
+        $!ent2
+        NEW WELD SEL WI STYP |$!wldPosition|
+        :WTYPE |$!weldtype|
+        var !wsize P1 BORE
+        :WSIZE |$!wsize|
+        :WDEL TRUE
+        var !pspec SPRE
+        !!WeldData(!pspec, !wsize)
+        CONN TO PT
+        handle any
+          DELETE WELD
+          $!ent2
+        endhandle
+      else
+        var !ent2spref spref of $!ent2
+        handle any
+          !ent2spref = 'nulref'
+        endhandle
+        $!ent1
+        NEW WELD SEL WI STYP |$!wldPosition|
+        if ( !type1 eq 'TUBI' and !ent2spref.MatchWild('*STUB*') ) then
+          :WTYPE 'IW'
+          var !wsize P1 BORE
+          :WSIZE |$!wsize|
+          :WDEL TRUE
+          var !pspec SPRE
+          !!WeldData(!pspec, !wsize)
+        else
+          :WTYPE |$!weldtype|
+          var !wsize P1 BORE
+          :WSIZE |$!wsize|
+          :WDEL TRUE
+          var !pspec SPRE
+          !!WeldData(!pspec, !wsize)
+        endif
+        CONN TO PH
+        handle any
+          DELETE WELD
+          $!ent1
+        endhandle
+      endif
+    elseif ( !status eq 'tref') then
+      if (!type2 eq 'TUBI') then
+        $!ent2
+        NEW WELD SEL WI STYP |$!wldPosition|
+        :WTYPE |$!weldtype|
+        var !wsize P1 BORE
+        :WSIZE |$!wsize|
+        :WDEL TRUE
+        var !pspec SPRE
+        !!WeldData(!pspec, !wsize)
+        CONN TO PH
+        handle any
+          DELETE WELD
+          $!ent2
+        endhandle
+      else
+        var !ent2spref spref of $!ent2
+        handle any
+          !ent2spref = 'nulref'
+        endhandle
+        $!ent1
+        handle ANY
+          -----------------------------------------
+          -- there is no any member under a BRAN --
+          -----------------------------------------
+        endhandle
+        NEW WELD SEL WI STYP |$!wldPosition|
+        if ( !type1 eq 'TUBI' and !ent2spref.MatchWild('*STUB*') ) then
+          :WTYPE 'IW'
+          var !wsize P1 BORE
+          :WSIZE |$!wsize|
+          :WDEL TRUE
+          var !pspec SPRE
+          !!WeldData(!pspec, !wsize)
+          CONN TO PT
+          handle any
+            DELETE WELD
+            $!ent1
+          endhandle
+        else        
+          CONN TO PT
+          handle any
+            DELETE WELD
+            $!ent1
+          elsehandle NONE
+            -----------------
+            -- out of spec --
+            -----------------
+						var !ent1spec spec of spref of $!ent1
+						handle any
+						
+						
+						elsehandle none
+							var !cespec spec of spref of ce
+							if (!ent1spec neq !cespec) then
+								var !cespref spref
+								var !celstu lstu
+								if (!cespref.occurs('/') le 2) then
+									!newspref = !ent1spec & '/' & !cespref.split('/').getindexed(3)
+								else
+									!newspref = !ent1spec & '/' & !cespref.split('/').getindexed(3) & '/' & !cespref.split('/').getindexed(4)
+								endif
+								SPREF $!newspref
+								CONN
+								:WTYPE |$!weldtype|
+								var !wsize P1 BORE
+								:WSIZE |$!wsize|
+								:WDEL TRUE
+								var !tempsele coll all sele with matchwild(ques, 'PBOR') and tans eq 'TUBE' for $!ent1spec
+								var !newlstus coll all spco with para[1] of catref of spref eq $!wsize for $!tempsele[1]
+								LSTU $!newlstus[1]
+							endif
+						endhandle
+						var !wsize P1 BORE
+						var !pspec SPRE
+            :WTYPE |$!weldtype|
+            :WSIZE |$!wsize|
+            :WDEL TRUE
+            !!WeldData(!pspec, !wsize)
+          endhandle
+        endif
+        
+      endif
+    else
+      if ( !type1 eq 'TUBI') then
+        var !ent2spref spref of $!ent2
+        handle any
+          !ent2spref = 'nulref'
+        endhandle
+        if ( !ent2spref.MatchWild('*SOL*') or !ent2spref.MatchWild('*TOL*') or !ent2spref.MatchWild('*TTO*') or !ent2spref.MatchWild('*WOL*') or !ent2spref.MatchWild('*STUB*') or !ent2spref.MatchWild('*CHS*') or !ent2spref.MatchWild('*CHT*') or !ent2spref.MatchWild('*CHR*') or !ent2spref.MatchWild('*NW-*') or !ent2spref.MatchWild('*UBR-*') or !ent2spref.MatchWild('*DES*')) then
+        else
+          $!ent2
+          BACK
+          NEW WELD SEL WI STYP |$!wldPosition|
+          -----------------
+          -- out of spec --
+          -----------------
+          if (!ent2spref eq 'nulref') then
+          else
+            var !ent2spec spec of spref of $!ent2
+            var !cespec spec of spref of ce
+            if (!ent2spec neq !cespec) then
+              var !cespref spref
+              var !celstu lstu
+              if (!cespref.occurs('/') le 2) then
+                !newspref = !ent2spec & '/' & !cespref.split('/').getindexed(3)
+              else
+                !newspref = !ent2spec & '/' & !cespref.split('/').getindexed(3) & '/' & !cespref.split('/').getindexed(4)
+              endif
+              SPREF $!newspref
+							CONN
+							:WTYPE |$!weldtype|
+							var !wsize P1 BORE
+							:WSIZE |$!wsize|
+							:WDEL TRUE
+							var !tempsele coll all sele with matchwild(ques, 'PBOR') and tans eq 'TUBE' for $!ent2spec
+--							!a=!tempsele.size()
+--							$p $!ent2spec
+							var !newlstus coll all spco with para[1] of catref of spref eq $!wsize for $!tempsele[1]
+              LSTU $!newlstus[1]
+					  endif
+          endif
+          CONN
+          :WTYPE |$!weldtype|
+          var !wsize P1 BORE
+          :WSIZE |$!wsize|
+          :WDEL TRUE
+          var !pspec SPRE
+          !!WeldData(!pspec, !wsize)
+          FOR
+        endif
+      else
+        var !ent1spref spref of $!ent1
+        handle any
+          !ent1spref = 'nulref'
+        endhandle
+        if ( !ent1spref.MatchWild('*STUB*') ) then
+        else
+          $!ent1
+          NEW WELD SEL WI STYP |$!wldPosition|
+          -----------------
+          -- out of spec --
+          -----------------
+          if (!ent1spref eq 'nulref') then
+          else
+            var !ent1spec spec of spref of $!ent1
+            var !cespec spec of spref of ce
+            if (!ent1spec neq !cespec) then
+              var !cespref spref
+              var !celstu lstu
+              if (!cespref.occurs('/') le 2) then
+                !newspref = !ent1spec & '/' & !cespref.split('/').getindexed(3)
+              else
+                !newspref = !ent1spec & '/' & !cespref.split('/').getindexed(3) & '/' & !cespref.split('/').getindexed(4)
+              endif
+              SPREF $!newspref
+							CONN
+							:WTYPE |$!weldtype|
+							var !wsize P1 BORE
+							:WSIZE |$!wsize|
+							:WDEL TRUE
+							var !tempsele coll all sele with matchwild(ques, 'PBOR') and tans eq 'TUBE' for $!ent1spec
+							var !newlstus coll all spco with para[1] of catref of spref eq $!wsize for $!tempsele[1]
+              LSTU $!newlstus[1]
+						endif
+          endif
+          CONN
+					handle any
+					  delete weld
+					elsehandle none
+						if ( !ent1spref.MatchWild('*SOL*') or !ent1spref.MatchWild('*TOL*') or !ent1spref.MatchWild('*TTO*') or !ent1spref.MatchWild('*WOL*') or !ent1spref.MatchWild('*CHS*') or !ent1spref.MatchWild('*CHT*') or !ent1spref.MatchWild('*CHR*') or !ent1spref.MatchWild('*NW-*') or !ent1spref.MatchWild('*UBR-*') or !ent1spref.MatchWild('*DES*')) then
+							:WTYPE 'IW'
+							var !wsize PPBOR 3 OF $!ent1spref
+							-- only for non-standard branch
+							handle any
+								var !wsize PPBOR 2 OF $!ent1spref
+							endhandle
+							:WSIZE |$!wsize|
+							:WDEL TRUE
+							var !pspec SPRE
+							!!WeldData(!pspec, !wsize)
+						else
+							:WTYPE |$!weldtype|
+							var !wsize P1 BORE
+							:WSIZE |$!wsize|
+
+							:WDEL TRUE
+							var !pspec SPRE
+							!!WeldData(!pspec, !wsize)
+						endif
+						var !tempref ref
+						!!premem = 'ileave tube of ' & $!tempref
+					endhandle
+        endif
+      endif
+    endif
+  endif
+  
+--  !file = Object file('C:\temp\Weld.Inspec.Report.txt')
+--  !file.open('APPEND')
+--  !wstring = !lineno & ';' &  & ';' &  & ';' &  & ';' &  & ';' &  & ';' &           !wtype
+--  !wstring = !checkaddweld & ';' & !ent1 & ';' & !ent2 & ';' & !conn1 & ';' & !conn2 & ';' & !type1 & ';' & !type2
+--  !file.writerecord(!wstring)
+--  !file.close()
+  
+endfunction

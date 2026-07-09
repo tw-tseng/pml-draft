@@ -1,0 +1,61 @@
+define function !!setWeld(!conn1 is string, !pspec1 is string)
+  if ( !conn1 eq 'BWP' or !conn1 eq 'BWD' or !conn1 eq 'BW') then
+    !weldtype = 'BW'
+  elseif ( !conn1 eq 'SWM' or !conn1 eq 'SWF' or !conn1 eq 'SMW' or !conn1 eq 'SFW' or !conn1 eq 'TUB') then
+    !weldtype = 'SW'
+  elseif ( !conn1 eq 'SCM' or !conn1 eq 'SCF' or !conn1 eq 'SMC' or !conn1 eq 'SFC') then
+    !weldtype = 'SC'
+  endif
+  
+  var !wsize P1 BORE
+  !psize = !wsize.real()
+  :WTYPE |$!weldtype|
+  :WSIZE |$!wsize|
+  :WSPEC |$!pspec1|
+  
+  if (!pspec1.Matchwild('CS01')) then
+    if (!psize LE 40) then
+      :WSCH |S-80|
+    else
+      :WSCH |S-40|
+    endif
+    :WMAT |A106 Gr.B|
+  elseif (!pspec1.Matchwild('CS02')) then
+    :WSCH |S-40|
+    :WMAT |A53B TPE Galv|
+  elseif (!pspec1.Matchwild('SS01')) then
+    if (!psize LE 40) then
+      :WSCH |S-40S|
+    else
+      :WSCH |S-10S|
+    endif
+    :WMAT |A312 TP304|
+  elseif (!pspec1.Matchwild('SS02')) then
+    if (!psize LE 40) then
+      :WSCH |S-40S|
+    else
+      :WSCH |S-10S|
+    endif
+    :WMAT |A312 TP316|
+  elseif (!pspec1.Matchwild('SS03')) then
+    if (!psize LE 40) then
+      :WSCH |S-40S|
+    else
+      :WSCH |S-10S|
+    endif
+    :WMAT |A312 TP304|
+  elseif (!pspec1.Matchwild('SS04')) then
+    if (!psize LE 40) then
+      :WSCH |S-40S|
+    else
+      :WSCH |S-10S|
+    endif
+    :WMAT |A312 TP304|
+  elseif (!pspec1.Matchwild('SS06')) then
+    :WSCH |S-80|
+    :WMAT |A312 TP316L|
+  else
+    :WSCH |XXX|
+    :WMAT |XXX|
+  endif
+endfunction

@@ -1,0 +1,325 @@
+---------------------------------------------------------------
+-- Function : Export attribute and its offspring into a file --
+-- Auther : tw tseng                                         --
+-- Date   : 2022/12/24                                       --
+---------------------------------------------------------------
+define function !!AttDump(!target is string, !files is string)
+
+  $!target
+  -- Initialise Variables
+  !dilm    = ':='
+  !sepr    = '&end&'
+  !aIgnore = ',unset,=0/0,'
+  !oDepth  = !!ce.ddepth
+  !pDepth = -99
+	
+	var !project PROJECT CODE
+  if (!project eq 'DAC') then
+		!path = '/D:\Projects\BatchExportNWD\DAC\'
+  elseif (!project eq 'BAA') then
+		!path = '/D:\Projects\BatchExportNWD\BAA\'
+  elseif (!project eq 'TAS') then
+		!path = '/D:\'
+  endif
+	!file = !path & !files
+
+
+
+  -- Check if file exists
+  if !file.substring(1,1).eq('/') then
+    !file = !file.after('/')
+  endif
+  var !fNam file "$!file" entry
+  handle (41,323)
+    -- Unable to find file (must be a new one)
+  elsehandle ANY
+    -- Uncaptured errors
+    !this.fNam.val = ''
+    return error 1 |$!!error.text|
+  elsehandle NONE
+--    if(!!alert.confirm('OK to overwrite file $!fNam$n?',0.5,0.5) ne 'YES') then
+--      return
+--    endif
+  endhandle
+
+  -- Open file
+  openfile "$!file" write !fUnit
+  handle ANY
+    openfile "$!file" overwrite !fUnit
+  endhandle
+
+  -- Write the file
+  -- Write Header
+  var !date clock date
+  var !time clock time
+  writefile $!fUnit |AVEVA_Attributes_File v1.0 , start: NEW , end: END , name_end: $!dilm , sep: $!sepr|
+  writefile $!fUnit |NEW Header Information|
+
+  var !dprt compose |  Source$!dilm Everything3D Data $!sepr Date$!dilm $!date$n $!sepr Time$!dilm $!time|
+  writefile $!fUnit |$!dprt[1]|
+  var !mdb MDB
+  
+  var !name (FULLNAME)
+  var !dprt compose |  Project$!dilm $!project $!sepr MDB$!dilm $!mdb $!sepr Element$!dilm $!name|
+  writefile $!fUnit |$!dprt[1]|
+  writefile $!fUnit |END|
+
+  !sites = ARRAY()
+  !zones = ARRAY()
+  !pipes = ARRAY()
+  -- Get elements
+  if (true) then
+	  if (!!ce.type eq 'WORL') then
+      var !sites coll all site
+      !coll  = ARRAY()
+      do !site value !sites
+        var !tempArray coll all for $!site
+        !coll.appendArray(!tempArray)
+      enddo
+    else
+      var !coll coll all for ce
+      if (!!ce.type eq 'BRAN') then
+        !pipe = !!ce.owner.ref.string()
+        !pipes.append(!pipe)
+      endif
+      var !zone ref of zone of ce
+      handle (2,111)
+        --
+      elsehandle NONE
+        !zones.append(!zone)
+      endhandle
+      var !site ref of site of ce
+      handle (2,111)
+        --
+      elsehandle NONE
+        !sites.append(!site)
+      endhandle
+    endif
+  elseif (!this.elements.val) then
+    !coll  = ARRAY()
+    do !item value !this.dbElements.dText
+      if (!item.dbref().type eq 'BRAN') then
+        !pipe = !item.dbref().owner.ref.string()
+        !pipes.append(!pipe)
+      endif
+      var !zone ref of zone of $!item
+      handle (2,111)
+        --
+      elsehandle NONE
+        !zones.append(!zone)
+      endhandle
+      var !site ref of site of $!item
+      handle (2,111)
+        --
+      elsehandle NONE
+        !sites.append(!site)
+      endhandle
+      if (!item.dbref().type eq 'WORL') then
+        var !sites coll all site
+        do !site value !sites
+          var !tempArray coll all for $!site
+          !coll.appendArray(!tempArray)
+        enddo
+      else
+        var !tempArray coll all for $!item
+        !coll.appendArray(!tempArray)
+      endif
+    enddo
+  elseif (!this.drawlist.val) then
+    var !drawlist coll all from drawlist
+    !coll = ARRAY()
+    do !item value !drawlist
+      if (!item.dbref().type eq 'BRAN') then
+        !pipe = !item.dbref().owner.ref.string()
+        !pipes.append(!pipe)
+      endif
+      var !zone ref of zone of $!item
+      handle (2,111)
+        --
+      elsehandle NONE
+        !zones.append(!zone)
+      endhandle
+      var !site ref of site of $!item
+      handle (2,111)
+        --
+      elsehandle NONE
+        !sites.append(!site)
+      endhandle
+      var !tempArray coll all for $!item
+      !coll.appendArray(!tempArray)
+    enddo
+  endif
+
+  !sites.unique()
+  !zones.unique()
+  !pipes.unique()
+
+  -- append all elements to array in hierarchy order
+  !all = ARRAY()
+  !all.appendArray(!sites)
+  !all.appendArray(!zones)
+  !all.appendArray(!pipes)
+  !all.appendArray(!coll)
+  !all.unique()
+
+  !nelts = !all.size()
+  if (!nelts eq 0) then
+    !!alert.error('No elements exported')
+     -- close file and hide form
+     closefile $!fUnit
+     !!fmsys.setProgress( 0 )
+  endif
+
+  --$p No of elements is $!nelts
+  -- initialise progress and interrupt system
+  !progress = 0
+  !progStep = 5
+  -- % progress report step
+
+
+  -- Loop through the list of elements
+  do !indx indices !all
+	  var !type TYPE of $!all[$!indx]
+		var !ownert TYPE of owner of $!all[$!indx]
+		var !sitename NAME OF SITE
+		handle any
+		  !sitename = ''
+		endhandle
+		-- not export equi members --
+    skip if(!type eq |TUBI| or !type eq |ARCHIV| or !type eq |BOX| or !type eq |CONE| or !type eq |CTOR| or !type eq |CYLI| or !type eq |DISH|)
+      handle ANY
+        skip
+      endhandle
+    skip if(!type eq |EXTR| or !type eq |GENPRI| or !type eq |LOOP| or !type eq |NBOX| or !type eq |NCYL| or !type eq |RTOR| or !type eq |VERT|)
+      handle ANY
+        skip
+      endhandle
+    skip if(!ownert eq 'BRAN' and !sitename.matchwild('*CABLE'))
+      handle ANY
+        skip
+      endhandle
+			
+    $!all[$!indx]
+
+    -- Hierarchy level
+    !depth = !!ce.ddepth
+    !tab   = !depth * 2 - !oDepth * 2
+    !iTab  = !tab + 2
+
+    -- End(s)
+    if(!depth eq !pDepth and !pDepth neq -99) then
+      var !dprt compose space $!tab |END|
+      writefile $!fUnit |$!dprt[1]|
+    elseif (!depth lt !pDepth) then
+      do !indxA from !pDepth to !depth by -1
+        var !dprt compose space $!indxA |END|
+        writefile $!fUnit |$!dprt[1]|
+      enddo
+    endif
+
+    !pDepth = !depth
+
+    -- attributes of element
+    ----var !attl delete
+    ----var !attl attlist
+    !attl = !!ce.attlist
+
+    -- Check if item is owned by a branch
+    if(TYPE neq |WORL|) then
+      if(TYPE of OWNER eq |BRAN| and NOT BADREF(SPREF)) then
+        !attl.append('APOS')
+        !attl.append('LPOS')
+        ----added for ENPPI ADMIN TEAM P-10226--
+        !attl.append('DTXR')
+        !attl.append('MTXX')
+        ----------------------------------------
+      endif
+    endif
+
+    -- Get name
+    !name = !!ce.fullname
+    var !dprt compose space $!tab |NEW $!name|
+    writefile $!fUnit |$!dprt[1]|
+
+    -- Loop through attribute array
+    !asize = !attl.width() + 3
+    do !attr values !attl
+      !attr = !attr.upCase()
+      var !attrib (ATTRIB $!attr)
+      handle ANY
+        var !attrib $!attr
+          handle ANY
+            skip
+          endhandle
+      endhandle
+
+      !attrib = !attrib.trim().replace('$$V','V').replace('$$v','v').replace('|','||').substring(1, 150)
+--      if(!this.unsets.val) then
+      if(false) then
+        var !dprt compose space $!iTab |$!attr$n$!dilm| width $!asize R space 2 |$!attrib|
+        writefile $!fUnit |$!dprt[1]|
+        handle ANY
+          writefile $!fUnit '$!dprt[1]'
+        endhandle
+      else
+        if( !attrib neq || and (!aIgnore.match(|,$!attrib$n,|) eq 0) ) then
+          var !dprt compose space $!iTab |$!attr$n$!dilm| width $!asize R space 2 |$!attrib|
+          writefile $!fUnit |$!dprt[1]|
+          handle ANY
+            writefile $!fUnit '$!dprt[1]'
+          endhandle
+        endif
+      endif
+    enddo
+		
+		
+		if (!ownert eq |BRAN|) then
+		  var !insthk inth of $!all[$!indx]
+handle any
+elsehandle none
+			var !dprt compose space $!iTab |InsThk$n$!dilm| width $!asize R space 2 |$!insthk|
+			writefile $!fUnit |$!dprt[1]|
+endhandle
+
+		elseif (!type eq |PIPE| or !type eq |EQUI|) then
+		  var !status STVVAL( /Status_Control )
+			handle any
+			elsehandle none
+				var !dprt compose space $!iTab |Status$n$!dilm| width $!asize R space 2 |$!status|
+				writefile $!fUnit |$!dprt[1]|
+			endhandle
+
+    endif		
+		
+
+    -- Update progress if required
+    !percentDone = int( (!indx * 100 ) / !nelts )
+    --$P index = $!indx, %done is $!percentDone, step $!progStep%
+    if( !percentDone - !progress ge !progStep ) then
+      !progress = !percentDone
+      --$P         $!progress%
+      !!fmsys.setProgress( !progress )
+    endif
+
+  enddo
+
+  if(!depth gt !oDepth) then
+    do !indxA from !depth to !oDepth by -1
+      !tab  = !indxA * 2 - !oDepth * 2
+      var !dprt compose space $!tab |END|
+      writefile $!fUnit |$!dprt[1]|
+    enddo
+  endif
+
+
+  -- close file and hide form
+  closefile $!fUnit
+  !!fmsys.setProgress( 0 )
+
+endfunction
+
+
+
+
+
+

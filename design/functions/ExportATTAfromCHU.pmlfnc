@@ -1,0 +1,68 @@
+-----------------------------------------------------
+-- Function : Export ATTA from CHU for CSC project --
+-- Date     : 2021/11/13                           --
+-- Author   : tw tseng                             --
+-----------------------------------------------------
+
+define function !!ExportATTAfromCHU()
+  var !project PROJECT CODE
+  if (!project eq 'DAC') then
+    --/NWD_GROUPWORL
+		/TEST
+	  !file = 'D:\Projects\BatchExportNWD\DAC\DAC_ATTA.TXT'
+  else
+    /NWD_GPWL
+	  !file = 'D:\Projects\BatchExportNWD\BAA\BAA_ATTA.TXT'
+  endif
+	
+	!ff = object file(!file)
+	!ff.open('OVERWRITE')
+	
+	-- Find out all ATTA in hierachy
+	var !allpipe coll all pipe for CE
+	if (!allpipe.size() gt 0) then
+		do !pipece values !allpipe
+			$!pipece
+			var !brannum mem bran count
+			do !i to $!brannum
+				 $!pipece
+				 BRAN $!I
+				 !ptype = 'HEAD'
+				 do !j
+				   if (!ptype eq 'HEAD') then
+					   1
+						 handle any
+						   break
+						 endhandle
+						 !ptype = 'HEADP'
+					 else
+					   NEXT
+						 handle any
+						   break
+						 endhandle
+					 endif
+					 !ele = CE
+					 var !eleType TYPE
+					 if (!eleType eq 'ATTA') then
+					   var !eleSPREF SPREF
+						 if (!eleSPREF.matchwild('*SUPC-*')) then
+						   var !eleName NAME
+						   var !eleLstu LSTU
+						   var !eleCref CREF
+						   var !elePos  POS
+						   var !eleStex STEXT
+							 if (!ele.order eq 1) then
+							   var !elePrev Owner
+							 else
+							   var !elePrev PREV
+							 endif
+						   !str = !eleName & ';' & !eleSPREF & ';' & !eleLstu & ';' & !eleCref & ';' & !elePos & ';' & !eleStex & ';' & !elePrev
+						   !ff.writerecord(!str)
+						 endif
+					 endif
+				 enddo				 
+			enddo
+		enddo
+	endif
+	!ff.close()
+endfunction

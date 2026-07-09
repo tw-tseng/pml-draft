@@ -1,0 +1,92 @@
+----------------------------------------------------------
+-- Function : Merge each bolt file for Pecl requestment --
+---Auther : tw tseng                                    --
+-- Date   : 2022/12/23                                  --
+----------------------------------------------------------
+define function !!MergeBolt()
+  var !proj proj id
+  if (!proj eq '400999DAC') then
+		!run = 'dir /s/b C:\temp\CCP\*_bolt.txt > C:\temp\CCP\BoltFile.txt'
+		!path = 'C:\temp\CCP\BoltFile.txt'
+		!path1 = 'C:\temp\CCP\BoltMerge.txt'
+		!path2 = 'C:\temp\CCP\BoltError.txt'
+  elseif (!proj eq '400780') then
+		!run = 'dir /s/b C:\temp\COP\*_bolt.txt > C:\temp\COP\BoltFile.txt'
+		!path = 'C:\temp\COP\BoltFile.txt'
+		!path1 = 'C:\temp\COP\BoltMerge.txt'
+		!path2 = 'C:\temp\COP\BoltError.txt'
+  elseif (!proj eq 'THH') then
+		!run = 'dir /s/b C:\temp\THH\*_bolt.txt > C:\temp\THH\BoltFile.txt'
+		!path = 'C:\temp\THH\BoltFile.txt'
+		!path1 = 'C:\temp\THH\BoltMerge.txt'
+		!path2 = 'C:\temp\THH\BoltError.txt'
+  endif
+	SYSCOM |$!run|
+	
+	!fileerror = Object file(!path2)
+  !fileerror.open('APPEND')
+	!file1 = Object file(!path1)
+  !file1.open('WRITE')
+  !file1.close()  
+	!file1 = Object file(!path1)
+  !file1.open('APPEND')
+	!file = Object file(!path)
+  !file.open('READ')
+  !line = !file.readrecord()
+  do
+    if (!line.set()) then
+			!file2 = Object file(!line)
+			!file2.open('READ')
+			!lines2 = !file2.readfile()
+			if (!lines2.set()) then
+			  do !x from 1 to !lines2.size()
+				  !line2 = !lines2[!x]
+					if (!line2.matchwild('*PIPELINE REF*')) then
+					  !pipe = !line2.after('PIPELINE REF ')
+						!pspre = !pipe.split('_').getindexed(1)
+--						$p $!pipe 
+					elseif (!line2.matchwild('* mm *')) then
+					  !len = !line2.substring(55, 10).trim('LR')
+						!qty = !line2.substring(105).trim('LR')
+					  !size = !line2.substring(70, 15).trim('LR')
+						if (!size.matchwild('*"*')) then
+							!bspre = !size.split('x').getindexed(1) & 'x'
+						  !size = !size.split('-').getindexed(2).split('x').getindexed(1)
+							handle any
+							  !size = !size.split('_').getindexed(2).split('x').getindexed(1)
+							endhandle
+						else
+						  !size = !size.substring(1, !size.length() - !len.length())
+							!bspre = !size
+						endif
+					  !desc = !line2.substring(1, 44).trim('LR')
+						!y = !x + 1
+						do
+						  !temp = !lines2[!y].trim('LR')
+							if (!temp.trim('LR').length() lt 45 and !temp.trim('LR').length() gt 3) then
+							  !desc = !desc & ' ' & !temp
+								!y = !y + 1
+							else
+							  break
+							endif
+						enddo
+						!file1.WriteRecord(!desc & '!' & !size & '!' & !len & '!' & !bspre & '!' & !qty & '!' & !pipe & '!' & !pspre)
+					elseif (!line2.matchwild('*is not in the network*')) then
+					  !fileerror.WriteRecord(!pipe & ' -> is not in the network')
+					elseif (!line2.matchwild('*No bolts found*')) then
+					  !fileerror.WriteRecord(!pipe & ' -> No bolts found')						
+					endif
+				enddo
+			else
+			  break
+			endif
+			!file2.close()
+			!line = !file.readrecord()
+    else
+      break
+    endif
+  enddo
+  !file.close()  
+  !file1.close() 	
+endfunction
+

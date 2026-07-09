@@ -1,0 +1,11 @@
+define function !!padpmodelupd(!inRefNo is ANY,!inAryDVal is ARRAY)   
+    $!inRefNo
+
+    !mySetValue = 'Desp '
+    Do !idx Values !!myAryDOrder        
+       !strDpVal = STRING($!inAryDVal[$!idx])
+       !mySetValue = !mySetValue + !strDpVal + ' '
+    EndDo
+    !mySetValue = !mySetValue.TRIM()
+    $!mySetValue  
+endfunction

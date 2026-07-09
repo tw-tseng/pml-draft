@@ -1,0 +1,167 @@
+--------------------------------------
+-- Function : Mto for >6m coupling  --
+-- Date     : 2023/09/13            --
+-- Auther   : tw tseng              --
+--------------------------------------
+define function !!CouplingMto()
+
+  !checkdist = 6000
+	!ceref = REF
+	!cetype = TYPE
+  if (!cetype eq 'SITE' or !cetype eq 'ZONE' or !cetype eq 'PIPE' or !cetype eq 'GPWL' or !cetype eq 'GPSET') then
+	  ----------------------------
+	  -- excluding jacket pipes --
+		----------------------------
+    var !pipes coll all pipe with not(matchwild(name,'*_J_*')) for $!ceref
+		!i = 0
+    if (!pipes.size() gt 0) then
+		  !ff = object file('c:\temp\CouplingCheck.txt')
+			!ff.open('overwrite')
+		  !result = object file('c:\temp\CouplingMto.txt')
+			!result.open('overwrite')
+      do !pipe values !pipes
+			  !qty = 0
+				var !brans coll all bran for $!pipe
+				do !bran values !brans
+				  $!bran
+					var !brann name of $!bran
+					var !zone name of zone of $!bran
+					if (defined(!branhead)) then
+					  !branhead.delete()
+					endif
+					1
+					handle any
+						var !dist atle
+						if (!dist.real() gt !checkdist) then
+						  var !hbor hbor of $!bran 
+							!ff.writerecord(!i & ' ' & !zone & ' ' & !brann & ' ' & !brann & ' ' & !hbor & ' ' & !dist)
+							!i = !i + 1
+							!qty = int(!dist.real() / !checkdist)
+							var !pipe name of pipe
+							var !pspec pspec
+							var !spre name of spref
+							!spres = !spre.split('/')
+							var !documentnumber :PWMFIELD5 OF PIPE
+							if (!pspec.matchwild('/0150*') or !pspec.matchwild('/0300*') or !pspec.matchwild('/1500*')) then
+								!pspec = '/' & !spres[2]
+								var !spcos coll all spco with ( MATCHWILD(NAME OF CATREF,'/COU-3000-AMB1611-SW-0-0-*') AND NOT (MATCHWILD(NAME OF CATREF,'*x*'))) for $!pspec
+								if (!spcos.size() ge 1) then
+									var !spco name of $!spcos[1]
+									var !p1bore p1 bore of $!spco
+									var !p2bore p2 bore of $!spco
+									var !dtxr rtext of detref of $!spco
+									var !cwei cwei of cmpref of $!spco
+									var !pnum :pnum of $!spco
+									var !thk :THK OF $!spco
+							    --                   LINE NO !TYPE!     P1BORE         !P2BORE!  P3BORE  !DTXR!  ITLE!  QUANTITY!MTOC!MTOT!CWEIGHT!UWEIGHT!SPREF!:PNUM OF SPREF!DocumentNumber!thk
+									!result.writerecord(!pipe & '!COUP!' & !p1bore & '!' & !p2bore & '!0!' & !dtxr & '!0!' & !qty & '!0!0!' & !cwei & '!0!' & !spco & '!' & !pnum & '!' & !documentnumber & '!' & !thk)
+								endif
+							endif
+						endif
+						break
+					elsehandle none
+						var !type type
+						var !p1bore p1 bore
+						if (!type neq 'ATTA' and !type neq 'OLET' and !type neq 'PTAP') then
+							var !ref ref
+						  if (undefined(!branhead)) then
+						    !branhead = !bran
+								var !dist cons dist pa of $!ref to ph
+							else
+							  var !dist cons dist pa of $!ref to pl of $!pref
+						  endif
+
+							var !pref ref
+							if (!dist.real() gt !checkdist) then
+							  !ff.writerecord(!i & ' ' & !zone & ' ' & !brann & ' ' & !ref & ' ' & !p1bore & ' ' & !dist)
+							  !i = !i + 1
+								!qty = int(!dist.real().value() / !checkdist)
+								var !pipe name of pipe
+								var !documentnumber :PWMFIELD5 OF PIPE
+								var !p1 p1 bore
+								!p1 = !p1.replace('mm','')
+								var !spre name of spref
+								!spres = !spre.split('/')
+								if (!spres.size() ge 3) then
+								  if (!spres[2].matchwild('0150*') or !spres[2].matchwild('0300*') or !spres[2].matchwild('1500*')) then
+										!pspec = '/' & !spres[2]
+										var !spcos coll all spco with ( MATCHWILD(NAME OF CATREF,'/COU-3000-AMB1611-SW-0-0-*') AND MATCHWILD(NAME OF CATREF,'*$!p1*') AND (NOT (MATCHWILD(NAME OF CATREF,'*x*')))) for $!pspec
+										if (!spcos.size() ge 1) then
+											var !spco name of $!spcos[1]
+									    var !p1bore p1 bore of $!spco
+									    var !p2bore p2 bore of $!spco
+											var !dtxr rtext of detref of $!spco
+											var !cwei cwei of cmpref of $!spco
+											var !pnum :pnum of $!spco
+											var !thk :THK OF $!spco
+							        --                   LINE NO !TYPE!     P1BORE         !P2BORE!  P3BORE  !DTXR!  ITLE!  QUANTITY!MTOC!MTOT!CWEIGHT!UWEIGHT!SPREF!:PNUM OF SPREF!DocumentNumber!thk
+											!result.writerecord(!pipe & '!COUP!' & !p1bore & '!' & !p2bore & '!0!' & !dtxr & '!0!' & !qty & '!0!0!' & !cwei & '!0!' & !spco & '!' & !pnum & '!' & !documentnumber & '!' & !thk)
+										endif
+									endif
+								endif
+							endif
+						endif
+						do !j
+						  next
+							handle any
+							  break
+							elsehandle none
+							  var !type type
+								var !p1bore p1 bore
+								if (!type neq 'ATTA' and !type neq 'OLET' and !type neq 'PTAP') then
+									var !ref ref
+								  if (undefined(!branhead)) then
+									  !branhead = !bran
+										var !dist cons dist pa of $!ref to ph
+									else
+									  var !dist cons dist pa of $!ref to pl of $!pref
+									endif
+
+									var !pref ref
+									if (!dist.real() gt !checkdist) then
+									  !ff.writerecord(!i & ' ' & !zone & ' ' & !brann & ' ' & !ref & ' ' & !p1bore & ' ' & $!dist)
+							      !i = !i + 1
+										!qty = int(!dist.real().value() / !checkdist)
+										var !pipe name of pipe
+										var !documentnumber :PWMFIELD5 OF PIPE
+										var !p1 p1 bore
+										!p1 = !p1.replace('mm','')
+										var !spre name of spref
+										!spres = !spre.split('/')
+										if (!spres.size() ge 3) then
+											if (!spres[2].matchwild('0150*') or !spres[2].matchwild('0300*') or !spres[2].matchwild('1500*')) then
+												!pspec = '/' & !spres[2]
+												var !spcos coll all spco with ( MATCHWILD(NAME OF CATREF,'/COU-3000-AMB1611-SW-0-0-*') AND MATCHWILD(NAME OF CATREF,'*$!p1*') AND (NOT (MATCHWILD(NAME OF CATREF,'*x*')))) for $!pspec
+												if (!spcos.size() ge 1) then
+													var !spco name of $!spcos[1]
+													var !p1bore p1 bore of $!spco
+													var !p2bore p2 bore of $!spco
+													var !dtxr rtext of detref of $!spco
+													var !cwei cwei of cmpref of $!spco
+													var !pnum :pnum of $!spco
+													var !thk :THK OF $!spco
+							            --                   LINE NO !TYPE!     P1BORE         !P2BORE!  P3BORE  !DTXR!  ITLE!  QUANTITY!MTOC!MTOT!CWEIGHT!UWEIGHT!SPREF!:PNUM OF SPREF!DocumentNumber!thk
+													!result.writerecord(!pipe & '!COUP!' & !p1bore & '!' & !p2bore & '!0!' & !dtxr & '!0!' & !qty & '!0!0!' & !cwei & '!0!' & !spco & '!' & !pnum & '!' & !documentnumber & '!' & !thk)
+												endif
+											endif
+										endif
+									endif
+								endif
+							endhandle
+						enddo
+					endhandle	
+				enddo
+			enddo
+			!ff.close()
+			!result.close()
+		endif
+		$!ceref
+		$p ***********************************
+		$p exported to c:\temp\CouplingMto.txt
+		$p ***********************************
+--		syscom |""C:\Windows\System32\notepad.exe"" c:\temp\CouplingCheck.txt|
+
+	else
+	  !!alert.warning('select SITE, ZONE, PIPE, GPWL, GPSET')
+	endif
+endfunction

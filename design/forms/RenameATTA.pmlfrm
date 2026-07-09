@@ -1,0 +1,61 @@
+
+
+
+
+
+
+setup form !!renameatta dialog dock
+   using namespace 'Aveva.Pdms.Presentation'
+   using namespace 'Aveva.Pdms.Presentation.PMLDBSearchCtrl'
+   member .array is Array
+   member .netcontrol is NETGRIDCONTROL
+
+   !!renameatta.Formtitle='Carantec Netgridtest'
+   !!renameatta.Initcall = '!!renameatta.init()'
+   import 'GridControl'
+   handle any
+   endhandle
+
+   paragraph .txtexample at xmin ymin width 25 lines 1
+   text .intext at at xmin ymax  width 30 is string
+   button .butrefresh 'Add' at xmax.intext ymin.intext callback'!this.add()' 
+   container .colist nobox pmlNetControl |Category | at xmin.intext ymax  anchor left + right + bottom + top height 11  width 80   
+exit
+define method .init()
+  !this.array = object Array()
+  !this.txtexample.val = 'Example.... column1;column2;column3'
+  using namespace 'Aveva.Pdms.Presentation'
+  using namespace 'Aveva.Pdms.Presentation.PMLDBSearchCtrl'
+
+  !this.netcontrol = object NETGRIDCONTROL()
+  !this.colist.Control = !this.netcontrol.handle()
+  !this.netcontrol.cleargrid()
+
+endmethod
+define method .add()
+  !header[1] = 'Column 1'
+  !header[2] = 'Column 2'
+  !header[3] = 'Column 3'
+  using namespace 'Aveva.Pdms.Presentation'
+  using namespace 'Aveva.Pdms.Presentation.PMLDBSearchCtrl'
+
+  if !this.intext.val.length().gt(0) then
+    !split = !this.intext.val.split(';')
+    !numberof
+    !this.Array.append(!split)
+    !data = object netDatasource()
+    !data.netDataSource('Test',!header,!this.array)
+  
+    !this.netcontrol.bindtoDatasource(!data)
+    !this.netcontrol.outlookGroupStyle(false)
+    !this.netcontrol.columnExcelFilter(true)
+    !this.netcontrol.headerSort(false)
+    !this.netcontrol.fixedHeaders(false)
+    !this.netcontrol.columnSummaries(true)
+    !this.netcontrol.singleRowSelection(true)
+    !this.netcontrol.setAlternateRowColor(240,240,255)
+    !this.netcontrol.editableGrid(true)
+    !this.netcontrol.resizeAllColumns()
+
+  endif
+endmethod

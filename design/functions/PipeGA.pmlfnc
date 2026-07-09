@@ -1,0 +1,34 @@
+---------------------------------------------------------------
+-- Function : Find out how many drawings does a pipe go through
+-- Date     : 2024/01/19
+-- Auther   : tw tseng 
+---------------------------------------------------------------
+define function !!PipeGA()
+	!ceref = REF
+	var !proj proj code
+	if (!proj eq 'DAC') then
+	  !xref = '/LIST-DEPT1'
+	else
+	  !xref = '/LIST-COP_PIPLING_PLAN_'
+	endif
+	$!xref
+	handle any
+	  !!alert.warning('No correct DEPT found!')
+	elsehandle none
+		!result = object file('c:\temp\PipeGA.csv')
+		!result.open('overwrite')
+		var !views coll all view for $!xref
+		do !view values !views
+			$!view
+			var !sheet name of sheet
+			var !brans vscan for all bran with matchwild(name of pipe,'*_*')
+			do !bran values !brans
+				var !pipe name of owner of $!bran
+				var !brann name of $!bran
+				!result.writerecord(!sheet & ',' & !pipe & ',' & !brann)
+			enddo
+		enddo
+		!result.close()
+		$P <<<<< PIPE INFO. OUTPUT COMPLETED >>>>>
+	endhandle
+endfunction

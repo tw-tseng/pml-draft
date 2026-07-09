@@ -1,0 +1,59 @@
+define function !!FlowArrow()
+  VIEW
+  handle ANY
+	prompt on
+	prompt dismiss
+	!!Alert.Message('Not in VIEW')
+  elsehandle NONE
+	!layer = !!ce.name & '/FlowArrow' 
+	$!layer
+	handle ANY
+	  new layer $!layer after last meM
+	  new vnote $!layer/VNOTE
+	endhandle
+	$!layer/VNOTE
+	handle ANY
+	  new vnote $!layer/VNOTE
+	endhandle
+	do
+	  prompt off
+	  prompt load escape |Identify PIPE for Flow Arrow|
+	  ID DESEL @
+	  handle ANY $* USER cancel
+			prompt on
+			prompt dismiss
+			break
+	  elsehandle NONE
+			!ref = REF
+			----------------------------------------------------
+			-- the first entity may cause an unexpected error --
+			----------------------------------------------------
+			var !branref ileave tube of  $!ref
+			var !p1pos p1pos of $!branref
+			var !p2pos p2pos of $!branref
+			$!layer/VNOTE
+					var !p1shpos shpos of $!p1pos
+			var !p2shpos shpos of $!p2pos
+			NEW STRA
+			FPT Offset $!p1shpos
+			TPT Offset $!p2shpos
+			nlpn 1
+			VAR !ANGLESTRA ADEG
+			DELETE STRA
+			new symb 
+			TMRF /PW-DRAW-DFLTS-LIBY/SYMB/GEN/SLOPE/ARROW
+			ADEG $!ANGLESTRA
+			PROMPT OFF
+			PROMPT LOAD ESCAPE |Position FlowArrow with the cursors|
+			var !newpos SHPO @
+			HANDLE ANY
+				prompt on
+				prompt dismiss
+				break
+			elsehandle NONE
+				XYPO $!newpos  
+			endhandle			
+	  endhandle
+	enddo  
+  endhandle
+endfunction

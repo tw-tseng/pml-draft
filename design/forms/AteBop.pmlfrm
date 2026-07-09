@@ -1,0 +1,92 @@
+------------------------------------------------
+-- Copyright ATOMTECH Ltd 2024                --
+--                                            --
+-- Function : Bottom of pipe align            --
+-- Author   : IT department of ATOMTECH       --
+-- Date     : 2024/08/02                      --
+------------------------------------------------
+
+setup form !!AteBop dialog
+title 'BOP Tools'
+  path down
+	
+--  rgroup .alignType 'Align to Bottom of' frame HORIZONTAL
+--	  add tag 'Pipe      ' select 'BOP'
+--	  add tag 'Insulation' select 'INS'
+--	exit
+	
+  text   .Clear  'Clearances' width 10 is real
+  text   .posU   'Position U' width 10 is real
+	
+	button .Selent '   Align   ' at xmin.posU+1 ymax.posU+.5 call '!This.BopEle()'  
+  button .Close  'Close' at xmax.Selent+2 ymin.Selent call '!This.Close()'
+exit
+
+define method .AteBop()
+  if (!!cleanances.set()) then
+	  !this.Clear.val = !!cleanances
+	else
+	  !this.Clear.val = 0
+		!!cleanances = 0
+	endif
+--  if (defined(!!alignType)) then
+--	  !this.alignType.select(|$!!alignType|)
+--	endif
+  if (defined(!!posu)) then
+	  !this.posU.val=!!posU
+	endif
+endmethod
+
+define method .BopEle()
+--  if (!this.alignType.selection() eq 'BOP') then
+--	  !!alignType = 'BOP'
+--	else
+--	  !!alignType = 'INS'
+--	endif
+	!!cleanances = !this.Clear.val
+	!!posU = !this.posU.val
+
+  !ce1 = ref
+	!aodiam1 = aodiam
+	handle any
+	  !!alert.error('Not Pipe Fitting!')
+	elsehandle none
+	  !inth = inth
+		!pos = false
+		if (not unset(!!posu)) then
+		  if (!!posU gt 0) then
+			  !pos = true
+			endif
+		endif
+		if (!pos) then
+		  !dist = !aodiam1 * 0.5 + !!cleanances
+		  DRAG MOVE D DIST $!dist to U $!!posU
+		else
+			id@
+			handle any
+			elsehandle none
+				!ce2 = ref
+				!aodiam2 = aodiam
+				handle any
+					-- align to gensec etc.
+					!dist = !aodiam1 * 0.5 + !!cleanances
+				elsehandle none
+					-- align to bran members
+					!dist = (!aodiam1 - !aodiam2) * 0.5 + !!cleanances
+				endhandle
+				if (!!cleanances gt 1) then
+					
+					!dist = !dist + !inth
+				endif
+				
+				$!ce1
+				DRAG MOVE D DIST $!dist to $!ce2
+			endhandle
+		endif
+	endhandle
+--	!this.Close()
+endmethod
+
+define method .Close()
+   kill !!AteBop
+endmethod

@@ -1,0 +1,29 @@
+$(H
+
+------------------------------------------------------------------------
+Copyright ATOMTECH Ltd 2001
+
+Macro:   AUTOREODER                                $Revision: 1.0 $
+Author:  SAM.HO
+
+Macro Generic Type: Results
+
+------------------------------------------------------------------------
+
+$)
+$(D
+
+$)
+!GType = TYPE
+if ( !GType ne 'BRAN' and !GType ne 'HANG') then
+   var !Member coll mem of CE
+   var !Memname eval (NAME) for all from !Member
+   !Memname.Sort()
+   !CMemsize = !Memname.Size() - 1
+   do !I from 1 to $!CMemsize 
+      !J = !I + 1
+      REORDER $!Memname[$!J] AFTER $!Memname[$!I]   
+   enddo
+endif
+
+$.

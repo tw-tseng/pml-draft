@@ -1,0 +1,29 @@
+define function !!paAutoWeldSchFindSpec(!inFindSpec is STRING , !inFindBore is Real , !inAllSpec is ARRAY) is STRING
+    !myExtractSPREF = !inFindSpec.SPLIT('/')
+    !myActFindSpec = !myExtractSPREF[2]        $* === First element is empty, second was SPEC item ===
+    !myConstColumns = 3
+    !myResultString = ''
+    
+    -- q var !myActFindSpec , q var !inFindBore , q var !inAllSpec  
+    Do !theRIdx From 1 to !inAllSpec.Size() 
+         if (!inAllSpec[$!theRIdx][1] EQ !myActFindSpec) then 
+            Do !mySpecBoreSize From 2 to !inAllSpec[$!theRIdx].Size() By !myConstColumns
+                  if (!inFindBore LEQ REAL(!inAllSpec[$!theRIdx][$!mySpecBoreSize])) then 
+                      !colSCH = REAL()
+                      !colMTL = REAL()
+                      !colSCH = $!mySpecBoreSize + 1
+                      !colMTL = $!mySpecBoreSize + 2
+                      !myResultString = !inAllSpec[$!theRIdx][$!colSCH] + ',' + !inAllSpec[$!theRIdx][$!colMTL] 
+                      Break
+                  endif        
+            EndDo
+            Break
+         endif
+    Enddo
+    
+    if (!myResultString eq '') then 
+        !myResultString = 'XXXX' + ',' + 'XXXX' 
+    endif 
+  --  q var !myResultString
+    Return !myResultString
+endfunction

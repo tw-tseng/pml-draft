@@ -1,0 +1,22 @@
+define function !!WeldData(!pspec is string , !pbore is string)
+    !myWeldSchMtl = !!paAutoWeldSchReadDef()    
+    
+    !pspecAry = !pspec.SPLIT('/')
+    !mySPEC = !pspecAry[2]
+    !psize = !pbore.real()    
+    :WSIZE |$!psize|    
+    :WSPEC |$!mySPEC|
+    
+    If (!myWeldSchMtl.LENGTH() LEQ 0) Then
+       :WSCH |XXXX|
+       :WMAT |XXXX|      
+    Else
+       !WeldArySchMtl = !!paAutoWeldSchArySpec(!myWeldSchMtl)
+       !myWeldSchMtlInfo = !!paAutoWeldSchFindSpec(!pspec , REAL(!pbore) , !WeldArySchMtl)
+       !myResultSchMtlARY = !myWeldSchMtlInfo.SPLIT(',')
+       
+       :WSCH |$!myResultSchMtlARY[1]|
+       :WMAT |$!myResultSchMtlARY[2]|        
+    EndIf
+endfunction
+

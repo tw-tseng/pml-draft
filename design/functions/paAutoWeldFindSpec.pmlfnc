@@ -1,0 +1,18 @@
+define function !!paAutoWeldFindSpec(!inFindSpec is STRING , !inAllSpec is ARRAY) is STRING
+    !myActFindSpec = SubString(!inFindSpec,2)   $* Ignore first character '/'
+    !myConstColumns = 3
+    !myResultString = ''
+    
+  --  q var !inFindSpec
+  --  q var !inAllSpec
+    
+    Do !theIdx From 1 to !inAllSpec.Size() By 3
+         If (!myActFindSpec EQ !inAllSpec[$!theIdx]) then 
+            !myResultString = !inAllSpec[$!theIdx + 1 ]  + ','  + !inAllSpec[$!theIdx + 2 ] 
+            Break
+         EndIf          
+    Enddo
+
+  --  q var !myResultString
+    Return !myResultString
+endfunction

@@ -1,0 +1,221 @@
+---------------------------------------------------------------------------------
+-- Function : Analysis which objects modified from text file exported from E3D --
+--            and write relavent info. in :MREF field                          --
+-- Auther : T.W. Tseng                                                         --
+-- Date : 2024/01/05                                                           --
+---------------------------------------------------------------------------------
+
+setup form !!AutoCloud
+title 'Deferences'
+  path down
+  button .createdif  'Create Different Text File' call '!This.diffile()'
+  button .writeMREF  'Write MREF into Model'      call '!This.writeMREF()'
+  button .clearMREF  'Clear MREF from Model'      call '!This.clearMREF()'
+  button .Cancel     'Cancel'                     call '!This.Close()'
+exit
+
+--------------------------------------
+-- output difference to a text file --
+--------------------------------------
+define method .diffile()
+  !ce = ref
+  var !pipes coll all pipe with not (matchwild(name of site,'*CABLE*')) for $!ce
+  
+  if (!pipes.size() ge 1) then
+    if (undefined(!!fileBrowser)) then
+	    pml load form !!fileBrowser
+    endif
+    import 'pmlfilebrowser'
+    handle any
+    endhandle
+    Using namespace 'Aveva.Core.Presentation'
+    !browser = object PMLFILEBROWSER( 'NEW' )
+    !browser.show('C:\temp\', '*.txt', 'Difference', false, '', 2)
+    !file = !browser.file()
+ 	  if (!file neq '') then
+      !ff = object file(!file)
+      !ff.Open('OVERWRITE')
+      !ff.close()
+      !fff = object file('c:\temp\diff.txt')
+      !fff.Open('OVERWRITE')
+      !fff.close()
+      do !pipe values !pipes
+        var !mems coll all bran members for $!pipe
+        if (!mems.size() ge 1) then
+          !comparesession = '9999999'
+          do !mem values !mems
+            $!mem
+            var !hist hist for $!mem
+            if (!hist.split(' ').last().real() lt !comparesession.real()) then
+              !comparesession = !hist.split(' ').last()
+            endif
+          enddo
+--          $P $!comparesession
+          var !compared sessd $!comparesession
+          !compareds = !compared.trim().split(' ')
+          !adddate = !compareds[2].real() + 1
+          !comparedate = !compareds[1] & ' ' & !adddate  & ' ' & !compareds[3]  & ' ' & !compareds[4]
+          
+          ALPHA FILE "c:\temp\diff.txt" APPEND
+          DIFFERENCE $!pipe SINCE $!comparedate
+          ALPHA FILE END              
+        endif
+      enddo
+      
+            
+      !fff = object file('c:\temp\diff.txt')
+      !fff.Open('READ')      
+
+            
+      
+      !lines = !fff.readfile()
+      !i = 1
+      !ent = ''
+      !list = object array()
+			do !j
+			  !line = !lines[!i]
+        if (!line.matchwild('*[*') and !line.matchwild('*]*')) then
+          if (!ent neq '') then
+            if (!list.size() gt 0) then
+              !ff = object file(!file)
+              !ff.Open('APPEND')
+              do !lis values !list
+                !ff.WriteRecord(!lis)
+              enddo
+              !ff.close()
+              
+--              !this.exportfff(!ff, !list)
+--              $p $!ent -> draw cloud
+--              !this.doMREF(!list)
+            endif
+          endif
+          !list.clear()
+          !ent = !line.split('[').getindexed(2).split(']').getindexed(1)
+        else
+          if (!ent neq '') then
+--            $p $!ent -> read line and append to array
+            if (not (badref(object dbref(|$!ent|)))) then
+              var !type type of $!ent
+              var !ref ref of $!ent
+              !attr = ''
+              !value = ''
+              if (!line.substring(1,4) eq 'Name') then
+                !attr = 'NAME'
+              elseif (!line.substring(1,4) eq ':STE') then
+                !attr = ':STEXT'
+              elseif (!line.substring(1,4) eq 'Stex') then
+                !attr = 'STEXT'
+              elseif (!line.substring(1,4) eq 'Orie' or !line.substring(1,4) eq 'Angl' or !line.substring(1,4) eq 'Posi') then
+                !attr = 'POS'
+              endif
+              if (!attr eq 'NAME' or !attr eq ':STEXT' or !attr eq 'STEXT' or !attr eq 'POS') then
+                !i = !i + 2
+                !line = !lines[!i]
+                if (!line.matchwild('*New value*')) then
+                  !value = !line.after('New value= ')
+                  -----------------------
+                  -- add only once POS --
+                  -----------------------
+                  !rec = true
+                  if (!attr eq 'POS') then
+                    do !lis values !list
+                      if (!lis.split('!').getindexed(3).eq('POS')) then
+                        !rec = false
+                      endif
+                    enddo
+                  endif
+                  if (!rec) then
+--                    $p $!ref $!type $!attr $!value
+                    
+                    !list.append(!ref & '!' & !type & '!' & !attr & '!' & !value)
+                  endif
+                else
+                  $p error - $!ref not New value
+                endif
+              endif
+            endif
+          endif
+        endif
+        !i = !i + 1
+--        $p $!i
+        if (!i gt !lines.size()) then
+          if (!list.size() gt 0) then
+            !ff = object file(!file)
+            !ff.Open('APPEND')
+            do !lis values !list
+              !ff.WriteRecord(!lis)
+            enddo
+            !ff.close()
+--            !this.exportfff(!ff, !list)
+--            $p $!ent -> draw cloud
+--            !this.doMREF(!list)
+          endif
+          break
+        endif
+			enddo
+			
+			!fff.close()
+     
+      
+      
+      
+      
+      $p <<<<<<<<<< Output Completed >>>>>>>>>>
+    endif
+    $!ce
+  else
+    !!alert.warning('No pipes')
+  endif
+endmethod
+
+
+define method .writeMREF()
+
+
+
+
+    if (undefined(!!fileBrowser)) then
+	    pml load form !!fileBrowser
+    endif
+    import 'pmlfilebrowser'
+    handle any
+    endhandle
+    Using namespace 'Aveva.Core.Presentation'
+    !browser = object PMLFILEBROWSER( 'OPEN' )
+    !browser.show('C:\temp\', '*.txt', 'Difference', true, '', 2)
+    !file = !browser.file()
+
+
+
+
+
+
+	if (!file neq '') then
+	  if (!!alert.confirm('Write MREF into Model?') eq 'YES') then
+    
+		endif
+	endif
+endmethod
+
+define method .Close()
+   kill !!AutoCloud
+endmethod
+
+define method .doMREF(!list is array)
+  do !lis values !list
+    !ref   = !lis.split('!').getindexed(1)
+    !type  = !lis.split('!').getindexed(2)
+    !attr  = !lis.split('!').getindexed(3)
+    !value = !lis.split('!').getindexed(4)
+    $p $!ref
+    $p $!type
+    $p $!attr
+    $p $!value
+  enddo
+endmethod
+
+define method .exportfff(!file is file, !list is array)
+  do !lis values !list
+    !file.WriteRecord(!lis)
+  enddo
+endmethod

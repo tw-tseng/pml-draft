@@ -1,0 +1,564 @@
+$(
+------------------------------------------------------------------------
+--
+--   File:          KTIIso.pmlfrm
+--   Type:          Form Definition
+--
+--   Module:        common
+--   Replaces:
+--
+-- Author:          L.Scaringi
+-- Created:         May 12th, 2014 --> revised on June 10th, 2023
+-- Last modification: Jun 21st, 2023 added formule to change coordinates
+--
+-- Description:
+-- Isometric drawing production and review according to KTI needs
+--
+---------------------------------------------------------------------------------------
+--
+    pml reload form !!makeIso
+    show !!makeIso
+$)
+--
+Kill !!makeIso
+setup form !!makeIso resizeable
+-- document float
+--
+  !this.formTitle     = 'Make Isometric Drawings'
+  !this.iconTitle     = 'IsoGen'
+  !this.initcall      = '!this.initialise()'
+  !this.cancelCall    = '!this.close()'
+  !this.formRevision  = ' $Revision: 1.0 $ '
+
+  -- Icon size from the common control
+  !iconSize = !!comSysOpt.iconSize()
+
+-- Utilitiy buttons...
+  frame .frmUtiltity 'Utility' at x0 y0
+      button .isomessages      at x0.2 y0.7   tooltip 'View error File...' pixmap width $!iconSize height $!iconSize callback |!this.ErrMessages()|
+      button .isoLog           at xmax      tooltip 'View Log File...' pixmap width $!iconSize height $!iconSize callback |!this.LogMessages()|
+  exit
+  
+-- Option File, Output Dir, PDF option
+  frame .frmOption 'Option file and Output Dir' at x20 y0
+    para .parOptDir    at x1  y1.4 text |Option File: |
+	text .optionFile   at x15 y1.4 || width 40 is STRING
+	para .parOutDir    at x1  y2.8 text |Output Dir:|
+	text .outputDir    at x15 y2.8 || width 40 is STRING
+	para .txtClaDate   at x80 y1      text |Current Date: Unset | width 25 
+  exit
+ --
+-- Pipe List and isometric status
+   list  .lstPipes  |PIPE List| at x1 y9 anchor top+left tooltip |Selected Pipes| callback |!this.SelectSheet()| MULTIPLE width 50 length 40
+   
+-- Isometric plotview  53
+    view .plot at xmax.lstPipes+2 y10 plot width 105 height 25
+    borders on
+   exit
+
+--  Buttons To add Pipe to List and To view Pipe Iso Drawing if it has been generated
+    button .addPipes |Add PIPEs in Tree Level to PIPE List|   at x1 y7 call |!this.AddPipesToList()|
+    button .remSelectedPipe |Remove Selected PIPE from PIPE List|   at x41 y7 call |!this.RemoveSelectedPipe()|
+	button .remAllPipes |Clear PIPES in PIPE List|   at x80 y7 call |!this.ClearAllPipes()|
+	option .optSheet   at x110  y7 '' callback |!this.DisplaySheet()| width 35
+
+--
+--  Run Iso Generation or Exit
+    button .make |Create ISOs|   at x1 y2.8 call |!this.makeIsos()|
+    button .cancel |Cancel|      at x3.5 y5 CANCEL
+-- 
+    member .curEle     is DBREF
+    member .vActivePipes is ARRAY
+    member .nVactivePipes is REAL
+    member .status     is ARRAY
+    member .isoCreated is BOOLEAN   
+    member .vPlotFile  is ARRAY
+    member .nVPlotFile is REAL
+--
+    member .pipeGrid   is ARRAY  
+	member .nErrors    is REAL
+--
+    member .xSize      is REAL
+	member .xThickness is REAL
+	member .xQty       is REAL
+	member .ypos       is REAL
+	member .dy         is REAL
+	member .chSize     is REAL
+--
+    member .maxIsos    is REAL
+--
+exit
+--
+----------------------------------------------------------------------------------------------------------------
+--
+define method .close()
+endmethod
+--
+----------------------------------------------------------------------------------------------------------------
+--
+define method .makeIso()
+
+-- Icon size from the common control
+  !iconSize = !!comSysOpt.iconSize()
+  !this.isomessages.addPixmap(!!pml.getPathName('reports' & !iconSize & '.png'))
+  !this.isoLog.addPixmap(!!pml.getPathName('reports' & !iconSize & '.png'))
+--  
+     !header[1] = ' --------------------- PIPEs ----------------- '
+	 !header[2] = '                       STATUS                  '
+     !this.LstPipes.setHeadings(!header)
+--
+    !this.xSize = 45
+	!this.xThickness = 70
+	!this.xQty = 95
+	!this.ypos = 33.5
+	!this.dy   = 5
+	!this.chSize = 2.5
+--
+endmethod
+--
+----------------------------------------------------------------------------------------------------------------
+--
+define method .initialise()
+
+     !this.curEle = !!ce
+	 !optFile = 'APaulWurth.met'
+--
+--
+	 !this.outputDir.val   = 'C:\temp\ISOs'
+     syscom |"mkdir $!this.outputDir.val"|
+--
+     !curDate = object DATETIME()
+     !curDay = !curDate.date()
+     !curMonth = !curDate.month()
+     !curYear = !curDate.year()
+	 !this.txtClaDate.val  = !curDay & '-' & !curMonth & '-' & !curYear
+--
+     !curName = !this.curEle.name
+	 !project = CURRENT PROJECT
+     !projCode = !project.code()
+	 !isoVar   = !projCode & 'ISO'
+	 !isoDir   = !!evar(!isoVar) & '\std\'
+	 !optFileFullName = !isoDir & !optFile
+	 !this.optionFile.val = !optFileFullName
+--
+     !this.nVactivePipes = 0
+     !this.vactivePipes.clear()
+     !this.lstPipes.clear()
+     !this.status.clear()
+--
+     !this.isoCreated = FALSE
+--
+     !this.nVPlotFile = 0
+     !this.vPlotFile.clear()
+     !this.optSheet.clear()
+     !this.plot.clear()
+	 !this.pipeGrid.clear()
+--
+     !this.isoCreated = FALSE
+	 !this.maxIsos = 50
+--
+endMethod
+--
+------------------------------------------------------------------------------------
+--
+define method .addPipesToList()
+--
+   !CurType = !!CE.type
+   !CurPos = !!CE
+ --  if (!CurType eq 'WORL') or (!CurType eq 'SITE') then
+   if (!CurType eq 'WORL')  then
+      !!Alert.warning('WORLD or SITE Selection not allowed')
+	  golabel /ESCI
+   endif
+   var !AllPipes collect ALL PIPE for CE
+   !nFound = arraySize(!AllPipes)
+   if (!nFound eq 0) then
+      !!Alert.warning('No PIPEs found')
+      golabel /ESCI
+   endif
+   do !n from 1 to !nFound
+      if (!n gt !this.maxIsos) then
+	     !!Alert.warning('Maximum number of PIPEs loaded !this.maxIsos - extra PIPEs will be skipped')
+		 golabel /ESCI
+	  endif
+      !CurPipe = !AllPipes[$!n]
+	  !namn = namn of $!CurPipe
+      !this.AddPipe(!namn)
+   enddo
+label /ESCI
+   $!CurPos
+endmethod
+--
+------------------------------------------------------------------------------------
+--
+define method .addPipe(!pipeName is STRING) 
+--
+    DO !n from 1 to !this.nVactivePipes
+	   if (!pipeName eq !this.vactivePipes [$!n]) then
+	      golabel /ESCI                                   $* pipe already included
+	   endif
+	ENDDO
+--
+    !this.nVactivePipes = !this.nVactivePipes + 1
+	!this.vactivePipes [$!this.nVactivePipes] = (!pipeName)
+	!this.lstPipes.add(!pipeName)
+	!k = arraysize(!this.status)
+	!k = !k + 1
+	!this.status[!k] = '-'
+--
+label /ESCI
+endmethod
+--
+------------------------------------------------------------------------------------
+--
+define method .removeSelectedPipe()
+--
+   !selectedlineNumbers = !this.lstPipes.val
+   !elementsInList      = !this.lstPipes.rtext
+   
+   !newList = ARRAY()
+   !newPipe = ARRAY()
+   do !n from 1 to !elementsInList.size()
+      do !k from 1 to !selectedlineNumbers.size()
+         !curKNumber = !selectedlineNumbers[!k]
+         if (!n eq !curKNumber) then
+           golabel /next
+         endif
+      enddo
+      !current = !elementsInList[!n]
+      !onlyPipeName = !current.before(' ')
+      !newList.append(!current)
+      !newPipe.append(!onlyPipeName)
+label /next
+   enddo
+   --q var !newList
+   --q var !newPipe
+   !this.vactivePipes.clear()
+   !this.vactivePipes = !newPipe
+   !this.nVactivePipes = !newPipe.size()
+   !this.lstPipes.clear()
+   do !n from 1 to  !newList.size()
+     !this.lstPipes.add(!newList[!n])
+   enddo
+  return
+   
+--
+   --!this.lstPipes.clear()
+   --!this.lstPipes.rText = !this.lstPipes
+   --!this.lstPipes.dText = !this.lstPipes
+   --!nV = !this.lstPipes.val
+   --!nSelected = !nV[1]
+   --!this.lstPipes.clear(!nSelected)
+   --!rootStatus = '!this.ST'   
+----
+    --!k = 0
+	--!v = array()
+	--!v.clear()
+	--do !n from 1 to !this.nVactivePipes
+	   --if (!n eq !nSelected) then
+	      --golabel /nextPipe
+	   --endif
+	   --!k = !k + 1
+	   --!v[$!k] = !this.vactivePipes [$!n]
+--label /nextPipe
+	--enddo
+	--!this.nVactivePipes = !K
+	--!this.vactivePipes.clear()
+	--!this.vactivePipes = !v
+--
+endmethod
+--
+------------------------------------------------------------------------------------
+--
+define method .clearAllPipes()
+--
+   !this.nVactivePipes = 0
+   !this.VactivePipes.clear()
+   !this.LstPipes.clear()
+   !this.PipeGrid.clear()
+   !this.OptSheet.clear()
+--
+   !this.IsoCreated = FALSE
+endmethod
+--
+------------------------------------------------------------------------------------
+--
+define method .makeIsos()
+--
+     !CurEle = !!CE.refno
+--
+     !AllPipes = !this.VActivePipes
+	 !nPipes   = !this.nVActivePipes
+	 do !n from 1 to !nPipes
+	    !row[1] = !AllPipes[$!n]
+		!row[2] = '-'
+		!this.PipeGrid[$!n] = !row
+	 enddo
+	 !this.LstPipes.setRows(!this.PipeGrid)
+	 !this.LstPipes.reFresh()
+--
+     !WrtLog = object FILE(|C:\temp\IsoLog.log|)
+     !WrtLog.Open( 'OVERWRITE' )
+	 !WrtErr = object FILE(|C:\temp\IsoErrors.txt|)
+     !WrtErr.Open( 'OVERWRITE' )
+	 !T = object datetime()
+--
+     !this.nErrors = 0
+--	 ISODRAFT
+     do !n from 1 to !nPipes
+	    !CurPipe = !AllPipes[$!n]
+		!firstChar = substr(!CurPipe,1,1)
+		if (!firstChar ne '=') then
+		   !CurPipe = '/' & !CurPipe
+		endif
+		!Time = !t.datetime()
+$P CUrPipe is $!CurPipe
+	    !WrtLog.WriteRecord('$!Time - Processing Pipe: $!CurPipe ')
+	    !yn = !this.generateIsoCurPipe(!CurPipe)                           $* metodo per la creazione isometrico
+		if (!yn eq 'Done') then
+		   !Status = 'Iso Generated'
+		   !Time = !t.datetime()
+	       !WrtLog.WriteRecord('$!Time - Iso has been generated for PIPE $!CurPipe ')
+		   !WrtLog.WriteRecord(' ')
+		else
+		   if (!yn ne 'IsoErr') then
+		      !WrtLog.Close()
+	          !WrtErr.Close()
+			  !WrtErr.WriteRecord('$!Time - Error Using Option FIle, please check it..! ')
+			  !WrtLog.WriteRecord('$!Time - No Isometric has been generated for PIPE $!CurPipe - look at specific error file in output directory')
+			  golabel /ESCI
+		   endif
+		   !Status = 'Error creating Iso'
+		   !WrtErr.WriteRecord('$!Time - Error Creating Iso for PIPE $!CurPipe - check specific Error File ')
+		   !WrtErr.WriteRecord(' ')
+		   !this.nErrors = !this.nErrors + 1
+		endif
+		!row[1] = !AllPipes[$!n]
+		!row[2] = !Status
+		!this.PipeGrid[$!n] = !row
+		!this.LstPipes.setRows(!this.PipeGrid)
+	    !this.LstPipes.reFresh()
+	 enddo
+--	 EXIT
+	 !this.IsoCreated = TRUE
+--
+     !WrtLog.Close()
+	 !WrtErr.Close()
+--
+     $!CurEle
+	 !this.IsoCreated = TRUE
+	 if (!this.nErrors gt 0) then
+	    !!Alert.Warning( | $!This.Erros error Producing Isos - Please check C:\temp\IsoErrors.txt file | )
+	 endif
+--
+Label /ESCI
+     !!Alert.Message( |Process Completed..!  log file is C:\temp\IsoLog.log | )
+     $!CurEle
+     handle any
+     endhandle
+endmethod
+--
+------------------------------------------------------------------------------------
+--  
+define method .selectSheet()
+--
+   if (!this.IsoCreated eq FALSE) then
+      golabel /ESCI
+   endif
+   !CurObj = CE
+--   !nselected = !this.LstPipes.val
+   !nV = !this.LstPipes.val
+   !nselected = !nV[1]
+   !PipeNameNoSlash =  !this.VActivePipes[$!nselected]
+--
+   !BaseFileName = !PipeNameNoSlash.replace('=','_')
+   !BaseFileName = !BaseFileName.replace('/','_')
+   !BaseFileName = !BaseFileName.replace('\','_')
+   !BaseFileName = !BaseFileName.replace('"','_')
+   !BaseFileName = !BaseFileName.replace(|'|,|_|)
+   !Outdir =    !this.OutputDir.val
+--
+   if (!Outdir eq '') then
+      golabel /ESCI
+   endif 
+   !Outdir =  !Outdir & '\'
+--
+   !PlotFiles = !Outdir & !BaseFileName & '0*'
+   !ListFile = !Outdir & !BaseFileName & '_LIST.txt'
+   SYSCOM 'DIR /B $!PlotFiles > $!ListFile'
+   !Input = object FILE(|$!ListFile|)
+   !Input.Open('READ')
+   handle (41,319)
+      golabel /ESCI
+   endhandle
+   !this.nVPlotFile = 0
+   !this.VPlotFile.clear()
+   !this.optSheet.clear()
+   !this.plot.clear()
+   DO
+     !Line = !Input.ReadRecord()
+     if !Line.unset() then
+         BREAK
+     endif
+     !dxfyn = !Line.match('.dxf')
+	 if (!dxfyn gt 0) then
+	    golabel /Next
+	 endif
+	 !this.nVPlotFile = !this.nVPlotFile + 1
+	 !this.VPlotFile[$!this.nVPlotFile] = !Outdir & !Line
+	 !this.optSheet.add(!Line)
+	 if (!this.nVPlotFile eq 1) then
+	     !this.plot.add(|$!this.VPlotFile[$!this.nVPlotFile]|)
+		 !this.optSheet.refresh()
+     endif
+label /Next
+   ENDDO
+   !Input.close()
+--
+label /ESCI
+--
+endmethod
+--
+----------------------------------------------------------------------------------------------
+--
+define method .displaySheet()
+--
+   if (!this.IsoCreated eq TRUE) then
+      !n = !this.optSheet.val
+      !PltFile = !this.VPlotFile[$!n]
+      !this.plot.clear()
+      !this.plot.add(|$!PltFile|)
+   endif
+endmethod
+--
+-----------------------------------------------------------------------------------------------
+--
+define method .errMessages()
+   if (!this.IsoCreated eq TRUE) then
+      SYSCOM 'Notepad C:\temp\IsoErrors.txt'
+   endif
+endmethod
+--
+-----------------------------------------------------------------------------------------------
+--
+define method .logMessages()
+   if (!this.IsoCreated eq TRUE) then
+      SYSCOM 'Notepad C:\temp\IsoLog.log'
+   endif
+endmethod
+--
+-----------------------------------------------------------------------------------------------
+--
+define method .generateIsoCurPipe(!Pipe is string) is string
+     !retcode = !this.setCoordinate(!Pipe)
+$P PAsso con $!retcode
+     if (!retcode neq 'OK') then
+        !!Alert.Error( |Error getting component coordinate...! | )
+        Return 'Coordinate Problems '
+     endif
+     !Return = 'Done'
+	 !OutDir = !this.OutputDir.val
+	 !BaseFileName = namn of $!Pipe
+	 !BaseFileName = !BaseFileName.replace('=','_')
+	 !BaseFileName = !BaseFileName.replace('/','_')
+	 !BaseFileName = !BaseFileName.replace('\','_')
+	 !BaseFileName = !BaseFileName.replace('"','_')
+	 !BaseFileName = !BaseFileName.replace(|'|,|_|)
+	 !OptFile = !this.OptionFile.val
+--
+-- Delete Previous FIles
+--
+	 !AllFiles = !OutDir & '\' & !BaseFileName & '*.*'
+	 SYSCOM 'DEL /Q $!AllFiles'
+--
+--   Create Iso e related file for Current Pipe
+--
+     !OutDir = !OutDir & '/'
+	 !IsoDwgName = !BaseFileName
+	 !OutFile   = !OutDir & !IsoDwgName
+     !MatFile   = !OutDir & !IsoDwgName & '-Mat.txt'
+     !MesFile   = !OutDir & !IsoDwgName & '-mes.txt'
+--
+q var !OptFile
+     ISODRAFTMODE
+	   $M/$!OptFile
+	   handle any
+	      !!Alert.Error( |Error Managing Option File, please check it Existance or Definition...! | )
+          EXIT
+          Return 'OptionFile Problems'
+	   endhandle
+	   
+	   !FileSpecification = 'File AND DXF  "' & !OutFile & '"  SINGLE'
+       $!FileSpecification
+	   MessageFile "$!MesFile" OVERWRITE
+       MatlistFile "$!MatFile" OVERWRITE with 55 lines
+--
+	   DETAIL PIPE $!Pipe
+	   handle any
+	      EXIT
+		  Return 'IsoErr'
+	   endhandle
+--
+	 EXIT
+	Return !Return
+endmethod
+
+--
+-----------------------------------------------------------------------
+--
+define method .setCoordinate(!pipe is STRING) is STRING
+  !ce = !!ce
+  var !allBran collect all bran for $!pipe
+  !allMember = ARRAY()
+  do !n from 1 to !allBran.size()
+     !curBran = !allBran[!n]
+     var !curMember COLLECT ALL BRA MEM for $!curBran
+     !allMember.appendArray(!curMember)
+  enddo
+--
+  !v = ARRAY()
+  do !n from 1 to !allMember.size()
+    !curelement = !allMember[!n]
+    !yn = !curelement.match('IL TUB OF')
+    if (!yn gt 0) then
+       skip
+    endif
+    !v.append(!curelement)
+  enddo
+--
+  do !n from 1 to !v.size()
+    !curelement = !v[!n]
+    !type = TYPE of $!curelement
+    --if (!type eq 'GASK') then
+        --skip
+    --endif
+    if (!type ne 'ELBO') and (!type ne 'VALV') and (!type ne 'FLAN') and(!type ne 'FBLI') and (!type ne 'TEE') $
+        and (!type ne 'OLET') and (!type ne 'INST') then
+      skip
+ --$P passo con errore
+      --return 'TYPE $!type not managed in LEXICON'
+    endif
+    !pos = POS of $!curelement wrt /*
+    !posx = ABS ( !pos.east )
+    !posy = ABS ( !pos.north )
+    !posz = !pos.up
+    !sposx =  ( !posx * !posx )
+    !sposy =  ( !posy * !posy )
+	!radius = SQRT(!sposx + !sposy)
+	!degree  =  ATAN (!posy / !posx)
+	!newdeg =   12.68312826
+	!newalpha =  !degree - !newdeg
+	!newalphadeg = !newalpha
+	!xCoordinate = ABS ( !radius * COS(!newalphadeg) )
+    !yCoordinate = ABS ( !radius * SIN(!newalphadeg) )
+    !strCoordx = 'X ' + !xCoordinate.string('d3').before('mm')
+    !strCoordy = 'Y ' + !yCoordinate.string('d3').before('mm')
+    !strCoordz = 'EL ' + !posz.string('d2').before('mm')
+	$!curelement
+	:COORDX |$!strCoordx|
+    :COORDY |$!strCoordy|
+    :COORDZ |$!strCoordz|
+  enddo
+  !!ce = !ce
+  return 'OK'
+endmethod

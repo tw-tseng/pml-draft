@@ -1,0 +1,218 @@
+-- Description : AteBoltcheck in design
+-- Module      : Design
+-- Author      : BY Chen
+-- Created     : 2024/10/21
+
+import 'GridControl'
+handle any
+endhandle
+Import 'pmlfilebrowser'
+handle any
+endhandle
+
+setup form !!AteBoltcheck resize
+	container .netFrame pmlNetControl 'NET' dock fill height 20 width 120
+	button .apply  'CE'            at x50 ymin  anchor r+t call '!this.GetSpco()'
+	button .sel  'Navigate To'     at x58 ymin  anchor r+t call '!this.sel()'
+	button .save 'Save'            at x75 ymin  anchor r+t call '!this.save()'
+  member .columnHeadings    is ARRAY
+  member .attributeTable    is ARRAY
+  member .file              is STRING
+  using namespace 'Aveva.Core.Presentation'
+  member .dbCtrl is NETGRIDCONTROL
+  member .rows is array
+  member .columns is array
+exit
+
+define method .AteBoltcheck()
+  show !!AteBoltcheck
+  !this.GetSpco()
+endmethod
+
+define method .save()
+	Using namespace 'Aveva.Core.Presentation' $*
+	!browser = object PMLFILEBROWSER('SAVE')
+	!browser.show('%PDMSUSER%', 'Report', 'Report Filename', false ,' xls files (*.xls)|*.xls' , 2)
+	!file = !browser.file()
+	if (!file neq '') then
+		!this.dbCtrl.saveGridToExcel(!browser.file())
+	endif
+endmethod
+
+define method .sel()
+  do !aa values !this.dbCtrl.GetSelectedRows()
+	  $!aa[1]
+  enddo
+endmethod
+
+define method .GetSpco()
+  using namespace 'Aveva.Core.Presentation'
+  !this.dbCtrl = object NETGRIDCONTROL()
+  !this.netFrame.control = !this.dbCtrl.handle()
+  !title = 'Boltcheck'
+  !Heading[1] = 'REF'
+  !Heading[2] = 'COMP.SPREF'
+  !Heading[3] = 'PPOINT'
+	!Heading[4] = 'PCONN'
+  !Heading[5] = 'BORE'
+  !Heading[6] = 'TYPE'
+  !Heading[7] = 'BOLT SPREF'
+  !Heading[8] = 'RTEXT'
+  !Heading[9] = 'BD'
+	!Heading[10] = 'BL'
+	!Heading[11] = 'BW'
+	!Heading[12] = 'BN'
+	!Heading[13] = 'GASK.THK.'
+	!Heading[14] = 'FLTH'
+  
+	
+  !dbi = 1
+	var !mems coll all bran mem for ce
+		do !b indices !mems
+			!mem = !mems[!b]
+			var !ppls ppls of $!mem
+			handle any
+			  --------------------
+			  -- no valid spref --
+				--------------------
+			elsehandle none
+				!pls = !ppls.split()
+				
+				do !i indices !pls
+					!pl = 'p' & $!pls[$!i] & 'conn'
+					var !pconn $!pl of $!mem
+					!pconn1 = !pconn.substring(1,1)
+					if (!pconn1 eq 'F') then
+						
+							var !ref ref of $!mem
+							!pn = 'P' & '$!pls[$!i]'
+							var !a $!pn bolt total of $!mem
+							handle any
+								-----------------------------------------------------------
+								-- cannot find match flange connected to forien database --
+								-----------------------------------------------------------
+							elsehandle none
+								var !type type of $!mem
+								var !compspref spref of $!mem
+								var !bore $!pn bore of $!mem
+								var !sref $!pn bolt $!a spref of $!mem
+								var !rt $!pn bolt $!a rtext of $!mem
+								var !l $!pn bolt $!a blength of $!mem
+								var !d $!pn bolt $!a bdiameter of $!mem
+								var !w $!pn bolt $!a bweight of $!mem
+								var !n $!pn bolt $!a noff of $!mem
+								var !flth rprop flth of $!mem
+								handle any
+								  !flth = ''
+								endhandle
+								
+								--------------------------
+								-- get gasket thickness --
+								--------------------------
+								!gask = ''
+								var !padir pa dir of $!mem
+								var !pndir $!pn dir of $!mem
+								if (!pndir.direction() eq !padir.direction()) then
+									--------------------------
+									-- find previous object --
+									--------------------------
+									var !pre prev of $!mem
+									handle any
+										--------------------------------
+										-- check the last mem of href --
+										--------------------------------
+										var !href href of owner of $!mem
+										handle any
+											-----------------------
+											-- no href reference --
+											-----------------------
+										elsehandle none
+											var !pre last mem of $!href
+											handle any
+												------------------
+												-- empty branch --
+												------------------
+											elsehandle none
+												var !pretype type of $!pre
+												if (!pretype eq 'GASK') then
+													var !gask fitlen of $!pre
+												endif
+											endhandle
+										endhandle
+									elsehandle none
+										var !pretype type of $!pre
+										if (!pretype eq 'GASK') then
+											var !gask fitlen of $!pre
+										endif
+									endhandle		
+								else
+									----------------------
+									-- find next object --
+									----------------------
+									var !next next of $!mem
+									handle any
+										---------------------------------
+										-- check the first mem of tref --
+										---------------------------------
+										var !tref tref of owner of $!mem
+										handle any
+											-----------------------
+											-- no tref reference --
+											-----------------------
+										elsehandle none
+											var !next first mem of $!tref
+											handle any
+												------------------
+												-- empty branch --
+												------------------
+											elsehandle none
+												var !nexttype type of $!next
+												if (!nexttype eq 'GASK') then
+													var !gask fitlen of $!next
+												endif
+											endhandle
+										endhandle
+									elsehandle none
+										var !nexttype type of $!next
+										if (!nexttype eq 'GASK') then
+											var !gask fitlen of $!next
+										endif
+									endhandle		
+								endif
+								
+								!dbNames[!dbi][1] = '$!ref'
+								!dbNames[!dbi][2] = !compspref
+								!dbNames[!dbi][3] = '$!pn'
+								!dbNames[!dbi][4] = '$!pconn'
+								!dbNames[!dbi][5] = '$!bore'
+								!dbNames[!dbi][6] = '$!type'
+								!dbNames[!dbi][7] = '$!sref'
+								!dbNames[!dbi][8] = '$!rt'
+								!dbNames[!dbi][9] = 'M' & '$!d'
+								!dbNames[!dbi][10] = '$!l'
+								!dbNames[!dbi][11] = '$!w'
+								!dbNames[!dbi][12] = '$!n'
+								!dbNames[!dbi][13] = !gask
+								!dbNames[!dbi][14] = !flth
+								!dbi = !dbi + 1
+							endhandle
+					endif	
+				enddo
+			endhandle
+		enddo
+  
+	  if (defined(!dbNames)) then
+			using namespace 'Aveva.Core.Presentation'
+			!nds = object NETDATASOURCE(!title, !Heading, !dbNames)
+			!this.dbCtrl.bindToDataSource(!nds)
+			!this.dbCtrl.columnExcelFilter(true)
+			!this.dbCtrl.outlookGroupStyle(false)
+			!this.dbCtrl.fixedHeaders(true)
+			!this.dbCtrl.fixedRows(true)
+			!this.dbCtrl.outlookGroupStyle(true)
+			!this.dbCtrl.gridHeight(1000.0)
+			!this.dbCtrl.SingleRowSelection(false)
+		endif
+  
+  
+endmethod
