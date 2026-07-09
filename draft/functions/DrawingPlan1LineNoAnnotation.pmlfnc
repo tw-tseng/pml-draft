@@ -807,12 +807,7 @@ endfunction
 
 
 $(  
-
-
 	NEW DPPT ON $!mem Pltxt '#PIPE(c2:)'
-
-
-
 
   var !mems coll all bran members within $!vlfm to $!vlto
   do !i from 1 to !mems.size()
