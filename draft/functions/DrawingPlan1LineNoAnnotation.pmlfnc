@@ -5,7 +5,7 @@
 ------------------------------------
 
 import 'AteSortLineNo'
-handle any
+	handle any
 endhandle
 
 define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real, !boxYlen is real)
@@ -51,8 +51,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	CHColour Grey
   Cheitx '3.00mm'
 	
---	var !viewdirup    viewdir up
---	var !viewdirleft  viewdir left
 	var !viewdirdown  viewdir down
 	var !viewdirright viewdir right
 	
