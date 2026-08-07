@@ -149,12 +149,14 @@ layout form !!DrawingPlan1 dialog dock
 	member .maxU is real
 	member .minU is real
 	
-	member .intersections is array
+	member .intersections is array    $( intersections of the current refgln only  $)
+	member .allintersections is array $( intersections of every refgln of the drawing, used by !!DrawingPlan1LineNoAnnotation  $)
 	member .canvassize is string
 	member .equiparray is array   $( array for equipments are dimensioned $)
 	member .userevar is string    $( for path of text file  $)
 	member .rev is string         $( for revision  $)
 	member .supttmp is string     $( for support callout template  $)
+	member .rcode is string       $( view rcode, 'up' or 'left'  $)
 	
 
 exit
@@ -168,6 +170,7 @@ define method .DrawingPlan1()
   !this.gridgap.val = 3
   !this.gridhei.val = 3
   !this.griddia.val = 10
+	!this.rcode = 'up'
 	!this.openshee.val = true
 	!this.delshee.val = true
 	!this.annotext.val = |3|
@@ -358,6 +361,7 @@ define method .Apply()
 		!name = '/' & !equistr
 		!box = !boxs[1]
 		!this.intersections = object array()
+		!this.allintersections = object array()
 		new drwg
 		handle any
 			!!alert.error('cannot create DRWG under this level')
@@ -449,7 +453,6 @@ define method .Apply()
 				else
           !nfpla = !nfpla1.opposite()
 				endif
-        $p $!efpla $!nfpla
 				
 				--------------------------------------
 				-- add 0.025 for decimal precistion --
@@ -473,7 +476,7 @@ define method .Apply()
 				!this.minN = !minN
 				!this.maxU = !maxU
 				!this.minU = !minU  
-				$p $!minE $!minN $!minU $!maxE $!maxN $!maxU
+--				$p $!minE $!minN $!minU $!maxE $!maxN $!maxU
 				
 				!thpoE = !boxPos.position().east
 				!thpoN = !boxPos.position().north
@@ -484,7 +487,7 @@ define method .Apply()
 				!thpoNforR = !boxPos.position().offset(!efpla,            !elen.real() * 0.5).north
 				!thpoNforL = !boxPos.position().offset(!efpla.opposite(), !elen.real() * 0.5).north
         
-        $p $!thpoEforN $!thpoEforS $!thpoNforR $!thpoNforL
+--        $p $!thpoEforN $!thpoEforS $!thpoNforR $!thpoNforL
 				
 				$!name/SS/S1/V1/PLANES_R$!this.rev
 				
@@ -494,13 +497,13 @@ define method .Apply()
 				end
 				new fpla $!name/SS/S1/V1/TONP_R$!this.rev
 				position E $!thpoEforN N $!maxN U $!thpoU
-				!temp = !nfpla.opposite().string().before('WRT')
-				norm $!temp
+				!tempdir = !nfpla.opposite().string().before('WRT')
+				norm $!tempdir
 				end
 				new fpla $!name/SS/S1/V1/TOEP_R$!this.rev
 				position E $!maxE N $!thpoNforR U $!thpoU
-				!temp = !efpla.opposite().string().before('WRT')
-				norm $!temp
+				!tempdir = !efpla.opposite().string().before('WRT')
+				norm $!tempdir
 				end
 				new fpla $!name/SS/S1/V1/FRUP_R$!this.rev
 				position E $!thpoE N $!thpoN U $!minU
@@ -508,13 +511,13 @@ define method .Apply()
 				end
 				new fpla $!name/SS/S1/V1/FRNP_R$!this.rev
 				position E $!thpoEforS N $!minN U $!thpoU
-				!temp = !nfpla.string().before('WRT')
-				norm $!temp
+				!tempdir = !nfpla.string().before('WRT')
+				norm $!tempdir
 				end
 				new fpla $!name/SS/S1/V1/FREP_R$!this.rev
 				position E $!minE N $!thpoNforL U $!thpoU
-				!temp = !efpla.string().before('WRT')
-				norm $!temp
+				!tempdir = !efpla.string().before('WRT')
+				norm $!tempdir
 				end
 				
 				------------------------------------------
@@ -749,6 +752,7 @@ define method .Apply()
 				-- add 0.025 for decimal precistion --
 				--------------------------------------
 				var !rcode rcode
+				!this.rcode = !rcode
 				if !rcode.eqnocase('up') then
 					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
 					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
@@ -784,7 +788,7 @@ define method .Apply()
 				-------------------------
 				-- line no. annotation --
 				-------------------------
-$(				$!name/SS/S1/V1_R$!this.rev
+				$!name/SS/S1/V1_R$!this.rev
 				1
 				last
 				!!DrawingPlan1LineNoAnnotation(!name, !boxXlen.real(), !boxYlen.real())
@@ -795,7 +799,7 @@ $(				$!name/SS/S1/V1_R$!this.rev
 				1
 				last
 				!!DrawingPlan1EquiAnnotation(!name, !minE.string(), !minN.string(), !minU.string(), !maxE.string(), !maxN.string(), !maxU.string())   
-$)				
+				
 				-------------------------------------------
 				-- highlight the drawing area in keyplan --
 				-------------------------------------------
@@ -1700,7 +1704,25 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 	!y = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.griddist.val).north - !npptp.north)
 	!xap = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.gridgap.val).east - !npptp.east)
 	!yap = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.gridgap.val).north - !npptp.north)
-	
+
+	--------------------------------------------------------------------------
+	-- !x !y !xap !yap above are in sheet coordination, because they come   --
+	-- from shpos, but XYPO and APOF are in view coordination. when         --
+	-- rcode = left the view is rotated 90 degrees anticlockwise on the     --
+	-- sheet, so convert them back before writing. same conversion as the   --
+	-- one in .Apply() for the labels of LabelSpace.                        --
+	-- AGSIDE is not converted, it always means the side of the view as it  --
+	-- appears on the sheet, whatever the rcode is                          --
+	--------------------------------------------------------------------------
+	if (!this.rcode.eqnocase('left')) then
+		!tempxy = !x
+		!x     = !y
+		!y     = !tempxy * -1
+		!tempxy = !xap
+		!xap   = !yap
+		!yap   = !tempxy * -1
+	endif
+
 	NEW SLAB
 	DDNA $!refgln
 	NPPT $!nppt
@@ -1708,6 +1730,12 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 	XYPO $!x $!y
 	APOF $!xap $!yap
 	Agside |$!agside|
+	----------------------------------------------------------------
+	-- turn the symbol back upright when the view is rotated       --
+	----------------------------------------------------------------
+	if (!this.rcode.eqnocase('left')) then
+		Adegrees -90
+	endif
 endmethod
 
 ----------------------------------------------------
@@ -1743,6 +1771,24 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 		!yap = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.gridgap.val).north - !thispossh.position().north
 	endif
 
+	--------------------------------------------------------------------------
+	-- !x !y !xap !yap above are in sheet coordination, because they come   --
+	-- from shpos, but XYPO and APOF are in view coordination. when         --
+	-- rcode = left the view is rotated 90 degrees anticlockwise on the     --
+	-- sheet, so convert them back before writing. same conversion as the   --
+	-- one in .Apply() for the labels of LabelSpace.                        --
+	-- AGSIDE is not converted, it always means the side of the view as it  --
+	-- appears on the sheet, whatever the rcode is                          --
+	--------------------------------------------------------------------------
+	if (!this.rcode.eqnocase('left')) then
+		!tempxy = !x
+		!x     = !y
+		!y     = !tempxy * -1
+		!tempxy = !xap
+		!xap   = !yap
+		!yap   = !tempxy * -1
+	endif
+
 	NEW SLAB
 	DDNA $!refgln
 	NPPT $!nppt
@@ -1750,6 +1796,12 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 	XYPO $!x $!y
 	APOF $!xap $!yap
 	Agside |$!agside|
+	----------------------------------------------------------------
+	-- turn the symbol back upright when the view is rotated       --
+	----------------------------------------------------------------
+	if (!this.rcode.eqnocase('left')) then
+		Adegrees -90
+	endif
 endmethod
 
 ------------------------------------------------------------------------
@@ -2033,7 +2085,7 @@ $)
 --						!newy = !sortedtypes[!i].split('!').getindexed(4)
 --						new stra fpt x $!newx y $!newy length 10 adegrees 0 NLStyle 201 NLColour Magenta
 			endif
-			$p $!sortedtypes[$!i]
+--			$p $!sortedtypes[$!i]
 		enddo
 	else
 		!tempt = ''

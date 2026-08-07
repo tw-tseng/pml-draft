@@ -97,6 +97,13 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 			$p $!p1dirsh
 
 			$!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
+			-------------------------------------------------------------------------
+			-- .intersections holds the intersections of THIS refgln only, because --
+			-- the checks below pick them up by getindexed(1) and getindexed(2).   --
+			-- every intersection is also kept in .allintersections, which         --
+			-- !!DrawingPlan1LineNoAnnotation() uses to dimension the grid          --
+			-------------------------------------------------------------------------
+			!!DrawingPlan1.intersections = object array()
 			--------------------------------------------------------------------------
 			-- check if grids are in view volume                                    --
 			-- step 1. find out intersction points between view frame and grid line --
@@ -130,7 +137,11 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 			endhandle
 			
 			!!DrawingPlan1.intersections.unique()
-			
+
+			do !thisint values !!DrawingPlan1.intersections
+				!!DrawingPlan1.allintersections.append(!thisint)
+			enddo
+
 			!total = 0
 			if (!!DrawingPlan1.intersections.size().geq(2)) then
 				if (!p12linesh.on(!!DrawingPlan1.intersections.getindexed(1).split('-').getindexed(2).position(), true)) then
@@ -140,7 +151,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 				  !total = !total + 1
 				endif
 			endif
-			
+
 			!framedir = object direction()
 			!griddir = object direction()
 			!nppt = 0

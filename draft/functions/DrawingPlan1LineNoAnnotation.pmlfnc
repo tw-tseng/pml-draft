@@ -5,7 +5,7 @@
 ------------------------------------
 
 import 'AteSortLineNo'
-	handle any
+handle any
 endhandle
 
 define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real, !boxYlen is real)
@@ -51,6 +51,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	CHColour Grey
   Cheitx '3.00mm'
 	
+--	var !viewdirup    viewdir up
+--	var !viewdirleft  viewdir left
 	var !viewdirdown  viewdir down
 	var !viewdirright viewdir right
 	
@@ -591,95 +593,113 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				var !mempossh shpos of $!mempos
 			endif
 
-			
+			!intpt.delete()
+			handle any
+			endhandle
 			!templine = object line(!mempossh.position(), !mempossh.position().offset(!viewdir.direction(), 1))
 			if (!dir.eq('right')) then
 				!intpt = !!DrawingPlan1.viewRlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				handle any
+					-- two lines are parellel
+				endhandle
 			elseif (!dir.eq('left')) then
 				!intpt = !!DrawingPlan1.viewLlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				handle any
+					-- two lines are parellel
+				endhandle
 			elseif (!dir.eq('down')) then
 				!intpt = !!DrawingPlan1.viewDlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				handle any
+					-- two lines are parellel
+				endhandle
 			elseif (!dir.eq('up')) then
 				!intpt = !!DrawingPlan1.viewUlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				handle any
+					-- two lines are parellel
+				endhandle
 			endif
-			var !temppos enupos of $!intpt
-			!attapos = object position(!temppos)
-			!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
-			if (!type.eqnocase('BRAN')) then
-				if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
-					if (!bopu.geq(0)) then
-						if (!dir.eq('right') or !dir.eq('down')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!bopu'
-						elseif (!dir.eq('left')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!bopu      '
-						elseif (!dir.eq('up')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL+$!bopu'
+			$p $!intpt
+			handle any
+			elsehandle none
+				var !temppos enupos of $!intpt
+				!attapos = object position(!temppos)
+				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
+				if (!type.eqnocase('BRAN')) then
+					if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
+						if (!bopu.geq(0)) then
+							if (!dir.eq('right') or !dir.eq('down')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!bopu'
+							elseif (!dir.eq('left')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!bopu      '
+							elseif (!dir.eq('up')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL+$!bopu'
+							endif
+						else
+							if (!dir.eq('right') or !dir.eq('down')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!bopu'
+							elseif (!dir.eq('left')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!bopu      '
+							elseif (!dir.eq('up')) then	
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL$!bopu'
+							endif
 						endif
 					else
 						if (!dir.eq('right') or !dir.eq('down')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!bopu'
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)'
 						elseif (!dir.eq('left')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!bopu      '
-						elseif (!dir.eq('up')) then	
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL$!bopu'
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)      '
+						elseif (!dir.eq('up')) then
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:)'
 						endif
 					endif
-				else
+				elseif (!type.eqnocase('EQUI')) then
 					if (!dir.eq('right') or !dir.eq('down')) then
-						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)'
+						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#EQUI(c2:)'
 					elseif (!dir.eq('left')) then
-						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)      '
+						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#EQUI(c2:)    '
 					elseif (!dir.eq('up')) then
-						NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:)'
+						NEW DPOI POS $!attapos DDNA $!mem Pltxt '    #EQUI(c2:)'
 					endif
-				endif
-			elseif (!type.eqnocase('EQUI')) then
-				if (!dir.eq('right') or !dir.eq('down')) then
-					NEW DPOI POS $!attapos DDNA $!mem Pltxt '#EQUI(c2:)'
-				elseif (!dir.eq('left')) then
-					NEW DPOI POS $!attapos DDNA $!mem Pltxt '#EQUI(c2:)    '
-				elseif (!dir.eq('up')) then
-					NEW DPOI POS $!attapos DDNA $!mem Pltxt '    #EQUI(c2:)'
-				endif
-				Ptchtx '4mm'
-			else
-				if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
-					var !pabop abop of $!mem
-					var !plbop lbop of $!mem
-					if (abs(!pabop.position().up - !bop) le 5) then
-						if (!dir.eq('right') or !dir.eq('down')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PABOPU+'
-						elseif (!dir.eq('left')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PABOPU+      '
-						elseif (!dir.eq('up')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL#PABOPU+'
+					Ptchtx '4mm'
+				else
+					if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
+						var !pabop abop of $!mem
+						var !plbop lbop of $!mem
+						if (abs(!pabop.position().up - !bop) le 5) then
+							if (!dir.eq('right') or !dir.eq('down')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PABOPU+'
+							elseif (!dir.eq('left')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PABOPU+      '
+							elseif (!dir.eq('up')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL#PABOPU+'
+							endif
+						else
+							if (!dir.eq('right') or !dir.eq('down')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PLBOPU+'
+							elseif (!dir.eq('left')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PLBOPU+      '
+							elseif (!dir.eq('up')) then
+								NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL#PLBOPU+'
+							endif
 						endif
 					else
 						if (!dir.eq('right') or !dir.eq('down')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PLBOPU+'
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)'
 						elseif (!dir.eq('left')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PLBOPU+      '
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)      '
 						elseif (!dir.eq('up')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL#PLBOPU+'
-						endif
+							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:)'
+						endif	
 					endif
-				else
-					if (!dir.eq('right') or !dir.eq('down')) then
-						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)'
-					elseif (!dir.eq('left')) then
-						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)      '
-					elseif (!dir.eq('up')) then
-						NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:)'
-					endif	
 				endif
-			endif
+			endhandle
 		enddo		
 		------------------------------------------------
 		-- create dimension for grid                  --
-		-- !!DrawingPlan1.intersections including     --
+		-- !!DrawingPlan1.allintersections including  --
 		-- intersection points between view and grids --
 		------------------------------------------------
-		do !intersection value !!DrawingPlan1.intersections
+		do !intersection value !!DrawingPlan1.allintersections
 			!checkpt = false
 			if (!intersection.split('-').getindexed(1).eqnocase('viewRlinesh') and !dir.eq('right')) then
 				!checkpt = true
@@ -805,7 +825,12 @@ endfunction
 
 
 $(  
+
+
 	NEW DPPT ON $!mem Pltxt '#PIPE(c2:)'
+
+
+
 
   var !mems coll all bran members within $!vlfm to $!vlto
   do !i from 1 to !mems.size()
