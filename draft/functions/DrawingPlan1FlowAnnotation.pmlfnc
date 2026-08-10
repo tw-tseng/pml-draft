@@ -60,16 +60,190 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	SpPurpose unset
 	Function unset
 	
-	--------------------------------------
-	-- sort !sortedtypes by tubi length --
-	--------------------------------------
+	------------------------------------------------
+	-- sort !tubiss by how much of the tube shows --
+	------------------------------------------------
 	using namespace 'Aveva.Core.Samples'
 	!obj = object AteSortLineNo()
+	------------------------------------------------------------------------
+	-- the tubes are gathered branch by branch, not pipe by pipe           --
+	--                                                                     --
+	-- the scan hands back branches, but the gathering used to be done on  --
+	-- the name of the pipe, so every branch of a pipe picked up the whole --
+	-- pipe again, settled on the same longest tube of the lot and laid    --
+	-- another arrow on the very same spot. a pipe with three branches got --
+	-- three arrows stacked on one run and nothing at all on the other     --
+	-- two, however far they ran across the drawing                        --
+	--                                                                     --
+	-- taking one branch at a time gets rid of the stack and covers every  --
+	-- run, because each branch settles on the longest tube it has of its  --
+	-- own and those are in different places                               --
+	------------------------------------------------------------------------
 	var !brans vscan for all bran
-	!tubiss = object array()
+	------------------------------------------------------------------------
+	-- the branches are worked from the top of the plant downwards         --
+	--                                                                     --
+	-- where two pipes cross or run side by side on a plan they are        --
+	-- usually at different elevations, and the one underneath is the one  --
+	-- the reader cannot see properly. whoever is placed first gets the    --
+	-- room, so the higher pipe is placed first and keeps the open spot on --
+	-- its run, and the lower one is pushed along its own pipe to wherever --
+	-- there is room left                                                  --
+	--                                                                     --
+	-- the elevation is taken from the head of the branch. only tubes      --
+	-- which lie near flat are ever annotated, so a branch does not wander --
+	-- far in elevation from its head, and this only has to be good enough --
+	-- to say which of two pipes is on top                                 --
+	--                                                                     --
+	-- the small value on the end keeps the sort keys apart. plenty of     --
+	-- branches share an elevation and the sort cannot take two the same   --
+	------------------------------------------------------------------------
+	!branus = object array()
+	!bb = 0
 	do !bran values !brans
-		var !pname name of pipe of $!bran
-		var !tubis vscan for all tubi with matchwild(name of pipe, |$!pname|)
+		!bb = !bb + 1
+		--------------------------------------------------------------------
+		-- the scan hands the branch back as 'BRAN =2013286676/2167', the --
+		-- type in front of the reference, the same way it hands tubes    --
+		-- back as 'TUBI /COMP'. the reference on its own is what an      --
+		-- attribute query wants, so it is taken off the front here, the  --
+		-- same as !tubis[!tt].part(2) does further down                  --
+		--                                                                --
+		-- the whole string went to hpos before, every query fell into    --
+		-- its handle and every branch came out at elevation nought, so   --
+		-- the sort below was really just scan order and the higher pipe  --
+		-- was not being placed first at all                              --
+		--------------------------------------------------------------------
+		!branref = !bran.part(2)
+		if (!branref.eq('')) then
+			!branref = !bran
+		endif
+		!hp = ''
+		var !hp hpos of $!branref
+		handle any
+		endhandle
+		!branu = 0
+		if (!hp.neq('')) then
+			----------------------------------------------------------------
+			-- read straight off the string and stripped of mm, the same   --
+			-- as ltle and shpos are handled everywhere else here. going   --
+			-- through position().up hands back a real with its unit still --
+			-- on it, and the unit rode into the sort key                  --
+			--                                                             --
+			-- hpos reads 'E 306000mm N 303594mm U 102930mm', so part 6 is --
+			-- the elevation and part 5 says which way. below datum it     --
+			-- comes out as D and has to be turned negative by hand        --
+			----------------------------------------------------------------
+			!branu = !hp.part(6).replace('mm', '').real()
+			handle any
+				!branu = 0
+			endhandle
+			if (!hp.part(5).eqnocase('D')) then
+				!branu = !branu * -1
+			endif
+		endif
+		--------------------------------------------------------------------
+		-- scaled up and the count added whole, rather than the count      --
+		-- added as a tiny fraction. a branch whose elevation is not known --
+		-- leaves !branu at nought, and nought plus a tiny fraction is the --
+		-- kind of number which comes back out as 1E-10 and cannot be read --
+		-- as a number either. a thousandth of a mm is far finer than two  --
+		-- pipes are ever apart                                            --
+		--------------------------------------------------------------------
+		!brankey = !branu * 1000 + !bb
+		!branus.append(!brankey & '~' & !bran & '~x!x!x!x!x!x')
+	enddo
+	!sortedbrans = !obj.method('y', !branus)
+	------------------------------------------------------------------------
+	-- the rectangle of the view in sheet coordination, which is where the --
+	-- visible run of each tube is worked out. the same four numbers as    --
+	-- DrawingPlan1LineNoAnnotation takes                                  --
+	------------------------------------------------------------------------
+	!vwx1 = min(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
+	!vwx2 = max(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
+	!vwy1 = min(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
+	!vwy2 = max(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
+	------------------------------------------------------------------------
+	-- two branches which run side by side, a pair of drops off the same   --
+	-- equipment for instance, settle on runs which are only a few mm      --
+	-- apart on the sheet and their arrows end up touching                 --
+	--                                                                     --
+	-- !usedx / !usedy are where the arrows have gone so far, and every    --
+	-- new one tries to keep !mindist of the sheet away from all of them.  --
+	-- !fracs are the places along a run to try, the middle first and then --
+	-- out towards the ends, so an arrow slides along its own tube to get  --
+	-- clear rather than jumping off it. sliding keeps the arrow on the    --
+	-- pipe it belongs to, which is the whole point of it                  --
+	--                                                                     --
+	-- !mindist is the one number to turn when the arrows come out too     --
+	-- close or too scattered. it is centre to centre in mm of the sheet,  --
+	-- and it has to be well clear of the length of the arrow itself, not  --
+	-- merely equal to it, or two of them sit a gap of half an arrow apart --
+	-- and still read as one mark. the reach goes out to a twentieth of    --
+	-- the run at either end, which is as far as an arrow can go and still --
+	-- read as belonging to that run                                       --
+	--                                                                     --
+	-- turning !mindist up is safe. when nothing on a branch can meet it   --
+	-- the roomiest place found is taken instead, so a large value never   --
+	-- loses an arrow, it only makes more of them go the roomiest way. a   --
+	-- pipe on its own is not pushed about either: with no arrow down yet  --
+	-- every place scores the same and the first one tried, the middle of  --
+	-- the longest run, is the one kept                                    --
+	------------------------------------------------------------------------
+	!mindist = 20
+	!mindist2 = !mindist * !mindist
+	------------------------------------------------------------------------
+	-- !hardmin is where giving the branch an arrow stops being worth it.  --
+	-- a pair of short spools off two nozzles, one above the other, run    --
+	-- along the very same line on a plan, and neither one is long enough  --
+	-- to slide an arrow clear of the other. sliding cannot help and       --
+	-- moving to another tube cannot help, because there is no other tube  --
+	--                                                                     --
+	-- the branches are worked from the top of the plant downwards, so     --
+	-- whatever is already down belongs to the pipe above, the one the     --
+	-- reader can actually see. the pipe underneath gives way and goes     --
+	-- without, which is better than a second arrow smudged over the first --
+	--                                                                     --
+	-- this only bites when nowhere on the whole branch reaches !hardmin.  --
+	-- everything with room to breathe still gets its arrow, so a pipe is  --
+	-- only ever left out where an arrow could not have been read anyway   --
+	------------------------------------------------------------------------
+	!hardmin = 10
+	!hardmin2 = !hardmin * !hardmin
+	------------------------------------------------------------------------
+	-- turn !dbg on to have every branch report where its arrow went, in   --
+	-- the command window. that is the quickest way to tell a pair which   --
+	-- really is too close from a pair which only looks it                 --
+	------------------------------------------------------------------------
+	!dbg = true
+	!usedx = object array()
+	!usedy = object array()
+	!fracs = object array()
+	!fracs.append(0.5)
+	!fracs.append(0.35)
+	!fracs.append(0.65)
+	!fracs.append(0.2)
+	!fracs.append(0.8)
+	!fracs.append(0.1)
+	!fracs.append(0.9)
+	!fracs.append(0.05)
+	!fracs.append(0.95)
+	!tubiss = object array()
+	--------------------------------------------------------------------------
+	-- backwards, because the sort puts the lowest elevation first and the   --
+	-- highest pipe is the one which has to be placed first                  --
+	--------------------------------------------------------------------------
+	do !bb from !sortedbrans.size() to 1 by -1
+		!bran = !sortedbrans[!bb].split('~').getindexed(2)
+		--------------------------------------------------------------------
+		-- emptied first, so that a branch which cannot be scanned is left --
+		-- out instead of being given the tubes of the branch before it,   --
+		-- and so that the error does not stop every branch after it       --
+		--------------------------------------------------------------------
+		!tubis = object array()
+		var !tubis vscan for all tubi for $!bran
+		handle any
+		endhandle
 		!tubiss.clear()
 		if defined(!tubis) then
 			do !tt from 1 to !tubis.size()
@@ -81,128 +255,223 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 				handle any
 				elsehandle none
 					if (abs(!grad.real()) leq 1) then
-						var !ltle ltle of $!tubi
-						!ltle1 = !ltle.replace('mm', '').real() + 0.0000000001 * !tt
-						!tubiss.append(!ltle1 & '~' & !tubi & '~x!x!x!x!x!x')
+						------------------------------------------------------------
+						-- the tubes are ranked on how much of them can be seen,  --
+						-- not on ltle. ltle is the length in the model, and the  --
+						-- longest tube of a pipe is very often one which runs    --
+						-- mostly or wholly outside the view. the drawlist of the --
+						-- view holds whole pipes, so the scan above hands those  --
+						-- back just the same, and the arrow was then either put  --
+						-- down out on the empty sheet or squeezed onto the       --
+						-- border where the little that shows of the tube is      --
+						--                                                        --
+						-- a tube with nothing inside the view is left out here,  --
+						-- so it can no longer win                                --
+						------------------------------------------------------------
+						!seen = !!DrawingPlan1.VisibleSheetRunOfTube(!tubi, !vwx1, !vwy1, !vwx2, !vwy2)
+						if (not(!seen.empty())) then
+							----------------------------------------------------
+							-- !seen[1] is the visible run squared. it is only --
+							-- ever a ranking key, never a length             --
+							--                                                --
+							-- scaled up and the count added whole, for the   --
+							-- same reason as the branch key above. a tube    --
+							-- which comes out as a single point on the sheet --
+							-- has nothing squared to nothing, and nought     --
+							-- plus a tiny fraction is the kind of number the --
+							-- sort cannot read back                          --
+							----------------------------------------------------
+							!seenkey = !seen[1] * 1000 + !tt
+							!tubiss.append(!seenkey & '~' & !tubi & '~x!x!x!x!x!x')
+						endif
 					endif
 				endhandle
 			enddo
 			if (not(!tubiss.empty())) then
-				----------------------------------------------
-				-- find out the longest tubi for flow arrow --
-				----------------------------------------------
-				!tubi = !obj.method('y', !tubiss).last().split('~').getindexed(2)
-				------------------------
-				-- check insert point --
-				------------------------
-				var !p1 pos p1 of $!tubi wrt worl
-				var !p2 pos p2 of $!tubi wrt worl
-				!p1posenu = object position(!p1) 
-				!p2posenu = object position(!p2)
-				!p1posenu.up = 0
-				!p2posenu.up = 0
-				var !p1possh shpos of $!p1posenu
-				var !p2possh shpos of $!p2posenu
-				!p12linesh = object line(!p1possh.position(), !p2possh.position())
-				
-				--------------------------------------------------------
-				-- find which boundary line is intersection with tubi --
-				--------------------------------------------------------
-				if (not(!!DrawingPlan1.CheckInsideView(!p1possh, !!DrawingPlan1.viewULsh, !!DrawingPlan1.viewURsh, !!DrawingPlan1.viewLRsh, !!DrawingPlan1.viewLLsh))) then
-					!dist1 = !p1possh.distance(!!DrawingPlan1.viewUlinesh.intersection(!p12linesh))
-					handle any
-						!dist1 = 1111111111111
-					endhandle
-					!dist2 = !p1possh.distance(!!DrawingPlan1.viewDlinesh.intersection(!p12linesh))
-					handle any
-						!dist2 = 1111111111111
-					endhandle
-					!dist3 = !p1possh.distance(!!DrawingPlan1.viewLlinesh.intersection(!p12linesh))
-					handle any
-						!dist3 = 1111111111111
-					endhandle
-					!dist4 = !p1possh.distance(!!DrawingPlan1.viewRlinesh.intersection(!p12linesh))
-					handle any
-						!dist4 = 1111111111111
-					endhandle
-					if (min(!dist1, !dist2, !dist3, !dist4) eq !dist1) then
-						!p1possh = !!DrawingPlan1.viewUlinesh.intersection(!p12linesh)
-					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist2) then
-						!p1possh = !!DrawingPlan1.viewDlinesh.intersection(!p12linesh)
-					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist3) then
-						!p1possh = !!DrawingPlan1.viewLlinesh.intersection(!p12linesh)
-					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist4) then
-						!p1possh = !!DrawingPlan1.viewRlinesh.intersection(!p12linesh)
+				------------------------------------------------------------------
+				-- the tubes of this branch, longest visible run first           --
+				------------------------------------------------------------------
+				!sorted = !obj.method('y', !tubiss)
+				!gotpos = false
+				!tookbest = false
+				!dropped = false
+				!bestset = false
+				!bestd = -1
+				!bestx = 0
+				!besty = 0
+				!besttubi = ''
+				do !ii from !sorted.size() to 1 by -1
+					!trytubi = !sorted[!ii].split('~').getindexed(2)
+					!seen = !!DrawingPlan1.VisibleSheetRunOfTube(!trytubi, !vwx1, !vwy1, !vwx2, !vwy2)
+					if (not(!seen.empty())) then
+						do !ff from 1 to !fracs.size()
+							!px = !seen[4] + !fracs[!ff] * (!seen[6] - !seen[4])
+							!py = !seen[5] + !fracs[!ff] * (!seen[7] - !seen[5])
+							----------------------------------------------------
+							-- how far this spot is from the nearest arrow    --
+							-- already down, squared to keep clear of sqrt.   --
+							-- nothing down yet leaves it at the large value, --
+							-- so the first arrow of the drawing takes the    --
+							-- middle of its longest run                      --
+							----------------------------------------------------
+							!near2 = 999999999
+							do !uu from 1 to !usedx.size()
+								!d2 = (!px - !usedx[!uu]) * (!px - !usedx[!uu]) + (!py - !usedy[!uu]) * (!py - !usedy[!uu])
+								if (!d2 lt !near2) then
+									!near2 = !d2
+								endif
+							enddo
+							if (!near2 geq !mindist2) then
+								--------------------------------------------
+								-- far enough from everything, take it     --
+								--------------------------------------------
+								!tubi = !trytubi
+								!posx = !px
+								!posy = !py
+								!gotpos = true
+								break
+							elseif (!near2 gt !bestd) then
+								--------------------------------------------
+								-- not clear, but the roomiest place found --
+								-- so far. kept in case nothing on this    --
+								-- branch comes out clear                  --
+								--------------------------------------------
+								!bestd = !near2
+								!bestx = !px
+								!besty = !py
+								!besttubi = !trytubi
+								!bestset = true
+							endif
+						enddo
 					endif
-				endif			
-				if (not(!!DrawingPlan1.CheckInsideView(!p2possh, !!DrawingPlan1.viewULsh, !!DrawingPlan1.viewURsh, !!DrawingPlan1.viewLRsh, !!DrawingPlan1.viewLLsh))) then
-					!dist1 = !p2possh.distance(!!DrawingPlan1.viewUlinesh.intersection(!p12linesh))
-					handle any
-						!dist1 = 1111111111111
-					endhandle
-					!dist2 = !p2possh.distance(!!DrawingPlan1.viewDlinesh.intersection(!p12linesh))
-					handle any
-						!dist2 = 1111111111111
-					endhandle
-					!dist3 = !p2possh.distance(!!DrawingPlan1.viewLlinesh.intersection(!p12linesh))
-					handle any
-						!dist3 = 1111111111111
-					endhandle
-					!dist4 = !p2possh.distance(!!DrawingPlan1.viewRlinesh.intersection(!p12linesh))
-					handle any
-						!dist4 = 1111111111111
-					endhandle
-					if (min(!dist1, !dist2, !dist3, !dist4) eq !dist1) then
-						!p2possh = !!DrawingPlan1.viewUlinesh.intersection(!p12linesh)
-					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist2) then
-						!p2possh = !!DrawingPlan1.viewDlinesh.intersection(!p12linesh)
-					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist3) then
-						!p2possh = !!DrawingPlan1.viewLlinesh.intersection(!p12linesh)
-					elseif (min(!dist1, !dist2, !dist3, !dist4) eq !dist4) then
-						!p2possh = !!DrawingPlan1.viewRlinesh.intersection(!p12linesh)
+					break if (!gotpos)
+				enddo
+				if (not(!gotpos) and !bestset) then
+					if (!bestd geq !hardmin2) then
+						--------------------------------------------------------
+						-- nowhere on this branch is a full !mindist clear of  --
+						-- the arrows already down, which is what happens round --
+						-- a set of nozzles where short stubs run side by side. --
+						-- the roomiest of the places tried is taken, so the    --
+						-- arrow is pushed as far off the others as this branch --
+						-- allows                                               --
+						--                                                      --
+						-- this used to fall back on the middle of the longest  --
+						-- run instead, which is the crowded spot itself, and   --
+						-- that is why the arrows came out touching             --
+						--                                                      --
+						-- the roomiest place can be on a shorter tube than the --
+						-- longest one. an arrow on a shorter run of the right  --
+						-- pipe reads better than two arrows on top of each     --
+						-- other                                                --
+						--------------------------------------------------------
+						!tubi = !besttubi
+						!posx = !bestx
+						!posy = !besty
+						!gotpos = true
+						!tookbest = true
+					else
+						--------------------------------------------------------
+						-- even the roomiest place on the branch is right on   --
+						-- top of an arrow already down. this is the pipe       --
+						-- underneath a pipe which runs the same line on the    --
+						-- plan, and it goes without. see !hardmin above        --
+						--------------------------------------------------------
+						!dropped = true
 					endif
 				endif
-				
-				!mid = !p1possh.position().midpoint(!p2possh.position())
-				!mid1 = !mid.string().before(' U').replace('E', 'X').replace('N', 'Y')
-				var !mid1 enupos of $!mid1
-				!mtbe = !tubi.after('of ')
-				var !type type of $!mtbe
-				if (!type.eqnocase('BRAN')) then
-					var !pldir hdir of $!mtbe
-				else
-					var !pldir pl dir of $!mtbe
+				if (!dbg) then
+					----------------------------------------------------------
+					-- the elevation is read back out of the sort key, which --
+					-- is where this branch's own one is. !branu still holds --
+					-- whatever the gathering loop above finished on          --
+					--                                                        --
+					-- how far the arrow really ended up from its nearest     --
+					-- neighbour is worked out again on the place settled on, --
+					-- so the number reported is the one on the sheet         --
+					----------------------------------------------------------
+					!branudbg = !sortedbrans[!bb].split('~').getindexed(1).real() / 1000
+					!bestlabel = 'no'
+					if (!tookbest) then
+						!bestlabel = 'yes'
+					endif
+					!dbgnear = 999999999
+					if (!gotpos) then
+						do !uu from 1 to !usedx.size()
+							!d2 = (!posx - !usedx[!uu]) * (!posx - !usedx[!uu]) + (!posy - !usedy[!uu]) * (!posy - !usedy[!uu])
+							if (!d2 lt !dbgnear) then
+								!dbgnear = !d2
+							endif
+						enddo
+						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' x ' & string(!posx) & ' y ' & string(!posy) & ' near2 ' & string(!dbgnear) & ' roomiest ' & !bestlabel
+					elseif (!dropped) then
+						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' DROPPED under another pipe, best near2 ' & string(!bestd)
+					else
+						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' NO PLACE'
+					endif
+					$p $!dbgline
 				endif
-				
-				var !viewdirup viewdir up
-				!pldira = object direction(!pldir)
-				!viewdirupa = object direction(!viewdirup)
-				!ang = !viewdirupa.angle(!pldira)
-				if (!ang.leq(40)) then
-					!ang = !ang * -1
-				else
+				if (!gotpos) then
+					!usedx.append(!posx)
+					!usedy.append(!posy)
+					------------------------------------------------------------------
+					-- the arrow goes on the visible run and not in the middle of    --
+					-- the whole tube, so it is always inside the view and never out --
+					-- on the border. the place comes back in sheet mm and is handed --
+					-- to enupos the same way the line number annotation does it,    --
+					-- which also takes the E / N / W / S of a position string out   --
+					-- of the way                                                    --
+					------------------------------------------------------------------
+					!midsh = 'x ' & string(!posx) & ' y ' & string(!posy)
+					var !mid1 enupos of $!midsh
+					!mtbe = !tubi.after('of ')
+					var !type type of $!mtbe
+					if (!type.eqnocase('BRAN')) then
+						var !pldir hdir of $!mtbe
+					else
+						var !pldir pl dir of $!mtbe
+					endif
+
+					var !viewdirup viewdir up
 					var !viewdirri viewdir right
+					!pldira = object direction(!pldir)
+					!viewdirupa = object direction(!viewdirup)
 					!viewdirria = object direction(!viewdirri)
-					if (!viewdirria.angle(!pldira).leq(40)) then
+					--------------------------------------------------------------------
+					-- angle() only ever hands back 0 to 180, so the angle to the top  --
+					-- of the sheet says how far the pipe leans over but not which way --
+					-- it leans. which way is settled by the angle to the right of the --
+					-- sheet: under 90 the pipe points to the right and the symbol has --
+					-- to turn clockwise, which is the negative way round for ADEGREES --
+					--                                                                 --
+					-- the test used to be against 40 rather than 90. that came out    --
+					-- right for the four square directions, which is most of the      --
+					-- piping and is why it went unnoticed, but a sloping pipe leaning --
+					-- to the left came out mirrored, and one running downwards to     --
+					-- either side came out turned right round, with the arrow against --
+					-- the flow                                                        --
+					--------------------------------------------------------------------
+					!ang = !viewdirupa.angle(!pldira)
+					if (!viewdirria.angle(!pldira).lt(90)) then
 						!ang = !ang * -1
 					endif
+					NEW SLAB
+					DDNA $!tubi
+					tmrf /DRA/MAS/SYMBOLS/GEN/WELD/WELD-ARR
+					Font 1
+					Blnk false
+					Bmargin 0mm
+					Xyscale 1 1
+					Cheitx '2mm'
+					Lvisibility true
+					Txcolour Yellow
+					LLColour Cyan
+					LFColour Cyan
+					Alignment Hbody
+					POS $!mid1
+					XYPO 0 0
+					Adegrees $!ang
 				endif
-				NEW SLAB
-				DDNA $!tubi
-				tmrf /DRA/MAS/SYMBOLS/GEN/WELD/WELD-ARR
-				Font 1
-				Blnk false
-				Bmargin 0mm
-				Xyscale 1 1
-				Cheitx '2mm'
-				Lvisibility true
-				Txcolour Yellow
-				LLColour Cyan
-				LFColour Cyan
-				Alignment Hbody
-				POS $!mid1
-				XYPO 0 0
-				Adegrees $!ang      
 			endif
 		endif
 	enddo

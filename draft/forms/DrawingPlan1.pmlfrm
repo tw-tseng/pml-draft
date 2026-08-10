@@ -2144,6 +2144,154 @@ define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) 
 endmethod
 
 --------------------------------------------------------------------------
+-- how much of !tube can be seen inside the view, and where the middle   --
+-- of that visible run falls, all in sheet coordination                  --
+--                                                                       --
+-- answers [ length squared, middle x, middle y, x1, y1, x2, y2 ], and   --
+-- an empty array when no part of the tube is inside the view. the four  --
+-- numbers on the end are the two ends of the visible run, which let the --
+-- caller slide the arrow along the tube to get it clear of another one  --
+--                                                                       --
+-- the length comes back squared so that it can be compared without      --
+-- sqrt, the same way .ViewSheetTransform() keeps clear of it. nothing   --
+-- else is done with it, it is only ever used to tell one tube from      --
+-- another                                                               --
+--                                                                       --
+-- the border of the view is an endless line as far as intersection() is --
+-- concerned, so a tube which runs past the side of the view still gives --
+-- a crossing, out on the extension of the border and away from the      --
+-- sheet. asking each border in turn and keeping the nearest crossing    --
+-- picks those up, and it also picks up crossings which lie behind the   --
+-- start of the tube. the run is cut against the rectangle itself here   --
+-- instead, one side at a time, along the parameter of the tube, so what --
+-- comes back is always a piece of the tube and always inside the view   --
+--                                                                       --
+-- the view is an upright rectangle in sheet coordination whatever the   --
+-- box is turned to on the model, which is why the sides can be taken    --
+-- one at a time like this. see the note on .SheetBandOfSide()           --
+--------------------------------------------------------------------------
+define method .VisibleSheetRunOfTube(!tube is string, !vwx1 is real, !vwy1 is real, !vwx2 is real, !vwy2 is real) is array
+	!answer = object array()
+	!ok = true
+	var !p1 pos p1 of $!tube wrt worl
+	handle any
+		!ok = false
+	endhandle
+	if (!ok) then
+		var !p2 pos p2 of $!tube wrt worl
+		handle any
+			!ok = false
+		endhandle
+	endif
+	if (!ok) then
+		----------------------------------------------------------------
+		-- the elevation is dropped before the ends are put on the     --
+		-- sheet, as the flow annotation has always done               --
+		----------------------------------------------------------------
+		!p1enu = object position(!p1)
+		!p2enu = object position(!p2)
+		!p1enu.up = 0
+		!p2enu.up = 0
+		var !p1sh shpos of $!p1enu
+		handle any
+			!ok = false
+		endhandle
+	endif
+	if (!ok) then
+		var !p2sh shpos of $!p2enu
+		handle any
+			!ok = false
+		endhandle
+	endif
+	if (!ok) then
+		!x1 = !p1sh.split().getindexed(2).replace('mm', '').real()
+		!y1 = !p1sh.split().getindexed(4).replace('mm', '').real()
+		!x2 = !p2sh.split().getindexed(2).replace('mm', '').real()
+		!y2 = !p2sh.split().getindexed(4).replace('mm', '').real()
+		!dx = !x2 - !x1
+		!dy = !y2 - !y1
+		------------------------------------------------------------------
+		-- !t0 and !t1 are how far along the tube the visible run starts --
+		-- and ends, 0 being the first end and 1 the second. each side   --
+		-- of the view pulls them in                                     --
+		--                                                               --
+		-- !p is how fast the tube crosses that side and !q how far the  --
+		-- first end sits inside it. !p under zero means the tube comes  --
+		-- in over that side and pushes !t0 up, over zero means it goes  --
+		-- out and pulls !t1 down                                        --
+		------------------------------------------------------------------
+		!t0 = 0.0
+		!t1 = 1.0
+		!inview = true
+		!ps = object array()
+		!qs = object array()
+		!ps.append(!dx * -1)
+		!qs.append(!x1 - !vwx1)
+		!ps.append(!dx)
+		!qs.append(!vwx2 - !x1)
+		!ps.append(!dy * -1)
+		!qs.append(!y1 - !vwy1)
+		!ps.append(!dy)
+		!qs.append(!vwy2 - !y1)
+		do !k from 1 to 4
+			!p = !ps[!k]
+			!q = !qs[!k]
+			----------------------------------------------------------------
+			-- the sign of !p is tested first and the tube which runs     --
+			-- along the side is left to the else, so that !p can never   --
+			-- be nought where the division is. a tolerance test round    --
+			-- the division is not enough: a pipe square with the sheet   --
+			-- makes !p exactly nought on two of the four sides, which is --
+			-- most of the piping, and CALCULATOR ERROR: division by zero --
+			-- came straight back                                         --
+			--                                                            --
+			-- no tolerance is wanted either way. where the tube is very  --
+			-- nearly along the side !t comes out huge, and a huge !t     --
+			-- neither pulls !t1 down nor pushes !t0 up, which is right   --
+			----------------------------------------------------------------
+			if (!p lt 0) then
+				!t = !q / !p
+				if (!t gt !t1) then
+					!inview = false
+				elseif (!t gt !t0) then
+					!t0 = !t
+				endif
+			elseif (!p gt 0) then
+				!t = !q / !p
+				if (!t lt !t0) then
+					!inview = false
+				elseif (!t lt !t1) then
+					!t1 = !t
+				endif
+			else
+				--------------------------------------------------------
+				-- the tube runs along this side, so it is either      --
+				-- wholly inside it or wholly outside it and there is  --
+				-- nothing to cut                                      --
+				--------------------------------------------------------
+				if (!q lt 0) then
+					!inview = false
+				endif
+			endif
+		enddo
+		if (!inview and !t1 gt !t0) then
+			!cx1 = !x1 + !t0 * !dx
+			!cy1 = !y1 + !t0 * !dy
+			!cx2 = !x1 + !t1 * !dx
+			!cy2 = !y1 + !t1 * !dy
+			!answer.append((!cx2 - !cx1) * (!cx2 - !cx1) + (!cy2 - !cy1) * (!cy2 - !cy1))
+			!answer.append((!cx1 + !cx2) * 0.5)
+			!answer.append((!cy1 + !cy2) * 0.5)
+			!answer.append(!cx1)
+			!answer.append(!cy1)
+			!answer.append(!cx2)
+			!answer.append(!cy2)
+		endif
+	endif
+	return !answer
+endmethod
+
+--------------------------------------------------------------------------
 -- the point of the grid line which is nearest to !intpt, in sheet       --
 -- coordination                                                          --
 --                                                                       --
@@ -2205,7 +2353,7 @@ $)
 					break
 				endif
 			elseif (!type.eqnocase('EQUI')) then
-				!checkok = fasle
+				!checkok = false
 				break
 			else
 				var !p1dir p1dir of $!mem
@@ -2243,7 +2391,7 @@ $)
 					break
 				endif
 			elseif (!type.eqnocase('EQUI')) then
-				!checkok = fasle
+				!checkok = false
 				break
 			else
 				var !p1dir p1dir of $!mem
