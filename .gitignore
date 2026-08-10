@@ -2,3 +2,8 @@
 Thumbs.db
 .DS_Store
 _temp/
+
+# rebuilt by pml rehash, never committed. pml rehash all walks the whole
+# directory including .git, so the file fills up with .git/objects paths
+# and churns on every git operation
+pml.index
