@@ -7,3 +7,9 @@ _temp/
 # directory including .git, so the file fills up with .git/objects paths
 # and churns on every git operation
 pml.index
+
+# scratch files used while working. error.png is the screenshot passed
+# back and forth while chasing a bug and is overwritten every time,
+# check.txt is a debug dump
+check.txt
+error.png
