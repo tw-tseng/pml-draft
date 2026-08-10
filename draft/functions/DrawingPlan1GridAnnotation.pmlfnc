@@ -94,7 +94,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
       !p12linesh = object line(!p1possh.position(), !p2possh.position())
 			!p1dirsh = !p1possh.position().direction(!p2possh.position())
 			
-			$p $!p1dirsh
+--			$p $!p1dirsh
 
 			$!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
 			-------------------------------------------------------------------------
@@ -138,8 +138,17 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 			
 			!!DrawingPlan1.intersections.unique()
 
+			-------------------------------------------------------------------------
+			-- .allintersections carries where the grid line really ends as well, --
+			-- after a '~', so that !!DrawingPlan1LineNoAnnotation() can reach    --
+			-- the projection line of the dimension in to the grid instead of     --
+			-- stopping it at the border of the view. .intersections itself is    --
+			-- left alone, the two .CreateGridSymbol*() methods read it           --
+			-------------------------------------------------------------------------
 			do !thisint values !!DrawingPlan1.intersections
-				!!DrawingPlan1.allintersections.append(!thisint)
+				!thisintpt = !thisint.split('-').getindexed(2).position()
+				!thisend = !!DrawingPlan1.NearEndOfGrid(!p12linesh, !p1possh, !p2possh, !thisintpt)
+				!!DrawingPlan1.allintersections.append(!thisint & '~' & !thisend.string())
 			enddo
 
 			!total = 0

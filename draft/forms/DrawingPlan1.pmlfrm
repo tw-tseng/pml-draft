@@ -1804,6 +1804,377 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 	endif
 endmethod
 
+--------------------------------------------------------------------------
+-- the four sides of the view are parallel to E and N only when the      --
+-- drawing box is orthogonal to the world. when it is not, .Apply() puts --
+-- ADEGREES on the view so that the box still comes out square on the    --
+-- sheet, and a volume such as "10mm inside the right hand side of the   --
+-- view" can no longer be handed to COLLECT ... WITHIN, because WITHIN   --
+-- only takes volumes which are square with E / N / U                    --
+--                                                                       --
+-- the methods below work in sheet coordination instead, where the view  --
+-- is always square, and convert between the two coordinations with a    --
+-- 2 by 2 matrix measured from the view itself, so the view scale,       --
+-- ADEGREES and RCODE are all carried by it                              --
+--                                                                       --
+-- .ViewSheetTransform() returns that matrix as                          --
+--   1, 2  sheet x, y of the centre of the view                          --
+--   3, 4  east, north of the centre of the view                         --
+--   5, 6  sheet x, y of a 1mm step to the east                          --
+--   7, 8  sheet x, y of a 1mm step to the north                         --
+--   9     determinant, for the way back                                 --
+--   10    1 when the view sits square on the sheet, that is when the    --
+--         box is orthogonal to the world, whatever rcode is. the world  --
+--         box of a band is then the band itself and nothing has to be   --
+--         checked a second time                                         --
+-- CE must be the view or an element inside it                           --
+--------------------------------------------------------------------------
+define method .ViewSheetTransform() is array
+	!trans = object array()
+	!c0x = (!this.viewLLsh.part(2).real() + !this.viewURsh.part(2).real()) * 0.5
+	!c0y = (!this.viewLLsh.part(4).real() + !this.viewURsh.part(4).real()) * 0.5
+	!c0sh = 'x ' & string(!c0x) & ' y ' & string(!c0y)
+	var !c0enu enupos of $!c0sh
+	!cen = object position(!c0enu)
+	!trans[1] = !c0x
+	!trans[2] = !c0y
+	!trans[3] = !cen.east
+	!trans[4] = !cen.north
+	!tempp = !cen.offset(object direction('E'), 1000)
+	var !tempsh shpos of $!tempp
+	!trans[5] = (!tempsh.part(2).replace('mm', '').real() - !c0x) / 1000
+	!trans[6] = (!tempsh.part(4).replace('mm', '').real() - !c0y) / 1000
+	!tempp = !cen.offset(object direction('N'), 1000)
+	var !tempsh shpos of $!tempp
+	!trans[7] = (!tempsh.part(2).replace('mm', '').real() - !c0x) / 1000
+	!trans[8] = (!tempsh.part(4).replace('mm', '').real() - !c0y) / 1000
+	!trans[9] = !trans[5] * !trans[8] - !trans[7] * !trans[6]
+	----------------------------------------------------------------------
+	-- square means east lies along one of the two sheet axes and north  --
+	-- along the other one. compared as squares to keep clear of sqrt    --
+	----------------------------------------------------------------------
+	!scal2 = !trans[5] * !trans[5] + !trans[6] * !trans[6]
+	!tol2 = !scal2 * 0.000001
+	!trans[10] = 0
+	if ((!trans[6] * !trans[6] lt !tol2 and !trans[7] * !trans[7] lt !tol2) or (!trans[5] * !trans[5] lt !tol2 and !trans[8] * !trans[8] lt !tol2)) then
+		!trans[10] = 1
+	endif
+	return !trans
+endmethod
+
+------------------------------------------------------------------------
+-- the band along one side of the view, !depth mm deep measured from   --
+-- the border of the view, in sheet coordination.                      --
+-- !dir is the side as it appears on the sheet                         --
+-- returns x1, y1, x2, y2                                              --
+------------------------------------------------------------------------
+define method .SheetBandOfSide(!dir is string, !depth is real) is array
+	!x1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+	!x2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+	!y1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+	!y2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+	if (!dir.eq('right')) then
+		!x1 = !x2 - !depth
+	elseif (!dir.eq('left')) then
+		!x2 = !x1 + !depth
+	elseif (!dir.eq('up')) then
+		!y1 = !y2 - !depth
+	elseif (!dir.eq('down')) then
+		!y2 = !y1 + !depth
+	endif
+	!band = object array()
+	!band[1] = !x1
+	!band[2] = !y1
+	!band[3] = !x2
+	!band[4] = !y2
+	return !band
+endmethod
+
+------------------------------------------------------------------------
+-- the world axis aligned volume which contains a sheet rectangle.     --
+-- it is the same rectangle when the box is orthogonal, and bigger     --
+-- than it when the view is turned, so it is safe to hand to WITHIN    --
+-- returns min E, min N, max E, max N                                  --
+------------------------------------------------------------------------
+define method .WorldLimitsOfSheetRect(!x1 is real, !y1 is real, !x2 is real, !y2 is real, !trans is array) is array
+	!xs = object array()
+	!ys = object array()
+	!xs[1] = !x1
+	!ys[1] = !y1
+	!xs[2] = !x2
+	!ys[2] = !y1
+	!xs[3] = !x2
+	!ys[3] = !y2
+	!xs[4] = !x1
+	!ys[4] = !y2
+	!es = object array()
+	!ns = object array()
+	do !i from 1 to 4
+		!dx = !xs[!i] - !trans[1]
+		!dy = !ys[!i] - !trans[2]
+		!es[!i] = !trans[3] + (!dx * !trans[8] - !dy * !trans[7]) / !trans[9]
+		!ns[!i] = !trans[4] + (!dy * !trans[5] - !dx * !trans[6]) / !trans[9]
+	enddo
+	!lim = object array()
+	!lim[1] = min(min(!es[1], !es[2]), min(!es[3], !es[4]))
+	!lim[2] = min(min(!ns[1], !ns[2]), min(!ns[3], !ns[4]))
+	!lim[3] = max(max(!es[1], !es[2]), max(!es[3], !es[4]))
+	!lim[4] = max(max(!ns[1], !ns[2]), max(!ns[3], !ns[4]))
+	return !lim
+endmethod
+
+------------------------------------------------------------------------
+-- the sheet rectangle which contains a world axis aligned volume,     --
+-- WVOL of an element                                                  --
+-- returns x1, y1, x2, y2                                              --
+------------------------------------------------------------------------
+define method .SheetLimitsOfVolume(!wvol is string, !trans is array) is array
+	!e1 = !wvol.part(1).replace('mm', '').real()
+	!n1 = !wvol.part(2).replace('mm', '').real()
+	!e2 = !wvol.part(4).replace('mm', '').real()
+	!n2 = !wvol.part(5).replace('mm', '').real()
+	!es = object array()
+	!ns = object array()
+	!es[1] = !e1
+	!ns[1] = !n1
+	!es[2] = !e2
+	!ns[2] = !n1
+	!es[3] = !e2
+	!ns[3] = !n2
+	!es[4] = !e1
+	!ns[4] = !n2
+	!xs = object array()
+	!ys = object array()
+	do !i from 1 to 4
+		!de = !es[!i] - !trans[3]
+		!dn = !ns[!i] - !trans[4]
+		!xs[!i] = !trans[1] + !de * !trans[5] + !dn * !trans[7]
+		!ys[!i] = !trans[2] + !de * !trans[6] + !dn * !trans[8]
+	enddo
+	!lim = object array()
+	!lim[1] = min(min(!xs[1], !xs[2]), min(!xs[3], !xs[4]))
+	!lim[2] = min(min(!ys[1], !ys[2]), min(!ys[3], !ys[4]))
+	!lim[3] = max(max(!xs[1], !xs[2]), max(!xs[3], !xs[4]))
+	!lim[4] = max(max(!ys[1], !ys[2]), max(!ys[3], !ys[4]))
+	return !lim
+endmethod
+
+------------------------------------------------------------------------
+-- does the element really reach into the band, checked in sheet       --
+-- coordination. the volume handed to WITHIN is only the world box     --
+-- which contains the band, so this is what keeps the elements which   --
+-- sit in the corners of that box out of the annotation               --
+-- an element whose WVOL cannot be read is kept                        --
+------------------------------------------------------------------------
+define method .CheckInSheetBand(!elem is string, !band is array, !trans is array) is boolean
+	!answer = true
+	if (!trans[10] neq 1) then
+		var !wvol wvol of $!elem
+		handle any
+			----------------------------------------------
+			-- no volume to check against, keep it      --
+			----------------------------------------------
+		elsehandle none
+			!lim = !this.SheetLimitsOfVolume(!wvol, !trans)
+			if (!lim[1] gt !band[3] or !lim[3] lt !band[1] or !lim[2] gt !band[4] or !lim[4] lt !band[2]) then
+				!answer = false
+			endif
+		endhandle
+	endif
+	return !answer
+endmethod
+
+--------------------------------------------------------------------------
+-- where the tube which leaves !elem crosses one border of the view, as  --
+-- a world position. answers 'NONE' when the tube is known not to reach  --
+-- that border, and '' when it cannot be worked out at all, so that the  --
+-- caller can tell the two apart                                         --
+--                                                                       --
+-- a straight run of pipe is not an element of its own, it turns up in a --
+-- collection as an implied tube and MTBE gives the thing the tube       --
+-- leaves from, which is the BRAN when the tube leaves the head of the   --
+-- branch and a component otherwise. that element can be right across    --
+-- the drawing from the border, so its own position must not be used to  --
+-- dimension against. the tube is followed instead, the same way as      --
+-- E3dDraftModify and DrawingPlan1FlowAnnotation follow one             --
+--                                                                       --
+-- the crossing has to sit on the tube itself and not on the endless     --
+-- line through it. where a pipe turns near a border, the tube before    --
+-- the bend and the tube after it both have a line which cuts that       --
+-- border, a short distance apart, but only one of them really reaches   --
+-- it. without this the pipe gets two identical line numbers side by     --
+-- side. ITLE gives the length of the tube, as in E3dDraftModify         --
+--                                                                       --
+-- !tube is the implied tube as it came out of the collection, !elem is  --
+-- what MTBE made of it                                                  --
+-- !dir is the side of the view as it appears on the sheet               --
+-- CE must be the view or an element inside it                           --
+--------------------------------------------------------------------------
+define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) is string
+	!answer = ''
+	!ok = true
+	!stpos = ''
+	!stdir = ''
+	!tubelen = 0
+	var !type type of $!elem
+	handle any
+		!ok = false
+	endhandle
+	if (!ok) then
+		if (!type.eqnocase('BRAN')) then
+			var !stpos hposition of $!elem
+			handle any
+				!ok = false
+			endhandle
+			var !stdir hdirection of $!elem
+			handle any
+				!ok = false
+			endhandle
+		else
+			var !stpos pl pos of $!elem
+			handle any
+				!ok = false
+			endhandle
+			var !stdir pl dir of $!elem
+			handle any
+				!ok = false
+			endhandle
+		endif
+	endif
+	if (!ok) then
+		----------------------------------------------------------------
+		-- the tube on the sheet, from where it leaves !elem along the --
+		-- direction it leaves in                                      --
+		----------------------------------------------------------------
+		!p1 = object position(!stpos)
+		--------------------------------------------------------------
+		-- the far end of the tube. when ITLE does not answer, walk  --
+		-- 1000mm instead and let the crossing be taken from the     --
+		-- endless line, as it was before                            --
+		--------------------------------------------------------------
+		var !itle itle of $!tube
+		handle any
+			!itle = ''
+		endhandle
+		!tubelen = !itle.replace('mm', '').real()
+		handle any
+			!tubelen = 0
+		endhandle
+		if (!tubelen gt 0) then
+			!p2 = !p1.offset(!stdir.direction(), !tubelen)
+		else
+			!p2 = !p1.offset(!stdir.direction(), 1000)
+		endif
+		var !p1sh shpos of $!p1
+		var !p2sh shpos of $!p2
+		------------------------------------------------------------------
+		-- a tube which runs up or down is a single point on a plan, so  --
+		-- its two ends land on top of each other on the sheet. handing  --
+		-- that to intersection() only earns a warning about coincident  --
+		-- start and end positions, and there is nothing to work out     --
+		-- either. answered as '' so that the caller falls back on the   --
+		-- position of the element, which for such a tube is the same    --
+		-- point on the plan anyway                                      --
+		------------------------------------------------------------------
+		if (!p1sh.position().distance(!p2sh.position()) lt 0.001) then
+			!ok = false
+		endif
+	endif
+	if (!ok) then
+		!tubeline = object line(!p1sh.position(), !p2sh.position())
+		!crosssh = ''
+		if (!dir.eq('right')) then
+			!crosssh = !this.viewRlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			handle any
+				------------------------------------------------
+				-- the tube runs along that border            --
+				------------------------------------------------
+				!ok = false
+			endhandle
+		elseif (!dir.eq('left')) then
+			!crosssh = !this.viewLlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			handle any
+				!ok = false
+			endhandle
+		elseif (!dir.eq('down')) then
+			!crosssh = !this.viewDlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			handle any
+				!ok = false
+			endhandle
+		elseif (!dir.eq('up')) then
+			!crosssh = !this.viewUlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			handle any
+				!ok = false
+			endhandle
+		endif
+	endif
+	if (!ok and !tubelen gt 0) then
+		------------------------------------------------------------------
+		-- the crossing has to lie between the two ends of the tube. the --
+		-- point is known to be on the line through them, so comparing   --
+		-- the distances is enough. 1mm of the sheet is allowed either   --
+		-- end, for a bend which sits right on the border                --
+		------------------------------------------------------------------
+		!s1 = !p1sh.position()
+		!s2 = !p2sh.position()
+		!cs = !crosssh.position()
+		!slen = !s1.distance(!s2)
+		if (!slen gt 0.001) then
+			if (!s1.distance(!cs) gt (!slen + 1) or !s2.distance(!cs) gt (!slen + 1)) then
+				------------------------------------------------------------
+				-- this tube does not reach that border. answered apart   --
+				-- from '' so that the caller can drop the member instead --
+				-- of falling back on the position of the element         --
+				------------------------------------------------------------
+				!answer = 'NONE'
+				!ok = false
+			endif
+		endif
+	endif
+	if (!ok) then
+		var !crossenu enupos of $!crosssh
+		handle any
+			!ok = false
+		endhandle
+		if (!ok) then
+			!answer = !crossenu
+		endif
+	endif
+	return !answer
+endmethod
+
+--------------------------------------------------------------------------
+-- the point of the grid line which is nearest to !intpt, in sheet       --
+-- coordination                                                          --
+--                                                                       --
+-- the intersections of a grid line with the borders of the view are     --
+-- worked out on endless lines, so a grid line which stops inside the    --
+-- view still gets an intersection out on the border. the dimension is   --
+-- then drawn with nothing joining it to the grid. this answers where    --
+-- the grid line really ends, so that the projection line can be reached --
+-- in to it: the intersection itself when it does lie on the grid line,  --
+-- and the nearer of the two ends of the grid line when it does not      --
+--------------------------------------------------------------------------
+define method .NearEndOfGrid(!gridline is line, !p1sh is string, !p2sh is string, !intpt is position) is position
+	!answer = !intpt
+	------------------------------------------------------------------
+	-- a grid line which comes out as a single point on the sheet    --
+	-- cannot be asked whether something lies on it, on() would only --
+	-- warn about coincident start and end positions. keep the point --
+	-- on the border in that case                                    --
+	------------------------------------------------------------------
+	if (!p1sh.position().distance(!p2sh.position()) geq 0.001) then
+		if (not(!gridline.on(!intpt, true))) then
+			if (!p1sh.position().distance(!intpt) lt !p2sh.position().distance(!intpt)) then
+				!answer = !p1sh.position()
+			else
+				!answer = !p2sh.position()
+			endif
+		endif
+	endif
+	return !answer
+endmethod
+
 ------------------------------------------------------------------------
 -- check which one is correct when dimension attach point(s) are near --
 -- called by !!DrawingPlan1LineNoAnnotation()                         --

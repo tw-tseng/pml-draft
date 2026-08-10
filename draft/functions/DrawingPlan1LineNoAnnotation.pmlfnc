@@ -8,6 +8,13 @@ import 'AteSortLineNo'
 handle any
 endhandle
 
+--------------------------------------------------------------------------
+-- !boxXlen / !boxYlen are no longer used. the width of the bands is now --
+-- taken from the size of the view on the sheet, which is right whatever --
+-- the box is turned to, and which also gets the swap of xlength and     --
+-- ylength in .Apply() right. the two arguments are kept so that nothing --
+-- which calls this function has to change                               --
+--------------------------------------------------------------------------
 define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real, !boxYlen is real)
 	NEW LAYE $!name/SS/S1/V1/ateLINE_R$!!DrawingPlan1.rev
 	Purpose LINE
@@ -58,6 +65,23 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	
 	!dirlist = 'right left down up'	
 	
+	---------------------------------------------------------------------------
+	-- the sides of the view are only parallel to E and N when the drawing   --
+	-- box is orthogonal to the world. when it is not, .Apply() turns the    --
+	-- view with ADEGREES, and a band along one side of the view is then a   --
+	-- turned rectangle in the model, which COLLECT ... WITHIN cannot take.  --
+	-- so every band below is set out in sheet coordination, where the view  --
+	-- is always square, WITHIN is given the world box which contains the    --
+	-- band, and .CheckInSheetBand() throws away what that box picks up      --
+	-- outside the band itself. this also covers rcode, because the sheet    --
+	-- corners of the view are already turned by .Apply()                    --
+	---------------------------------------------------------------------------
+	!trans = !!DrawingPlan1.ViewSheetTransform()
+	!vwx1 = min(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
+	!vwx2 = max(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
+	!vwy1 = min(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
+	!vwy2 = max(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
+
 	------------------------------------------------------------------
 	-- !result is the array with th correct dimension attach points --
 	------------------------------------------------------------------
@@ -65,7 +89,49 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	!!DrawingPlan1.equiparray.clear()
 	do !jj from 1 to 4
 		!dir = !dirlist.part(!jj)
+		-------------------------------------------------------------------------
+		-- !dir is the side of the view as it appears on the sheet, and so are  --
+		-- the bands, the sorting, the border line to shoot at, the corners of  --
+		-- the view, DIR / DOFFSET of the LDIM, the text angle and the padding  --
+		-- spaces of Pltxt                                                      --
+		--                                                                      --
+		-- viewdir gives the model direction which appears to point that way on --
+		-- the sheet, so it already follows both ADEGREES and rcode. !viewdir   --
+		-- is only used as a model direction, to offset the attach point away   --
+		-- from the view and to check the direction of a component. the same    --
+		-- applies to !viewdirdown / !viewdirright above, which give DIR of the --
+		-- LDIM                                                                 --
+		-------------------------------------------------------------------------
 		var !viewdir viewdir $!dir
+		-------------------------------------------------------------------------
+		-- !shdir is !dir in sheet coordination. it is used to shoot a line     --
+		-- from the sheet position of a member to the border line of the view,  --
+		-- both of them come from shpos, so it must not be taken from viewdir,  --
+		-- which is a model direction                                           --
+		-------------------------------------------------------------------------
+		if (!dir.eq('right')) then
+			!shdir = object direction('E')
+		elseif (!dir.eq('left')) then
+			!shdir = object direction('W')
+		elseif (!dir.eq('down')) then
+			!shdir = object direction('S')
+		elseif (!dir.eq('up')) then
+			!shdir = object direction('N')
+		endif
+		------------------------------------------------------------------------
+		-- how deep the bands below reach in from the border, in sheet mm.     --
+		-- !banddeep is 33% and !bandshal 10% of the view, as before, and      --
+		-- !bandthin is the 10mm of the model which catches whatever crosses   --
+		-- the border itself                                                   --
+		------------------------------------------------------------------------
+		!bandthin = 10 * !!DrawingPlan1.vsca
+		if (!dir.eq('right') or !dir.eq('left')) then
+			!banddeep = (!vwx2 - !vwx1) * 0.33
+			!bandshal = (!vwx2 - !vwx1) * 0.1
+		else
+			!banddeep = (!vwy2 - !vwy1) * 0.33
+			!bandshal = (!vwy2 - !vwy1) * 0.1
+		endif
 		!j = 1
 		!result.clear()
 
@@ -74,30 +140,26 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- find pipes that cross right match line  --
 		---------------------------------------------
 		!types = object array()
-		if (!dir.eq('right')) then
-			!tempvl = !!DrawingPlan1.maxE - 10
-			!vlfm = 'E ' & $!tempvl & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
-		elseif (!dir.eq('left')) then
-			!tempvl = !!DrawingPlan1.minE + 10
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
-			!vlto = 'E ' & $!tempvl & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
-		elseif (!dir.eq('down')) then
-			!tempvl = !!DrawingPlan1.minN + 10
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl & ' U ' & $!!DrawingPlan1.maxU
-		elseif (!dir.eq('up')) then
-			!tempvl = !!DrawingPlan1.maxN - 10
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl & ' U ' & $!!DrawingPlan1.minU
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
-		endif
+		!band = !!DrawingPlan1.SheetBandOfSide(!dir, !bandthin)
+		!wlim = !!DrawingPlan1.WorldLimitsOfSheetRect(!band[1], !band[2], !band[3], !band[4], !trans)
+		!bminE = !wlim[1]
+		!bminN = !wlim[2]
+		!bmaxE = !wlim[3]
+		!bmaxN = !wlim[4]
+		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
+		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
 
 		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
+			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !type type of $!mem
+			!istube = false
+			!tubeelem = ''
 			if (!type.matchwild('*TUB*')) then
+				!istube = true
+				!tubeelem = !mems[$!i]
 				var !mem mtbe of $!mems[$!i]
 			endif
 			var !check IDLN for $!mem
@@ -106,23 +168,60 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	--      skip
 			elsehandle none
 				var !pipe namn of pipe of $!mem
-				if (!check.eqnocase('INCLUDED')) then
+				if (!check.eqnocase('INCLUDED') and !inband) then
 					var !type type of $!mem
 					if (!type.eqnocase('BRAN')) then
 						var !memenupos hpos of $!mem
 					else
 						var !memenupos worpos of $!mem
 					endif
-					var !memshpos shpos of $!memenupos
-					----------------------------------------------------------------
-					-- y is the key of hashtable in .Net and cannot be duplicated --
-					-- so a small value needs to be added to identify it          --
-					----------------------------------------------------------------
-					!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
-					!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
-					!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!y'
-					!result[!j] = !memstr
-					!j = !j + 1
+					------------------------------------------------------------------
+					-- a length of pipe with no fitting in it is an implied tube,    --
+					-- and mtbe above turned it into the branch or the component it  --
+					-- leaves from, which can be right across the drawing. so follow --
+					-- the tube to where it really crosses the border and dimension  --
+					-- there. only the elevation is kept from the element, so that   --
+					-- BOP still comes out right                                     --
+					--                                                               --
+					-- while the box was orthogonal this went unnoticed, because a   --
+					-- pipe crossing a border runs square with it and the leader,    --
+					-- which is shot square at the border, landed on the right spot  --
+					-- anyway. once the box is turned the pipe crosses at an angle   --
+					-- and the leader ends up somewhere else along the border, or    --
+					-- off the end of it                                             --
+					------------------------------------------------------------------
+					!useit = true
+					if (!istube) then
+						!crossenu = !!DrawingPlan1.CrossingOfTube(!tubeelem, !mem, !dir)
+						if (!crossenu.eq('NONE')) then
+							--------------------------------------------------------
+							-- the world box handed to WITHIN is bigger than the  --
+							-- band when the view is turned, so a tube which does --
+							-- not reach this border can still get this far. it   --
+							-- is dropped here, otherwise a pipe which turns near --
+							-- the border gets the same line number twice, once   --
+							-- from the tube before the bend and once from the    --
+							-- tube after it                                      --
+							--------------------------------------------------------
+							!useit = false
+						elseif (!crossenu.neq('')) then
+							!crosspos = object position(!crossenu)
+							!crosspos.up = !memenupos.position().up
+							!memenupos = !crosspos.string()
+						endif
+					endif
+					if (!useit) then
+						var !memshpos shpos of $!memenupos
+						----------------------------------------------------------------
+						-- y is the key of hashtable in .Net and cannot be duplicated --
+						-- so a small value needs to be added to identify it          --
+						----------------------------------------------------------------
+						!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
+						!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+						!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!y'
+						!result[!j] = !memstr
+						!j = !j + 1
+					endif
 				endif
 			endhandle
 		enddo
@@ -171,32 +270,21 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- TYPE 2a situation                       --
 		-- find pipes that cross upper match line  --
 		---------------------------------------------
-		if (!dir.eq('right')) then
-			!tempvl  = !!DrawingPlan1.maxU - 10
-			!tempvl1 = !!DrawingPlan1.maxE - !boxXlen * 0.33
-			!vlfm = 'E ' & $!tempvl1 & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
-		elseif (!dir.eq('left')) then
-			!tempvl  = !!DrawingPlan1.maxU - 10
-			!tempvl1 = !!DrawingPlan1.minE + !boxXlen * 0.33
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
-			!vlto = 'E ' & $!tempvl1 & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
-		elseif (!dir.eq('down')) then
-			!tempvl  = !!DrawingPlan1.maxU - 10
-			!tempvl1 = !!DrawingPlan1.minN + !boxYlen * 0.33
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl1 & ' U ' & $!!DrawingPlan1.maxU
-		elseif (!dir.eq('up')) then
-			!tempvl  = !!DrawingPlan1.maxU - 10
-			!tempvl1 = !!DrawingPlan1.maxN - !boxYlen * 0.33
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl1 & ' U ' & $!tempvl
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!!DrawingPlan1.maxU
-		endif
+		!band = !!DrawingPlan1.SheetBandOfSide(!dir, !banddeep)
+		!wlim = !!DrawingPlan1.WorldLimitsOfSheetRect(!band[1], !band[2], !band[3], !band[4], !trans)
+		!bminE = !wlim[1]
+		!bminN = !wlim[2]
+		!bmaxE = !wlim[3]
+		!bmaxN = !wlim[4]
+		!tempvl  = !!DrawingPlan1.maxU - 10
+		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
+		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
 
 		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
+			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !type type of $!mem
 			if (!type.matchwild('*TUB*')) then
 				var !mem mtbe of $!mems[$!i]
@@ -207,7 +295,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	--      skip
 			elsehandle none
 				var !pipe namn of pipe of $!mem
-				if (!check.eqnocase('INCLUDED')) then
+				if (!check.eqnocase('INCLUDED') and !inband) then
 					var !type type of $!mem
 					if (!type.eqnocase('BRAN')) then
 						var !memenupos hpos of $!mem
@@ -228,32 +316,21 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- TYPE 2b situation                       --
 		-- find pipes that cross lower match line  --
 		---------------------------------------------
-		if (!dir.eq('right')) then
-			!tempvl  = !!DrawingPlan1.minU + 10
-			!tempvl1 = !!DrawingPlan1.maxE - !boxXlen * 0.33
-			!vlfm = 'E ' & $!tempvl1 & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl
-		elseif (!dir.eq('left')) then
-			!tempvl  = !!DrawingPlan1.minU + 10
-			!tempvl1 = !!DrawingPlan1.minE + !boxXlen * 0.33
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
-			!vlto = 'E ' & $!tempvl1 & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl
-		elseif (!dir.eq('down')) then
-			!tempvl  = !!DrawingPlan1.minU + 10
-			!tempvl1 = !!DrawingPlan1.minN + !boxYlen * 0.33
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!!DrawingPlan1.minU
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl1 & ' U ' & $!tempvl
-		elseif (!dir.eq('up')) then
-			!tempvl  = !!DrawingPlan1.minU + 10
-			!tempvl1 = !!DrawingPlan1.maxN - !boxYlen * 0.33
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl1 & ' U ' & $!!DrawingPlan1.minU
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl
-		endif
+		!band = !!DrawingPlan1.SheetBandOfSide(!dir, !banddeep)
+		!wlim = !!DrawingPlan1.WorldLimitsOfSheetRect(!band[1], !band[2], !band[3], !band[4], !trans)
+		!bminE = !wlim[1]
+		!bminN = !wlim[2]
+		!bmaxE = !wlim[3]
+		!bmaxN = !wlim[4]
+		!tempvl  = !!DrawingPlan1.minU + 10
+		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
+		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl
 
 		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
+			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !type type of $!mem
 			if (!type.matchwild('*TUB*')) then
 				var !mem mtbe of $!mems[$!i]
@@ -264,7 +341,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	--      skip
 			elsehandle none
 				var !pipe namn of pipe of $!mem
-				if (!check.eqnocase('INCLUDED')) then
+				if (!check.eqnocase('INCLUDED') and !inband) then
 					var !type type of $!mem
 					if (!type.eqnocase('BRAN')) then
 						var !memenupos hpos of $!mem
@@ -287,35 +364,27 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		------------------------------------
 		!tempvl  = !!DrawingPlan1.minU + 10
 		!tempvl1  = !!DrawingPlan1.maxU - 10
-		if (!dir.eq('right')) then
-			!tempvl2 = !!DrawingPlan1.maxE - !boxXlen * 0.33
-			!vlfm = 'E ' & $!tempvl2 & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
-		elseif (!dir.eq('left')) then
-			!tempvl2 = !!DrawingPlan1.minE + !boxXlen * 0.33
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
-			!vlto = 'E ' & $!tempvl2 & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
-		elseif (!dir.eq('down')) then
-			!tempvl2 = !!DrawingPlan1.minN + !boxYlen * 0.33
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl2 & ' U ' & $!tempvl1
-		elseif (!dir.eq('up')) then
-			!tempvl2 = !!DrawingPlan1.maxN - !boxYlen * 0.33
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl2 & ' U ' & $!tempvl
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
-		endif
+		!band = !!DrawingPlan1.SheetBandOfSide(!dir, !banddeep)
+		!wlim = !!DrawingPlan1.WorldLimitsOfSheetRect(!band[1], !band[2], !band[3], !band[4], !trans)
+		!bminE = !wlim[1]
+		!bminN = !wlim[2]
+		!bmaxE = !wlim[3]
+		!bmaxN = !wlim[4]
+		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
+		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
 
 		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
 		var !mems coll all elbo within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
+			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !check IDLN for $!mem
 	--      $p $!check
 			handle any
 	--      skip
 			elsehandle none
 				var !pipe namn of pipe of $!mem
-				if (!check.eqnocase('INCLUDED')) then
+				if (!check.eqnocase('INCLUDED') and !inband) then
 					var !memenupos worpos of $!mem
 					var !memshpos shpos of $!memenupos
 					!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
@@ -330,71 +399,69 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		----------------------------------------
 		-- find euqipments within view limit  --
 		----------------------------------------
-		if (!dir.eq('right')) then
-			!tempvl2 = !!DrawingPlan1.maxE - !boxXlen * 0.1
-			!vlfm = 'E ' & $!tempvl2 & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
-		elseif (!dir.eq('left')) then
-			!tempvl2 = !!DrawingPlan1.minE + !boxXlen * 0.1
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
-			!vlto = 'E ' & $!tempvl2 & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
-		elseif (!dir.eq('down')) then
-			!tempvl2 = !!DrawingPlan1.minN + !boxYlen * 0.1
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!!DrawingPlan1.minN & ' U ' & $!tempvl
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!tempvl2 & ' U ' & $!tempvl1
-		elseif (!dir.eq('up')) then
-			!tempvl2 = !!DrawingPlan1.maxN - !boxYlen * 0.1
-			!vlfm = 'E ' & $!!DrawingPlan1.minE & ' N ' & $!tempvl2 & ' U ' & $!tempvl
-			!vlto = 'E ' & $!!DrawingPlan1.maxE & ' N ' & $!!DrawingPlan1.maxN & ' U ' & $!tempvl1
-		endif
+		!band = !!DrawingPlan1.SheetBandOfSide(!dir, !bandshal)
+		!wlim = !!DrawingPlan1.WorldLimitsOfSheetRect(!band[1], !band[2], !band[3], !band[4], !trans)
+		!bminE = !wlim[1]
+		!bminN = !wlim[2]
+		!bmaxE = !wlim[3]
+		!bmaxN = !wlim[4]
+		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
+		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
 		var !mems coll all equi with (not(matchwild(name, |*_DrawingPlan|))) within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
+			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !check IDLN for $!mem
 			handle any
 			elsehandle none
 				var !equi namn of $!mem
-				if (!check.eqnocase('INCLUDED')) then
+				if (!check.eqnocase('INCLUDED') and !inband) then
 					---------------------------------------------------------------
 					-- check if most volume of equipment is within view boundary --
+					-- the equipment has to reach at least 10mm of the sheet in  --
+					-- from the border, measured on the sheet so that it still   --
+					-- works when the view is turned                             --
 					---------------------------------------------------------------
 					var !wvol wvol of $!mem
+					!memlim = !!DrawingPlan1.SheetLimitsOfVolume(!wvol, !trans)
 					!checkwvol = false
 					if (!dir.eq('right')) then
-						if (abs(!!DrawingPlan1.maxE - !wvol.part(1).real()) geq (10 / !!DrawingPlan1.vsca))  then
+						if ((!vwx2 - !memlim[1]) geq 10)  then
 							!checkwvol = true
 						endif
 					elseif (!dir.eq('left')) then
-						if (abs(!!DrawingPlan1.minE - !wvol.part(4).real()) geq (10 / !!DrawingPlan1.vsca))  then
+						if ((!memlim[3] - !vwx1) geq 10)  then
 							!checkwvol = true
 						endif
 					elseif (!dir.eq('down')) then
-						if (abs(!!DrawingPlan1.minN - !wvol.part(5).real()) geq (10 / !!DrawingPlan1.vsca))  then
+						if ((!memlim[4] - !vwy1) geq 10)  then
 							!checkwvol = true
 						endif
 					elseif (!dir.eq('up')) then
-						if (abs(!!DrawingPlan1.maxN - !wvol.part(2).real()) geq (10 / !!DrawingPlan1.vsca))  then
+						if ((!vwy2 - !memlim[2]) geq 10)  then
 							!checkwvol = true
 						endif
 					endif
 					if (!checkwvol) then
 						var !memenupos worpos of $!mem
-						!memenupos1 = object position(!memenupos)
+						var !memshpos shpos of $!memenupos
 						-------------------------------------------------------
 						-- check if pos of equipment is within view boundary --
+						-- along the side the annotation is drawn on         --
 						-------------------------------------------------------
+						!memx = !memshpos.split().getindexed(2).replace('mm','').real()
+						!memy = !memshpos.split().getindexed(4).replace('mm','').real()
 						!checkwvol = false
 						if (!dir.eq('right') or !dir.eq('left')) then
-							if (!memenupos1.north lt !!DrawingPlan1.maxN and !memenupos1.north gt !!DrawingPlan1.minN) then
+							if (!memy lt !vwy2 and !memy gt !vwy1) then
 								!checkwvol = true
 							endif
 						elseif (!dir.eq('down') or !dir.eq('up')) then
-							if (!memenupos1.east lt !!DrawingPlan1.maxE and !memenupos1.east gt !!DrawingPlan1.minE) then
+							if (!memx lt !vwx2 and !memx gt !vwx1) then
 								!checkwvol = true
 							endif
 						endif
 						if (!checkwvol) then
-							var !memshpos shpos of $!memenupos
 							!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
 							!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
 							!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !equi
@@ -422,15 +489,22 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			var !tdir tdir of $!mem
 			!hdir1 = object direction(!hdir)
 			!tref1 = object direction(!tdir)
+			--------------------------------------------------------------------
+			-- the head / tail has to be inside the view. east and north are  --
+			-- no use for that when the view is turned, so the sheet position --
+			-- is checked against the sheet rectangle of the view instead     --
+			--------------------------------------------------------------------
 			if (!hdir1.opposite().eq(object direction(!viewdir))) then
 				var !memenupos hpos of $!mem
 				!memenupos1 = object position(!memenupos)
-				if (!memenupos1.east lt !!DrawingPlan1.maxE and !memenupos1.east gt !!DrawingPlan1.minE) then
-					if (!memenupos1.north lt !!DrawingPlan1.maxN and !memenupos1.north gt !!DrawingPlan1.minN) then
+				var !memshpos shpos of $!memenupos
+				!memx = !memshpos.split().getindexed(2).replace('mm','').real()
+				!memy = !memshpos.split().getindexed(4).replace('mm','').real()
+				if (!memx lt !vwx2 and !memx gt !vwx1) then
+					if (!memy lt !vwy2 and !memy gt !vwy1) then
 						if (!memenupos1.up lt !!DrawingPlan1.maxU and !memenupos1.up gt !!DrawingPlan1.minU) then
-							var !memshpos shpos of $!memenupos
-							!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
-							!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+							!x = !memx + 0.0000000001 * !j
+							!y = !memy + 0.0000000001 * !j
 							!memstr = !y & '~' & !x & '~type4!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
 							!types[!j] = !memstr
 							!j = !j + 1
@@ -441,12 +515,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			if (!tref1.opposite().eq(object direction(!viewdir))) then
 				var !memenupos tpos of $!mem
 				!memenupos1 = object position(!memenupos)
-				if (!memenupos1.east lt !!DrawingPlan1.maxE and !memenupos1.east gt !!DrawingPlan1.minE) then
-					if (!memenupos1.north lt !!DrawingPlan1.maxN and !memenupos1.north gt !!DrawingPlan1.minN) then
+				var !memshpos shpos of $!memenupos
+				!memx = !memshpos.split().getindexed(2).replace('mm','').real()
+				!memy = !memshpos.split().getindexed(4).replace('mm','').real()
+				if (!memx lt !vwx2 and !memx gt !vwx1) then
+					if (!memy lt !vwy2 and !memy gt !vwy1) then
 						if (!memenupos1.up lt !!DrawingPlan1.maxU and !memenupos1.up gt !!DrawingPlan1.minU) then
-							var !memshpos shpos of $!memenupos
-							!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
-							!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
+							!x = !memx + 0.0000000001 * !j
+							!y = !memy + 0.0000000001 * !j
 							!memstr = !y & '~' & !x & '~type4!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
 							!types[!j] = !memstr
 							!j = !j + 1
@@ -575,28 +651,29 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			!resultl = !result[!i]
 			!mem = !resultl.split('~').getindexed(3).split('!').getindexed(4)
 			var !type type of $!mem
-			
-			if (!type.eqnocase('BRAN')) then
-				var !mempos hpos of $!mem
-				var !aod phod of $!mem
+			--------------------------------------------------------------------
+			-- the position was worked out when the member was found and is    --
+			-- carried in the string, so take it from there instead of asking  --
+			-- the element again. for a length of plain tube it is the point   --
+			-- where the tube crosses the border of the view, and for a type 4 --
+			-- tail it is tpos, neither of which hpos would hand back          --
+			--------------------------------------------------------------------
+			!mempos   = !resultl.split('~').getindexed(3).split('!').getindexed(2)
+			!mempossh = !resultl.split('~').getindexed(3).split('!').getindexed(3)
+			if (not(!type.eqnocase('EQUI'))) then
+				if (!type.eqnocase('BRAN')) then
+					var !aod phod of $!mem
+				else
+					var !aod aod of $!mem
+				endif
 				!bop = !mempos.position().up - !aod.real().value() * 0.5
 				!bopu = !bop.nint().value()
-				var !mempossh shpos of $!mempos
-			elseif (!type.eqnocase('EQUI')) then
-				var !mempos (pos of $!mem wrt worl)
-				var !mempossh shpos of $!mempos
-			else
-				var !mempos worpos of $!mem
-				var !aod aod of $!mem
-				!bop = !mempos.position().up - !aod.real().value() * 0.5
-				!bopu = !bop.nint().value()
-				var !mempossh shpos of $!mempos
 			endif
 
 			!intpt.delete()
 			handle any
 			endhandle
-			!templine = object line(!mempossh.position(), !mempossh.position().offset(!viewdir.direction(), 1))
+			!templine = object line(!mempossh.position(), !mempossh.position().offset(!shdir, 1))
 			if (!dir.eq('right')) then
 				!intpt = !!DrawingPlan1.viewRlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 				handle any
@@ -618,11 +695,52 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- two lines are parellel
 				endhandle
 			endif
-			$p $!intpt
+			--------------------------------------------------------------------
+			-- !ptok replaces the '$p $!intpt' which used to sit here. that   --
+			-- print was what raised the error when the two lines came out    --
+			-- parallel and !intpt was left unset, and the handle any below   --
+			-- caught it, so commenting the print out let an unset !intpt     --
+			-- through to enupos                                              --
+			--------------------------------------------------------------------
+			!ptok = true
+			!ptx = !intpt.part(2).replace('mm', '').real()
 			handle any
-			elsehandle none
+				------------------------------------------------
+				-- no intersection point at all, nothing to do --
+				------------------------------------------------
+				!ptok = false
+			endhandle
+			if (!ptok) then
+				--------------------------------------------------------------
+				-- the border of the view is an endless line as far as       --
+				-- intersection() is concerned, so a member which is off the --
+				-- side of the view still gives a point, but one which lies  --
+				-- outside the view. drop those, or the dimension runs off   --
+				-- the drawing                                               --
+				--------------------------------------------------------------
+				!pty = !intpt.part(4).replace('mm', '').real()
+				if (!ptx lt (!vwx1 - 1) or !ptx gt (!vwx2 + 1) or !pty lt (!vwy1 - 1) or !pty gt (!vwy2 + 1)) then
+					!ptok = false
+				endif
+			endif
+			if (!ptok) then
 				var !temppos enupos of $!intpt
 				!attapos = object position(!temppos)
+				--------------------------------------------------------------------
+				-- the projection line starts at the member itself, not out at the --
+				-- border of the view, so that it can be followed back to what it  --
+				-- belongs to. the gridgap below then leaves the same 3mm of the   --
+				-- sheet clear of the fitting as it used to leave of the border.   --
+				-- a length of tube which crosses the border carries the crossing  --
+				-- point as its position, so for those nothing moves               --
+				--                                                                 --
+				-- equipment is left on the border. its position is the middle of  --
+				-- the equipment and a projection line starting there would be     --
+				-- drawn right across it                                           --
+				--------------------------------------------------------------------
+				if (not(!type.eqnocase('EQUI'))) then
+					!attapos = object position(!mempos)
+				endif
 				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 				if (!type.eqnocase('BRAN')) then
 					if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
@@ -689,11 +807,11 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)      '
 						elseif (!dir.eq('up')) then
 							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:)'
-						endif	
+						endif
 					endif
 				endif
-			endhandle
-		enddo		
+			endif
+		enddo
 		------------------------------------------------
 		-- create dimension for grid                  --
 		-- !!DrawingPlan1.allintersections including  --
@@ -712,7 +830,36 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			endif
 			if (!checkpt) then
 				!intpt = !intersection.split('-').getindexed(2).before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
-				var !temppos enupos of $!intpt
+				!ptx = !intpt.part(2).replace('mm', '').real()
+				!pty = !intpt.part(4).replace('mm', '').real()
+				--------------------------------------------------------------------
+				-- a grid line whose ends are inside the view does not reach the   --
+				-- border at all, the intersection above comes from the endless    --
+				-- line through it, so the dimension ends up with nothing joining  --
+				-- it to the grid. reach the point back in to where the grid line  --
+				-- really ends, and the gridgap below then leaves the same 3mm of  --
+				-- the sheet clear of it as it used to leave of the border         --
+				--                                                                 --
+				-- only the depth is taken from the end of the grid. the           --
+				-- coordinate along the border stays as it was, so the dimension   --
+				-- itself does not change                                          --
+				--------------------------------------------------------------------
+				!nearpt = ''
+				!nearpt = !intersection.split('~').getindexed(2).before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				handle any
+					--------------------------------------------------------------
+					-- no end of grid recorded, keep the point on the border    --
+					--------------------------------------------------------------
+				endhandle
+				if (!nearpt.neq('')) then
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!ptx = min(max(!nearpt.part(2).replace('mm', '').real(), !vwx1), !vwx2)
+					else
+						!pty = min(max(!nearpt.part(4).replace('mm', '').real(), !vwy1), !vwy2)
+					endif
+				endif
+				!intsh = 'x ' & string(!ptx) & ' y ' & string(!pty)
+				var !temppos enupos of $!intsh
 				!attapos = object position(!temppos)
 				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 				NEW DPOI POS $!attapos
