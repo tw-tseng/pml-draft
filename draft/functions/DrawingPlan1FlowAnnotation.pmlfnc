@@ -81,27 +81,59 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	------------------------------------------------------------------------
 	var !brans vscan for all bran
 	------------------------------------------------------------------------
-	-- the branches are worked from the top of the plant downwards         --
+	-- the rectangle of the view in sheet coordination, which is where the --
+	-- visible run of each tube is worked out. the same four numbers as    --
+	-- DrawingPlan1LineNoAnnotation takes                                  --
+	------------------------------------------------------------------------
+	!vwx1 = min(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
+	!vwx2 = max(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
+	!vwy1 = min(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
+	!vwy2 = max(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
+	------------------------------------------------------------------------
+	-- the branches are worked from the top of the plant downwards, and    --
+	-- where two of them sit at the same elevation the one with more of    --
+	-- itself on show goes first                                           --
 	--                                                                     --
-	-- where two pipes cross or run side by side on a plan they are        --
-	-- usually at different elevations, and the one underneath is the one  --
-	-- the reader cannot see properly. whoever is placed first gets the    --
-	-- room, so the higher pipe is placed first and keeps the open spot on --
-	-- its run, and the lower one is pushed along its own pipe to wherever --
-	-- there is room left                                                  --
+	-- whoever is placed first gets the room. where two pipes cross or run --
+	-- side by side on a plan they are often at different elevations, and  --
+	-- the one underneath is the one the reader cannot see properly, so    --
+	-- the higher pipe keeps the open spot on its run and the lower one is --
+	-- pushed along its own pipe to wherever there is room left            --
+	--                                                                     --
+	-- elevation on its own is not enough. four branches off the same      --
+	-- nozzle bank came back at exactly 101076 and the order between them  --
+	-- fell to the order they were scanned in, which is to say chance, so  --
+	-- which of them lost its arrow was chance as well. the length on show --
+	-- settles it instead: a long run is the more telling place to put an  --
+	-- arrow, so the short spool is the one which gives way                --
 	--                                                                     --
 	-- the elevation is taken from the head of the branch. only tubes      --
 	-- which lie near flat are ever annotated, so a branch does not wander --
 	-- far in elevation from its head, and this only has to be good enough --
 	-- to say which of two pipes is on top                                 --
-	--                                                                     --
-	-- the small value on the end keeps the sort keys apart. plenty of     --
-	-- branches share an elevation and the sort cannot take two the same   --
 	------------------------------------------------------------------------
-	!branus = object array()
-	!bb = 0
+	------------------------------------------------------------------------
+	-- a run of pipe shorter than !minrun on the sheet is not offered an   --
+	-- arrow at all. the arrow is about 10mm of the sheet long, so on a    --
+	-- stub which only shows for 3mm it comes out several times the length --
+	-- of the pipe it belongs to and points at nothing in particular       --
+	--                                                                     --
+	-- this is what all the crowding round the nozzles really was. of the  --
+	-- fourteen branches in the view seven showed for 11mm or more and     --
+	-- seven for 5mm or less, with nothing in between, and every arrow     --
+	-- which had to be shoved about or given up was one of the short ones. --
+	-- once they are left out the seven which remain are 28mm apart at     --
+	-- their closest, so !mindist and !hardmin below never come into it    --
+	--                                                                     --
+	-- they are kept all the same. another drawing, or another scale, can  --
+	-- still bring two long runs alongside each other                      --
+	------------------------------------------------------------------------
+	!minrun = 10
+	!minrun2 = !minrun * !minrun
+	!bU = object array()
+	!bR = object array()
+	!bRef = object array()
 	do !bran values !brans
-		!bb = !bb + 1
 		--------------------------------------------------------------------
 		-- the scan hands the branch back as 'BRAN =2013286676/2167', the --
 		-- type in front of the reference, the same way it hands tubes    --
@@ -111,8 +143,8 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 		--                                                                --
 		-- the whole string went to hpos before, every query fell into    --
 		-- its handle and every branch came out at elevation nought, so   --
-		-- the sort below was really just scan order and the higher pipe  --
-		-- was not being placed first at all                              --
+		-- the order was really just scan order and the higher pipe was   --
+		-- not being placed first at all                                  --
 		--------------------------------------------------------------------
 		!branref = !bran.part(2)
 		if (!branref.eq('')) then
@@ -128,7 +160,7 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 			-- read straight off the string and stripped of mm, the same   --
 			-- as ltle and shpos are handled everywhere else here. going   --
 			-- through position().up hands back a real with its unit still --
-			-- on it, and the unit rode into the sort key                  --
+			-- on it, and the unit rode into the key                       --
 			--                                                             --
 			-- hpos reads 'E 306000mm N 303594mm U 102930mm', so part 6 is --
 			-- the elevation and part 5 says which way. below datum it     --
@@ -143,26 +175,98 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 			endif
 		endif
 		--------------------------------------------------------------------
-		-- scaled up and the count added whole, rather than the count      --
-		-- added as a tiny fraction. a branch whose elevation is not known --
-		-- leaves !branu at nought, and nought plus a tiny fraction is the --
-		-- kind of number which comes back out as 1E-10 and cannot be read --
-		-- as a number either. a thousandth of a mm is far finer than two  --
-		-- pipes are ever apart                                            --
+		-- the longest run this branch has inside the view, squared. it is --
+		-- only ever compared with another one of the same kind, so the    --
+		-- square root is never wanted                                     --
+		--                                                                 --
+		-- this walks the tubes of the branch a second time, once here to  --
+		-- work out the order and once again below to place the arrow. the --
+		-- database work is doubled and that was accepted for the sake of  --
+		-- getting the order right                                         --
 		--------------------------------------------------------------------
-		!brankey = !branu * 1000 + !bb
-		!branus.append(!brankey & '~' & !bran & '~x!x!x!x!x!x')
+		!branrun = 0
+		!tubis = object array()
+		var !tubis vscan for all tubi for $!bran
+		handle any
+		endhandle
+		if defined(!tubis) then
+			do !tt from 1 to !tubis.size()
+				!tubi = 'ileave tube of ' & !tubis[!tt].part(2)
+				var !grad gradient of $!tubi
+				handle any
+				elsehandle none
+					if (abs(!grad.real()) leq 1) then
+						!seen = !!DrawingPlan1.VisibleSheetRunOfTube(!tubi, !vwx1, !vwy1, !vwx2, !vwy2)
+						if (not(!seen.empty())) then
+							----------------------------------------------------
+							-- the true longest run, with no !minrun test on   --
+							-- it. this number only settles the order, and a   --
+							-- branch with nothing long enough finds no        --
+							-- candidate when its turn comes anyway, so there  --
+							-- is nothing to gain by zeroing it here           --
+							--                                                 --
+							-- what is lost by zeroing it is the report. with  --
+							-- the test in, every branch left out came back as --
+							-- run2 0 and there was no way to see how short it --
+							-- really was, which is the one number wanted when --
+							-- deciding where to put !minrun                   --
+							----------------------------------------------------
+							if (!seen[1] gt !branrun) then
+								!branrun = !seen[1]
+							endif
+						endif
+					endif
+				endhandle
+			enddo
+		endif
+		!bU.append(!branu)
+		!bR.append(!branrun)
+		!bRef.append(!bran)
 	enddo
-	!sortedbrans = !obj.method('y', !branus)
 	------------------------------------------------------------------------
-	-- the rectangle of the view in sheet coordination, which is where the --
-	-- visible run of each tube is worked out. the same four numbers as    --
-	-- DrawingPlan1LineNoAnnotation takes                                  --
+	-- put in order by hand rather than through AteSortLineNo. that sort   --
+	-- takes one number, so elevation and length would have to be packed   --
+	-- into a single key: elevation runs to six figures, and multiplying   --
+	-- it up to leave room for the length underneath pushes the key out to --
+	-- the end of what a real can hold and into the shape which comes back --
+	-- as 1E12 and cannot be read as a number. two fields compared plainly --
+	-- have none of that, no packing, no keys which have to be kept apart  --
+	--                                                                     --
+	-- a plain selection sort. there are tens of branches in a view and    --
+	-- the comparing is nothing beside the database work above             --
 	------------------------------------------------------------------------
-	!vwx1 = min(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
-	!vwx2 = max(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
-	!vwy1 = min(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
-	!vwy2 = max(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
+	!ord = object array()
+	do !i from 1 to !bU.size()
+		!ord.append(!i)
+	enddo
+	----------------------------------------------------------------------
+	-- guarded the same way DrawingPlan1LineNoAnnotation guards its own  --
+	-- 'to !mcount - 1' loop, so that a view holding one branch or none  --
+	-- never reaches a loop counting up to nought                        --
+	----------------------------------------------------------------------
+	if (!ord.size() gt 1) then
+		do !i from 1 to !ord.size() - 1
+			!pick = !i
+			do !j from !i + 1 to !ord.size()
+				!a = !ord[!j]
+				!b = !ord[!pick]
+				!ahead = false
+				if (!bU[!a] gt !bU[!b]) then
+					!ahead = true
+				elseif (!bU[!a] eq !bU[!b] and !bR[!a] gt !bR[!b]) then
+					!ahead = true
+				endif
+				if (!ahead) then
+					!pick = !j
+				endif
+			enddo
+			if (!pick neq !i) then
+				!tmp = !ord[!i]
+				!ord[!i] = !ord[!pick]
+				!ord[!pick] = !tmp
+			endif
+		enddo
+	endif
 	------------------------------------------------------------------------
 	-- two branches which run side by side, a pair of drops off the same   --
 	-- equipment for instance, settle on runs which are only a few mm      --
@@ -215,7 +319,7 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	-- the command window. that is the quickest way to tell a pair which   --
 	-- really is too close from a pair which only looks it                 --
 	------------------------------------------------------------------------
-	!dbg = true
+	!dbg = false
 	!usedx = object array()
 	!usedy = object array()
 	!fracs = object array()
@@ -233,8 +337,12 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	-- backwards, because the sort puts the lowest elevation first and the   --
 	-- highest pipe is the one which has to be placed first                  --
 	--------------------------------------------------------------------------
-	do !bb from !sortedbrans.size() to 1 by -1
-		!bran = !sortedbrans[!bb].split('~').getindexed(2)
+	--------------------------------------------------------------------------
+	-- forwards, because !ord is already highest first                       --
+	--------------------------------------------------------------------------
+	do !oo from 1 to !ord.size()
+		!bb = !ord[!oo]
+		!bran = !bRef[!bb]
 		--------------------------------------------------------------------
 		-- emptied first, so that a branch which cannot be scanned is left --
 		-- out instead of being given the tubes of the branch before it,   --
@@ -266,23 +374,26 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 						-- border where the little that shows of the tube is      --
 						--                                                        --
 						-- a tube with nothing inside the view is left out here,  --
-						-- so it can no longer win                                --
+						-- and so is one which shows for less than !minrun, so   --
+						-- neither can win                                        --
 						------------------------------------------------------------
 						!seen = !!DrawingPlan1.VisibleSheetRunOfTube(!tubi, !vwx1, !vwy1, !vwx2, !vwy2)
 						if (not(!seen.empty())) then
-							----------------------------------------------------
-							-- !seen[1] is the visible run squared. it is only --
-							-- ever a ranking key, never a length             --
-							--                                                --
-							-- scaled up and the count added whole, for the   --
-							-- same reason as the branch key above. a tube    --
-							-- which comes out as a single point on the sheet --
-							-- has nothing squared to nothing, and nought     --
-							-- plus a tiny fraction is the kind of number the --
-							-- sort cannot read back                          --
-							----------------------------------------------------
-							!seenkey = !seen[1] * 1000 + !tt
-							!tubiss.append(!seenkey & '~' & !tubi & '~x!x!x!x!x!x')
+							if (!seen[1] geq !minrun2) then
+								----------------------------------------------------
+								-- !seen[1] is the visible run squared. it is only --
+								-- ever a ranking key, never a length             --
+								--                                                --
+								-- scaled up and the count added whole, for the   --
+								-- same reason as the branch key above. a tube    --
+								-- which comes out as a single point on the sheet --
+								-- has nothing squared to nothing, and nought     --
+								-- plus a tiny fraction is the kind of number the --
+								-- sort cannot read back                          --
+								----------------------------------------------------
+								!seenkey = !seen[1] * 1000 + !tt
+								!tubiss.append(!seenkey & '~' & !tubi & '~x!x!x!x!x!x')
+							endif
 						endif
 					endif
 				endhandle
@@ -382,15 +493,16 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 				endif
 				if (!dbg) then
 					----------------------------------------------------------
-					-- the elevation is read back out of the sort key, which --
-					-- is where this branch's own one is. !branu still holds --
-					-- whatever the gathering loop above finished on          --
+					-- elevation and run come straight out of the two arrays --
+					-- the order was worked out from, so what is reported is --
+					-- exactly what decided this branch's turn               --
 					--                                                        --
 					-- how far the arrow really ended up from its nearest     --
 					-- neighbour is worked out again on the place settled on, --
 					-- so the number reported is the one on the sheet         --
 					----------------------------------------------------------
-					!branudbg = !sortedbrans[!bb].split('~').getindexed(1).real() / 1000
+					!branudbg = !bU[!bb]
+					!brandbg = !bR[!bb]
 					!bestlabel = 'no'
 					if (!tookbest) then
 						!bestlabel = 'yes'
@@ -403,11 +515,11 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 								!dbgnear = !d2
 							endif
 						enddo
-						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' x ' & string(!posx) & ' y ' & string(!posy) & ' near2 ' & string(!dbgnear) & ' roomiest ' & !bestlabel
+						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' x ' & string(!posx) & ' y ' & string(!posy) & ' near2 ' & string(!dbgnear) & ' roomiest ' & !bestlabel
 					elseif (!dropped) then
-						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' DROPPED under another pipe, best near2 ' & string(!bestd)
+						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' DROPPED, best near2 ' & string(!bestd)
 					else
-						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' NO PLACE'
+						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' NO PLACE'
 					endif
 					$p $!dbgline
 				endif
@@ -471,6 +583,18 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 					POS $!mid1
 					XYPO 0 0
 					Adegrees $!ang
+				endif
+			else
+				----------------------------------------------------------------
+				-- nothing on this branch shows for !minrun or more, so it is  --
+				-- not offered an arrow at all and never reaches the placing   --
+				-- above. reported here so that a branch left out for being    --
+				-- too short can be told apart from one left out for being     --
+				-- crowded                                                     --
+				----------------------------------------------------------------
+				if (!dbg) then
+					!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!bU[!bb]) & ' run2 ' & string(!bR[!bb]) & ' NO RUN reaches minrun'
+					$p $!dbgline
 				endif
 			endif
 		endif
