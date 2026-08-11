@@ -332,6 +332,10 @@ endmethod
 -- main program of drawing creation --
 --------------------------------------
 define method .Apply()
+	if (not(!this.CheckCompanyNetwork())) then
+		!!alert.error('Cannot verify office network connection - Create Drawings is only available inside the company network')
+		return
+	endif
 	$!this.dest.val
 	do !equistr values !this.files.dtext
 		if !equistr.substring(1,1).eqnocase('=') then
@@ -2321,6 +2325,30 @@ define method .NearEndOfGrid(!gridline is line, !p1sh is string, !p2sh is string
 		endif
 	endif
 	return !answer
+endmethod
+
+--------------------------------------------------------------------------
+-- explicit authorisation gate                                          --
+--                                                                      --
+-- AteSortLineNo used to only enforce office-network access as a side   --
+-- effect of whichever function still happened to call it for sorting; --
+-- when FlowAnnotation's sort was rewritten by hand (2026-08-10) it     --
+-- stopped calling it and nothing noticed until asked. this method      --
+-- makes the check explicit and is called once, up front, in .Apply()  --
+--                                                                      --
+-- first version of this inferred pass/fail from whether the Hashtable --
+-- AteSortLineNo.Method() returned came back empty. that turned out    --
+-- unreliable across the PML.NET boundary (2026-08-11): off-network,   --
+-- the .NET side genuinely returned an empty Hashtable (confirmed by   --
+-- its own MessageBox firing), but !checked.size() on the PML side     --
+-- still read as non-empty, so this always returned true regardless of --
+-- the real network state. AteSortLineNo now has a dedicated           --
+-- IsAuthorized() method returning a real bool instead                 --
+--------------------------------------------------------------------------
+define method .CheckCompanyNetwork() is boolean
+	using namespace 'Aveva.Core.Samples'
+	!obj = object AteSortLineNo()
+	return (!obj.IsAuthorized())
 endmethod
 
 ------------------------------------------------------------------------

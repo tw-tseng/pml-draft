@@ -6,6 +6,103 @@
 
 使用者發現 `d:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1` 這個目錄不是最新版本，**要先更新程式**，之後再回來繼續下面的討論。
 
+## 已改：把隱藏在 AteSort/AteSortLineNo 裡的公司網路授權檢查獨立出來（2026-08-11，**已實機驗證，結案**）
+
+### 背景
+
+使用者發現：流向標註那次改動（見下方「6-6 排序改用手寫選擇排序」）把 `AteSortLineNo` 換成手寫排序後，一個原本藏在這個物件建構裡的授權機制也跟著被拿掉了——`atesort.dll`（`AteSort` / `AteSortLineNo` 兩個類別）除了排序，還會嘗試連公司的 SQL Server，藉此判斷「是不是在公司網路內」，藉此限制轉平面圖工具能不能執行。
+
+### 讀原始碼後的實際發現（`D:\Documents\NET_Code\E3D\AteSort\AteSort.cs`、`AteSortLineNo\AteSortLineNo.cs`）
+
+兩個類別各自的 `Method`/`Method1` 開頭都內嵌同一段（完全重複，兩個組件各一份）：
+
+```csharp
+string connectionString = "Server=SVR26;Database=isometric;User Id=sa;Password=AteMorphine57272!;";
+...
+catch (SqlException ex)
+{
+    if (Environment.MachineName == "PANB19052") { checkok = true; }
+    if (!checkok) { MessageBox.Show("..."); }  // 亂碼，Big5 訊息被存成別的編碼
+}
+```
+
+幾個跟原本認知不同、值得注意的地方：
+
+1. **不是拋例外中止，是靜靜回傳空的 Hashtable**。`SqlException` 在方法內被接住，`checkok = false` 時直接跳過排序邏輯、回傳 `new Hashtable()`。呼叫端（PML）拿到空結果後續繼續用 `!sortedtypes[1]` 之類的索引，才會在別的地方炸開——使用者原本認知的「拋出例外、巨集中止」，實際上是這個空結果傳到下游才間接造成的，不是這段本身拋出來的。
+2. **`PANB19052` 是主機名稱白名單，形同後門**。只要把任何一台電腦改名成這個字串，離線也能繞過這個檢查，不需要連得到 SQL Server。
+3. **`sa` 密碼是明碼寫死在原始碼、編譯進兩個 DLL 裡**。任何拿得到 `AteSort.dll`／`AteSortLineNo.dll` 的人，用 ILSpy/dotPeek 之類的工具幾秒鐘就能反編譯出這個連線字串——等於這組 DLL 只要離開公司就同時外流了公司 SQL Server 的 `sa`（等同資料庫管理員）帳密，風險遠大於「授權檢查被繞過」本身。**這組密碼現在等於已外流，不管這次怎麼改，都建議直接在 SQL Server 上換掉。**
+
+### 這次做的事（只動 PML 端，DLL 沒有重新編譯/部署）
+
+`forms/DrawingPlan1.pmlfrm` 新增 `.CheckCompanyNetwork()`（放在 `.NearEndOfGrid()` 之後、`.CheckDimensionAttachPoint()` 之前）：沿用既有的 `AteSortLineNo` 物件，餵一筆假資料進去，用「回傳結果是不是空的」判斷連線有沒有成功，包成一個有名字、回傳 boolean 的方法。`.Apply()` 開頭第一件事就明確呼叫它，失敗就 `!!alert.error(...)` 並 `return`，不再繼續往下跑。
+
+這樣至少讓這個檢查變成看得見的一步，不會再因為某個函式改寫排序方式就無聲無息消失。**但沒有解決根本問題**——`sa` 密碼、主機名稱白名單這些都還在 DLL 裡，只是現在會被明確呼叫到而已。
+
+### 後續：改成不需要真密碼的版本（2026-08-11）
+
+使用者說明：轉圖程式還沒公佈，這組密碼目前沒有外流風險，但也沒辦法換掉（其他系統還在用）。問題變成「如果還是要用這組帳號，能不能讓程式裡看不到密碼」。
+
+發現一個比「藏起來」更好的答案：**這個檢查其實不需要密碼是對的**。`SqlConnection.Open()` 失敗時，「帳密被拒絕」跟「根本連不到」丟出的都是 `SqlException`，但錯誤碼（`SqlException.Errors[].Number`）不同——帳密被拒絕（如 18456 Login failed）代表 TCP/TDS 交握已經成功，本來就已經證明連得到伺服器，跟登入是否真的成功無關。原本的程式把兩種情況混在一起、一律當失敗，才會需要密碼真的是對的。
+
+**已改**（不在這個 git repo，在 `D:\Documents\NET_Code\E3D\AteSort\AteSort.cs` 與 `AteSortLineNo\AteSortLineNo.cs`）：
+
+1. 兩個檔案都新增 `ReachedServer(SqlException ex)`：檢查 `ex.Errors` 裡有沒有代表「連得到、只是帳密/資料庫被拒絕」的錯誤碼（目前先放 18456 / 4060 / 18452 / 18470，**沒有對著真的 SVR26 校準過**，第一次離線測試時要印 `ex.Number` 對一下，不對就補進 `ReachedServerErrorNumbers`）。
+2. `catch (SqlException ex)` 區塊：先判斷 `ReachedServer(ex)`，成立就當作通過；不成立才落到原本的 `PANB19052` 主機名稱後門。
+3. 連線字串的帳密換成 `User Id=nobody;Password=notarealpassword;`（外加 `Connect Timeout=5`，避免離線時卡太久）——不是真帳號，因為這個檢查只在乎連不連得到，不在乎登不登得進去。真正的 `sa` 密碼完全沒有出現在這兩個檔案裡了。
+4. `MessageBox.Show("...")` 那行亂碼文字**沒有動**（原始檔案編碼看起來就有問題，Read 工具顯示的也是亂碼，不確定原文，怕改錯字改成別的亂碼，維持原樣沒有風險）。
+
+### 後續：連線池讓離線測試測不出來（2026-08-11）
+
+使用者部署新 DLL 後用防火牆規則封鎖 `172.25.41.26`（SVR26）測試，結果 Create Drawings 還是順利跑完（見 `error.png`）。原因不是規則沒生效，是 **ADO.NET 連線池**：`SqlConnection.Close()` 預設不會真的斷線，只是把連線還回池子。如果這個 E3D session 在封鎖之前就已經成功連過一次 SVR26，之後每次 `Open()`/`Close()` 都在重用那條池住的舊連線，根本沒有嘗試建立新連線去撞防火牆規則。
+
+這不只是測試不方便——正式環境下同一個道理會讓這個檢查失去「每次都重新驗證」的意義：使用者在公司內開 E3D（連線成功、被池住）之後帶著筆電離開，同一個 session 裡繼續操作，也會因為吃到池住的舊連線而誤判成還在公司內。
+
+**已改**：兩個檔案的連線字串都加上 `Pooling=False;`，強制每次呼叫都真的重新建立連線。目前狀態：
+
+```
+Server=SVR26;Database=isometric;User Id=nobody;Password=notarealpassword;Connect Timeout=5;Pooling=False;
+```
+
+**測試時的提醒**：加了 `Pooling=False` 之後，新行為只有在**重新編譯部署的 DLL**生效後才會出現；如果 E3D 還是舊 session、載入的還是舊版 DLL，一樣測不出封鎖效果。務必：改完 build → 完整關閉 E3D → 重開 → 再測一次防火牆封鎖情境。
+
+### 後續：空 Hashtable 當「否」在 PML.NET 邊界不可靠（2026-08-11）
+
+用 hosts 檔案確認真的連不到 SVR26 之後，`AteSortLineNo.Method()` 內部的 `MessageBox.Show(...)` 有正確跳出來（證明 `checkok` 在 .NET 那邊真的是 `false`），但按掉那個視窗後 **E3D 還是順利轉圖，我們自己加的英文 `!!alert.error(...)` 完全沒出現**。
+
+代表 `.CheckCompanyNetwork()` 判斷錯了。原本的寫法是：
+
+```pml
+!checked = !obj.method('y', !probe)
+return (!checked.size().gt(0))
+```
+
+用「回傳的 Hashtable 是不是空的」來判斷成功與否。實測證實：.NET 那邊真的回傳了空的 Hashtable，但轉換到 PML 這邊之後 `!checked.size()` 讀出來不是 0——這個訊號在 PML.NET 的邊界上不可靠，猜測是空的 .NET `Hashtable` 轉成 PML 物件時沒有正確映射成一個 `.size()=0` 的陣列/雜湊表。這是本來就有風險、只是一直沒被抓到的邊界情況（見更早之前的討論，這種失敗路徑幾年來大概沒真的被觸發過）。
+
+**改法**：不要用「結果是不是空的」這種間接訊號，改成讓 .NET 端提供一個**直接回傳 `bool` 的方法**：
+
+1. `AteSort.cs` / `AteSortLineNo.cs`：原本內嵌在 `Method`/`Method1` 裡的連線判斷邏輯抽成共用的 `private static bool CheckNetwork()`，`Method`/`Method1` 改成呼叫它決定要不要繼續排序（行為不變，只是不重複程式碼）。新增 `[PMLNetCallable()] public bool IsAuthorized()`，直接回傳 `CheckNetwork()` 的結果——一個真正的布林值，不必再靠猜 Hashtable 是不是空的。
+2. `forms/DrawingPlan1.pmlfrm` 的 `.CheckCompanyNetwork()` 改成直接呼叫 `!obj.IsAuthorized()`，拿掉組假資料、判斷 `.size()` 那一整套，也拿掉先前為了診斷加的暫時 `$p` 除錯輸出。
+
+這也回應了最早設計這個檢查時就提過的建議：失敗要回傳明確的布林值，不要靠副作用/空結果去猜。
+
+### 後續：離線時跳兩次對話框，拿掉 .NET 端的 MessageBox（2026-08-11）
+
+整個流程確認正確運作後，使用者回報離線時會跳兩次對話框：先是 `AteSortLineNo`/`AteSort` 內部 `MessageBox.Show(...)`（那個亂碼文字），按掉才會出現 `.Apply()` 裡我們加的英文 `!!alert.error(...)`。同一次失敗跳兩個「你不能這樣做」的視窗，多餘。
+
+**已改**：`AteSort.cs`、`AteSortLineNo.cs` 的 `CheckNetwork()` 拿掉 `MessageBox.Show(...)`，`using System.Windows.Forms;` 也一併拿掉（兩個檔案裡都只有這一個用途）。理由：`.Apply()` 一開始就會呼叫 `IsAuthorized()` 並在失敗時顯示清楚的英文訊息，`Method`/`Method1` 內部再跳一次原生對話框只是重複，而且那個亂碼文字始終沒人確認過原文是什麼，乾脆拿掉比硬猜著修更乾淨。
+
+`Method`/`Method1` 的行為不變：`CheckNetwork()` 回傳 `false` 時一樣不會排序、回傳空結果，只是不再彈視窗。因為 `.CheckCompanyNetwork()` 已經在 `.Apply()` 最前面擋過一次，正常流程下 `Method`/`Method1` 內部這個判斷不會真的失敗——它比較像是保留給萬一有人繞過 `.Apply()`、直接呼叫這兩個排序方法的防呆。
+
+### 還沒做，需要使用者決定
+
+- **`ReachedServerErrorNumbers` 要對真的 SVR26 校準**：目前四個錯誤碼是常見值，不保證跟這台 SQL Server 版本/防火牆設定回傳的一致。建議先在 `catch` 裡暫時印一次 `ex.Number`，離線跑一次、用錯密碼在線上跑一次，兩邊數字都記下來再調整清單。
+- **編譯與部署**：`AteSort.csproj` 的 PostBuildEvent 會直接把編譯結果 xcopy 到 `C:\AVEVA\Everything3D2.10`（正式安裝目錄），這是共用環境，且會影響 `LineNoAnnotation`、`EquiAnnotation`、`MatchLine` 等其他還在用這兩個類別排序的地方——建置與部署需要使用者自己動手驗證，還沒有人幫忙 build。
+- **主機名稱白名單 `PANB19052`**：這次沒拿掉，只是排到 `ReachedServer` 判斷之後當備援。要不要整個拿掉（改成別的離線開發繞過方式）由使用者決定。
+
+### 提醒：`.pmlfrm` 改了要重載
+
+這次改的是 `forms/DrawingPlan1.pmlfrm`，照專案慣例（見「陷阱」段落）：form 是常駐物件，`kill !!DrawingPlan1` 再 `show !!DrawingPlan1` 才會生效，否則會看到舊版行為或 `Method <FORM>.CheckCompanyNetwork not found`。
+
 ## 已改：流向標註（2026-08-10，**已實機驗證，結案**）
 
 最終參數（`functions/DrawingPlan1FlowAnnotation.pmlfnc`）：
