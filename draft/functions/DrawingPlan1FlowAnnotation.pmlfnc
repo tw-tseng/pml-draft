@@ -567,6 +567,29 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 					if (!viewdirria.angle(!pldira).lt(90)) then
 						!ang = !ang * -1
 					endif
+					--------------------------------------------------------------------
+					-- !ang so far is the angle the arrow has to lie at on the sheet.  --
+					-- viewdir up and viewdir right are the model directions which     --
+					-- appear to point up and right on the sheet, so they already      --
+					-- follow the rcode, and the angle between them and the pipe is    --
+					-- a sheet angle                                                   --
+					--                                                                 --
+					-- ADEGREES of the symbol is not read on the sheet though, it is   --
+					-- read in the view. Portrait to Landscape puts RCODE LEFT on the  --
+					-- view, which turns the view 90 degrees anticlockwise on the      --
+					-- sheet, and the two differ by that much. the same 90 degrees is  --
+					-- taken off the grid symbols in .CreateGridSymbol(), which is     --
+					-- where this was first met                                        --
+					--                                                                 --
+					-- XYPO stays 0 0 and needs no turning, unlike the XYPO and APOF   --
+					-- of the grid symbols, and POS is not touched either              --
+					--------------------------------------------------------------------
+					if (!!DrawingPlan1.rcode.eqnocase('left')) then
+						!ang = !ang - 90
+						if (!ang lt -180) then
+							!ang = !ang + 360
+						endif
+					endif
 					NEW SLAB
 					DDNA $!tubi
 					tmrf /DRA/MAS/SYMBOLS/GEN/WELD/WELD-ARR
