@@ -6,6 +6,467 @@
 
 使用者發現 `d:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1` 這個目錄不是最新版本，**要先更新程式**，之後再回來繼續下面的討論。
 
+## 已改：box 轉 10 度時，圖上空白處卻標了一堆管線編號（2026-08-12，**尚未實機驗證**）
+
+症狀（見 `error.png` 紅框）：box 轉 10 度切出來的圖，左下角一大片沒有畫出任何管子，但左側的 LINE NO. 標註仍然在那個高度範圍標了 8~9 個編號，而且同一條管、同一個 BOP 高程重複出現 3~4 次（`Copy-of-100-C-12 BOP EL+100566` ×3、`Copy-of-200-B-4 BOP EL+100235` ×3）。同一批管線在下方的標註也再出現一次。
+
+### 原因：view 的世界座標裁切體積比 box 本身還小
+
+`.Apply()` 算 box 範圍的地方（`forms/DrawingPlan1.pmlfrm:464-473` 附近）是這樣算的：
+
+```pml
+!maxE1 = !boxPos.position().offset(!efpla, !elen.real() * 0.5 + 0.025).east
+```
+
+`!efpla` 是 **box 自己的軸方向**（已經轉了 10 度）。沿著轉過的方向走半個邊長之後再取 `.east`，得到的是
+
+```
+Ec + (elen / 2) * cos(10°)
+```
+
+但轉過的 box 真正的最東點是 `Ec + (elen / 2) * cos(10°) + (nlen / 2) * sin(10°)`。也就是說這組 `!minE / !maxE / !minN / !maxN` **既不是 box、也不是 box 的 bounding box，而是 box 各邊乘上 cos(角度) 之後的縮小版**。box 是正的時候 cos = 1，三者相同，所以以前看不出來。
+
+這組縮小的值被拿去設兩個**世界座標軸對齊**的裁切：
+
+| 位置 | 指令 | 作用 |
+|---|---|---|
+| `:475` | `limits E .. TO E ..` | DRAWLIST 的 IDLI limits，限制這個 drawlist 項目畫出來的體積 |
+| `:711` | `:CDLIMITS \|FROM E .. TO E ..\|` | view 的裁切範圍 |
+
+而 view 的**外框**（`size $!sizeX $!sizeY` = `elen * vsca` × `nlen * vsca`，加上 `Adegrees`）是**完整的 box**。於是畫出來的東西 = 完整 box ∩ 縮小的世界方盒，等於**從 box 上斜切掉兩個大楔形**。
+
+用 tan 算一下就知道有多大：在 view 自己的座標裡，被畫出來的條件是 `|u·sinθ + v·cosθ| ≤ (H/2)·cosθ`，也就是 `v ≥ -H/2 - u·tanθ`。θ = 10° 時 `tan θ = 0.176`，所以在 view 最左邊（`u = -W/2`）底部被切掉 `0.088·W`；W = 2H 的橫式圖就是**高度的 17.6%**，一路往中間收斂到 0。另一個楔形在對角（右上）。這正好就是紅框那片空白。
+
+**標註沒有跟著被切掉**，因為 `DrawingPlan1LineNoAnnotation` 走的是 2026-08-10 改過的圖紙座標路線：`.SheetBandOfSide()` 用的是 `viewLLsh / viewURsh`（來自 view 的 `shxypos` + `size`，也就是**完整的 box**），`.WorldLimitsOfSheetRect()` 再包成世界方盒餵給 `WITHIN`。所以被 CDLIMITS 切掉、沒畫出來的那些管子，標註照樣抓得到、照樣標。兩邊對 view 範圍的認知不一致，這就是「沒看到管子卻標了編號」。
+
+同一條管重複 3~4 次也是同一個根因的延伸：楔形區域同時落在左側帶與下側帶裡，一條分支在帶內的每個管件各標一次，而 TYPE 1 的去重門檻只有圖紙 1mm（見下方 2026-08-10「同一條管在同一邊標了兩次」那節）。
+
+### 作法
+
+`limits` 與 `:CDLIMITS` 改用 **box 的世界 bounding box**（`wvol`，`:427-432` 本來就讀好了，只是後來被覆蓋掉），另存成 `!wminE .. !wmaxU`（各留 0.025 容差，沿用原本的用意）。
+
+**為什麼放寬是安全的**：view 底下已經有六個 FPLA + VSEC（`:496-525`、`:717-734`），平面位置是 box 的面中心、法線是 box 轉過的方向，**那六個平面才是真正把 view 切成轉過的 box 形狀的東西**。世界軸對齊的方盒本來就不可能貼合一個轉過的 box，它的角色只能是「不小於 box 的超集合」。box 是正的時候 `wvol` 就等於原本那組值（差 0.025），行為不變。
+
+`!lim = limits`（`:476`）是沒有人讀的死碼，一併移除。
+
+**`!this.minE / .maxE / .minN / .maxN`（`:477-482`）維持用原本那組面中心的值，沒有動**——理由見下面「還沒做」。
+
+### 實機驗證結果：這個假設是錯的（2026-08-12）
+
+使用者改完重載表單、重新 Create Drawings，**紅框那片空白依然沒有管子**。
+
+回頭重算 `.ViewSheetTransform()` 底下那六個 FPLA（`:520-549`）才發現：`position` 用的兩個分量雖然分別來自 `!thpoEforN` 這類「中心沿 efpla/nfpla 偏移半邊長」的值和 `!maxE`/`!maxN` 這類「同樣沿 efpla/nfpla 偏移（另加 0.025）」的值，兩者其實是**同一個偏移點**的 E 分量和 N 分量分開算出來的——代入角度可以證明這六個平面的位置點準確落在轉過的 box 真正的面上，法線也用 `efpla`/`nfpla`（已經是轉過的方向）。也就是說**這六個 FPLA/VSEC 本來就是照轉過的 box 正確切的**，`limits` / `:CDLIMITS` 那組世界軸對齊的值從頭到尾就只是 DRAWLIST／CD 的輔助資訊，不是實際裁切 view 內容的東西——這次的改動大機率是無效更動（改了但沒改到真正裁切的地方），予以保留但不再視為這個症狀的答案，真正原因待查。
+
+### 真正原因（2026-08-12，靠診斷輸出找到，已修）
+
+`functions/DrawingPlan1LineNoAnnotation.pmlfnc` 加了 `!dbgln`，只在 `!dir.eq('left')` 印 TYPE 1 迴圈每一步，重新 Create Drawings 一次、把 Command Window 的 `TYPE1` 行存成 `check.txt` 比對之後找到的。
+
+前一輪懷疑「`.CheckInSheetBand()` 對 implied TUBE 放行、`.CrossingOfTube()` 的 `itle` 分支漏檢查」——**這個懷疑是錯的**。`check.txt` 顯示 `.CrossingOfTube()` 的判斷完全正確：真的沒碰到邊界的管都拿到 `crossenu=NONE` 並且被丟掉（例如 `pipe=Copy-of-200-B-4 ... crossenu=NONE`，後面沒有 `KEPT` 那行）；真的垂直、投影成一點的管拿到 `crossenu=`（空字串），照文件描述的行為退回用元件自己的位置，這兩種都對。
+
+**真正壞掉的是「算出正確交點之後，把交點包回字串」這一步**（`:222-224`）：
+
+```pml
+!crosspos = object position(!crossenu)
+!crosspos.up = !memenupos.position().up
+!memenupos = !crosspos.string()
+```
+
+`check.txt` 裡四筆「管真的穿過邊界」的紀錄，`crossenu`（`.CrossingOfTube()` 的原始回傳，來自 `enupos of`）明明是四個差好幾百公尺的世界座標：
+
+```
+crossenu=W 365567.882945mm N 243650.028102mm U 104749.080026mm  (pipe Copy-of-100-B-1)
+crossenu=W 366611.385066mm N 237732.033324mm U 104749.080026mm  (pipe Copy-of-100-C-13)
+crossenu=W 365880.277896mm N 241878.348126mm U 104749.080026mm  (pipe Copy-of-250-B-5)
+crossenu=W 365027.319571mm N 246715.715336mm U 104749.080026mm  (pipe Copy-of-150-A-3)
+```
+
+但转成 `!memenupos`、再 `shpos of` 算出圖紙座標之後，**X 全部變成同一個數**（`201.934545mm` / `201.934546mm`，六位小數都幾乎一樣），只有 Y 還照實際位置變化。四條完全不相關的管，圖紙 X 不可能只差千分之一毫米。
+
+原因：`object position(<string>)` 建構出來的 POSITION，`.string()` 印回去的格式**不是**單純的 `E .. N .. U ..`，會多一段 `WRT /*`（`memenupos=W ...mm N ...mm U ...mm WRT /*`）——這是 `check.txt` 直接印出來、肉眼可見的。這條尾巴是 `object position()` 建構出來的物件特有的，`enupos of` / `hpos of` / `worpos of` 這類直接查詢出來的字串從來沒有這段（`check.txt` 裡其餘幾十筆 `KEPT` 都沒有 `WRT`）。`SHPOS OF` 後面接到這段尾巴時解析壞掉，算出來的圖紙 X 變成某個跟真正座標無關的固定值。
+
+這條路徑只有在「管真的穿過邊界、`.CrossingOfTube()` 算出實際交點」時才會走到——也就是**唯一真正該標註、真正在紅框那個位置有管子的情況，反而是唯一座標算壞的情況**。壞掉的圖紙 X 落在別的地方（不是它真正該在的深度），標籤跟著跑位，看起來就像「這裡標了編號但沒看到管子」。box 是正的時候這條路徑（`.CrossingOfTube()` 走到真交點）比較少被觸發，轉了角度之後管跟邊界斜交，才常態性地踩進來。
+
+### 作法（第一版，不完整）
+
+不依賴 `.string()`，改成跟這個檔案其他地方（`!vlfm`/`!vlto`、`.ViewSheetTransform()` 的 `!c0sh`）一樣的手動組字串，用 `.east` / `.north` / `.up` 三個分量直接拼：
+
+```pml
+!memenupos = 'E ' & string(!crosspos.east) & ' N ' & string(!crosspos.north) & ' U ' & string(!crosspos.up)
+```
+
+### 實機驗證結果：拿掉 WRT 尾巴不夠（2026-08-12）
+
+重新 Create Drawings 之後，`check.txt` 裡 `WRT /*` 確實不見了，但**圖紙 X 還是卡在同一個 201.934545/6mm**，跟修之前一模一樣（`error.png` 也沒有變化）：
+
+```
+crossenu=W 365567.882945mm ...  → memenupos=E -365567.882945mm ...  → memshpos X 201.934545mm
+crossenu=W 366611.385066mm ...  → memenupos=E -366611.385066mm ...  → memshpos X 201.934546mm
+```
+
+問題不在 `WRT`，在**負的東座標被印成 `E -365567.88mm`**。`!crosspos.east` 對這個案場是負值（案場世界座標在原點西側），`string()` 一個負的 real 會直接帶負號，`'E ' & string(...)` 就組出 `E -365567.88mm`。但這個檔案裡其他每一筆成功算出來的座標，負的東座標從來不是這樣寫的——一律是 `W 365567.88mm`（正數 + 相反方位字母），`check.txt` 裡幾十筆 `KEPT`／`SKIPPED` 沒有一筆例外（`.CrossingOfTube()` 內部處理 N/S/E/W 也是同一個假設：`.replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')`，前提就是負值一定印成反方位字母而不是負號）。`SHPOS OF` 認得 `W <正數>`，不認得 `E <負數>`，兩種都解析不出正確結果，所以退回同一個固定答案（哪來的固定答案還不確定，但兩次都恰好是 201.93 這件事，比較像是同一個解析失敗路徑，不是巧合）。
+
+### 作法（第二版）
+
+把符號換成方位字母，跟這個檔案其他地方一致：
+
+```pml
+if (!crosspos.east geq 0) then
+	!epfx = 'E '
+	!eval = !crosspos.east
+else
+	!epfx = 'W '
+	!eval = !crosspos.east * -1
+endif
+-- north、up 同一套邏輯（north 負值用 S，up 負值用 D）
+!memenupos = !epfx & string(!eval) & ' ' & !npfx & string(!nval) & ' ' & !upfx & string(!uval)
+```
+
+`!dbgln` 診斷還留著（預設開），下一次重新 Create Drawings 時要看 `memshpos` 的 X 是不是四條管各自不同、不再卡在 201.93 附近；確認沒問題後把 `!dbgln` 改回 `false` 或整段拿掉。
+
+**尚未查證、留意**：`object position()` 建構物件的 `.string()` 帶 `WRT` 尾巴、以及「負座標要用方位字母不能用負號」這兩件事，這次都只在這一處發現、也只修這一處。全 repo 還有幾十處 `object position(...)` 用法（`DrawingPlan1EquiAnnotation.pmlfnc`、`DrawingPlan1MatchLine*.pmlfnc` 等），大部分後續是直接當物件用（`.distance()`／`.on()`／`.intersection()`），沒有再轉成字串餵回 `shpos of`/`coll ... within` 這類指令替換，所以不會踩到同一個坑；但沒有逐一確認過，之後若又遇到「座標卡在同一個怪數字」或「東西南北對不起來」的症狀，先往這兩個方向查。
+
+### 實機驗證結果：X 座標修好了，但紅框依然沒有管子——之前的懷疑診斷錯了方向（2026-08-12）
+
+第二版重新 Create Drawings 之後，`check.txt` 裡 `memenupos` 已經是正確的 `W ###mm N ###mm U ###mm` 格式，不再有 `WRT` 尾巴或 `E -###`。但 `error.png` 跟改之前**逐像素相同**——紅框那片還是沒有管子。
+
+回頭比對 `check.txt` 才發現，**「四筆穿越邊界的交點，圖紙 X 幾乎相同」這件事本身不是 bug，是必然如此**：這四個交點都精確落在 view 的**左邊界**上，而左邊界在圖紙（sheet-local）座標系裡定義就是一條 X 為定值的直線（`.SheetBandOfSide()`／`viewLLsh`／`viewULsh` 用的就是這個 local 座標系，view 在裡面永遠是方的）——落在同一條「X 為定值」的邊界線上的點，`SHPOS OF` 算出來的 X 本來就該相等，只有沿邊界方向的 Y 會依各自實際位置變化，而 `check.txt` 裡確實是 Y 在變、X 幾乎不變。這是**正確**行為，不是我之前說的「壞掉」。E/W 那個修正本身是對的（保留），但**它不是紅框沒有管子這件事的答案**——那件事從頭到尾就不是這個函式的 bug。
+
+重新看 `check.txt` 全文，`.CheckInSheetBand()`、`.CrossingOfTube()`、IDLN 判斷這一整條鏈路其實**都對得上**：紅框附近那些 `Copy-of-100-C-12` 的 VALV/TEE/ELBO/FLAN（`:147-167`）全部 `check=Included`、`inband=TRUE`，位置也都是同一個 E/N（`W 366767.32mm N 236859.96mm`，只有 U 高程不同——這是一根立管/riser），标注邏輯正確地把它們都收了進去、標了 8 個不同高程。問題不是「標註誤判」，是**這些元件明明 `IDLN` 查出來是 `Included`（已經在 drawlist 裡），畫面上卻看不到**——這把問題指回 view 本身的幾何範圍，而不是 `DrawingPlan1LineNoAnnotation.pmlfnc`。等於繞了一圈，回到 2026-08-12 最早那個「FPLA/VSEC」方向，但那次推導位置公式沒找到破綻，法線方向（`norm`）也重新檢查過，六個面全部朝內、成對對稱，公式本身看不出錯。
+
+### 下一步：直接印出兩種候選邊界，對照已知的真實座標
+
+不再靠推導，`forms/DrawingPlan1.pmlfrm`（`:507-519` 附近，`limits` 那行之後）加了三行 `$p BOXLIM ...`，印出：
+
+- 縮小版方盒 `!minE/!maxE/!minN/!maxN/!minU/!maxU`（原本疑似有問題、後來 CDLIMITS 已經不用它，但 `.this.minE` 等成員還在用，Nozzle/Valve/Instrument 也還在用）
+- 真正的 wvol bounding box `!wminE/!wmaxE/!wminN/!wmaxN`
+- box 中心座標、`efpla`/`nfpla`/`elen`/`nlen`
+
+`check.txt` 裡那根 riser 的真實世界座標已知：`W 366767.319826mm N 236859.958272mm`。下一次重新 Create Drawings 後，把 Command Window 裡 `BOXLIM` 開頭的三行也存進 `check.txt`，我們直接拿這個真實座標去對兩種方盒的邊界，看它是被兩種都收、只被寬的收（縮小版方盒真的漏掉它——坐實最早的楔形猜測）、還是兩種都收（那問題就在 FPLA/VSEC 或別的地方，縮小方盒這條線可以排除）。
+
+**改的是 `.pmlfrm`，這次要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1` 才會生效**（`.pmlfnc` 那邊的 `!dbgln` 診斷不用，會自動重讀）。
+
+### 使用者提供關鍵線索：問題方向反了（2026-08-12）
+
+在等 `BOXLIM` 診斷結果之前，使用者直接貼了 3D model 畫面（不是圖紙）：金色/深黃色是切圖用的 box（轉了 10 度），內部是綠色管——這是真的在 box 範圍內、該畫進圖的東西。box **外面、左側**另外有一條**藍色**管，明顯不在 box 範圍內。
+
+使用者指出：紅框那些多標的管線編號，對應的正是這條**藍色、box 外的管**，不是「box 裡的管沒畫出來」。
+
+這翻轉了先前的假設方向。之前的推理鏈是「這些元件 `IDLN` 查出來是 `Included`、位置也對得上，所以問題在 view 沒把它畫出來」——但如果它們根本不該在 box 裡，`Included` 本身就不該是 `true`，問題就不是「view 漏畫」，是**「收集階段把 box 外的東西收了進來」**。這正好對回最早（`.CheckInSheetBand()`／`.CrossingOfTube()` 加入的那次改動）就留過的一個缺口，一直沒有實際驗證過：
+
+```pml
+define method .CheckInSheetBand(!elem is string, !band is array, !trans is array) is boolean
+	!answer = true
+	if (!trans[10] neq 1) then
+		var !wvol wvol of $!elem
+		handle any
+			-- 沒有體積可以比對，直接放行 --
+		elsehandle none
+			...做真正的圖紙座標重疊檢查...
+		endhandle
+	endif
+	return !answer
+endmethod
+```
+
+`WITHIN` 收集用的世界方盒本來就是「包住轉過的 box 的世界軸對齊超集合」，範圍一定比真正的 box 大，這是刻意的、安全的（見更早「box 相對世界座標歪一個角度」那節），**過濾漏網之魚的責任全部壓在 `.CheckInSheetBand()` 這道複驗上**。而它查 `wvol of $!elem` 時，`!elem` 對 implied TUBE（`IL TUB OF ...`）而言是不是真的能查到 WVOL，這次會第一次靠診斷確認——如果查不到，直接 `handle any` 放行，等於這道複驗對所有 implied tube 形同虛設，退回到「只要落在超集合裡就收」，那條藍色管只要有一小段（或它的世界方盒一角）落進超集合，就會被收進來標註。
+
+`.pmlfrm` 的 `.CheckInSheetBand()`（`:2034-2050`）加了一行 `$p CHECKBAND WVOL-FAIL elem=$!elem`，放在 `handle any`（WVOL 讀不到）那個分支——如果那條藍色管的 implied tube 觸發了這行，就證實是這個缺口；如果完全沒觸發，代表 WVOL 讀得到、問題出在 `.SheetLimitsOfVolume()` 或 `.ViewSheetTransform()` 的座標換算本身算錯（兩個都已經手算驗證過公式，但沒有拿真實數字對過，不排除還是有問題）。
+
+**下一次重新 Create Drawings 時**，麻煩把 Command Window 裡 `BOXLIM`（前一節加的）跟 `CHECKBAND`（這節加的）開頭的行都存進 `check.txt`——兩者會在同一次執行裡一起出現，不用分兩次測。
+
+### 實機驗證結果：WVOL 沒有失敗，但用 BOXLIM 的數字反算出真正落點（2026-08-12）
+
+`check.txt` 全文**沒有任何一行 `CHECKBAND WVOL-FAIL`**——`.CheckInSheetBand()` 對每一個元件（包括所有 implied tube）查 `wvol of` 都成功，先前「implied tube 讀不到 WVOL、直接放行」這個猜測**排除**。
+
+但 `BOXLIM` 印出的兩組方盒，直接拿紅框那根 riser（`Copy-of-100-C-12`，`check.txt` 裡 `W 366767.319826mm N 236859.958272mm`）的座標去對，可以確認它真正的落點：
+
+```
+縮小版方盒：minE=-366090.48  maxE=-356929.33
+wvol 超集合：wminE=-367019.93 wmaxE=-355999.88
+riser E = -366767.32
+```
+
+`-366767.32` **小於** `-366090.48`（縮小版方盒的西界）——不在縮小版方盒內，但落在 `wvol` 超集合的範圍裡（`-367019.93` 到 `-355999.88` 之間）。換算成局部座標（用 `efpla`/`nfpla`、box 中心 `boxE=-361509.91` `boxN=239874.36` 手算），這根 riser 在 box 自己的旋轉座標系裡，沿 `efpla`（東西向）方向大約在 box 真正邊界**外側 1000mm 左右**——不是貼著邊界的誤差，是**明顯在 box 外**，跟使用者說「藍色管在 box 外」完全吻合。
+
+問題就是：`.CheckInSheetBand()` 的 `wvol of` 查詢成功、`.SheetLimitsOfVolume()` 也算出了一個 `!lim`，但這個 `!lim` 顯然跟 `!band`（真正邊界附近的窄帶）判定成有重疊，才會 `answer=true` 一路被收進來標註。`!bandthin`（TYPE 1 用的窄帶深度）只有 `10mm 模型 × vsca`，這個案子 vsca 落在 0.0333 附近，換算下來窄帶只有約 0.3mm 深——一個真正在 box 外 1000mm 的元件，不應該有任何機會落進一條 0.3mm 深的窄帶，除非 `.SheetLimitsOfVolume()` 或 `.ViewSheetTransform()` 算出來的座標本身就是錯的（不只是精度問題，量級對不上）。
+
+### 下一步：直接印 `.CheckInSheetBand()` 內部比較的兩組數字
+
+`.CheckInSheetBand()`（`:2048-2059`）的 `elsehandle none` 分支加了一行：
+
+```pml
+$p CHECKBAND elem=$!elem answer=$!answer lim=$!lim[1] $!lim[2] $!lim[3] $!lim[4] band=$!band[1] $!band[2] $!band[3] $!band[4]
+```
+
+這會印出**每一個**查得到 WVOL 的元件、它换算到圖紙座標的 `!lim`（元件的圖紙外框）、以及當下比對用的 `!band`（窄帶範圍），還有最後的 `answer`。輸出量會比之前大（TYPE1/2a/2b/3/equipment、四個邊都會印），下次把 Command Window 全部內容存進 `check.txt` 即可，我會直接用元件 ref（`=2013286676/3253`、`/3254`、`/3255`、`/3248`、`/3249`、`/3251` 這幾個已知在紅框那根 riser 上的 ref，以及它們對應的 `IL TUB OF` implied tube）去撈出相關的行比對 `!lim` 跟 `!band` 的實際數字，直接看是 `!lim` 算錯、還是 `!band` 算錯。
+
+**改的還是 `.pmlfrm`，一樣要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1`。**
+
+### 實機驗證結果：印太兇，Command Window 捲軸把想看的行擠掉了（2026-08-12）
+
+那個「每個查得到 WVOL 的元件都印」的診斷太貪心：這次重新 Create Drawings，`.CheckInSheetBand()` 在四個邊 × 五種類型（TYPE1/2a/2b/3/equipment）加起來被呼叫幾百次，`check.txt` 存回來的 171 行**全部是 `CHECKBAND`，一行 `TYPE1` 都沒有**，而且 `3249`/`3251`/`3253`/`3254` 這四個 ref 完全沒出現——不是這次沒被呼叫到，是 Command Window 的捲動緩衝區被灌爆，較早印出的內容（包含這幾個 ref、以及所有 `TYPE1` 那組診斷）在使用者複製的時候已經被沖掉了。唯一還留著的兩個（`3248`、`3255`）看數字也對不上：`band` 寬達 300+mm，明顯是 TYPE2a/2b/equipment 那種寬帶，不是 TYPE1 用的 0.3mm 窄帶，所以連這兩筆都不是我們要看的那次呼叫。
+
+**改法**：把印出條件收窄到只印這六個已知在紅框那根 riser 上的 ref（`3248`/`3249`/`3251`/`3253`/`3254`/`3255`，含它們的 `IL TUB OF` implied tube），其餘一律不印：
+
+```pml
+if (!elem.matchwild('*3248*') or !elem.matchwild('*3249*') or !elem.matchwild('*3251*') or !elem.matchwild('*3253*') or !elem.matchwild('*3254*') or !elem.matchwild('*3255*')) then
+	$p CHECKBAND elem=$!elem answer=$!answer lim=$!lim[1] $!lim[2] $!lim[3] $!lim[4] band=$!band[1] $!band[2] $!band[3] $!band[4]
+endif
+```
+
+這樣輸出量會降到幾十行，跟 `.pmlfnc` 那邊本來就有、且已經證實印得下的 `TYPE1`（`!dir.eq('left')`，上一次 330 行都完整存下來過）加在一起，應該不會再把彼此擠出緩衝區。
+
+**還是 `.pmlfrm`，一樣要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1`。**
+
+### 實機驗證結果：找到真正原因了（2026-08-12）
+
+收窄後的 `check.txt` 終於同時拿到 `TYPE1` 跟 `CHECKBAND` 兩組數字，而且問使用者直接在 E3D 點了那條藍色管確認就是 `Copy-of-100-C-12`（跟一路假設的一樣）。拿 `/3248` 這筆對數字：
+
+```
+CHECKBAND elem==2013286676/3248 answer=TRUE
+  lim = 196.558 180.782 206.649 191.868   (元件 WVOL 換算到圖紙座標的外框)
+  band= 201.935 136.558 202.268 493.442   (TYPE 1 左邊界窄帶，寬只有 0.33mm)
+```
+
+`!lim` 橫跨 196.6~206.6，寬達 10mm，band 只有 0.33mm 寬、剛好整條落在 `!lim` 的範圍裡——`!lim` 的中心點 `(196.558+206.649)/2 = 201.6`，比 band 的左界 `201.935` 還小 0.33mm，也就是**這個元件的圖紙中心其實在 band 外面一點點，但因為它的圖紙外框有 10mm 寬，還是「碰到」了那條窄帶，判定成重疊**。
+
+**根因**：`.CheckInSheetBand()` 拿元件的 `WVOL`（世界座標軸對齊的外框）換算到圖紙座標再跟窄帶比對。`WVOL` 是**世界軸對齊**的，box 轉了 10 度之後，同一個元件的真實外框（可能只是一個普通尺寸的凡爾/法蘭，實體沒多大）投影到圖紙座標系，會因為兩個座標系差了角度而被「斜著撐大」成一個更大、對角拉長的矩形——不是元件真的變大了，是**軸對齊外框硬套進轉過的座標系必然產生的膨脹**。`!bandthin`（TYPE 1 用的窄帶深度）只有模型 10mm，換算成圖紙才 0.33mm，本來就是設計成「幾乎貼著邊界才算數」的門檻，但只要元件的圖紙外框被撐大超過 10mm（很常見），這個窄帶幾乎攔不住任何東西——元件即使中心點明顯在 box 外，外框的一角只要划過那條線就算「有重疊」。
+
+box 是正的時候 `WVOL` 换算不會被撐大（軸對齊的世界座標系跟圖紙座標系方向一致），這個問題才一直沒被踩到。
+
+### 作法
+
+`functions/DrawingPlan1LineNoAnnotation.pmlfnc` 的 TYPE 1 迴圈：拿掉一開始（拿到原始 collect 項目、還沒做 mtbe 換算之前）呼叫 `.CheckInSheetBand()` 的那次判斷，改成在算出 `!memenupos`／`!memshpos`（元件真正會拿去標註的那個代表點，implied tube 已經套用 `.CrossingOfTube()` 的交點覆寫）之後，直接拿這個**點**跟 `!band` 比對範圍：
+
+```pml
+!inband = true
+if (!memshx.lt(!band[1]) or !memshx.gt(!band[3]) or !memshy.lt(!band[2]) or !memshy.gt(!band[4])) then
+	!inband = false
+endif
+```
+
+一個點沒有「軸對齊外框」可以被撐大，不會受轉角度影響；而且這個點本來就是最後真的會拿去畫標註的那個位置，比起元件整個外框，語意上也更貼近「這個標註是不是真的在邊界附近」。
+
+**沒有動** `TYPE 2a/2b/3/equipment` 幾段——那幾個用的 `!banddeep`（33%）/`!bandshal`（10%）比 `!bandthin`（0.33mm）寬得多，同樣的膨脹問題在那個尺度下不容易造成誤判，這次沒有實測證據顯示那幾段有壞，先不動，維持改動範圍只對症下藥。
+
+**這次只改了 `.pmlfnc`，不用 kill/show，`.pmlfnc` 每次呼叫會自動重讀**，直接重新 Create Drawings 即可。
+
+### 實機驗證結果：主要問題修好了，但抓到一個浮點邊界的小回歸（2026-08-12）
+
+`check.txt` 顯示 `Copy-of-100-C-12`（`3231`~`3268` 全部）這次每一筆都正確判定 `inband=FALSE`，`error.png` 的紅框重複標籤也從 `EL+100566` ×3 + `EL+100553` 收斂成 `EL+102278` ×2——主要症狀解決。
+
+但同時發現新的嚴格點座標比對，對真正落在邊界上的交點會不穩定：
+
+```
+pipe=Copy-of-100-B-1  inband=TRUE  memshx=201.934545  band[1]=201.9345455
+pipe=Copy-of-150-A-3  inband=FALSE memshx=201.934545  band[1]=201.9345455
+```
+
+兩筆印出來的 `memshx` 到小數點後 6 位完全一樣，`Copy-of-150-A-3` 那筆 `crossenu` 也是真的算出交點（不是 `NONE`），照理該保留，卻被判定在邊界外。原因：真正的邊界交點本來就是**從邊界線本身**算出來的，跟 `!band[1]`（也是從邊界線算出來的）理論上該是同一個數，但兩者的浮點運算路徑不同（一個經過 `.CrossingOfTube()` 的 `enupos of`，一個經過 `.ViewSheetTransform()` 的差分），完整精度下可能各自帶著 1e-7mm 量級的誤差，剛好卡在門檻兩側。
+
+**作法**：比對加上 `0.01mm` 容差（`!postol`），這個量級遠低於任何有意義的幾何差異，只用來吃掉浮點噪訊：
+
+```pml
+!postol = 0.01
+!inband = true
+if (!memshx.lt(!band[1] - !postol) or !memshx.gt(!band[3] + !postol) or !memshy.lt(!band[2] - !postol) or !memshy.gt(!band[4] + !postol)) then
+	!inband = false
+endif
+```
+
+**還是只改 `.pmlfnc`，不用 kill/show**，直接重新 Create Drawings。這次要看兩件事：`Copy-of-100-C-12` 的紅框標籤應該完全消失（不是只剩 2 筆）；`Copy-of-150-A-3`／`Copy-of-100-B-1` 這種真正的邊界交點應該都還在，沒有被容差加大之後又誤刪或誤留別的東西。
+
+### 實機驗證結果：TYPE 1 完全乾淨了，剩下的來自 TYPE 2a/2b/3（2026-08-12）
+
+TYPE 1 這次只留下 3 筆（`Copy-of-100-B-1`、`Copy-of-100-C-13`、`Copy-of-250-B-5`，全部是真正穿過左邊界的交點），`Copy-of-100-C-12` 的每一個管件都正確判成 `inband=FALSE`。TYPE 1 到此確認修好。
+
+但圖上還有 `Copy-of-100-C-12` 的標籤，因為 **TYPE 2a/2b/3 三段都還在用舊的 `.CheckInSheetBand()`（WVOL 版）**。用 `check.txt` 的數字驗算：那根 riser 的圖紙點是 `memshx=201.863495`，而 TYPE 2a/2b/3 用的 `!banddeep` 左帶起點是 `band[1]=201.9345455`——**點在帶外 0.07mm**，但它的 WVOL 換算外框橫跨 `196.56~206.65`，照樣蓋過帶的起點，所以 WVOL 版一律放行。同一個膨脹問題，只是換一段程式碼。
+
+**作法**：TYPE 2a/2b/3 三段比照 TYPE 1 改成點座標比對（一樣的 `!postol = 0.01`），拿掉迴圈開頭那次 `.CheckInSheetBand()` 呼叫。**equipment 那段沒有動**：設備本來體積就大、WVOL 大是實情不是膨脹假象，而且它後面本來就有自己的「大部分體積在 view 內」「pos 在 view 內」兩道檢查，沒有證據顯示它有問題。
+
+三段各加了一行 `$p TYPE2A/2B/3 KEPT ...` 診斷（一樣只在 `!dir.eq('left')`），下一輪就能把圖上剩下的每個標籤歸到來源。
+
+### 實機驗證結果：`Copy-of-100-C-12` 從一堆收斂成 1 筆，而且那 1 筆看起來是對的（2026-08-12）
+
+TYPE 2a/2b/3 改成點座標比對之後，`check.txt` 裡 `Copy-of-100-C-12` 只剩 **1 筆**（`TYPE3 KEPT ... memshx=230.524117 memshy=196.046627`），圖上也只剩一個 `Copy-of-100-C-12 BOP EL+102278`。
+
+**這 1 筆很可能是正確的，不是漏網之魚**：view 的圖紙矩形是 X `201.93~512.07`、Y `136.56~493.44`，而這個彎頭在 `(230.52, 196.05)`——**距離左邊界 28mm、距離下邊界 60mm，扎扎實實在 view 裡面**，不是貼在邊界外的那根 riser（那根在 `memshx=201.86`，已經被正確排除）。也就是說 `Copy-of-100-C-12` 這條管**一部分在 box 外（riser 那段）、一部分在 box 內（這個彎頭）**，內側那段本來就該標。
+
+### 已確認：`Copy-of-250-B-5 BOP EL+104716` 標兩次是合理的，不用改
+
+使用者確認：**同一條管在同一側、但在明顯不同的兩個位置各標一次，算合理**。這兩筆來源不同（一筆 TYPE 1 的邊界交點 `memshy=355.49`，一筆 TYPE 3 的彎頭 `memshy=221.42`），Y 差 130 多 mm，`!types` 併回 `!result` 那道 4mm 去重（`:706`）本來就攔不住，行為正確，不動。
+
+### 推翻：剩下那 1 筆 `Copy-of-100-C-12` 也是錯的（2026-08-12）
+
+上一節推論「這個彎頭距離左邊界 28 圖紙 mm、在 view 裡面，所以標它是對的」——**使用者看 3D 實機否決了這個推論**：那條引線指到的是 model 裡被反白（洋紅色）的那個彎頭，位置就在 box 邊界上，**並不在 box 裡面，不該標**。
+
+所以「`memshx=230.52`（換算約在 box 內 857mm）」這個數字**對不上實際幾何**。
+
+> **後續（同日）**：不是歸錯元件——`/3256` 的座標是對的，圖紙座標也是對的。對不上的原因是 **view 本身轉錯邊**，圖紙座標系跟 box 座標系差了 20 度，所以「圖紙上在框內」跟「實際上在 box 內」是兩回事。見下一節。
+>
+> 同一節提到的另一個疑點——`/3256`、`/3257`、`/3258`、`/3280`、`/3281`、`/3282` 六個連續元件圖紙座標**完全相同到小數點後 6 位**（`230.524117, 196.046627`）且橫跨 `C-12`／`C-13` 兩條管——**還沒有解釋，也還沒查**。`/3256` 本身經實機 `q worpos` 確認是對的，所以至少它不是殘值；但其餘幾個是否為 `var !memenupos worpos of $!mem` 查詢失敗後 PML 保留舊值，仍未確認。它們這次都被判在框外丟掉了所以沒出事，但這是會讓元件被標到**別人位置**的隱患，列在下面「還沒做」。
+
+### 真正的根本原因：view 的旋轉方向反了（2026-08-12，**已實機驗證，結案**）
+
+拿到實機數值之後對出來的。使用者查出的 ground truth：
+
+```
+=2013286676/3256  →  Wposition W 365866.221mm N 237018.846mm U 102335.1mm
+box               →  Wposition W 361509.906mm N 239874.364mm U 104749.08mm
+                     Xlength 9302.428mm  Ylength 10704.993mm  Zlength 9498.161mm
+                     Orientation Y is S 10 E and Z is U
+```
+
+元件座標、box 中心、`elen`/`nlen` 全部跟 `BOXLIM` 印的一致——**兩邊的輸入資料都是對的**，所以先前那兩個懷疑方向（BOXLIM 數字不符、`worpos` 讀到殘值）都排除。
+
+用 `ori Y is S 10 E` 推回去：`boxYdir = (0.1736, -0.9848)`、`boxXdir = (-0.9848, -0.1736)`，走完 `.Apply()` 的分支得到 `efpla = E 10 N`、`nfpla = N 10 W`、`elen = xlength`、`nlen = ylength`——跟 `BOXLIM` 印的完全一樣。拿這組軸算 `/3256` 在 box 自己座標系的位置：
+
+```
+u（沿 efpla）= -4785.98   對照半長 4651.21  →  超出 135mm，在 box 外 ✓ 跟使用者說的一致
+v（沿 nfpla）= -2055.68   對照半長 5352.50  →  這個方向在內
+```
+
+但同一顆元件的**圖紙**座標反推出來卻是內縮 857mm。兩者差 20 度。再用 `/2860`（管與西邊界的交點，圖紙 X 剛好落在西邊界上）交叉驗證：它在 box 座標系是內縮 1310mm，在圖紙座標系卻剛好在邊界上。
+
+**結論：sheet X 軸對應的模型方向是 `E 10 S`，而 box 的軸是 `E 10 N`——view 轉錯邊了。**
+
+原因在 `.Apply()`（`:627` 附近）：
+
+```pml
+!temp = !efpla.angle(object direction('E'))
+...
+Adegrees $!temp
+```
+
+`.angle()` **只回傳 0~180 的無號角**。box 往北偏 10 度和往南偏 10 度，這行都得到 `10`，然後一律 `Adegrees +10`——其中一種轉向必然是錯的。**這跟 README 前面記過的流向箭頭 bug 是同一類**（「`angle()` 只回傳無號角，正負號必須由別的東西決定，門檻應該是 90 度不是 40 度」那節），只是當時沒發現這裡也踩到。
+
+**後果**：view 的外框不再等於 box 的外框，而是 box 繞自己中心轉了 **兩倍角度（20 度）** 的矩形。於是 box 外的元件投影進框內（被標註），box 內的東西被裁掉（留下空白）。使用者最早回報的「紅框那片沒有管子卻標了一堆編號」，根源就是這一件事——不是標註邏輯，是 view 本身擺錯角度。
+
+因為兩種轉向都得到同一個 `Adegrees`，**正的 box（角度 0）完全不受影響，往南偏的 box 一直都是對的**，只有往北偏的 box 會壞，所以這個 bug 能存活這麼久。
+
+### 作法
+
+補回 `.angle()` 丟掉的正負號，判斷方式沿用這個檔案同一段既有的寫法（比對 N/S 哪個夾角小，不依賴 DIRECTION 有沒有 `.north` 這種屬性）：
+
+```pml
+!temp = !efpla.angle(object direction('E'))
+if (abs(!efpla.angle(object direction('N'))) lt abs(!efpla.angle(object direction('S')))) then
+	!temp = !temp * -1
+endif
+```
+
+用修正後的角度重算，兩顆有問題的元件都會落到框外、自然被排除：
+
+| 元件 | box 座標 u | 修正後圖紙 X | view 矩形 X 範圍 |
+|---|---|---|---|
+| `/3255` | −5700.97（外 1050mm）| 166.97 | 201.96 ~ 512.04 → **框外** |
+| `/3256` | −4785.98（外 135mm）| 197.47 | 201.96 ~ 512.04 → **框外** |
+
+### 實機驗證結果：正確（2026-08-12）
+
+使用者並排比較修改前後兩張圖：
+
+- **柱位線（藍色點鏈線）與 match line 現在跟圖框正交**，修改前是整片斜掉的。這正是「view 外框終於等於 box 外框」該有的樣子——廠區格線本來就跟 box 對齊，所以在正確的 view 裡一定是正的。
+- **多餘的 `Copy-of-100-C-12` / `Copy-of-100-C-13` 標籤消失**。
+- 使用者判定：「這個版本應該是對的」。
+
+一併確認了先前所有繞路的方向都只是治標：真正的缺陷從頭到尾都是 view 擺錯角度，不是標註邏輯。
+
+### 收尾
+
+- `functions/DrawingPlan1LineNoAnnotation.pmlfnc` 的 `!dbgln` 改回 `false`（比照 `DrawingPlan1FlowAnnotation` 保留 `!dbg` 的作法，整套診斷留著備用，不刪）。裡面最有價值的是 **`LABEL` 那行**：每畫出一個標籤就印一行，帶元件 ref 和是哪個 TYPE 找到的，圖上任何一個標籤都能直接回溯，不必再靠推測——這次就是靠它才定位到問題。
+- `forms/DrawingPlan1.pmlfrm` 的 `BOXLIM` 三行 `$p` 已移除（無條件輸出，留著會每次洗畫面）。`CHECKBAND` 那行也先前移除了。
+
+### 先前卡住的地方（保留記錄）：程式算出來的座標跟實機看到的位置對不上
+
+`LABEL` 診斷確定了標籤來源：
+
+```
+LABEL pipe=Copy-of-100-C-12 src=type3 mem==2013286676/3256 type=ELBO
+      mempos=W 365866.220732mm N 237018.846355mm U 102335.1mm
+      mempossh=X 230.524117mm Y 196.046627mm
+```
+
+使用者實機導到 `/3256` 確認：**`/3255` 和 `/3256` 兩顆彎頭都不在 box 裡**。
+
+但程式的數字說 `/3256` 在 box **裡面**。當時的理由是「view 在圖紙上的矩形**就是** box 的外框（`size = elen × nlen × vsca`），所以只要比圖紙座標就夠」——**這個前提正是後來查出來壞掉的那件事**（view 轉錯邊，框跟 box 差 20 度），所以下表的最後一欄結論是錯的，保留只為記錄當時的推理：
+
+| | 圖紙 X | view 矩形 X 範圍 | 換算成 box 長軸座標 | 對照半長 4651.21 |
+|---|---|---|---|---|
+| `/3255` | 201.863 | 201.96 ~ 512.04 | −4653.35 | 超出 **2.1mm**（在外，已排除）|
+| `/3256` | 230.524 | 201.96 ~ 512.04 | −3794.28 | 內縮 **857mm**（在內）|
+
+（`vsca = 0.0333333`，view 角點各含 ±0.025mm 容差；用 `/2860` 那筆「管與西邊界的交點」校驗過：算出來剛好落在西面邊界上，誤差 0.76mm，所以換算式本身是對的。）
+
+`/3256` 的高程 `U 102335.1` 也在 box 的 `minU 99999.97 ~ maxU 109498.19` 之內。三個方向都在裡面。
+
+**兩件事必有一件錯**，但不是靠再推導能解決的：
+
+1. `BOXLIM` 印出的 box 中心／尺寸（`boxE=-361509.906 boxN=239874.364 elen=9302.428 nlen=10704.993`）跟實機那個 box 不符——例如那組數字是別的 box 的、或 box 在出圖後被移動過。
+2. `/3256` 的 `worpos`（`W 365866.22 N 237018.85 U 102335.1`）不是它真正的位置。
+
+第 2 點有個旁證值得留意：`check.txt` 裡 `/3257`、`/3258`、`/3280`、`/3281`、`/3282` 的座標跟 `/3256` **完全相同到小數點後 6 位**，還橫跨 `C-12`／`C-13` 兩條管，幾乎確定是 `var !memenupos worpos of $!mem` 查詢失敗時 PML 保留舊值。不過 `/3256` 這一筆在 TYPE 1 和 TYPE 3 兩個**獨立**迴圈都算出同一個值（兩者的前一個元件不同，若是殘值應該會不一樣），所以 `/3256` 本身看起來是讀到的、不是殘值。
+
+**下一步不再推導，直接取實機數值比對**：請使用者在 E3D 裡分別對 `/3256` 和那個切圖 box 查 `worpos` / `xlength` / `ylength` / `zlength` / `ori wrt worl`，跟 `BOXLIM` 對照，看是哪一邊對不上。
+
+### 先前那一步：把診斷放在「標籤真正產生的那一行」
+
+先前幾輪的診斷都印在**收集階段**，然後由我推論哪一筆變成哪個標籤——這一步猜錯過不只一次。改成直接在 DPOI 產生處（`:871` 附近，`NEW DPOI POS` 之前）印一行：
+
+```pml
+$p LABEL pipe=$!dbgpipe src=$!dbgsrc mem=$!mem type=$!type mempos=$!mempos mempossh=$!mempossh
+```
+
+`src` 是 `type1`/`type2a`/`type2b`/`type3`/`type4`，`mem` 是元件 ref，`mempos`/`mempossh` 是這個標籤實際用的世界座標與圖紙座標。**圖上看到的每一個標籤，都會對應到剛好一行 `LABEL`**，不需要再由我推測對應關係。
+
+下一輪請把 `LABEL` 開頭的行一起存進 `check.txt`——只要找出 `pipe=Copy-of-100-C-12` 那一行，就能直接知道是哪個元件、哪個 TYPE、座標多少。
+
+### 更正一個先前寫錯的數字
+
+前面「用 `BOXLIM` 反算」那段說這根 riser 在 box 邊界外約 **1000mm**，**這個數字是錯的**——那是我用 `efpla`/`nfpla` 手動反推局部座標時算錯的（當時也已經察覺推導有矛盾）。用程式自己算出來的圖紙座標對照才是對的：`memshx=201.863` 對 view 左邊界 `201.9345`，差 **0.07 圖紙 mm**，換算回模型大約 **2mm**。也就是這根管只是**剛好貼在 box 邊界外面一點點**，不是離很遠。這不影響結論（在外面就是在外面，不該標），但避免下次拿錯的量級去判斷別的事情。
+
+### 還沒做
+
+- **六個元件圖紙座標完全相同的疑點**：`/3256`、`/3257`、`/3258`、`/3280`、`/3281`、`/3282` 的圖紙座標一模一樣到小數點後 6 位，還橫跨 `C-12`／`C-13` 兩條管。懷疑是 `var !memenupos worpos of $!mem` 查詢失敗時 PML 保留舊值（這個檔案別處踩過同一類陷阱），會讓元件被標到**別人的位置**。修好 view 之後這幾個都落在框外、沒有實際出錯，但根因未查。查法：把 `!dbgln` 打開，看 `TYPE1 CHECK` 連續幾筆座標是否仍然重複；若是，在 `worpos of` 後面補 `handle any` 明確跳過，不要沿用舊值。
+- **1mm 去重門檻**：同一條管在同一邊重複標，TYPE 1 只濾掉圖紙相距 1mm 以內的（TYPE 2/3/4 對 TYPE 1 用的是 4mm）。修好 view 之後重複已大幅減少，暫時不動。
+- **Nozzle / Valve / Instrument / ATTA 仍用縮小的方盒收集**：`:1147`、`:1453`、`:1658`、`:2781` 都用 `within E $!this.minE .. TO E $!this.maxE ..`。那組值是「box 各邊乘 cos(角度)」的縮小版（見上面 CDLIMITS 那節的推導），轉過的 box 會**漏掉**角落的管嘴/閥件/儀錶。這次沒改，因為單純放寬會反過來收到 box 外的元件；正確作法是比照 LineNo 改成「世界方盒收集 + 圖紙座標複驗」。**view 轉向修好之後，這件事的實際影響有多大還沒重新評估。**
+- **`limits` / `:CDLIMITS` 改用 wvol bounding box 那次改動，效果從未被單獨驗證**：當時實機沒有變化，被判定為疑似無效更動而保留。view 轉向修好之後應該回頭確認一次它到底有沒有必要、有沒有副作用。
+
+## 已改：標籤連接點的排序丟給 AteSortLineNo 會炸（2026-08-12，**尚未實機驗證**）
+
+症狀（見 `error.png` 左半，同一張圖）：box 轉 10 度之後，Create Drawings 跑到一半跳
+
+```
+PML Error in method METHOD：輸入字串格式不正確。
+In line 1040 of PML function drawingplan1.APPLY
+    !sortedtypes = !obj.method('y', !tboxp)
+```
+
+`輸入字串格式不正確` 是 .NET `FormatException` 的中文訊息，`AteSortLineNo.Method()` 裡唯一會丟它的是 `double.Parse(entrystrs[0])`，也就是排序鍵。那個鍵在 PML 這邊是這樣組出來的：
+
+```pml
+!apos1.position().distance(!tempp).string().replace('mm', '')
+```
+
+**確定的部分**：距離被 `.string()` 轉成字串、跨過 PML.NET 邊界、再讓 C# 重新 parse 回數字，而某個角度下這個字串不是 `double.Parse` 吃得下的形式。**沒有確定的部分**：實際炸掉的那個字串長什麼樣（沒有印出來）。README 6-3 記過的兩次是 `.up` 把 `mm` 帶進鍵裡，這一處已經有 `.replace('mm','')`，所以不是同一個。
+
+為什麼轉 10 度才出現：這段在算「標籤方框四條邊」與「引線」的交點。box 正的時候引線通常斜穿方框，四個交點離附著點都有明確距離；轉過角度之後引線方向跟著轉，容易讓某個交點幾乎剛好落在附著點上。所以角度本身沒問題，是角度改變了幾何、踩到這個既有地雷。
+
+### 作法
+
+不去猜那個字串，直接**把這條「數字 → 字串 → 數字」的路徑拿掉**。這裡本來就只是要「四個交點裡離附著點最近的那個」，用不著排序，更用不著跨語言：
+
+- `!tboxp`（打包好的字串陣列）換成 `!tboxpt`（直接存 POSITION）。
+- 在 PML 裡跑一個小迴圈比 `.distance()` 取最小，距離全程是 PML 的 real。
+- 標籤中心點改成直接讀 `!lines[!i].part(2) / part(3)`（原本繞一圈從打包字串第 3 欄拆回來的就是這兩個值）。
+- 加 `if !tboxpt.size().gt(0)`：四條邊都沒有有效交點時就不下 `cpoftx`，維持原本的連接點，不會拿空陣列去索引。
+
+這段因此不再用到 `AteSortLineNo`，但**授權檢查不受影響**——`.Apply()` 開頭的 `.CheckCompanyNetwork()` → `IsAuthorized()` 照跑。
+
+### 實機要看的地方
+
+錯誤不再出現之外，要確認**引線的連接點仍然落在標籤方框邊上**，不是跑到方框中心（那樣引線會穿進文字裡）。
+
 ## 已改：把隱藏在 AteSort/AteSortLineNo 裡的公司網路授權檢查獨立出來（2026-08-11，**已實機驗證，結案**）
 
 ### 背景

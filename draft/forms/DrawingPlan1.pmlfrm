@@ -429,9 +429,23 @@ define method .Apply()
 				!minU = !wvol.part(3).replace('mm', '').real()
 				!maxE = !wvol.part(4).replace('mm', '').real()
 				!maxN = !wvol.part(5).replace('mm', '').real()
-				!maxU = !wvol.part(6).replace('mm', '').real()				
+				!maxU = !wvol.part(6).replace('mm', '').real()
 				add all zone within E $!minE N $!minN U $!minU to E $!maxE N $!maxN U $!maxU
 				add all REFGRD within E $!minE N $!minN U $!minU to E $!maxE N $!maxN U $!maxU
+				------------------------------------------------------------------------
+				-- keep the world bounding box of the box element. it is the same as   --
+				-- the box itself while the box is orthogonal, and contains the box    --
+				-- when the box is turned. LIMITS and CDLIMITS below are world axis    --
+				-- aligned and so cannot hold a turned box any tighter than this; the  --
+				-- six VSEC planes further down cut the real shape of the box, so a    --
+				-- wider volume here does not draw anything outside the frame          --
+				------------------------------------------------------------------------
+				!wminE = !minE - 0.025
+				!wminN = !minN - 0.025
+				!wminU = !minU - 0.025
+				!wmaxE = !maxE + 0.025
+				!wmaxN = !maxN + 0.025
+				!wmaxU = !maxU + 0.025
 				
 				
 				!efpla = object direction()
@@ -472,16 +486,26 @@ define method .Apply()
 				!maxN = max(!maxN1, !minN1)
 				!minN = min(!maxN1, !minN1)
 				
-				limits E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU
-				!lim = limits
+				------------------------------------------------------------------------
+				-- !minE .. !maxU above are the faces of the box, measured along the  --
+				-- direction the box itself points in. once the box is turned, taking --
+				-- .east of a point half the length away along a turned direction     --
+				-- gives centre + length / 2 * cos(angle), which is short of the      --
+				-- corner of the box by half the other side times sin(angle). that    --
+				-- is the box shrunk, not the box, so it must not be used for a world --
+				-- axis aligned limit -- it cuts a wedge off two corners of the       --
+				-- drawing while the annotation, which works from the sheet rectangle --
+				-- of the view, still finds and dimensions the pipes in there         --
+				------------------------------------------------------------------------
+				limits E $!wminE N $!wminN U $!wminU TO E $!wmaxE N $!wmaxN U $!wmaxU
 				!this.maxE = !maxE
 				!this.minE = !minE
 				!this.maxN = !maxN
 				!this.minN = !minN
 				!this.maxU = !maxU
-				!this.minU = !minU  
+				!this.minU = !minU
 --				$p $!minE $!minN $!minU $!maxE $!maxN $!maxU
-				
+
 				!thpoE = !boxPos.position().east
 				!thpoN = !boxPos.position().north
 				!thpoU = !boxPos.position().up
@@ -587,8 +611,30 @@ define method .Apply()
 				handle any
 				endhandle
 				!temp = !efpla.angle(object direction('E'))
+				------------------------------------------------------------------------
+				-- .angle() only ever answers 0 to 180, it has no sign, so a box       --
+				-- turned 10 degree towards the north and one turned 10 degree         --
+				-- towards the south both come out of the line above as 10 and both    --
+				-- used to be handed to Adegrees as +10. one of the two is then turned --
+				-- the wrong way, and the frame of the view stops being the outline of --
+				-- the box -- it becomes the box turned about its own centre by twice  --
+				-- the angle. what sits outside the box then falls inside the frame    --
+				-- and gets annotated, and what is really inside the box is clipped    --
+				-- away and leaves a blank wedge. this is the same trap as the flow    --
+				-- arrows (see the README section on the 40 degree test), where the    --
+				-- sign also had to be worked out separately from .angle()             --
+				--                                                                     --
+				-- the sheet x axis of the view runs along east turned by minus        --
+				-- Adegrees, so to line the frame up with the box, an efpla leaning    --
+				-- north needs a negative Adegrees. measured 2026-08-12 on a box with  --
+				-- ori Y is S 10 E: efpla came out E 10 N, Adegrees +10 put the sheet  --
+				-- x axis on E 10 S, 20 degree away from the box                       --
+				------------------------------------------------------------------------
+				if (abs(!efpla.angle(object direction('N'))) lt abs(!efpla.angle(object direction('S')))) then
+					!temp = !temp * -1
+				endif
 				if !temp.eq(0) then
-				
+
 				else
 					Adegrees $!temp
 				endif
@@ -708,7 +754,12 @@ define method .Apply()
 				
 	--      $p |E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU|
 				
-				:CDLIMITS |FROM E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU|
+				----------------------------------------------------------------------
+				-- the world bounding box of the box element, not the faces of the   --
+				-- box, for the same reason as LIMITS above. the VSEC planes created --
+				-- below cut the view down to the real shape of the box              --
+				----------------------------------------------------------------------
+				:CDLIMITS |FROM E $!wminE N $!wminN U $!wminU TO E $!wmaxE N $!wmaxN U $!wmaxU|
 				handle any
 				endhandle
 	--			:CDLIMITS |E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU|
@@ -1002,13 +1053,13 @@ define method .Apply()
 							-- check intersections between label boundary and leader line are on label boundary --
 							-- sort the distance between attachment point and intersections and get the minimun --
 							--------------------------------------------------------------------------------------
-							!tboxp = object array()
+							!tboxpt = object array()
 							!tempp = !labell.intersection(!tboxL)
 							handle any
 								-- for parellel condition --
 							elsehandle none
 								if !tboxL.on(!tempp, true) then
-									!tboxp.append(!apos1.position().distance(!tempp).string().replace('mm', '') & '~' & !tempp & '~' & !lines[!i].part(2) & ' ' & !lines[!i].part(3) & '!x!x!x!x!x')
+									!tboxpt.append(!tempp)
 								endif
 							endhandle
 							!tempp = !labell.intersection(!tboxR)
@@ -1016,7 +1067,7 @@ define method .Apply()
 								-- for parellel condition --
 							elsehandle none
 								if !tboxR.on(!tempp, true) then
-									!tboxp.append(!apos1.position().distance(!tempp).string().replace('mm', '') & '~' & !tempp & '~' & !lines[!i].part(2) & ' ' & !lines[!i].part(3) & '!x!x!x!x!x')
+									!tboxpt.append(!tempp)
 								endif
 							endhandle
 							!tempp = !labell.intersection(!tboxU)
@@ -1024,7 +1075,7 @@ define method .Apply()
 								-- for parellel condition --
 							elsehandle none
 								if !tboxU.on(!tempp, true) then
-									!tboxp.append(!apos1.position().distance(!tempp).string().replace('mm', '') & '~' & !tempp & '~' & !lines[!i].part(2) & ' ' & !lines[!i].part(3) & '!x!x!x!x!x')
+									!tboxpt.append(!tempp)
 								endif
 							endhandle
 							!tempp = !labell.intersection(!tboxD)
@@ -1032,15 +1083,34 @@ define method .Apply()
 								-- for parellel condition --
 							elsehandle none
 								if !tboxD.on(!tempp, true) then
-									!tboxp.append(!apos1.position().distance(!tempp).string().replace('mm', '') & '~' & !tempp & '~' & !lines[!i].part(2) & ' ' & !lines[!i].part(3) & '!x!x!x!x!x')
+									!tboxpt.append(!tempp)
 								endif
 							endhandle
-							using namespace 'Aveva.Core.Samples'
-							!obj = object AteSortLineNo()
-							!sortedtypes = !obj.method('y', !tboxp)
-							!newx = !sortedtypes[1].split('~').getindexed(2).part(2).replace('mm', '').real() - !sortedtypes[1].split('~').getindexed(3).split('!').getindexed(1).part(1).real()
-							!newy = !sortedtypes[1].split('~').getindexed(2).part(4).replace('mm', '').real() - !sortedtypes[1].split('~').getindexed(3).split('!').getindexed(1).part(2).real()
-							cpoftx |$!newx $!newy|
+							-------------------------------------------------------------------------
+							-- pick the intersection nearest !apos1 directly in PML instead of via  --
+							-- AteSortLineNo.Method(). that method round-trips the sort key through --
+							-- PML .string() and then C# double.Parse, and on a turned box it threw --
+							-- FormatException (PML Error in method METHOD: 輸入字串格式不正確).      --
+							-- the exact string that broke the parse was never captured, so the fix --
+							-- is to drop the round trip altogether rather than guess at it: only   --
+							-- the nearest of four points is wanted, which needs no sorting and no  --
+							-- crossing of the PML/.NET boundary                                    --
+							-------------------------------------------------------------------------
+							if !tboxpt.size().gt(0) then
+								!closept = !tboxpt[1]
+								!closedist = !apos1.position().distance(!closept)
+								do !k from 2 to !tboxpt.size()
+									!thisdist = !apos1.position().distance(!tboxpt[!k])
+									if !thisdist.lt(!closedist) then
+										!closept = !tboxpt[!k]
+										!closedist = !thisdist
+									endif
+								enddo
+								!closestr = '' & !closept
+								!newx = !closestr.part(2).replace('mm', '').real() - !lines[!i].part(2).real()
+								!newy = !closestr.part(4).replace('mm', '').real() - !lines[!i].part(3).real()
+								cpoftx |$!newx $!newy|
+							endif
 						endif
 					enddo
 					!ff.close()
@@ -1983,6 +2053,14 @@ define method .CheckInSheetBand(!elem is string, !band is array, !trans is array
 			if (!lim[1] gt !band[3] or !lim[3] lt !band[1] or !lim[2] gt !band[4] or !lim[4] lt !band[2]) then
 				!answer = false
 			endif
+			----------------------------------------------------------------
+			-- the CHECKBAND diagnostic that used to sit here is gone.     --
+			-- TYPE 1 / 2a / 2b / 3 no longer call this method at all --   --
+			-- they test the annotation point against the band directly    --
+			-- (see DrawingPlan1LineNoAnnotation.pmlfnc) -- so this only    --
+			-- runs for equipment now, where the WVOL is genuinely large   --
+			-- and the extra checks after it already cover the case        --
+			----------------------------------------------------------------
 		endhandle
 	endif
 	return !answer

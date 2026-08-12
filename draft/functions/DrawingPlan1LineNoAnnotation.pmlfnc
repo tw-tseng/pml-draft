@@ -63,8 +63,28 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	var !viewdirdown  viewdir down
 	var !viewdirright viewdir right
 	
-	!dirlist = 'right left down up'	
-	
+	!dirlist = 'right left down up'
+
+	--------------------------------------------------------------------------
+	-- diagnostic switch, left in the way DrawingPlan1FlowAnnotation keeps  --
+	-- its !dbg. there is far more of this than the command window can      --
+	-- hold, so it goes to a file, written the same way as CouplingMto      --
+	-- and checkCuttingLength do. only the left side of the view is         --
+	-- reported, which is enough to follow one border at a time             --
+	--                                                                      --
+	-- the LABEL line is the useful one: it prints once per label that is   --
+	-- really drawn, with the element and which TYPE found it, so a label   --
+	-- on the sheet can be traced back without guessing. that is what found --
+	-- the 2026-08-12 view rotation bug                                     --
+	--                                                                      --
+	-- L: on the machine running E3D is the same folder as D: here          --
+	--------------------------------------------------------------------------
+	!dbgln = false
+	if (!dbgln) then
+		!dbgf = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check.txt')
+		!dbgf.open('overwrite')
+	endif
+
 	---------------------------------------------------------------------------
 	-- the sides of the view are only parallel to E and N when the drawing   --
 	-- box is orthogonal to the world. when it is not, .Apply() turns the    --
@@ -153,7 +173,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
-			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !type type of $!mem
 			!istube = false
 			!tubeelem = ''
@@ -162,13 +181,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!tubeelem = !mems[$!i]
 				var !mem mtbe of $!mems[$!i]
 			endif
+			if (!dbgln and !dir.eq('left')) then
+				!dbgf.writerecord('TYPE1 raw=' & !mems[!i] & ' type=' & !type & ' istube=' & !istube.string() & ' mtbe=' & !mem)
+			endif
 			var !check IDLN for $!mem
 	--      $p $!check
 			handle any
 	--      skip
 			elsehandle none
 				var !pipe namn of pipe of $!mem
-				if (!check.eqnocase('INCLUDED') and !inband) then
+				if (!check.eqnocase('INCLUDED')) then
 					var !type type of $!mem
 					if (!type.eqnocase('BRAN')) then
 						var !memenupos hpos of $!mem
@@ -193,6 +215,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!useit = true
 					if (!istube) then
 						!crossenu = !!DrawingPlan1.CrossingOfTube(!tubeelem, !mem, !dir)
+						if (!dbgln and !dir.eq('left')) then
+							!dbgf.writerecord('TYPE1 tube=' & !tubeelem & ' owner=' & !mem & ' pipe=' & !pipe & ' crossenu=' & !crossenu)
+						endif
 						if (!crossenu.eq('NONE')) then
 							--------------------------------------------------------
 							-- the world box handed to WITHIN is bigger than the  --
@@ -207,21 +232,105 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						elseif (!crossenu.neq('')) then
 							!crosspos = object position(!crossenu)
 							!crosspos.up = !memenupos.position().up
-							!memenupos = !crosspos.string()
+							---------------------------------------------------------------
+							-- not !crosspos.string(): a POSITION built with object       --
+							-- position(<string>) stringifies back with a 'WRT /*' tail,   --
+							-- unlike the plain enupos / hpos / worpos strings used        --
+							-- everywhere else in this function. that tail was seen in the --
+							-- 2026-08-12 diagnostic output and SHPOS OF is not expected   --
+							-- to read past it, so the E / N / U string is built by hand   --
+							-- instead                                                     --
+							--                                                             --
+							-- the sign is written as the opposite compass letter (W/S/D)  --
+							-- rather than a minus sign, to match every other position     --
+							-- string here -- straight off hpos / worpos / enupos they all  --
+							-- come as 'W 366058mm', never 'E -366058mm'. whether the      --
+							-- minus form would actually have been rejected was never      --
+							-- isolated; this only keeps the format consistent             --
+							---------------------------------------------------------------
+							if (!crosspos.east geq 0) then
+								!epfx = 'E '
+								!eval = !crosspos.east
+							else
+								!epfx = 'W '
+								!eval = !crosspos.east * -1
+							endif
+							if (!crosspos.north geq 0) then
+								!npfx = 'N '
+								!nval = !crosspos.north
+							else
+								!npfx = 'S '
+								!nval = !crosspos.north * -1
+							endif
+							if (!crosspos.up geq 0) then
+								!upfx = 'U '
+								!uval = !crosspos.up
+							else
+								!upfx = 'D '
+								!uval = !crosspos.up * -1
+							endif
+							!memenupos = !epfx & string(!eval) & ' ' & !npfx & string(!nval) & ' ' & !upfx & string(!uval)
 						endif
 					endif
 					if (!useit) then
 						var !memshpos shpos of $!memenupos
-						----------------------------------------------------------------
-						-- y is the key of hashtable in .Net and cannot be duplicated --
-						-- so a small value needs to be added to identify it          --
-						----------------------------------------------------------------
-						!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
-						!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
-						!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!y'
-						!result[!j] = !memstr
-						!j = !j + 1
+						!memshx = !memshpos.split().getindexed(2).replace('mm','').real()
+						!memshy = !memshpos.split().getindexed(4).replace('mm','').real()
+						-----------------------------------------------------------------------
+						-- is this point actually inside the band, checked here instead of    --
+						-- via .CheckInSheetBand() on the raw collected item's WVOL. WVOL is   --
+						-- world axis aligned; projected through the box's rotation it comes   --
+						-- out as a rectangle bigger than the real footprint (a compact        --
+						-- fitting turns into an elongated diagonal smear in sheet space), so  --
+						-- against !bandthin's paper-thin strip a component that is genuinely  --
+						-- outside the box can still have that inflated box graze the strip    --
+						-- and pass. a single point cannot be inflated by rotation, and this    --
+						-- is also the exact point the annotation ends up placed at (including  --
+						-- the crossing-point override above for a tube), so testing it here    --
+						-- instead of the raw WVOL is both simpler and more correct             --
+						--                                                                      --
+						-- found 2026-08-12: Copy-of-100-C-12, confirmed sitting outside the    --
+						-- box (blue in the model view), kept passing the WVOL-based band check --
+						-- for all of its fittings even though none of them are really at the   --
+						-- border                                                               --
+						--                                                                      --
+						-- !postol guards the points which land exactly on the near edge of    --
+						-- the band: a crossing is worked out from the same border line the    --
+						-- band starts at, so its sheet coordinate can fall a hair either side --
+						-- of !band[1] depending on which way round the arithmetic went.       --
+						-- 0.01mm is far below anything geometrically meaningful here          --
+						-----------------------------------------------------------------------
+						!postol = 0.01
+						!inband = true
+						if (!memshx.lt(!band[1] - !postol) or !memshx.gt(!band[3] + !postol) or !memshy.lt(!band[2] - !postol) or !memshy.gt(!band[4] + !postol)) then
+							!inband = false
+						endif
+						if (!dbgln and !dir.eq('left')) then
+							!dbgf.writerecord('TYPE1 CHECK pipe=' & !pipe & ' inband=' & !inband.string() & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string() & ' band=' & !band[1].string() & ' ' & !band[2].string() & ' ' & !band[3].string() & ' ' & !band[4].string())
+						endif
+						if (!inband) then
+							----------------------------------------------------------------
+							-- y is the key of hashtable in .Net and cannot be duplicated --
+							-- so a small value needs to be added to identify it          --
+							----------------------------------------------------------------
+							!x = !memshx + 0.0000000001 * !j
+							!y = !memshy + 0.0000000001 * !j
+							!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!y'
+							!result[!j] = !memstr
+							!j = !j + 1
+							if (!dbgln and !dir.eq('left')) then
+								!dbgf.writerecord('TYPE1 KEPT pipe=' & !pipe & ' memenupos=' & !memenupos & ' memshpos=' & !memshpos)
+							endif
+						endif
 					endif
+				elseif (!dbgln and !dir.eq('left')) then
+					----------------------------------------------------------------
+					-- !inband is no longer set at the top of this loop, so it is  --
+					-- not printed here -- referring to it before the band test    --
+					-- runs would raise 'Variable INBAND not defined' on the very  --
+					-- first member that is not in the drawlist                    --
+					----------------------------------------------------------------
+					!dbgf.writerecord('TYPE1 SKIPPED check=' & !check & ' mem=' & !mem)
 				endif
 			endhandle
 		enddo
@@ -284,7 +393,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
-			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !type type of $!mem
 			if (!type.matchwild('*TUB*')) then
 				var !mem mtbe of $!mems[$!i]
@@ -295,7 +403,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	--      skip
 			elsehandle none
 				var !pipe namn of pipe of $!mem
-				if (!check.eqnocase('INCLUDED') and !inband) then
+				if (!check.eqnocase('INCLUDED')) then
 					var !type type of $!mem
 					if (!type.eqnocase('BRAN')) then
 						var !memenupos hpos of $!mem
@@ -303,11 +411,28 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						var !memenupos worpos of $!mem
 					endif
 					var !memshpos shpos of $!memenupos
-					!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
-					!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
-					!memstr = !y & '~' & !x & '~type2a!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
-					!types[!j] = !memstr
-					!j = !j + 1
+					!memshx = !memshpos.split().getindexed(2).replace('mm','').real()
+					!memshy = !memshpos.split().getindexed(4).replace('mm','').real()
+					--------------------------------------------------------------
+					-- the point is tested against the band rather than the WVOL --
+					-- of the raw collected item, for the reason set out in full --
+					-- in TYPE 1 above                                           --
+					--------------------------------------------------------------
+					!postol = 0.01
+					!inband = true
+					if (!memshx.lt(!band[1] - !postol) or !memshx.gt(!band[3] + !postol) or !memshy.lt(!band[2] - !postol) or !memshy.gt(!band[4] + !postol)) then
+						!inband = false
+					endif
+					if (!inband) then
+						!x = !memshx + 0.0000000001 * !j
+						!y = !memshy + 0.0000000001 * !j
+						!memstr = !y & '~' & !x & '~type2a!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
+						!types[!j] = !memstr
+						!j = !j + 1
+						if (!dbgln and !dir.eq('left')) then
+							!dbgf.writerecord('TYPE2A KEPT pipe=' & !pipe & ' mem=' & !mem & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string())
+						endif
+					endif
 				endif
 			endhandle
 		enddo
@@ -330,7 +455,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
-			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !type type of $!mem
 			if (!type.matchwild('*TUB*')) then
 				var !mem mtbe of $!mems[$!i]
@@ -341,7 +465,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	--      skip
 			elsehandle none
 				var !pipe namn of pipe of $!mem
-				if (!check.eqnocase('INCLUDED') and !inband) then
+				if (!check.eqnocase('INCLUDED')) then
 					var !type type of $!mem
 					if (!type.eqnocase('BRAN')) then
 						var !memenupos hpos of $!mem
@@ -349,11 +473,28 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						var !memenupos worpos of $!mem
 					endif
 					var !memshpos shpos of $!memenupos
-					!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
-					!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
-					!memstr = !y & '~' & !x & '~type2b!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
-					!types[!j] = !memstr
-					!j = !j + 1
+					!memshx = !memshpos.split().getindexed(2).replace('mm','').real()
+					!memshy = !memshpos.split().getindexed(4).replace('mm','').real()
+					--------------------------------------------------------------
+					-- the point is tested against the band rather than the WVOL --
+					-- of the raw collected item, for the reason set out in full --
+					-- in TYPE 1 above                                           --
+					--------------------------------------------------------------
+					!postol = 0.01
+					!inband = true
+					if (!memshx.lt(!band[1] - !postol) or !memshx.gt(!band[3] + !postol) or !memshy.lt(!band[2] - !postol) or !memshy.gt(!band[4] + !postol)) then
+						!inband = false
+					endif
+					if (!inband) then
+						!x = !memshx + 0.0000000001 * !j
+						!y = !memshy + 0.0000000001 * !j
+						!memstr = !y & '~' & !x & '~type2b!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
+						!types[!j] = !memstr
+						!j = !j + 1
+						if (!dbgln and !dir.eq('left')) then
+							!dbgf.writerecord('TYPE2B KEPT pipe=' & !pipe & ' mem=' & !mem & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string())
+						endif
+					endif
 				endif
 			endhandle
 		enddo
@@ -377,21 +518,37 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		var !mems coll all elbo within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
-			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !check IDLN for $!mem
 	--      $p $!check
 			handle any
 	--      skip
 			elsehandle none
 				var !pipe namn of pipe of $!mem
-				if (!check.eqnocase('INCLUDED') and !inband) then
+				if (!check.eqnocase('INCLUDED')) then
 					var !memenupos worpos of $!mem
 					var !memshpos shpos of $!memenupos
-					!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
-					!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
-					!memstr = !y & '~' & !x & '~type3!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
-					!types[!j] = !memstr
-					!j = !j + 1
+					!memshx = !memshpos.split().getindexed(2).replace('mm','').real()
+					!memshy = !memshpos.split().getindexed(4).replace('mm','').real()
+					--------------------------------------------------------------
+					-- the point is tested against the band rather than the WVOL --
+					-- of the raw collected item, for the reason set out in full --
+					-- in TYPE 1 above                                           --
+					--------------------------------------------------------------
+					!postol = 0.01
+					!inband = true
+					if (!memshx.lt(!band[1] - !postol) or !memshx.gt(!band[3] + !postol) or !memshy.lt(!band[2] - !postol) or !memshy.gt(!band[4] + !postol)) then
+						!inband = false
+					endif
+					if (!inband) then
+						!x = !memshx + 0.0000000001 * !j
+						!y = !memshy + 0.0000000001 * !j
+						!memstr = !y & '~' & !x & '~type3!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
+						!types[!j] = !memstr
+						!j = !j + 1
+						if (!dbgln and !dir.eq('left')) then
+							!dbgf.writerecord('TYPE3 KEPT pipe=' & !pipe & ' mem=' & !mem & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string())
+						endif
+					endif
 				endif
 			endhandle
 		enddo
@@ -724,6 +881,17 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				endif
 			endif
 			if (!ptok) then
+				--------------------------------------------------------------------
+				-- temporary diagnostic 2026-08-12: prints one line per label that --
+				-- actually gets drawn, with the element it is attached to and     --
+				-- which TYPE found it, so a label seen on the sheet can be traced --
+				-- back to its element without guessing. remove once answered      --
+				--------------------------------------------------------------------
+				if (!dbgln and !dir.eq('left')) then
+					!dbgsrc  = !resultl.split('~').getindexed(3).split('!').getindexed(1)
+					!dbgpipe = !resultl.split('~').getindexed(3).split('!').getindexed(5)
+					!dbgf.writerecord('LABEL pipe=' & !dbgpipe & ' src=' & !dbgsrc & ' mem=' & !mem & ' type=' & !type & ' mempos=' & !mempos & ' mempossh=' & !mempossh)
+				endif
 				var !temppos enupos of $!intpt
 				!attapos = object position(!temppos)
 				--------------------------------------------------------------------
@@ -964,6 +1132,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			enddo
 		endif
 	enddo
+	if (!dbgln) then
+		!dbgf.close()
+	endif
 endfunction
 
 
