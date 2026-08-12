@@ -148,7 +148,20 @@ layout form !!DrawingPlan1 dialog dock
 	member .minN is real
 	member .maxU is real
 	member .minU is real
-	
+	------------------------------------------------------------------------
+	-- the world bounding box of the drawing box. .minE .. .maxN above are --
+	-- the faces of the box measured along the box's own directions, which --
+	-- once the box is turned is the box shrunk by cos(angle), not a box   --
+	-- which contains it -- see the comment by LIMITS in .Apply(). these   --
+	-- are the values to hand to a world axis aligned COLLECT ... WITHIN,  --
+	-- with a check in sheet coordination afterwards to throw away what    --
+	-- the wider volume picks up outside the view                          --
+	------------------------------------------------------------------------
+	member .wmaxE is real
+	member .wminE is real
+	member .wmaxN is real
+	member .wminN is real
+
 	member .intersections is array    $( intersections of the current refgln only  $)
 	member .allintersections is array $( intersections of every refgln of the drawing, used by !!DrawingPlan1LineNoAnnotation  $)
 	member .canvassize is string
@@ -504,6 +517,10 @@ define method .Apply()
 				!this.minN = !minN
 				!this.maxU = !maxU
 				!this.minU = !minU
+				!this.wmaxE = !wmaxE
+				!this.wminE = !wminE
+				!this.wmaxN = !wmaxN
+				!this.wminN = !wminN
 --				$p $!minE $!minN $!minU $!maxE $!maxN $!maxU
 
 				!thpoE = !boxPos.position().east
@@ -1196,19 +1213,28 @@ define method .NozzleAnnotation(!name is string)
 	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
 	!ff.open('append')
 
-	var !nozzs coll $!this.nozztext1.val within E $!this.minE N $!this.minN U $!this.minU TO E $!this.maxE N $!this.maxN U $!this.maxU
+	var !nozzs coll $!this.nozztext1.val within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
 	do !nozz values !nozzs
+		var !apos ( pos of $!nozz wrt worl )
+		var !apos1 shpos of $!apos
+		------------------------------------------------------------------
+		-- the volume above is the world box which contains the drawing  --
+		-- box, so on a turned box it reaches past the corners. the      --
+		-- sheet position is what says whether this really sits in the   --
+		-- view, the same test the line number annotation uses           --
+		------------------------------------------------------------------
+		if (not(!this.InViewOnSheet(!apos1))) then
+			skip
+		endif
 		NEW GLAB
 		DDNA $!nozz
 		Btext |$!this.nozztext2.val|
 		Justification Centre
 		Alignment Hbody
 		ABSO
-		var !apos ( pos of $!nozz wrt worl )
-		var !apos1 shpos of $!apos
 		AT $!apos1
 		XYPO 5 5
-		
+
 		------------------------------------------------------------------
 		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
 		------------------------------------------------------------------
@@ -1502,19 +1528,27 @@ define method .ValveAnnotation(!name is string)
 	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
 	!ff.open('append')
 
-	var !valvs coll $!this.valvtext1.val within E $!this.minE N $!this.minN U $!this.minU TO E $!this.maxE N $!this.maxN U $!this.maxU
+	var !valvs coll $!this.valvtext1.val within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
 	do !valv values !valvs
+		var !apos ( pos of $!valv wrt worl )
+		var !apos1 shpos of $!apos
+		------------------------------------------------------------------
+		-- see the note in .NozzleAnnotation() -- the volume above is    --
+		-- the world box containing the drawing box, the sheet position  --
+		-- is what says whether this really sits in the view             --
+		------------------------------------------------------------------
+		if (not(!this.InViewOnSheet(!apos1))) then
+			skip
+		endif
 		NEW GLAB
 		DDNA $!valv
 		Btext |$!this.valvtext2.val|
 		Justification Centre
 		Alignment Hbody
 		ABSO
-		var !apos ( pos of $!valv wrt worl )
-		var !apos1 shpos of $!apos
 		AT $!apos1
 		XYPO 5 5
-		
+
 		------------------------------------------------------------------
 		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
 		------------------------------------------------------------------
@@ -1707,8 +1741,18 @@ define method .InstAnnotation(!name is string)
 	
 	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
 	!ff.open('append')
-	var !insts coll $!this.insttext1.val within E $!this.minE N $!this.minN U $!this.minU TO E $!this.maxE N $!this.maxN U $!this.maxU
+	var !insts coll $!this.insttext1.val within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
 	do !inst values !insts
+		var !apos ( pos of $!inst wrt worl )
+		var !apos1 shpos of $!apos
+		------------------------------------------------------------------
+		-- see the note in .NozzleAnnotation() -- the volume above is    --
+		-- the world box containing the drawing box, the sheet position  --
+		-- is what says whether this really sits in the view             --
+		------------------------------------------------------------------
+		if (not(!this.InViewOnSheet(!apos1))) then
+			skip
+		endif
 		NEW SLAB
 		DDNA $!inst
 		tmrf $!name/SS/LALB/NAME_CIRC_R$!this.rev
@@ -1723,11 +1767,9 @@ define method .InstAnnotation(!name is string)
 		LFColour Cyan
 		Alignment Hbody
 		ABSO
-		var !apos ( pos of $!inst wrt worl )
-		var !apos1 shpos of $!apos
 		AT $!apos1
 		XYPO 15 15
-		
+
 		------------------------------------------------------------------
 		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
 		------------------------------------------------------------------
@@ -1876,6 +1918,51 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 	if (!this.rcode.eqnocase('left')) then
 		Adegrees -90
 	endif
+endmethod
+
+--------------------------------------------------------------------------
+-- is a sheet position inside the rectangle of the view. !shpos is a     --
+-- string as SHPOS OF hands it back, e.g. 'X 231.0mm Y 196.0mm'          --
+--                                                                       --
+-- COLLECT ... WITHIN can only be given a volume square with E / N / U,  --
+-- so for a turned box it has to be handed the world box which contains  --
+-- the drawing box, which reaches past the corners. this is the check    --
+-- which throws away what that wider volume picks up outside the view.   --
+-- .viewLLsh / .viewURsh already carry 0.025mm of slack outwards, so a   --
+-- position exactly on the border stays in                               --
+--                                                                       --
+-- on an orthogonal box the wider volume is the box, so nothing is       --
+-- thrown away and the answer is the same as before                      --
+--------------------------------------------------------------------------
+define method .InViewOnSheet(!shpos is string) is boolean
+	!answer = true
+	------------------------------------------------------------------
+	-- a handle any only covers the one statement in front of it, so --
+	-- the two reads get one each, and an unreadable position leaves --
+	-- !ok false and the answer true -- better to keep an annotation --
+	-- which may well belong on the drawing than to lose it          --
+	------------------------------------------------------------------
+	!ok = true
+	!x = 0
+	!y = 0
+	!x = !shpos.part(2).replace('mm', '').real()
+	handle any
+		!ok = false
+	endhandle
+	!y = !shpos.part(4).replace('mm', '').real()
+	handle any
+		!ok = false
+	endhandle
+	if (!ok) then
+		!x1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+		!x2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+		!y1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+		!y2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+		if (!x lt !x1 or !x gt !x2 or !y lt !y1 or !y gt !y2) then
+			!answer = false
+		endif
+	endif
+	return !answer
 endmethod
 
 --------------------------------------------------------------------------
@@ -2838,9 +2925,21 @@ define method .SuptAnnotation(!name is string)
 	
 	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
 	!ff.open('append')
-	var !insts coll all atta with isnamed within E $!this.minE N $!this.minN U $!this.minU TO E $!this.maxE N $!this.maxN U $!this.maxU
+	var !insts coll all atta with isnamed within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
 	do !inst values !insts
     $!name/SS/S1/V1/ateSUPT_R$!this.rev
+		------------------------------------------------------------------
+		-- see the note in .NozzleAnnotation() -- the volume above is    --
+		-- the world box containing the drawing box, the sheet position  --
+		-- is what says whether this really sits in the view. asked here --
+		-- rather than further down, so that nothing is created for an   --
+		-- attachment which is going to be dropped                       --
+		------------------------------------------------------------------
+		var !apos ( pos of $!inst wrt worl )
+		var !apos1 shpos of $!apos
+		if (not(!this.InViewOnSheet(!apos1))) then
+			skip
+		endif
 		NEW SLAB
 		DDNA $!inst
 		!ce = ref
@@ -2866,11 +2965,9 @@ define method .SuptAnnotation(!name is string)
 		LFColour Cyan
 		Alignment Hbody
 		ABSO
-		var !apos ( pos of $!inst wrt worl )
-		var !apos1 shpos of $!apos
 		AT $!apos1
 		XYPO 15 15
-		
+
 		------------------------------------------------------------------
 		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
 		------------------------------------------------------------------
