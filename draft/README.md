@@ -6,6 +6,262 @@
 
 使用者發現 `d:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1` 這個目錄不是最新版本，**要先更新程式**，之後再回來繼續下面的討論。
 
+## 已改：view 要設 Agside 'All'，四邊的柱位線才會預設顯示（2026-08-13，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+使用者要求：view 的屬性 `Agside` 要設為 `'All'`，這樣四邊的柱位線才會預設顯示。`forms/DrawingPlan1.pmlfrm` 建立 view 的地方（`Crsf Nulref` / `Agmode 'OFF'` 那兩行旁邊，`:674` 附近）加了一行 `Agside 'All'`。
+
+**這是 `.pmlfrm`，要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1` 才會生效。**
+
+## 已改：LINE NO. 標籤的 Pltxt 用了不存在的巨集，文字整串消失變 #DEF（2026-08-13，**尚未實機驗證**）
+
+### 症狀
+
+轉過的 box 出圖後，使用者在紅框標出一條沒有文字的尺寸線。用樹狀結構導到那個 DPOI（`ateLINE_up_R` 底下的 DPOI2），確認 `DDNA` 有指到一個真實元件（`ELBOW 4 of BRANCH /80-A-11/B1`），但 `q pltxt` 查出來是 `#DEF`——PDMS 屬性從未被真正設定過的預設值。
+
+### 原因
+
+`DrawingPlan1LineNoAnnotation.pmlfnc`（`:951` 附近，處理「非 BRAN、非 EQUI 的一般元件」分支）：
+
+```pml
+if (abs(!pabop.position().up - !bop) le 5) then
+	...
+	NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL#PABOPU+'
+	...
+```
+
+`#PIPE(c2:)` 是真正的 PDMS 巨集（讀 DDNA 的管號，會在 PDMS 端動態解析）。但 `#PABOPU+`／`#PLBOPU+` **不是**——對照同一支函式裡 BRAN 分支已經在用、確定有效的寫法（`:918`）：
+
+```pml
+NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!bopu'
+```
+
+BOP 數字是 PML 先算好、用 `$!bopu` 代換成純文字塞進字串，不是丟給 PDMS 現場解析。壞掉的這兩行完全沒做這個代換——`!pabop`／`!plbop` 兩行確實算了，但算完從沒被用進字串裡，`#PABOPU+`／`#PLBOPU+` 是照抄巨集寫法但打錯的殘留，PDMS 認不得，整串 `Pltxt`（連帶 `#PIPE(c2:)`）一起失效退回 `#DEF`。
+
+同一個彎頭在「上邊」跟「左邊」被兩個獨立的 TYPE1 迴圈各抓到一次（同一元件在不同側各標一次，跟前面 `Copy-of-250-B-5` 那次一樣，是合理的行為，不是重複）——只是「上邊」這一份剛好落進這個壞掉的分支，變成一條看不出是什麼的空白尺寸線。
+
+**為什麼一直沒被發現**：這個分支只有在收集到的元件**不是** BRAN、也**不是** EQUI（也就是 ELBO/TEE/VALV/FLAN 這類一般管件）**而且**這個元件是 TYPE1（邊界穿越點，不是 implied tube 的擁有者，而是元件本身剛好卡在邊界上）時才會走到。多數 TYPE1 命中的是 implied tube（在別的分支處理）或 BRAN，這個分支平常很少被踩到。
+
+### 作法
+
+拿掉 `#PABOPU+`／`#PLBOPU+`，改成跟 BRAN 分支一樣：算出選中那一端（`!pabop` 或 `!plbop`，看哪個更接近通用算出來的 `!bop`）的高程、四捨五入、用 `$!endbopu` 代換進字串，並補上 BRAN 分支就有、這裡完全沒做的正負號判斷（`BOP EL+` vs `BOP EL`）。
+
+`!pabop`／`!plbop` 選端點的邏輯本身沒動——那是在判斷「用元件哪一端的 BOP 比較準」，這次只修「選完之後怎麼把值寫進文字」這一步。
+
+### 實機驗證結果：文字修好了，但使用者提出更根本的問題——這個標註根本不該存在（2026-08-13）
+
+`80-A-11` 的標籤確實顯示文字了，但使用者比對 3D 模型後回報：這個標註（`ateLINE_up_R` 的 DPOI2）對應的元件是 **`80-A-11` 的第 4 個彎頭**，那個彎頭實際上在圖面很內側的位置，不像會碰到上邊界；而且截圖上那條紅色標註線的位置（screen x≈235）跟彎頭實際所在（紅框，screen x≈365）明顯對不上。
+
+### 懷疑方向：ITLE 讀不到時的退路，把沒驗證過的猜測當成真的交點
+
+`.CrossingOfTube()`（`:2182`）在 `itle of $!tube` 讀不到時的退路是：
+
+```pml
+if (!tubelen gt 0) then
+	!p2 = !p1.offset(!stdir.direction(), !tubelen)
+else
+	!p2 = !p1.offset(!stdir.direction(), 1000)   -- 猜一個 1000mm
+endif
+...
+if (!ok and !tubelen gt 0) then
+	-- 交點要落在管段兩端之間 -- 這道檢查只在 !tubelen gt 0 才做
+	...
+endif
+```
+
+如果 `!tubelen` 讀不到（`itle of` 失敗，`!tubelen` 停在 `0`），程式會**憑空往 `!stdir` 方向走 1000mm**當作管段終點，而且「交點要落在管段兩端之間」這道防呆**完全不會執行**——只要這條猜出來的 1000mm 延伸線剛好掃到邊界，不管真正的管子有沒有那麼長、有沒有朝那個方向走那麼遠，都會被當成「真的穿越邊界」接受。這個缺口在 README 更早的位置就寫過（`.CrossingOfTube()` 一節本身的註解），但這是第一次找到疑似真的踩到的案例。
+
+### 作法：加診斷直接驗證，不再猜
+
+`forms/DrawingPlan1.pmlfrm` 的 `.CrossingOfTube()` 結尾加了一段：只要**最後真的接受了一個交點、但 `!tubelen` 是 0**（代表這個交點完全沒經過「落在管段兩端之間」的驗證），就寫一行到 `L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check2.txt`：
+
+```
+CROSSING-NOLEN tube=... elem=... dir=... stpos=... stdir=... answer=...
+```
+
+**這次改的是 `.pmlfrm`，需要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1`。**
+
+### 實機驗證結果：`check2.txt` 是空的，ITLE 猜測的懷疑排除（2026-08-13）
+
+`check2.txt` 完全沒有產生——這次執行沒有任何一筆交點是在 `!tubelen` 為 0（ITLE 讀不到）的情況下被接受的。`80-A-11` 這筆交點的 `!tubelen` 讀得到、「交點要落在管段兩端之間」的防呆真的執行過也真的通過了。這個懷疑方向排除。
+
+### 使用者提供關鍵反證：交點跟管子是真的，但 DPOI2 的座標對不上任何一筆
+
+使用者確認彎頭 4（`=2013286676/1630`）確實接了一段約 3 公尺、大致朝東的直管（用紅色箭頭標出來，跟算出來的 `ΔE≈2969mm ΔN≈0mm` 吻合），但那段管的圖面位置跟 DPOI2（使用者點選確認的那條紅線）的位置對不上。
+
+直接查 DPOI2 的 `q pos wrt worl`：
+
+```
+Position W 311379mm N 310592mm U 106437mm
+```
+
+拿這個座標去對這次執行 `check.txt` 記錄到的全部 5 筆 TYPE1 交點（`300-A-42`／`80-A-11`／`40-B-10`／`100-C-12`／`150-A-57`），**沒有一筆對得上**（差距從幾百到三千多 mm 不等）。`U≈106437` 這個特徵值倒是跟每一筆交點都一樣——這是另一個獨立的小毛病：`.CrossingOfTube()` 用 `.before('U')` 把高程從字串砍掉、再用 `enupos of` 轉回世界座標時，PML 用 view 的參考深度面補上缺的高程，所以每一筆交點的 `U` 都長一樣。不影響對錯判斷（`U` 之後會被呼叫端用元件自己的高程覆蓋掉），但確認了 DPOI2 應該也是某個 TYPE1 交點——只是不是這 5 筆裡的任何一筆。
+
+**已排除「舊圖」**：使用者重新 `kill/show` → Create Drawings → 立刻查 DPOI2，`q pos` 結果完全相同，`check.txt` 內容也完全相同。這是最新一次執行的真實資料。
+
+### 作法：不再挑診斷點，改成記錄每一個 DPOI 建立當下的完整資訊
+
+`functions/DrawingPlan1LineNoAnnotation.pmlfnc` 加了 `!dpoiseq`（每個 `!dir` 開始時歸零），在**全部三個**會建立 DPOI 的地方（標籤主迴圈、格線交點、兩個邊角補點）建立之前各印一行：
+
+```
+DPOISEQ <序號> section=labelled/grid/corner1/corner2 [pipe=...] mem=... attapos=E .. N .. U ..
+```
+
+這樣輸出的行號順序就是 DPOI 在這條 LDIM 上的**真實建立順序**——跟 Draw Explorer 樹狀結構裡 `DPOI 1, DPOI 2, ...` 的編號直接對得上，不用再靠推測「第幾個 label 對應第幾個 DPOI」。
+
+### 實機要看的地方
+
+重新 Create Drawings，把 `check.txt` 裡 `DPOISEQ` 開頭的所有行給我。第 2 行（`DPOISEQ 2 ...`）理論上就是 DPOI2，直接比對它印出來的 `attapos` 跟使用者查到的 `W 311379mm N 310592mm U 106437mm` 是否一致：
+
+- **一致** → 找到是哪個 `section`／哪個 `mem` 產生的，順著查下去。
+- **序號對不上**（比如 `DPOISEQ 2` 的座標不是這個，但某個別的序號是）→ 代表 DPOI 在 Draw Explorer 裡的編號和這條 LDIM 的建立順序其實不是同一件事，要換角度查。
+- **完全沒有任何一筆 `attapos` match** → 代表這個 DPOI 根本不是這次 `!!DrawingPlan1LineNoAnnotation` 呼叫建立的，要查是不是別的函式或別的時機建到同一條 LDIM 上。
+
+**只改了 `.pmlfnc`，不用 kill/show。**
+
+### 實機驗證結果：序號對不上——DPOI2 其實是格線交點，不是任何一筆標籤（2026-08-13）
+
+`check.txt` 這次跑出 9 行 `DPOISEQ`（5 筆 labelled、2 筆 grid、2 筆 corner）。第 2 行（`DPOISEQ 2 section=labelled pipe=80-A-11 ...`，就是 README 稍早懷疑的那個彎頭）的 `attapos` 是 `E -308134mm N 309345mm U 104925mm`，跟使用者查到的 `W 311379mm N 310592mm U 106437mm` **對不上**（差了 3200mm／1200mm／1500mm）。
+
+但第 6 行對上了，幾乎是逐位對齊：
+
+```
+DPOISEQ 6 section=grid attapos=E -311378.722130884mm N 310592.169447837mm U 106437.491663mm
+```
+
+`E -311378.72` = `W 311378.72`、`N 310592.17`、`U 106437.49`，跟使用者的 `W 311379 / N 310592 / U 106437` 只差零點幾 mm（四捨五入誤差範圍內）。
+
+這是 README 自己列的三個分支裡的**第二種**：「序號對不上，但某個別的序號是」——代表 Draw Explorer 樹狀結構裡的 `DPOI 1, DPOI 2, ...` 編號，跟這條 LDIM 的**建立順序不是同一件事**。最可能的原因是 `:1139`（`OWNER` 之後）的 `SORT DIM`：這個指令很可能是照「沿著尺寸線的實際位置」重排每個 DPOI 的顯示順序，而不是照程式建立它們的先後——建立順序（`!dpoiseq`）跟顯示順序因此各自獨立。
+
+**新的矛盾**：使用者查到的這個位置（`section=grid`）在程式碼裡是 `NEW DPOI POS $!attapos` 建的（`:1071` 附近），**完全沒有帶 `DDNA` 或 `Pltxt`**——理論上這種點的 DDNA 應該是空的，不該指到任何元件，更不該是使用者稍早查到的 `ELBOW 4 of BRANCH /80-A-11/B1`（那其實是 `DPOISEQ 2` 自己的 DDNA，是另一個點）。兩種可能：
+
+1. 使用者當時點的其實不是同一個 DPOI——9 個節點長得很像，樹狀結構裡容易點錯一個。
+2. PDMS 的 `NEW DPOI`（沒指定 `DDNA`）在這個情境下不是留空，而是延續了 session 裡某個「目前預設值」，把前面某次 `DDNA $!mem`（不一定是緊接在前的那筆）留下來的值繼續套用在後面沒指定的點上。
+
+### 實機驗證結果：同一次 q session 直接確認——不是點錯節點（2026-08-13）
+
+使用者提供截圖：Draw Explorer 樹狀結構裡選取的節點標題列清楚寫著 `POINT 2 of LDIMENSION /26001-AG-002/SS/S1/V1/ateLINE_up_R`（`DPOI2` 也在樹上被反白選取），命令視窗裡**連續**下了兩個指令：
+
+```
+q pos
+Position W 311379mm N 310592mm U 106437mm
+q ddna
+
+Ddname ELBOW 4 of BRANCH /80-A-11/B1
+```
+
+同一個節點、同一次選取、連續兩個查詢——上面的可能 1（點錯節點）排除。確定是同一個 DPOI 身上，`q pos` 對上這次執行 `DPOISEQ 6`（`section=grid`，程式碼沒帶 `DDNA`），`q ddna` 卻對上 `DPOISEQ 2`（`section=labelled`，`80-A-11` 彎頭）的 `mem`。
+
+### 作法：直接在建立當下讀回 DDNA，不再猜
+
+`DrawingPlan1LineNoAnnotation.pmlfnc` 在全部三個建立 DPOI 的地方（`labelled` 分支結束處、`grid`、`corner1`、`corner2`，緊接在每個 `NEW DPOI` 之後、CE 還是剛建出來那個 DPOI 的當下）都加了一行：
+
+```
+var !liveddna ddna of ce
+```
+
+寫進 `check.txt`：`LIVEDDNA <序號> section=... liveddna=...`。這樣可以直接看到**建立當下**（`OWNER` / `SORT DIM` 執行之前）grid／corner 這幾個沒帶 `DDNA` 參數的點，DDNA 到底是空的、還是一出生就已經是某個真實元件：
+
+- 如果 `LIVEDDNA 6 section=grid liveddna=` 是空的 → 建立當下確實沒有 DDNA，代表是 `OWNER`／`SORT DIM`（或更後面的步驟）把 `DPOISEQ 2` 的 DDNA 之類的屬性複製/搬動到了這個點上，要往那邊查。
+- 如果一出生就已經是某個真實元件（不一定是 80-A-11 彎頭，任何非空值都算）→ 代表 PDMS 的 `NEW DPOI`（沒指定 `DDNA`）在這個情境下真的會延續 session 裡某個「目前預設值」，之後要在建立這類點之前主動清掉或蓋掉這個預設。
+
+### 實機驗證結果：手動查完全部 9 個 DPOI，證實是 SORT DIM 依座標重排，且真正的管號標籤都沒被搞混（2026-08-13）
+
+使用者在 Draw Explorer 用 `next` 依序把 `ateLINE_up_R` 底下 9 個 DPOI 的 `q pos` 和 `q ddna` 都查了一遍（`check.1txt`）。把這 9 筆位置換算成 N（北）座標由大到小排序，順序正好是 `8, 6, 1, 7, 2, 3, 4, 5, 9`（用這次 `check.txt` 的建立順序編號 `DPOISEQ`）——跟使用者手動查到的 `DPOI1~9` 順序**完全吻合**。`:1160` 附近的 `SORT DIM` 確定就是照座標（這裡是 N 值由大到小）重排顯示順序，跟建立順序無關。
+
+更重要的是：5 筆 `labelled`（程式碼裡有明確 `DDNA $!mem` 的）不管被排到第幾個，`q ddna` 查到的都跟建立時設定的完全一致，一個沒錯——`SORT DIM` 只是重排顯示位置，**不會**把 DDNA 弄錯或搬到別的點上，真正要標管號的那 5 個點沒有問題。
+
+使用者最早紅框標出的那條「沒有文字的尺寸線」就是 `DPOI2`，對照 `DPOISEQ` 是 `section=grid`（柱位線跟邊界的交點）——程式碼裡這種點本來就不給 `Pltxt`，因為它不是在標某個管件。**這條線段落空白是設計如此，不是 bug**；`q ddna` 查到的 `ELBOW 4 of BRANCH /80-A-11/B1` 也已知跟這個點的 `Pltxt`／畫面顯示無關（畫面只看 `Pltxt`，不看 `DDNA`）。
+
+`section=grid`／`corner1`／`corner2` 這 4 個沒帶 `DDNA` 的點裡，有 3 個（對應 `DPOI1`／`2`／`4`）`q ddna` 卻查得到別的點的 DDNA，只有 1 個（`DPOI9` / `corner2`）是真的空的（`Nulref`）——這個次要謎團還沒解，已加了 `LIVEDDNA` 診斷在等下一次執行結果，但不影響上面的結論。
+
+### 實機驗證結果：`LIVEDDNA` 證實建立當下這 4 個點真的都是空的，不是 PDMS 的預設值延續（2026-08-13）
+
+重新執行後 `check.txt` 印出：
+
+```
+DPOISEQ 6 section=grid refgln==23414/847 attapos=...
+LIVEDDNA 6 section=grid liveddna==0/0
+DPOISEQ 7 section=grid refgln==23414/850 attapos=...
+LIVEDDNA 7 section=grid liveddna==0/0
+DPOISEQ 8 section=corner1 attapos=...
+LIVEDDNA 8 section=corner1 liveddna==0/0
+DPOISEQ 9 section=corner2 attapos=...
+LIVEDDNA 9 section=corner2 liveddna==0/0
+```
+
+`=0/0` 是 PDMS 空參照的表示法（跟使用者查到 `DPOI9` 是 `Nulref`一致）。**四個點在剛建立、`OWNER`／`SORT DIM` 都還沒跑的當下，DDNA 全部是空的**——排除了「`NEW DPOI` 延續 session 預設值」這個猜測。也就是說，使用者查到的 `DPOI1`／`2`／`4` 帶著別的點的 DDNA，是 `OWNER` 或 `SORT DIM`（`:1160` 附近）跑完之後才出現的，不是建立當下就有。這兩個指令怎麼會把 DDNA 貼到本來沒有的點上，目前還沒細查——但這不影響任何畫面上顯示的文字（`Pltxt` 從頭到尾没被動過），純粹是 Draw Explorer 查詢時看到的附加資訊，先擱置。
+
+### 使用者提出：從畫面看不出這個 DPOI2 是哪一條柱位線
+
+`.allintersections` 原本的格式（`GridAnnotation.pmlfnc:151`）只帶了邊界交點座標和柱位線末端座標，沒帶柱位線自己的名字，所以現有的 `DPOISEQ` 記錄查不出 DPOI2 對應的是哪一條柱位線。
+
+### 作法：`.allintersections` 多帶一節柱位線的 NAME
+
+`DrawingPlan1GridAnnotation.pmlfnc:148` 附近：`.allintersections` 追加時多接一個 `'~' & <NAME>`。第一版直接讀 `name of $!refgln`，實機一跑發現是空的——輸出的 `refgln==23414/847`／`=23414/850` 是 `NAME OF` 對沒設名字的元件的預設回傳值（DB 參照本身），不是真正的柱位線名稱。原因是 `!refgln`（`:80`）只是這條柱位線在**這個view 切出來的幾何線段**，本身沒有名字；真正掛名字的是外層 `do !gridel values !gridels`（`:78`）的 `!gridel`（從 `REFGRD` 收集回來的柱位線元件），在 `!refgln` 這層迴圈裡仍然在 scope 內，改讀 `name of $!gridel` 就對了（`.intersections` 本身不動，兩個 `.CreateGridSymbol*()` 還在讀它，不受影響）。`DrawingPlan1LineNoAnnotation.pmlfnc` 的 `section=grid` 那段（`:1092` 附近）跟著多讀這個第三欄，記進 `DPOISEQ` 那行：
+
+```
+DPOISEQ <序號> section=grid refgln=<柱位線名稱> attapos=E .. N .. U ..
+```
+
+### 實機驗證結果：DPOI2 對應的柱位線是 `/PIPERACK_P1_A01/Elev`，調查收斂（2026-08-13）
+
+```
+DPOISEQ 6 section=grid refgln=/PIPERACK_P1_A01/Elev attapos=E -311378.72mm N 310592.17mm U 106437.49mm
+DPOISEQ 7 section=grid refgln=/PIPERACK_P1_A01/Elev attapos=E -308559.59mm N 309745.57mm U 106437.49mm
+```
+
+`DPOISEQ 6`（= Draw Explorer 的 `DPOI2`）對應的是管架 P1、位置 A01 的參考網格線 `/PIPERACK_P1_A01/Elev`。`DPOISEQ 7`（= `DPOI4`）印的名字一樣，不是重複記錄——同一條網格線在同一個 `gridpl` 底下拆成兩段 `refgln` 幾何線（`GridAnnotation.pmlfnc:80`），各自跟上邊界交會一次，兩段都掛在同一個 `!gridel` 名下。`LIVEDDNA` 仍是 `=0/0`，跟前一次一致，沒有新東西。
+
+### 使用者在 3D 裡把 `/PIPERACK_P1_A01/Elev` 叫出來，看不出是哪一條柱位
+
+使用者提供截圖：3D 視角裡把 `/PIPERACK_P1_A01/Elev` 高亮成紅色，是一條跟主結構脫節的短斜線，不像 `P1.3`／`P1.4`（畫面下方兩個格線圓牌，中間有 `5180mm` 尺寸的那種）那種認得出來的柱位線。
+
+使用者說明規則：**在這個專案的 E3D 模型裡，平面（plan view）的柱位線要在 `Elev` 底下才找得到**，`Elev` 本身不是柱位線，是柱位線的容器層。
+
+### 作法：往下一層抓 `!gridpls[1]` 的名字
+
+`DrawingPlan1GridAnnotation.pmlfnc:80` 附近：`!refglns` 是從 `!gridpls[1]`（`Elev` 底下、實際用來收集這條線幾何的那個 grid plane）收集來的。新增 `var !gridplname name of $!gridpls[1]`，串進 `.allintersections` 的第三欄，變成 `<gridel名字>/<gridpl名字>`。`DrawingPlan1LineNoAnnotation.pmlfnc` 那邊不用改，`.split('~').getindexed(3)` 讀到的就是整串。
+
+### 實機驗證結果：`Elev_1` 也只是自動編號，不是柱位名稱（2026-08-13）
+
+```
+DPOISEQ 6 section=grid refgln=/PIPERACK_P1_A01/Elev//PIPERACK_P1_A01/Elev_1 attapos=...
+```
+
+`!gridpls[1]` 的名字是 `/PIPERACK_P1_A01/Elev_1`——只是在 `Elev` 後面加了自動編號的 `_1`，不是 `P1.3`／`P1.4` 那種柱位名稱。往下一層還是沒找到。
+
+### 作法：不再逐層猜，一次把整個 gridel/gridpl/refgln 階層印出來
+
+第一版程式碼有語法錯誤（`do !gp index !gpi values !gridpls` 不是合法的 PML 語法，IDE 有報錯），已改用一般計數器變數修正。`DrawingPlan1GridAnnotation.pmlfnc:77` 附近：開一個新的診斷檔 `check3.txt`，在 `!gridel` 迴圈一開始，把這個 `!gridel` 底下**所有** `!gridpls` 成員（不只 `[1]`）的名字，以及每個 `gridpl` 底下**所有** `refgln` 的名字跟 TYPE，全部印出來：
+
+```
+GRIDEL name=... gridpls.size=...
+  GRIDPL 1 name=... refglns.size=...
+    REFGLN 1 name=... type=...
+    REFGLN 2 name=... type=...
+  GRIDPL 2 name=... refglns.size=...
+    ...
+```
+
+### 實機要看的地方（下一步）
+
+重新 Create Drawings，把 `check3.txt` 整個內容給我，直接找哪一個 `GRIDPL` 或 `REFGLN` 的 `name=` 長得像 `P1.3`／`P1.4`。
+
+### 實機驗證結果：整個階層都沒有名字，`P1.3`／`P1.4` 不是存在這裡的 NAME 屬性（2026-08-13）
+
+`check3.txt` 全文：這次跑的 box 只收集到 1 個 `gridel`（`/PIPERACK_P1_A01/Elev`），底下 5 個 `gridpl`（`Elev_1`~`Elev_5`，都是自動編號），每個底下 6 個 `refgln`，**全部 30 個 `REFGLN` 的 `name of` 都是裸的 DB 參照**（`=23414/845` 這種），一個有名字的都沒有。
+
+也就是說：`P1.3`／`P1.4` 這種柱位名稱**不是**存在 `!!DrawingPlan1GridAnnotation()` 這支函式在走的 `gridel`／`gridpl`／`refgln` 這條階層裡的 `NAME` 屬性上——這條路徑走到底都是空的，不是還沒找對層級，是這整條階層本來就不存名字。`P1.3`／`P1.4` 那兩個牌子應該是另一組完全不同的元件（可能是獨立的 SLAB／LABEL，或用别的屬性像位置、間距算出來的），不是這條 `REFGRD → gridel → gridpl → refgln` 幾何線本身帶的名字。
+
+**要不要繼續往下查**：這條路徑已經走到底，要找到 `P1.3` 真正掛在哪個元件上，得換一個完全不同的切入點（例如直接在 3D 裡點開畫面上 `P1.3` 那個圓牌本身查它的 TYPE／OWNER），不是再從 `refgln` 這邊挖。這不影響最早已經修好、驗證過的文字消失 bug，也不影響「DPOI2 是柱位線交點、不是漏標」這個結論本身——只是還沒辦法讓 `check.txt` 自動印出使用者慣用的柱位牌子名稱。是否要繼續查，還是先在這裡停下，等使用者確認即可。
+
+如果之後找到了，整條調查線就收斂：
+1. 最早的 `#DEF` 文字消失（`#PABOPU+`／`#PLBOPU+` 巨集打錯字）——已修，已實機驗證。
+2. 使用者紅框標出的空白尺寸線（`DPOI2`）——是某條柱位線跟上邊界的交點，本來就不該有文字，**不是 bug**。
+3. `DDNA` 在 `OWNER`／`SORT DIM` 之後被貼到這些空白點上——只影響 Draw Explorer 查詢看到的附加資訊，不影響圖面上實際顯示的 `Pltxt`，擱置不追。
+
+到時候這幾輪加的暫時診斷（`!dbgln = true`、`DPOISEQ`／`LIVEDDNA`／`refgln` 記錄、`.pmlfrm` 裡 `.CrossingOfTube()` 結尾寫 `check2.txt` 的那段）都可以清掉，只留下 `#PABOPU+`／`#PLBOPU+` 那個真正的修正。
+
 ## 已改：box 轉 10 度時，圖上空白處卻標了一堆管線編號（2026-08-12，**尚未實機驗證**）
 
 症狀（見 `error.png` 紅框）：box 轉 10 度切出來的圖，左下角一大片沒有畫出任何管子，但左側的 LINE NO. 標註仍然在那個高度範圍標了 8~9 個編號，而且同一條管、同一個 BOP 高程重複出現 3~4 次（`Copy-of-100-C-12 BOP EL+100566` ×3、`Copy-of-200-B-4 BOP EL+100235` ×3）。同一批管線在下方的標註也再出現一次。

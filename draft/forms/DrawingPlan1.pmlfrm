@@ -673,7 +673,8 @@ define method .Apply()
 				
 				Crsf Nulref
 				Agmode 'OFF'
-				
+				Agside 'All'
+
 				-----------------------------------------
 				-- for A1 border,                      --
 				-- the max. view size is 500mm x 400mm --
@@ -2308,6 +2309,28 @@ define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) 
 		if (!ok) then
 			!answer = !crossenu
 		endif
+	endif
+	------------------------------------------------------------------------
+	-- temporary diagnostic 2026-08-13: a crossing is being accepted for a --
+	-- component whose implied tube apparently does not really reach that --
+	-- border (elbow 4 of /80-A-11/B1, confirmed by the user against the   --
+	-- model). the between-the-tube's-own-ends check just above is only   --
+	-- run when !tubelen is gt 0 -- if ITLE could not be read, !tubelen    --
+	-- stayed 0, !p2 became an arbitrary 1000mm walk in !stdir, and        --
+	-- whatever it happened to cross gets accepted with no verification    --
+	-- against where the tube really ends. logging every case where a     --
+	-- real crossing survived with !tubelen = 0 will confirm or rule this --
+	-- out directly instead of guessing further. remove once answered      --
+	------------------------------------------------------------------------
+	if (!answer.neq('') and !answer.neq('NONE') and !tubelen.leq(0)) then
+		!dbgf2 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check2.txt')
+		if (!dbgf2.exists()) then
+			!dbgf2.open('append')
+		else
+			!dbgf2.open('overwrite')
+		endif
+		!dbgf2.writerecord('CROSSING-NOLEN tube=' & !tube & ' elem=' & !elem & ' dir=' & !dir & ' stpos=' & !stpos & ' stdir=' & !stdir & ' answer=' & !answer)
+		!dbgf2.close()
 	endif
 	return !answer
 endmethod
