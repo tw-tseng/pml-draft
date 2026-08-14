@@ -78,8 +78,11 @@ layout form !!DrawingPlan1 dialog dock
 			text .date3hei  'Text height'     at xmax.date3pos+2  ymin.date3pos      tagwidth 10 width 5 is string 
 		exit
 		frame .fra 'Keyplan'
-			text .keytext1 'Lower Left Paper Coord.' tagwidth 22 width 27 is string 
-			button .keybutn1 'Pick' at xmax.keytext1+0.4 ymin.keytext1 width 5 call |!This.keyplanpick()|				
+			text .keyovertext 'KeyPlan' tagwidth 22 width 27 is string
+			button .keyoverbutn 'CE' at xmax.keyovertext+0.4 ymin.keyovertext width 5 call |!This.typepick('OVER', 'keyovertext')|
+			paragraph .keyoverpara at xmax.keyoverbutn+0.5 ymin.keyoverbutn+0.1 text 'OVER'
+			text .keytext1 'Lower Left Paper Coord.' tagwidth 22 at xmin.keyovertext ymax.keyovertext+0.1 width 27 is string
+			button .keybutn1 'Pick' at xmax.keytext1+0.4 ymin.keytext1 width 5 call |!This.keyplanpick()|
 			text .keytext2 'Lower Left Model Coord.  E'  tagwidth 22 at xmin.keytext1 ymax.keytext1+0.1 width 11 is string 
 			text .keytext3 'N' at xmax.keytext2+2 ymin.keytext2 width 11 is string 
 			text .keytext4 'Keyplan Scale'  tagwidth 22 at xmin.keytext2 ymax.keytext2+0.1 width 27 is string
@@ -615,6 +618,12 @@ define method .Apply()
 				if (!this.frametext.val.neq('')) then
 					bsrf $!this.frametext.val
 				endif
+				if (!this.keyovertext.val.neq('')) then
+					NEW OLAY $!name/SS/S1/KEYPLAN_R$!this.rev
+					XYSCALE 1 1
+					OSRF $!this.keyovertext.val
+					OPOSITION $!this.keytext1.val
+				endif
 				new view $!name/SS/S1/V1_R$!this.rev
 				lframe false
 				thposition E $!thpoE N $!thpoN U $!thpoU
@@ -878,42 +887,70 @@ define method .Apply()
 				-------------------------------------------
 				$!name/SS/S1/V1_R$!this.rev
 				!vlims = !!ce.vlimits
-				!vname = !!ce.name
-				var !viewshposs[1] shpos of E $!vlims[1] N $!vlims[2]
-				var !viewshposs[2] shpos of E $!vlims[1] N $!vlims[5]
-				var !viewshposs[3] shpos of E $!vlims[4] N $!vlims[5]
-				var !viewshposs[4] shpos of E $!vlims[4] N $!vlims[2]
 				new note
 				if (!this.keytext1.val neq '' and !this.keytext2.val neq '' and !this.keytext3.val neq '' and !this.keytext4.val neq '' and !this.keytext5.val neq '') then
 					$!name/SS/S1/V1_R$!this.rev
 					!vlims = !!ce.vlimits
-					!vname = !!ce.name
-					var !viewshposs[1] shpos of E $!vlims[1] N $!vlims[2]
-					var !viewshposs[2] shpos of E $!vlims[1] N $!vlims[5]
-					var !viewshposs[3] shpos of E $!vlims[4] N $!vlims[5]
-					var !viewshposs[4] shpos of E $!vlims[4] N $!vlims[2]
 					note 1
 					new outl lclosed true fstyle SystemStyle 3 NLColour cyan FColour cyan
 					!!ce.PrBlnkFlag = |false|
-					do !i from 1 to !viewshposs.size()
-						!viewshpos = !viewshposs[!i]					
-						!offx1 = !this.keytext1.val.split().getindexed(2)
-						!offy1 = !this.keytext1.val.split().getindexed(4)
-						
-						if (!i.eq(1)) then
-							!offx2 = 0
-							!offy2 = 0
-							!subx = !viewshpos.part(2).real() / !this.vsca * !this.keytext4.val.real()
-							!suby = !viewshpos.part(4).real() / !this.vsca * !this.keytext4.val.real()
-						else
-							!offx2 = !viewshpos.part(2).real() / !this.vsca * !this.keytext4.val.real() - !subx
-							!offy2 = !viewshpos.part(4).real() / !this.vsca * !this.keytext4.val.real() - !suby
-						endif
 
-						!offx3 = (!vlims[1].real() - !this.keytext2.val.real()) * !this.keytext4.val.real()
-						!offy3 = (!vlims[2].real() - !this.keytext3.val.real()) * !this.keytext4.val.real()
-						
-						new VRTX at X ($!offx1 + $!offx2 + $!offx3) Y ($!offy1 + $!offy2 + $!offy3)
+					----------------------------------------------------------------------
+					-- E/N -> sheet X/Y transform for the keyplan itself, same shape as   --
+					-- .SheetLimitsOfVolume()'s !trans, but built from the keyplan's own  --
+					-- paper origin (keytext1), reference E/N (keytext2/3), scale         --
+					-- (keytext4) and up direction (keytext5), not the detail view's own  --
+					-- placement, so the highlight box keeps the keyplan's own north      --
+					-- regardless of how the detail view itself is rotated                --
+					----------------------------------------------------------------------
+					!keytrans = object array()
+					!keytrans[1] = !this.keytext1.val.split().getindexed(2).real()
+					!keytrans[2] = !this.keytext1.val.split().getindexed(4).real()
+					!keytrans[3] = !this.keytext2.val.real()
+					!keytrans[4] = !this.keytext3.val.real()
+					!keysca = !this.keytext4.val.real()
+					!keydir = !this.keytext5.val.trim()
+					if !keydir.eqnocase('E') then
+						!keytrans[5] = 0
+						!keytrans[6] = !keysca
+						!keytrans[7] = -1 * !keysca
+						!keytrans[8] = 0
+					elseif !keydir.eqnocase('S') then
+						!keytrans[5] = -1 * !keysca
+						!keytrans[6] = 0
+						!keytrans[7] = 0
+						!keytrans[8] = -1 * !keysca
+					elseif !keydir.eqnocase('W') then
+						!keytrans[5] = 0
+						!keytrans[6] = -1 * !keysca
+						!keytrans[7] = !keysca
+						!keytrans[8] = 0
+					else
+						--------------------------------------------------------
+						-- 'N' (or anything unrecognised) -- north up, as before --
+						--------------------------------------------------------
+						!keytrans[5] = !keysca
+						!keytrans[6] = 0
+						!keytrans[7] = 0
+						!keytrans[8] = !keysca
+					endif
+
+					!cornerEs = object array()
+					!cornerNs = object array()
+					!cornerEs[1] = !vlims[1].real()
+					!cornerNs[1] = !vlims[2].real()
+					!cornerEs[2] = !vlims[1].real()
+					!cornerNs[2] = !vlims[5].real()
+					!cornerEs[3] = !vlims[4].real()
+					!cornerNs[3] = !vlims[5].real()
+					!cornerEs[4] = !vlims[4].real()
+					!cornerNs[4] = !vlims[2].real()
+					do !i from 1 to 4
+						!de = !cornerEs[!i] - !keytrans[3]
+						!dn = !cornerNs[!i] - !keytrans[4]
+						!offx3 = !keytrans[1] + !de * !keytrans[5] + !dn * !keytrans[7]
+						!offy3 = !keytrans[2] + !de * !keytrans[6] + !dn * !keytrans[8]
+						new VRTX at X ($!offx3) Y ($!offy3)
 					enddo
 				endif
 				
@@ -1377,6 +1414,7 @@ define method .Save()
 		!ff.writerecord('!this.openshee.val' & '=' & !this.openshee.val)
 		!ff.writerecord('!this.delshee.val' & '=' & !this.delshee.val)
 		!ff.writerecord('!this.frametext.val' & '=|' & !this.frametext.val & '|')
+		!ff.writerecord('!this.keyovertext.val' & '=|' & !this.keyovertext.val & '|')
 		!ff.writerecord('!this.keytext1.val' & '=|' & !this.keytext1.val & '|')
 		!ff.writerecord('!this.keytext2.val' & '=|' & !this.keytext2.val & '|')
 		!ff.writerecord('!this.keytext3.val' & '=|' & !this.keytext3.val & '|')
