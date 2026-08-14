@@ -10,6 +10,6 @@ pml.index
 
 # scratch files used while working. error.png is the screenshot passed
 # back and forth while chasing a bug and is overwritten every time,
-# check.txt is a debug dump
-check.txt
+# check.txt/check2.txt/check3.txt... are debug dumps
+check*.txt
 error.png

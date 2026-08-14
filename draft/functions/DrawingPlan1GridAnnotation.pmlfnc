@@ -74,40 +74,9 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
  		endif
 	enddo
 	
-	--------------------------------------------------------------------------
-	-- 2026-08-13: dumps the whole gridel/gridpl/refgln hierarchy for every  --
-	-- grid element this drawing collected, one time. reading name of       --
-	-- $!gridel gave '/PIPERACK_P1_A01/Elev' and name of $!gridpls[1] gave  --
-	-- '/PIPERACK_P1_A01/Elev_1' (an auto-numbered suffix, not a real       --
-	-- position name) -- per the user, the real plan position-line name    --
-	-- (like P1.3 / P1.4) is filed under Elev, so it must be somewhere in   --
-	-- this hierarchy this function has not looked at yet: another member  --
-	-- of !gridpls besides [1], or an attribute other than NAME. dumping    --
-	-- every gridpl's name and every refgln's name/type under each, so the --
-	-- real one can be spotted directly instead of guessing level by       --
-	-- level. temporary, remove once answered                              --
-	--------------------------------------------------------------------------
-	!dbgf3 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check3.txt')
-	!dbgf3.open('overwrite')
 	$!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
 	do !gridel values !gridels
 	  var !gridpls coll all gridpl for $!gridel
-		var !gridelname name of $!gridel
-		!dbgf3.writerecord('GRIDEL name=' & !gridelname & ' gridpls.size=' & !gridpls.size().string())
-		!gpi = 0
-		do !gp values !gridpls
-			!gpi = !gpi + 1
-			var !gpname name of $!gp
-			var !gprefglns coll all refgln for $!gp
-			!dbgf3.writerecord('  GRIDPL ' & !gpi.string() & ' name=' & !gpname & ' refglns.size=' & !gprefglns.size().string())
-			!gri = 0
-			do !gprefgln values !gprefglns
-				!gri = !gri + 1
-				var !griname name of $!gprefgln
-				var !gritype type of $!gprefgln
-				!dbgf3.writerecord('    REFGLN ' & !gri.string() & ' name=' & !griname & ' type=' & !gritype)
-			enddo
-		enddo
 		var !refglns coll all refgln for $!gridpls[1]
 		do !refgln values !refglns
 		  var !p1pos p1 pos of $!refgln wrt worl
@@ -268,5 +237,4 @@ $(
 $)			
 		enddo
 	enddo
-	!dbgf3.close()
 endfunction
