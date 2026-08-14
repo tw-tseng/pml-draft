@@ -1408,17 +1408,58 @@ define method .Save()
 	if (!file neq '') then
 		!ff = object file(!file)
 		!ff.open('overwrite')
+		---------------------------------------------------------------------
+		-- 'In Use' box list (Drawing tab) is an array, not a plain .val -- --
+		-- join it into one comma separated, pipe quoted line; .Load()     --
+		-- rebuilds the array from it instead of the generic $!option =    --
+		-- $!val used for every other (scalar) field below                --
+		---------------------------------------------------------------------
+		!filestr = ''
+		do !f values !this.files.dtext
+			if (!filestr.eq('')) then
+				!filestr = !f
+			else
+				!filestr = !filestr & ',' & !f
+			endif
+		enddo
+		!ff.writerecord('!this.files.dtext' & '=|' & !filestr & '|')
+		!ff.writerecord('!this.dest.val' & '=|' & !this.dest.val & '|')
 		!ff.writerecord('!this.gridorthogonal.val' & '=' & !this.gridorthogonal.val)
 		!ff.writerecord('!this.portrait.val' & '=' & !this.portrait.val)
 		!ff.writerecord('!this.canvasp.val' & '=|' & !this.canvasp.val & '|')
 		!ff.writerecord('!this.openshee.val' & '=' & !this.openshee.val)
 		!ff.writerecord('!this.delshee.val' & '=' & !this.delshee.val)
 		!ff.writerecord('!this.frametext.val' & '=|' & !this.frametext.val & '|')
+		!ff.writerecord('!this.dwgnopos.val' & '=|' & !this.dwgnopos.val & '|')
+		!ff.writerecord('!this.dwgnohei.val' & '=|' & !this.dwgnohei.val & '|')
+		!ff.writerecord('!this.scalepos.val' & '=|' & !this.scalepos.val & '|')
+		!ff.writerecord('!this.scalehei.val' & '=|' & !this.scalehei.val & '|')
+		!ff.writerecord('!this.revpos.val' & '=|' & !this.revpos.val & '|')
+		!ff.writerecord('!this.revhei.val' & '=|' & !this.revhei.val & '|')
+		!ff.writerecord('!this.title1pos.val' & '=|' & !this.title1pos.val & '|')
+		!ff.writerecord('!this.title1hei.val' & '=|' & !this.title1hei.val & '|')
+		!ff.writerecord('!this.title2pos.val' & '=|' & !this.title2pos.val & '|')
+		!ff.writerecord('!this.title2hei.val' & '=|' & !this.title2hei.val & '|')
+		!ff.writerecord('!this.title3pos.val' & '=|' & !this.title3pos.val & '|')
+		!ff.writerecord('!this.title3hei.val' & '=|' & !this.title3hei.val & '|')
+		!ff.writerecord('!this.name1pos.val' & '=|' & !this.name1pos.val & '|')
+		!ff.writerecord('!this.name1hei.val' & '=|' & !this.name1hei.val & '|')
+		!ff.writerecord('!this.name2pos.val' & '=|' & !this.name2pos.val & '|')
+		!ff.writerecord('!this.name2hei.val' & '=|' & !this.name2hei.val & '|')
+		!ff.writerecord('!this.name3pos.val' & '=|' & !this.name3pos.val & '|')
+		!ff.writerecord('!this.name3hei.val' & '=|' & !this.name3hei.val & '|')
+		!ff.writerecord('!this.date1pos.val' & '=|' & !this.date1pos.val & '|')
+		!ff.writerecord('!this.date1hei.val' & '=|' & !this.date1hei.val & '|')
+		!ff.writerecord('!this.date2pos.val' & '=|' & !this.date2pos.val & '|')
+		!ff.writerecord('!this.date2hei.val' & '=|' & !this.date2hei.val & '|')
+		!ff.writerecord('!this.date3pos.val' & '=|' & !this.date3pos.val & '|')
+		!ff.writerecord('!this.date3hei.val' & '=|' & !this.date3hei.val & '|')
 		!ff.writerecord('!this.keyovertext.val' & '=|' & !this.keyovertext.val & '|')
 		!ff.writerecord('!this.keytext1.val' & '=|' & !this.keytext1.val & '|')
 		!ff.writerecord('!this.keytext2.val' & '=|' & !this.keytext2.val & '|')
 		!ff.writerecord('!this.keytext3.val' & '=|' & !this.keytext3.val & '|')
 		!ff.writerecord('!this.keytext4.val' & '=|' & !this.keytext4.val & '|')
+		!ff.writerecord('!this.keytext5.val' & '=|' & !this.keytext5.val & '|')
 		!ff.writerecord('!this.griddist.val' & '=' & !this.griddist.val)
 		!ff.writerecord('!this.gridgap.val' & '=' & !this.gridgap.val)
 		!ff.writerecord('!this.gridhei.val' & '=' & !this.gridhei.val)
@@ -1426,19 +1467,19 @@ define method .Save()
 		!ff.writerecord('!this.annotext.val' & '=|' & !this.annotext.val & '|')
 		!ff.writerecord('!this.autoplace.val' & '=' & !this.autoplace.val)
 		!ff.writerecord('!this.insttog.val' & '=' & !this.insttog.val)
-		!ff.writerecord('!this.insttext1.val' & '=' & !this.insttext1.val)
+		!ff.writerecord('!this.insttext1.val' & '=|' & !this.insttext1.val & '|')
 		!ff.writerecord('!this.insttext2.val' & '=|' & !this.insttext2.val & '|')
 		!ff.writerecord('!this.insttext3.val' & '=' & !this.insttext3.val)
 		!ff.writerecord('!this.nozztog.val' & '=' & !this.nozztog.val)
-		!ff.writerecord('!this.nozztext1.val' & '=' & !this.nozztext1.val)
+		!ff.writerecord('!this.nozztext1.val' & '=|' & !this.nozztext1.val & '|')
 		!ff.writerecord('!this.nozztext2.val' & '=|' & !this.nozztext2.val & '|')
 		!ff.writerecord('!this.valvtog.val' & '=' & !this.valvtog.val)
-		!ff.writerecord('!this.valvtext1.val' & '=' & !this.valvtext1.val)
+		!ff.writerecord('!this.valvtext1.val' & '=|' & !this.valvtext1.val & '|')
 		!ff.writerecord('!this.valvtext2.val' & '=|' & !this.valvtext2.val & '|')
 		!ff.writerecord('!this.supttog.val' & '=' & !this.supttog.val)
 		!ff.writerecord('!this.supttog1.val' & '=' & !this.supttog1.val)
 		!ff.writerecord('!this.usertog.val' & '=' & !this.usertog.val)
-		!ff.writerecord('!this.usertext1.val' & '=' & !this.usertext1.val)
+		!ff.writerecord('!this.usertext1.val' & '=|' & !this.usertext1.val & '|')
 		!ff.writerecord('!this.usertext2.val' & '=|' & !this.usertext2.val & '|')
 		!ff.writerecord('!this.redutog.val' & '=' & !this.redutog.val)
 		!ff.close()
@@ -1462,12 +1503,110 @@ define method .Load()
 		!lines =!ff.readfile()
 		do !i From 1 to !lines.size()
 			!line = !lines[!i]
-			!option = !line.split('=').getindexed(1)
-			!val = !line.split('=').getindexed(2)
+			-----------------------------------------------------------------------
+			-- split on the FIRST '=' only -- a saved value (a Rule/Format text) --
+			-- can legitimately contain '=' further on, and .split('=') would    --
+			-- otherwise silently truncate it                                    --
+			-----------------------------------------------------------------------
+			!option = !line.before('=')
+			!val = !line.after('=')
 			handle any
 			elsehandle none
-				$!option = $!val
-				-------------------------------------------------------------------------------------------------------------------------------
+				handle any
+					-----------------------------------------------------------------
+					-- this one line failed to apply (eg. a field that doesn't     --
+					-- exist on this version of the form, or a value that still    --
+					-- won't quote safely) -- skip it and keep loading the rest    --
+					-- of the file instead of aborting here                       --
+					-----------------------------------------------------------------
+				elsehandle none
+					if (!option.eq('!this.files.dtext')) then
+						---------------------------------------------------------------------
+						-- 'In Use' box list is an array, not a plain .val -- rebuild it    --
+						-- from the comma joined string, then mirror what .selectce() does   --
+						-- by hand: pull the same names back out of the 'All' list and       --
+						-- refresh the Create Drawings button instead of falling through to  --
+						-- the generic $!option = $!val below (which only handles scalars)   --
+						---------------------------------------------------------------------
+						!filestr = !val
+						if (!filestr.length() gt 0 and !filestr.substring(1,1).eq('|')) then
+							!filestr = !filestr.substring(2, !filestr.length() - 2)
+						endif
+						if (!filestr.neq('')) then
+							!fileslist = !filestr.split(',')
+						else
+							!fileslist = object array()
+						endif
+						!this.files.dtext = !fileslist
+						do !fn values !fileslist
+							!this.files1.clear(!fn)
+						enddo
+						if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
+							!this.apply.active = true
+						else
+							!this.apply.active = false
+						endif
+					elseif (!option.eq('!this.dest.val')) then
+						-----------------------------------------------------------------------
+						-- Destination is a raw DB reference (eg '=2013286677/35036'), not a  --
+						-- stable name -- it can go stale if the database gets reorganised    --
+						-- between the Save and the Load, so unlike every other field it is   --
+						-- verified before being trusted: try to CE-navigate to it and warn   --
+						-- instead of silently leaving a dead reference sitting in the field  --
+						-----------------------------------------------------------------------
+						!destref = !val
+						if (!destref.length() gt 0 and !destref.substring(1,1).eq('|')) then
+							!destref = !destref.substring(2, !destref.length() - 2)
+						endif
+						if (!destref.eq('')) then
+							!this.dest.val = ''
+						else
+							!savedce = name
+							!destvalid = true
+							handle any
+								!destvalid = false
+							elsehandle none
+								$!destref
+							endhandle
+							if (!destvalid) then
+								!this.dest.val = !destref
+							else
+								!this.dest.val = ''
+								!!alert.warning('已儲存的 Destination 位置在目前資料庫中找不到了，請重新用 Destination 旁的 CE 按鈕設定')
+							endif
+							handle any
+							elsehandle none
+								$!savedce
+							endhandle
+						endif
+						if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
+							!this.apply.active = true
+						else
+							!this.apply.active = false
+						endif
+					else
+						-----------------------------------------------------------------------
+						-- older/hand-edited save files can carry a free-text value that was --
+						-- never pipe-quoted (eg. a Rule like 'ALL INST WITH ISNAMED', from a --
+						-- form version whose .Save() forgot the '|' on that field). splicing --
+						-- that in bare turns $!option = $!val into a CP syntax error, which  --
+						-- is raised while parsing the substituted text -- handle any cannot  --
+						-- trap that, so it has to be quoted here before that ever happens    --
+						-----------------------------------------------------------------------
+						if (!val.length() gt 0 and !val.substring(1,1).neq('|') and not(!val.eqnocase('TRUE')) and not(!val.eqnocase('FALSE'))) then
+							!isnum = true
+							!junk = !val.real()
+							handle any
+								!isnum = false
+							elsehandle none
+							endhandle
+							if (not(!isnum)) then
+								!val = '|' & !val & '|'
+							endif
+						endif
+						$!option = $!val
+					endif
+				endhandle
 			endhandle
 		enddo
 		!ff.close()

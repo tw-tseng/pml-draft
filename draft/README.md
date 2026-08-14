@@ -1452,6 +1452,96 @@ endif
 
 使用者認同這是「另一個好方法」，但**這次不深入設計**，只需在架構/UI 上預留擴充空間，讓使用者之後可以在兩種建 box 方式間切換。細節尚未討論。
 
+## 已改：View 分頁的 Save/Load 沒有把 Keyplan Y axis 跟整個 BorderText 分頁存進檔案（2026-08-14，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+使用者貼 `error.png`，紅框標出 View 分頁的 `Save`／`Load` 按鈕（`.Save()`/`.Load()`，`:1398`/`:1476` 附近），要求把「平面圖設定儲存及讀取」這個功能完整解決。
+
+### 找到的問題
+
+1. **`Keyplan Y axis`（`.keytext5.val`）從未被 `.Save()` 寫出**：Keyplan 分頁的 `.keytext1`~`.keytext4`（左下角紙面座標、模型座標 E/N、比例尺）都有存，唯獨 `.keytext5`（`N`/`S`/`E`/`W`，決定 keyplan 上高亮框的旋轉方向，`:891-936` 直接拿它算 `!keytrans[5..8]`）漏掉。`.Load()` 讀完檔案後這個欄位完全不會被覆寫，永遠停在表單當下的值（新開表單是初始值 `.DrawingPlan1()`(`:244`) 設的 `'N'`）——如果專案實際用的是別的方向（`error.png` 舊版截圖裡查到的元件名稱是 `..._KEYPLAN_E`，不是 `_N`），Load 之後算出來的高亮框方向就會跟存檔當時對不上。
+2. **BorderText 整個分頁（24 個欄位：`dwgnopos/hei`、`scalepos/hei`、`revpos/hei`、`title1~3pos/hei`、`name1~3pos/hei`、`date1~3pos/hei`）完全沒有存也沒有讀**。其中 `dwgnopos/hei`、`revpos/hei`、`title1~3pos/hei` 這 5 組其實有在 `.Apply()`（`:960-984`）真的拿來決定圖號/Rev/Title1-3 文字要印在圖紙的哪個位置，Save 沒寫、Load 自然救不回來，等於這幾個位置設定每次都要重新手動輸入。
+3. **`.Load()` 用 `!line.split('=').getindexed(2)` 取值**，任何存檔值本身若含第二個 `=`（例如以後 Rule/Format 欄位寫成類似 `X=1` 的條件字串），會被從第二個 `=` 那裡截斷。
+4. **`.Load()` 真正做賦值的 `$!option = $!val` 完全沒被 `handle` 保護到**——它寫在 `elsehandle none` 的 body 裡，而 `handle`/`elsehandle none` 只保護它前面切字串那兩行。只要檔案裡任何一行賦值失敗（例如存檔來自舊版表單、某個欄位已經不存在了），就會整個中斷迴圈、後面所有設定都不會被套用，而且不會有任何錯誤訊息，看起來像是「讀檔沒反應」。
+
+### 作法
+
+`forms/DrawingPlan1.pmlfrm`：
+
+- `.Save()`（`:1398`）補上 `!this.keytext5.val` 那行，以及 BorderText 分頁全部 24 個欄位（`dwgnopos/hei` ... `date3pos/hei`），寫在 `frametext` 之後、`keyovertext` 之前，跟分頁順序（View→BorderText→Keyplan）一致。
+- `.Load()`（`:1476`）：
+  - 切 key/value 改用 `.before('=')`/`.after('=')`（這個檔案別處，如 `:371` 的 `.after('rev:')`、`.CrossingOfTube()` 附近的 `.before('WRT')`，已經在用同一套字串方法），只切第一個 `=`，不會再被值裡的第二個 `=` 截斷。
+  - 在 `elsehandle none` 裡面再包一層 `handle any / elsehandle none`，把真正的賦值 `$!option = $!val` 包進去——單一行賦值失敗只會跳過那一行，不會讓後面所有設定一起遺失。
+
+**改的是 `.pmlfrm`，要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1` 才會生效。**
+
+### 實機驗證結果：真的按了 Load，噴了語法錯誤，抓到另一個獨立的存檔 bug（2026-08-14）
+
+使用者馬上按 `Load` 測試，直接跳出：
+
+```
+(47,15)  CP: Syntax error
+In line 1506 of PML function drawingplan1.LOAD
+        !this.insttext1.val = ^^ALL INST WITH ISNAMED
+ Called from line 1 of Command/Form Callback Command
+!This.Load()
+```
+
+**根因**：`.Save()` 裡 `insttext1`／`nozztext1`／`valvtext1`／`usertext1` 這 4 個「Rule」欄位（預設值像 `ALL INST WITH ISNAMED` 這種帶空白的自由文字）**從一開始就沒有加 `|...|` 引號**，跟同一批的 `insttext2`／`nozztext2`／`valvtext2`／`usertext2` 寫法不一致（那 4 個有引號）。這是舊碼本來就有的問題，不是這次新加的欄位造成的——`.Load()` 讀回沒引號的 `ALL INST WITH ISNAMED` 之後，`$!option = $!val` 展開成 `!this.insttext1.val = ALL INST WITH ISNAMED`，PML 沒辦法把這幾個沒加引號的裸字當成字串常數解析，直接語法錯誤。
+
+**這類語法錯誤是在展開 `$!val` 之後、PDMS 的 command processor 解析那一行時才發生的，`handle any` 包不住**（`handle`/`elsehandle` 抓的是執行期錯誤，不是巨集展開後的語法錯誤）——這也是為什麼前一版加的內層 `handle` 沒能擋下來，這次是實機驗證才抓到，光看程式碼看不出這一步會被 handle 漏接。
+
+### 作法
+
+1. `.Save()`（`:1454/1458/1461/1466`）把 `insttext1`／`nozztext1`／`valvtext1`／`usertext1` 也加上 `|...|`，跟其餘字串欄位一致——這樣**之後新存的檔案**不會再有裸字問題。
+2. 但使用者剛剛已經用舊版 `.Save()` 存過檔，那個檔案裡這 4 行還是沒引號的舊格式，光修 `.Save()` 救不回**已經存在的檔案**。`.Load()`（`:1495-1527`）補上一段防呆：對每一行算出來的 `!val`，如果**不是**已經用 `|` 包起來、也不是 `TRUE`/`FALSE`、且轉不成 `real()`（代表它是一段自由文字），就在展開成指令之前**自己先補上 `|...|`**。這樣不管存檔是新版（已加引號）還是舊版（沒加引號）都能正確讀回來，不用使用者手動重存一次舊檔。
+
+**改的是 `.pmlfrm`，要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1` 才會生效。**
+
+## 已改：Save 沒有把 Drawing 分頁的「In Use」box 清單存起來（2026-08-14，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+使用者又貼了一版 `error.png`，紅框這次標的是 Drawing 分頁「In Use」那個清單（`.files`，靠 `>`/`>>`/`<`/`<<` 四個按鈕跟左邊「All」清單（`.files1`）互相搬動的那個 multiple-selection list），問 Save 能不能也把這個存起來。
+
+### 原因
+
+`.files.dtext` 是陣列（要建哪幾張圖），不是一般欄位的單一 `.val`，`.Save()`/`.Load()` 原本整套機制只處理 `.val` 這種純量欄位，陣列完全沒被涵蓋——所以 Save 存檔完全沒寫這個清單，Load 也就沒有東西可以讀回來，每次都要重新在 Drawing 分頁手動勾選一次要建的 box。
+
+### 作法
+
+`forms/DrawingPlan1.pmlfrm`：
+
+- `.Save()`（`:1410` 附近）：把 `.files.dtext` 用逗號接成一行字串（box 名稱本身不會有逗號，安全），寫成 `!this.files.dtext=|26001-AG-001,26001-AG-002|` 這種格式，跟其他欄位共用同一個檔案、同一套一行一筆的格式，只是這行是陣列的特例。
+- `.Load()`（`:1522` 附近）：既有的逐行迴圈在真正做 `$!option = $!val` 之前，先判斷這一行的 `!option` 是不是 `!this.files.dtext`——是的話走專門的分支：拆逗號還原成陣列、指定回 `.files.dtext`，並且比照 `.selectce()`（`:271`）原本的作法，把同樣這些名字從「All」清單（`.files1`）裡拔掉、重新算一次 `Create Drawings` 按鈕該不該 active（`!this.dest.val` 有值且 `.files.dtext` 非空才 active）——不這樣做的話，讀回來的名字會同時留在「All」和「In Use」兩邊，跟正常用 `>` 按鈕手動加入的狀態不一致。不是這個特例的其他所有行，才會繼續走原本的 `$!option = $!val` 通用機制。
+
+**沒有存 `Destination`（`.dest.val`）**：那是一串裸的 DB 位址（`=2013286677/35036` 這種），不是穩定的名稱，資料庫重整之後同一個位置的位址可能會變，存起來反而可能指到錯的地方，跟「In Use」清單用的是穩定的 box 名稱字串不是同一類東西，這次刻意不動它。
+
+**改的是 `.pmlfrm`，要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1` 才會生效。**
+
+## 已改：Destination 也存起來，位置失效時改跳警告（2026-08-14，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+使用者：上一版特意不存 `Destination` 是對的顧慮（裸 DB 位址不穩定），但要求還是存起來，只是**位置失效時要跳警告訊息**，不要默默留著一個死掉的位址。
+
+### 作法
+
+`forms/DrawingPlan1.pmlfrm`：
+
+- `.Save()`（`:1411` 附近）：`!this.dest.val`（`=2013286677/35036` 這種裸 DB 位址）跟其他欄位一樣包 `|...|` 存進檔案。
+- `.Load()`（`:1549` 附近）：讀到 `!this.dest.val` 這行時走專門分支，**先驗證再相信**——不是直接賦值，而是仿照 `.desce()`（`:1298`）的作法先 `!savedce = name` 記住目前位置，`handle any` 包住 `$!destref` 試著把 CE 導到存檔裡的那個位址：
+  - 導得過去 → 是有效位址，`!this.dest.val = !destref`。
+  - 導不過去（`handle any` 抓到）→ `!this.dest.val` 設回空字串，`!!alert.warning(...)` 跳出訊息告訴使用者這個位置已經找不到了、要重新用 `Destination` 旁的 `CE` 按鈕設定。
+  - 不管哪種結果，驗證完都用 `$!savedce` 把 CE 導回驗證前的位置——這個檢查只是「問一下這個位址還在不在」，不應該真的把使用者目前所在的位置搬走。
+  - 跟 `.desce()`（`:1309`）、`.files.dtext` 那個分支一樣，驗證完重新算一次 `Create Drawings` 按鈕該不該 active。
+
+**改的是 `.pmlfrm`，要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1` 才會生效。**
+
+### 待實機驗證
+
+1. 重新 `kill/show` 之後直接用使用者剛剛那個舊存檔按 `Load`，確認不再噴語法錯誤、`Inst/Nozz/Valv/User Rule` 那幾個欄位有正確讀回文字。
+2. 把 Keyplan 分頁的 `Y axis` 改成非預設值（例如 `E`）、BorderText 分頁幾個位置欄位也改一下，`Save` 存一個新檔，`Load` 讀回來，確認這些欄位都正確回填。
+3. 確認 `Load` 一個更舊的存檔（沒有 `keytext5`/BorderText/`files.dtext`/`dest.val` 那幾行）不會報錯，其餘欄位一樣正常套用。
+4. Drawing 分頁「In Use」清單勾幾個 box、`Save`，清空重開表單（或按幾下 `<<` 清空)、`Load`，確認這幾個 box 正確回到「In Use」、同時從「All」消失，`Create Drawings` 按鈕也正確變成可按。
+5. `Destination` 按 `CE` 設一個有效位置、`Save`、`Load`，確認正確回填、`Create Drawings` 按鈕狀態也對。
+6. 存檔後（在 E3D 裡）把那個 `Destination` 指到的元素刪掉或改名，再 `Load` 同一個檔案，確認會跳出警告訊息，而不是默默塞一個死位址進 `Destination` 欄位。
+
 ## 其他已讀程式時發現的疑點（尚未確認是否為真正 bug，僅供之後查證）
 
 1. **`functions/DrawingPlan1EquiAnnotation.pmlfnc:143-161, 212, 218, 415`**：多處使用 `!namedir` 判斷 up/down/left/right，但整支函式內都沒有對 `!namedir` 賦值。
