@@ -88,6 +88,14 @@ layout form !!DrawingPlan1 dialog dock
 			text .keytext4 'Keyplan Scale'  tagwidth 22 at xmin.keytext2 ymax.keytext2+0.1 width 27 is string
 			text .keytext5 'Keyplan Y axis is'  tagwidth 22 at xmin.keytext2 ymax.keytext4+0.1 width 27 is string
 		exit
+		frame .northarrow 'NorthArrow'
+			text .northtext 'North Arrow' tagwidth 22 width 27 is string
+			button .northbutn 'CE' at xmax.northtext+0.4 ymin.northtext width 5 call |!This.typepick('SYTM', 'northtext')|
+			paragraph .northpara at xmax.northbutn+0.5 ymin.northbutn+0.1 text 'SYTM'
+			text .northsca 'Scale' tagwidth 22 at xmin.northtext ymax.northtext+0.1 width 27 is real
+			text .northpostext 'POS' tagwidth 22 at xmin.northsca ymax.northsca+0.1 width 27 is string
+			button .northposbutn 'Pick' at xmax.northpostext+0.4 ymin.northpostext width 5 call |!This.northarrowpick()|
+		exit
 		frame .gridframe 'Grid'
 			text .griddist 'Distance'    tagwidth 10 width 6 is real
 			text .gridgap  'Gap'         tagwidth 10 at xmin.griddist ymax.griddist+0.1 width 6 is real
@@ -186,6 +194,7 @@ define method .DrawingPlan1()
   !this.gridgap.val = 3
   !this.gridhei.val = 3
   !this.griddia.val = 10
+	!this.northsca.val = 1
 	!this.rcode = 'up'
 	!this.openshee.val = true
 	!this.delshee.val = true
@@ -983,7 +992,110 @@ define method .Apply()
 					new texp btext |$!title3| origin x $!posx y $!posy cheitx |$!this.title3hei.val| alig base just left txcolour yellow font 1
 				endif
 
-				
+				-----------------------------------------------------------------------
+				-- north arrow                                                       --
+				--                                                                   --
+				-- .ViewSheetTransform() reads SHPOS / ENUPOS out of the view, so the --
+				-- direction north takes on the sheet has to be measured while CE is  --
+				-- still the view. only after that can CE move to the sheet, and a    --
+				-- SYMB cannot hang off SHEE itself -- it has to be created down in   --
+				-- NOTE 1, the same note the border text above is written into        --
+				-----------------------------------------------------------------------
+				if (!this.northpostext.val.neq('')) then
+					$!name/SS/S1/V1_R$!this.rev
+					!ntrans = !this.ViewSheetTransform()
+					!ndx = !ntrans[7]
+					!ndy = !ntrans[8]
+					-------------------------------------------------------------------
+					-- 'rotated' is not asked of ADEGREES or RCODE separately -- each --
+					-- of them on its own, and the two together, can leave north off  --
+					-- the up direction of the sheet, so it is the measured north     --
+					-- vector which decides. compared as squares to keep clear of     --
+					-- sqrt, the same way .ViewSheetTransform() does                  --
+					-------------------------------------------------------------------
+					!nlen2 = !ndx * !ndx + !ndy * !ndy
+					!ntol2 = !nlen2 * 0.000001
+					!nrotated = true
+					if (!nlen2 le 0) then
+						----------------------------------------------------------
+						-- nothing was measured -- treat the view as upright so  --
+						-- the arrow still gets drawn and no angle is worked out --
+						-- from a zero length vector                             --
+						----------------------------------------------------------
+						!nrotated = false
+					elseif (!ndx * !ndx lt !ntol2 and !ndy gt 0) then
+						!nrotated = false
+					endif
+					!nsytm = !this.northtext.val
+					if (!nsytm.neq('')) then
+						-----------------------------------------------------------------
+						-- ADEGREES turns the symbol anticlockwise and a north arrow is --
+						-- drawn pointing up the sheet, so the turn wanted is the one   --
+						-- which takes sheet up onto the measured north. turning (0,1)  --
+						-- by t gives (-sin t, cos t), hence cos t = ndy / len and the  --
+						-- sign of the turn is the opposite of the sign of ndx. the     --
+						-- cosine is clamped because a value a hair outside -1 .. 1,    --
+						-- which rounding can produce, has no arc cosine                --
+						-----------------------------------------------------------------
+						!nang = 0
+						if (!nrotated) then
+							!ncos = !ndy / sqrt(!nlen2)
+							if (!ncos gt 1) then
+								!ncos = 1
+							endif
+							if (!ncos lt -1) then
+								!ncos = -1
+							endif
+							!nang = acos(!ncos)
+							if (!ndx gt 0) then
+								!nang = !nang * -1
+							endif
+						endif
+						----------------------------------------------------------------
+						-- the Pick button writes 'X <x> Y <y>', but the field can be  --
+						-- typed into by hand as well, so the 'x,y' the border text    --
+						-- fields use is taken too                                     --
+						----------------------------------------------------------------
+						!npos = !this.northpostext.val.trim()
+						if (!npos.matchwild('*,*')) then
+							!npx = !npos.split(',').getindexed(1).trim().real()
+							!npy = !npos.split(',').getindexed(2).trim().real()
+						else
+							!npx = !npos.replace('mm', '').part(2).real()
+							!npy = !npos.replace('mm', '').part(4).real()
+						endif
+						-----------------------------------------------------------------
+						-- Scale is how big the symbol is drawn. an empty or nonsense   --
+						-- field falls back to 1, which is the size the SYTM itself was --
+						-- drawn at, rather than shrinking the arrow to nothing         --
+						-----------------------------------------------------------------
+						!nsca = 1
+						if (not(!this.northsca.val.unset())) then
+							!nsca = !this.northsca.val
+						endif
+						if (!nsca le 0) then
+							!nsca = 1
+						endif
+						$!name/SS/S1_R$!this.rev
+						note 1
+						new symb
+						tmrf $!nsytm
+						XYPO X $!npx Y $!npy
+						XYSCALE $!nsca $!nsca
+						----------------------------------------------------------------
+						-- the text and the line fill both have to be told white, or   --
+						-- the arrow comes out in whatever colour the SYTM was drawn   --
+						-- in rather than white                                        --
+						----------------------------------------------------------------
+						Txcolour white
+						LFColour white
+						if (!nrotated) then
+							ADEG $!nang
+						endif
+					endif
+				endif
+
+
 				---------------------
 				-- draw match line --
 				---------------------
@@ -1460,6 +1572,9 @@ define method .Save()
 		!ff.writerecord('!this.keytext3.val' & '=|' & !this.keytext3.val & '|')
 		!ff.writerecord('!this.keytext4.val' & '=|' & !this.keytext4.val & '|')
 		!ff.writerecord('!this.keytext5.val' & '=|' & !this.keytext5.val & '|')
+		!ff.writerecord('!this.northtext.val' & '=|' & !this.northtext.val & '|')
+		!ff.writerecord('!this.northsca.val' & '=' & !this.northsca.val)
+		!ff.writerecord('!this.northpostext.val' & '=|' & !this.northpostext.val & '|')
 		!ff.writerecord('!this.griddist.val' & '=' & !this.griddist.val)
 		!ff.writerecord('!this.gridgap.val' & '=' & !this.gridgap.val)
 		!ff.writerecord('!this.gridhei.val' & '=' & !this.gridhei.val)
@@ -1512,101 +1627,150 @@ define method .Load()
 			!val = !line.after('=')
 			handle any
 			elsehandle none
-				handle any
-					-----------------------------------------------------------------
-					-- this one line failed to apply (eg. a field that doesn't     --
-					-- exist on this version of the form, or a value that still    --
-					-- won't quote safely) -- skip it and keep loading the rest    --
-					-- of the file instead of aborting here                       --
-					-----------------------------------------------------------------
-				elsehandle none
-					if (!option.eq('!this.files.dtext')) then
-						---------------------------------------------------------------------
-						-- 'In Use' box list is an array, not a plain .val -- rebuild it    --
-						-- from the comma joined string, then mirror what .selectce() does   --
-						-- by hand: pull the same names back out of the 'All' list and       --
-						-- refresh the Create Drawings button instead of falling through to  --
-						-- the generic $!option = $!val below (which only handles scalars)   --
-						---------------------------------------------------------------------
-						!filestr = !val
-						if (!filestr.length() gt 0 and !filestr.substring(1,1).eq('|')) then
-							!filestr = !filestr.substring(2, !filestr.length() - 2)
-						endif
-						if (!filestr.neq('')) then
-							!fileslist = !filestr.split(',')
-						else
-							!fileslist = object array()
-						endif
-						!this.files.dtext = !fileslist
-						do !fn values !fileslist
-							!this.files1.clear(!fn)
-						enddo
-						if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
-							!this.apply.active = true
-						else
-							!this.apply.active = false
-						endif
-					elseif (!option.eq('!this.dest.val')) then
-						-----------------------------------------------------------------------
-						-- Destination is a raw DB reference (eg '=2013286677/35036'), not a  --
-						-- stable name -- it can go stale if the database gets reorganised    --
-						-- between the Save and the Load, so unlike every other field it is   --
-						-- verified before being trusted: try to CE-navigate to it and warn   --
-						-- instead of silently leaving a dead reference sitting in the field  --
-						-----------------------------------------------------------------------
-						!destref = !val
-						if (!destref.length() gt 0 and !destref.substring(1,1).eq('|')) then
-							!destref = !destref.substring(2, !destref.length() - 2)
-						endif
-						if (!destref.eq('')) then
-							!this.dest.val = ''
-						else
-							!savedce = name
-							!destvalid = true
-							handle any
-								!destvalid = false
-							elsehandle none
-								$!destref
-							endhandle
-							if (!destvalid) then
-								!this.dest.val = !destref
-							else
-								!this.dest.val = ''
-								!!alert.warning('已儲存的 Destination 位置在目前資料庫中找不到了，請重新用 Destination 旁的 CE 按鈕設定')
-							endif
-							handle any
-							elsehandle none
-								$!savedce
-							endhandle
-						endif
-						if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
-							!this.apply.active = true
-						else
-							!this.apply.active = false
-						endif
-					else
-						-----------------------------------------------------------------------
-						-- older/hand-edited save files can carry a free-text value that was --
-						-- never pipe-quoted (eg. a Rule like 'ALL INST WITH ISNAMED', from a --
-						-- form version whose .Save() forgot the '|' on that field). splicing --
-						-- that in bare turns $!option = $!val into a CP syntax error, which  --
-						-- is raised while parsing the substituted text -- handle any cannot  --
-						-- trap that, so it has to be quoted here before that ever happens    --
-						-----------------------------------------------------------------------
-						if (!val.length() gt 0 and !val.substring(1,1).neq('|') and not(!val.eqnocase('TRUE')) and not(!val.eqnocase('FALSE'))) then
-							!isnum = true
-							!junk = !val.real()
-							handle any
-								!isnum = false
-							elsehandle none
-							endhandle
-							if (not(!isnum)) then
-								!val = '|' & !val & '|'
-							endif
-						endif
-						$!option = $!val
+				if (!option.eq('!this.files.dtext')) then
+					---------------------------------------------------------------------
+					-- 'In Use' box list is an array, not a plain .val -- rebuild it    --
+					-- from the comma joined string, split the boxes over the two lists --
+					-- the way .selectce() would, and refresh the Create Drawings button --
+					-- instead of falling through to the generic $!option = $!val below  --
+					-- (which only handles scalars)                                      --
+					---------------------------------------------------------------------
+					!filestr = !val
+					if (!filestr.length() gt 0 and !filestr.substring(1,1).eq('|')) then
+						!filestr = !filestr.substring(2, !filestr.length() - 2)
 					endif
-				endhandle
+					if (!filestr.neq('')) then
+						!fileslist = !filestr.split(',')
+					else
+						!fileslist = object array()
+					endif
+					---------------------------------------------------------------------
+					-- rebuild BOTH lists from the boxes that exist right now instead   --
+					-- of clear()ing the saved names out of 'All': the saved box may be  --
+					-- gone (deleted/renamed since the Save -- unnamed ones are stored   --
+					-- as a raw ref like '=23718/1652'), or it may already have been     --
+					-- moved to 'In Use' by hand before Load was pressed. In both cases  --
+					-- .clear() raises 'Cannot find requested field' and kills the whole --
+					-- load, so filter the names first and assign .dtext directly        --
+					---------------------------------------------------------------------
+					!this.AllBoxes()
+					!allboxes = !this.files1.dtext
+					!inuse = object array()
+					!missing = object array()
+					do !fn values !fileslist
+						if (!allboxes.find(!fn).size().gt(0)) then
+							if (!inuse.find(!fn).size().eq(0)) then
+								!inuse.append(!fn)
+							endif
+						else
+							!missing.append(!fn)
+						endif
+					enddo
+					!remain = object array()
+					do !bx values !allboxes
+						if (!inuse.find(!bx).size().eq(0)) then
+							!remain.append(!bx)
+						endif
+					enddo
+					-- an empty array is not a safe .dtext value -- empty the list instead
+					if (!inuse.size().gt(0)) then
+						!this.files.dtext = !inuse
+					else
+						!this.files.clear()
+					endif
+					if (!remain.size().gt(0)) then
+						!this.files1.dtext = !remain
+					else
+						!this.files1.clear()
+					endif
+					if (!missing.size().gt(0)) then
+						!msg = ''
+						do !m values !missing
+							if (!msg.eq('')) then
+								!msg = !m
+							else
+								!msg = !msg & ',' & !m
+							endif
+						enddo
+						!!alert.warning('已儲存的 Drawing Box 在目前專案中找不到，已略過：' & !msg)
+					endif
+					if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
+						!this.apply.active = true
+					else
+						!this.apply.active = false
+					endif
+				elseif (!option.eq('!this.dest.val')) then
+					-----------------------------------------------------------------------
+					-- Destination is a raw DB reference (eg '=2013286677/35036'), not a  --
+					-- stable name -- it can go stale if the database gets reorganised    --
+					-- between the Save and the Load, so unlike every other field it is   --
+					-- verified before being trusted: try to CE-navigate to it and warn   --
+					-- instead of silently leaving a dead reference sitting in the field  --
+					-----------------------------------------------------------------------
+					!destref = !val
+					if (!destref.length() gt 0 and !destref.substring(1,1).eq('|')) then
+						!destref = !destref.substring(2, !destref.length() - 2)
+					endif
+					if (!destref.eq('')) then
+						!this.dest.val = ''
+					else
+						!savedce = name
+						!destvalid = true
+						handle any
+							!destvalid = false
+						elsehandle none
+							$!destref
+						endhandle
+						if (!destvalid) then
+							!this.dest.val = !destref
+						else
+							!this.dest.val = ''
+							!!alert.warning('已儲存的 Destination 位置在目前資料庫中找不到了，請重新用 Destination 旁的 CE 按鈕設定')
+						endif
+						handle any
+						elsehandle none
+							$!savedce
+						endhandle
+					endif
+					if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
+						!this.apply.active = true
+					else
+						!this.apply.active = false
+					endif
+				else
+					-----------------------------------------------------------------------
+					-- older/hand-edited save files can carry a free-text value that was --
+					-- never pipe-quoted (eg. a Rule like 'ALL INST WITH ISNAMED', from a --
+					-- form version whose .Save() forgot the '|' on that field). splicing --
+					-- that in bare turns $!option = $!val into a CP syntax error, which  --
+					-- is raised while parsing the substituted text -- handle any cannot  --
+					-- trap that, so it has to be quoted here before that ever happens    --
+					-----------------------------------------------------------------------
+					if (!val.length() gt 0 and !val.substring(1,1).neq('|') and not(!val.eqnocase('TRUE')) and not(!val.eqnocase('FALSE'))) then
+						!isnum = true
+						!junk = !val.real()
+						handle any
+							!isnum = false
+						elsehandle none
+						endhandle
+						if (not(!isnum)) then
+							!val = '|' & !val & '|'
+						endif
+					endif
+					-----------------------------------------------------------------------
+					-- the handler has to sit right behind the statement it is meant to --
+					-- cover. it used to be opened at the top of the elsehandle none     --
+					-- branch above instead, with no statement in front of it, so it     --
+					-- guarded nothing and a save file naming a field this version of    --
+					-- the form no longer has (northrottext, dropped when the second     --
+					-- north arrow SYTM became Scale) aborted the whole Load with        --
+					-- 'Object does not have a member NORTHROTTEXT'. skip that one line  --
+					-- and keep reading the rest of the file                             --
+					-----------------------------------------------------------------------
+					$!option = $!val
+					handle any
+					endhandle
+				endif
 			endhandle
 		enddo
 		!ff.close()
@@ -1643,6 +1807,17 @@ define method .keyplanpick()
 		break
 	elsehandle none
 		!!DrawingPlan1.keytext1.val = 'X ' & !size1.replace('mm', '').part(2).real().string('D0') & ' Y ' & !size1.replace('mm', '').part(4).real().string('D0')
+	endhandle
+endmethod
+
+define method .northarrowpick()
+	var !size1 shpo @
+	handle any
+		prompt on
+		prompt dismiss
+		break
+	elsehandle none
+		!!DrawingPlan1.northpostext.val = 'X ' & !size1.replace('mm', '').part(2).real().string('D0') & ' Y ' & !size1.replace('mm', '').part(4).real().string('D0')
 	endhandle
 endmethod
 

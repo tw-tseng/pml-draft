@@ -1542,6 +1542,120 @@ In line 1506 of PML function drawingplan1.LOAD
 5. `Destination` 按 `CE` 設一個有效位置、`Save`、`Load`，確認正確回填、`Create Drawings` 按鈕狀態也對。
 6. 存檔後（在 E3D 裡）把那個 `Destination` 指到的元素刪掉或改名，再 `Load` 同一個檔案，確認會跳出警告訊息，而不是默默塞一個死位址進 `Destination` 欄位。
 
+## 新增：NorthArrow 分頁與指北向符號（2026-08-17，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+使用者要求比照 Keyplan 分頁新增一個 `NorthArrow` 分頁，並把符號實際畫到圖上。
+
+### 表單（`forms/DrawingPlan1.pmlfrm:91-97`）
+
+新增 `frame .northarrow 'NorthArrow'`，三列：
+
+| 欄位 | Gadget | 型式 | 按鍵 |
+|---|---|---|---|
+| North Arrow | `.northtext` | string | `.northbutn` → `.typepick('SYTM', 'northtext')`，旁邊 `SYTM` 提示詞 |
+| Scale | `.northsca` | real，內定 1 | 無 |
+| POS | `.northpostext` | string | `.northposbutn` → `.northarrowpick()`（滑鼠點圖紙位置） |
+
+改過兩輪：
+
+1. 第一版 `North Arrow` 的型式寫成 `OVER`（照抄 Keyplan），使用者更正為 `SYTM`——指北向是符號樣板，不是 overlay。
+2. 第二列原本是另一個 SYTM 欄位 `North Arrow When View is Rotated`，使用者改成 `Scale`（real，內定 1），當作符號的比例大小。**視圖旋轉時不再換符號，改成把同一個符號轉到指向真北**（角度算法本來就已經寫好了，見下）。
+
+其他：
+
+- `.northsca.val = 1` 的內定值設在 `.DrawingPlan1()`（`:197` 附近），跟 `griddist`/`gridgap` 那幾個 real 欄位放一起。
+- `.northarrowpick()`（`:1803` 附近）整支比照 `.keyplanpick()`：`var !size1 shpo @` 讓使用者在圖紙上點一點，換算成 `X <x> Y <y>` 字串填回欄位。
+- `.Save()`（`:1568` 附近）加了這三個欄位，`.northsca.val` 是 real 所以不包 `|...|`（跟 `griddist` 那幾行一樣）；`.Load()` 不用改，走既有的通用 `$!option = $!val` 分支。
+
+### 實作（`.Apply()`，`forms/DrawingPlan1.pmlfrm:995-1088`）
+
+放在填 BorderText 之後、`!!DrawingPlan1MatchLine()` 之前。
+
+**元素放哪裡**：使用者指定「CE 在 SHEE 時要先進 `note 1` 階層，才能 `new symb`」——SYMB 不能直接掛在 SHEE 底下，要放進 sheet 的 NOTE 裡，也就是 BorderText 那些 `new texp` 待的同一個 note（`:900` 的 `new note` 建的）。建完設 `tmrf` 為欄位裡的 SYTM、`XYPO` 為 POS、`XYSCALE` 為 Scale，再把 `Txcolour` 跟 `LFColour` 都設成 `white`——使用者指出這兩個屬性都要給，符號才會是白色的，只設一個的話會留著 SYTM 原本畫的顏色。這條路徑跟 `functions/DrawingPlan1MatchLine.pmlfnc:16-20` 一樣（`note 1` 之後直接用絕對圖紙座標下 `fpt`/`tpt`），所以 `XYPO X <x> Y <y>` 也是絕對圖紙座標。
+
+**要不要轉**：不是去問 `ADEGREES` 或 `RCODE`，而是量出來的。`.ViewSheetTransform()` 的第 7、8 個回傳值就是「往北走 1mm 在圖紙上的 x, y」，北向沒有正對圖紙上方就算旋轉——這樣 box 傾斜產生的 `Adegrees`、portrait→landscape 的 `RCODE LEFT`、以及兩者疊在一起的情況都涵蓋到，不用分開判斷。判斷式跟 `.ViewSheetTransform():2265-2268` 一樣比平方，避開 sqrt。這個矩陣要在 CE 還在 view 的時候量（它內部要讀 `SHPOS`/`ENUPOS`），所以量完才能把 CE 移到 sheet 的 note。
+
+**轉幾度**：`ADEGREES` 是逆時針轉，指北向符號畫的時候是朝圖紙上方，所以要轉的角度就是「把圖紙上方轉到量出來的北向」那個角度。把 `(0,1)` 逆時針轉 `t` 得到 `(-sin t, cos t)`，所以 `cos t = ndy / len`，正負號跟 `ndx` 相反：
+
+```pml
+!ncos = !ndy / sqrt(!nlen2)
+!nang = acos(!ncos)
+if (!ndx gt 0) then
+    !nang = !nang * -1
+endif
+```
+
+`!ncos` 有夾在 -1 .. 1 之間再送進 `acos()`——浮點捨入讓它跑出界一點點的話 `acos()` 是沒有解的。
+
+**這裡有個假設**：角度算法假設 SYTM 本身是畫成箭頭朝上（圖紙 +Y）。如果符號是朝右畫的，實機會差 90 度，`!nang` 減 90 即可。
+
+**防呆**：
+
+- `Scale` 空白或 `le 0` 時退回 1（也就是 SYTM 原本畫的大小），不要把箭頭縮成看不見。
+- `!nlen2` 是 0（量不到東西）時當作沒旋轉，避免除以零。
+- POS 欄位除了 Pick 按鍵寫進去的 `X <x> Y <y>`，也吃 BorderText 那幾個欄位用的 `x,y` 格式（使用者可能手打）。
+- `POS` 空白就整段不做；`North Arrow` 空白也不做。
+
+### 待實機驗證
+
+1. 填 `North Arrow` + `POS`，跑一個**沒有旋轉**的 box，確認符號出現在指定的圖紙位置、方向朝上、大小是 SYTM 原本的大小。
+2. `Scale` 改成 2 跟 0.5 各跑一次，確認符號真的跟著放大縮小，而且顏色是白的。
+3. 跑一個**傾斜的 box**（會下 `Adegrees` 的那種），確認箭頭真的指向模型北，而不是差 90 度（差 90 度就是上面那個「朝上/朝右」的假設錯了）。
+4. 跑一個觸發 `portrait → landscape`（`RCODE LEFT`）的 box，確認一樣轉到正確的北向。
+5. `POS` 留空，確認完全不畫、也不報錯。
+6. `Save` / `Load` 一輪，確認三個欄位都存得回來（`Scale` 是 real，特別確認讀回來不是空的）。
+
+## 已修：`.Load()` 讀到「這版表單已經沒有的欄位」會整個中斷（2026-08-17，**由使用者實機回報**）
+
+### 症狀
+
+按 `Load` 讀一個稍早存的檔，跳出錯誤視窗：
+
+```
+(2,759)  Object does not have a member NORTHROTTEXT
+In line 1761 of PML function drawingplan1.LOAD
+         $!option = $!val
+```
+
+那個存檔是 `North Arrow When View is Rotated` 還存在時存的，欄位改成 `Scale` 之後 `.northrottext` 已經不存在了。
+
+### 原因：那個「跳過失敗的行」的 `handle any` 其實沒有保護到任何東西
+
+`.Load()` 裡本來是這樣寫的：
+
+```pml
+!option = !line.before('=')
+!val = !line.after('=')
+handle any
+elsehandle none
+    handle any
+        -- this one line failed to apply ... skip it
+    elsehandle none
+        ...
+        $!option = $!val
+    endif
+    endhandle
+endhandle
+```
+
+PML 的 `handle` 區塊是掛在**它前面那一個敘述**上的（這一點檔案裡別處的註解也寫過）。裡面那個 `handle any` 被放在 `elsehandle none` 區塊的第一行，前面根本沒有敘述可以掛，所以它什麼都沒保護——`$!option = $!val` 是裸的，一出錯整個 `.Load()` 就斷在那裡，後面的欄位全部沒讀到。外面那個 `handle any` 也只保護到 `!val = !line.after('=')`。
+
+（註解寫的意圖是對的：「這行套用失敗就跳過，繼續讀下一行」。只是位置錯了，所以從來沒生效過。）
+
+### 作法（`forms/DrawingPlan1.pmlfrm:1621-1765`）
+
+- 刪掉那個沒作用的巢狀 `handle any / elsehandle none` 與對應的 `endhandle`，整段 body 往回縮排一層。
+- 在 `$!option = $!val` 的**正下方**補上真正的 `handle any / endhandle`（空的），跟這個檔案其他地方（`:1602`、`:1745`）一樣的寫法。
+
+這樣任何「存檔裡有、這版表單沒有」的欄位都會被安靜略過，Load 繼續讀完剩下的行。使用者手上那個舊存檔不用改，直接再按一次 `Load` 就會過。
+
+**改的是 `.pmlfrm`，要 `kill !!DrawingPlan1` 再 `show !!DrawingPlan1` 才會生效。**
+
+### 待實機驗證
+
+1. 用出錯的那個舊存檔再按一次 `Load`，確認不再跳錯誤視窗，而且 `northrottext` 以外的欄位都有正確讀回來。
+2. 重新 `Save` 一個新檔再 `Load`，確認 `NorthArrow` 三個欄位（含 real 型式的 `Scale`）都正確回填。
+
 ## 其他已讀程式時發現的疑點（尚未確認是否為真正 bug，僅供之後查證）
 
 1. **`functions/DrawingPlan1EquiAnnotation.pmlfnc:143-161, 212, 218, 415`**：多處使用 `!namedir` 判斷 up/down/left/right，但整支函式內都沒有對 `!namedir` 賦值。
