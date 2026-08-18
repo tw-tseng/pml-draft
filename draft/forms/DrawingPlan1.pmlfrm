@@ -895,14 +895,9 @@ define method .Apply()
 				-- highlight the drawing area in keyplan --
 				-------------------------------------------
 				$!name/SS/S1/V1_R$!this.rev
-				!vlims = !!ce.vlimits
 				new note
 				if (!this.keytext1.val neq '' and !this.keytext2.val neq '' and !this.keytext3.val neq '' and !this.keytext4.val neq '' and !this.keytext5.val neq '') then
 					$!name/SS/S1/V1_R$!this.rev
-					!vlims = !!ce.vlimits
-					note 1
-					new outl lclosed true fstyle SystemStyle 3 NLColour cyan FColour cyan
-					!!ce.PrBlnkFlag = |false|
 
 					----------------------------------------------------------------------
 					-- E/N -> sheet X/Y transform for the keyplan itself, same shape as   --
@@ -944,16 +939,42 @@ define method .Apply()
 						!keytrans[8] = !keysca
 					endif
 
+					----------------------------------------------------------------------
+					-- the view's own box on the sheet is always square to the paper,   --
+					-- but when the view is rotated (ADEGREES) that square corresponds  --
+					-- to a turned rectangle in the world, not to !!ce.vlimits' world-  --
+					-- axis-aligned box. so the world E/N of each paper corner is read  --
+					-- back out through .ViewSheetTransform()'s inverse (same formula   --
+					-- as .WorldLimitsOfSheetRect(), just kept per-corner instead of    --
+					-- collapsed to min/max), which is what actually carries the        --
+					-- view's rotation into the keyplan box                             --
+					----------------------------------------------------------------------
+					!vtrans = !this.ViewSheetTransform()
+					!cornersh = object array()
+					!cornersh[1] = !this.viewLLsh
+					!cornersh[2] = !this.viewULsh
+					!cornersh[3] = !this.viewURsh
+					!cornersh[4] = !this.viewLRsh
+
 					!cornerEs = object array()
 					!cornerNs = object array()
-					!cornerEs[1] = !vlims[1].real()
-					!cornerNs[1] = !vlims[2].real()
-					!cornerEs[2] = !vlims[1].real()
-					!cornerNs[2] = !vlims[5].real()
-					!cornerEs[3] = !vlims[4].real()
-					!cornerNs[3] = !vlims[5].real()
-					!cornerEs[4] = !vlims[4].real()
-					!cornerNs[4] = !vlims[2].real()
+					do !i from 1 to 4
+						!cshx = !cornersh[!i].part(2).real()
+						!cshy = !cornersh[!i].part(4).real()
+						!cdx = !cshx - !vtrans[1]
+						!cdy = !cshy - !vtrans[2]
+						!cornerEs[!i] = !vtrans[3] + (!cdx * !vtrans[8] - !cdy * !vtrans[7]) / !vtrans[9]
+						!cornerNs[!i] = !vtrans[4] + (!cdy * !vtrans[5] - !cdx * !vtrans[6]) / !vtrans[9]
+					enddo
+
+					----------------------------------------------------------------------
+					-- .ViewSheetTransform() needs CE still on the view (see its own      --
+					-- header comment), so the corner maths above has to run before CE    --
+					-- moves down into NOTE 1 / the new OUTL to actually draw the box      --
+					----------------------------------------------------------------------
+					note 1
+					new outl lclosed true fstyle SystemStyle 3 NLColour cyan FColour cyan
+					!!ce.PrBlnkFlag = |false|
 					do !i from 1 to 4
 						!de = !cornerEs[!i] - !keytrans[3]
 						!dn = !cornerNs[!i] - !keytrans[4]
@@ -2578,10 +2599,20 @@ define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) 
 		handle any
 			!itle = ''
 		endhandle
-		!tubelen = !itle.replace('mm', '').real()
-		handle any
+		----------------------------------------------------------------
+		-- .real() of an empty string does not throw here -- it just  --
+		-- comes back unset, which the handle below never sees since  --
+		-- no error was raised, so ITLE not answering has to be ruled --
+		-- out before the conversion is even attempted                --
+		----------------------------------------------------------------
+		if (!itle.eq('')) then
 			!tubelen = 0
-		endhandle
+		else
+			!tubelen = !itle.replace('mm', '').real()
+			handle any
+				!tubelen = 0
+			endhandle
+		endif
 		if (!tubelen gt 0) then
 			!p2 = !p1.offset(!stdir.direction(), !tubelen)
 		else
