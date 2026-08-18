@@ -4,154 +4,1038 @@
 -- Function : Create Volumn for Drawings in Design --
 -- Author   : Tseng                                --
 -- Date     : 2024/06/24                           --
+--                                                 --
+-- A drawing frame is given by four picked points: --
+--   P1 -> P2  first edge, gives one length and    --
+--             the angle of the frame. the U of P1 --
+--             is the first level of the box       --
+--   P3        anything off that line, gives the   --
+--             other length and which side the     --
+--             frame runs to                       --
+--   P4        only its U is read, the second      --
+--             level of the box. E and N ignored   --
+-- The Import tab has no picks, so it takes the    --
+-- two levels off the file or off its own Bottom   --
+-- U / Top U boxes instead.                        --
+-- Every tab only has to end up with three plan    --
+-- points and two levels and hand them to          --
+-- .MakeBox(), so a new way of setting out         --
+-- drawings is a new tab and nothing else.         --
 -----------------------------------------------------
 
-layout form !!DrawingPlan
+import 'PMLFileBrowser'
+handle any
+endhandle
 
-  -- The current view and its limits
-  member .pointSt     is POSITION
-  member .pointEn     is POSITION
-	
-	!this.formTitle = 'Set View Limits'
-	
-	button .caldrwg  'Calculate by Drawinglist'  at xmin ymax+0.2 width 20
-	
-	para .para0 at xmax+6 ymin.caldrwg text 'Margin'
-	text .margintext at xmax+0.5 ymin.caldrwg width 10 is REAL
-	
-  para .para00 at xmax+6 ymin.caldrwg text 'Lock All'
-	toggle .lockall at xmax+0.5 ymin.caldrwg
+layout form !!DrawingPlan dialog dock
 
-	para .para01 at xmin.caldrwg ymax+0.2 text 'From E'
-	text .fretext at xmax ymin.para01 width 15 is string
-	toggle .frelock at xmax+0.5 ymin.fretext
-	para .para02 at xmax+0.8 ymin.frelock text 'N'
-	text .frntext at xmax ymin.para01 width 15 is string
-	toggle .frnlock at xmax+0.5 ymin.fretext
-	para .para03 at xmax+0.8 ymin.frelock text 'U'
-	text .frutext at xmax ymin.para01 width 15 is string
-	toggle .frulock at xmax+0.5 ymin.fretext
-	button .frombt 'Pick' at xmax+0.8 ymin.fretext width 10 call |!This.PickPoint('Start Position')|
-	
-	para .para04 at xmin.para01 ymax+0.2 text 'To     E'
-	text .toetext at xmax.para04 ymin.para04 width 15 is string
-	toggle .toelock at xmax.toetext+0.5 ymin.toetext
-	para .para05 at xmax.toelock+0.8 ymin.toelock text 'N'
-	text .tontext at xmax.para05 ymin.para04 width 15 is string
-	toggle .tonlock at xmax.tontext+0.5 ymin.toetext
-	para .para06 at xmax.tonlock+0.8 ymin.toelock text 'U'
-	text .toutext at xmax.para06 ymin.para04 width 15 is string
-	toggle .toulock at xmax.toutext+0.5 ymin.toetext
-	button .tobt   'Pick'   at xmax.toulock+0.8 ymin.toetext width 10 call |!This.PickPoint('End Position')|
-	button .create 'Create Box' at xmin.para01   ymax+0.2    width 12 call |!This.CreateBox()|
-	button .delete 'Delete Box' at xmax.create+2 ymin.create width 12 call |!This.DeleteBox()|	
-	
-  button .apply  'Apply'  at xmax.toelock ymax+5 width 10
-	button .Cancel 'Cancel' at xmax.apply+1  ymin.apply width 10 call '!This.Close()'
+	member .userevar is STRING
+	member .edgdesc  is STRING
+
+	!this.formTitle = 'Create Drawing Plan Box'
+
+	frame .tabset tabset
+
+		----------------------------------------------------------------
+		-- pick the four points in the 3D view. one button, then the   --
+		-- four picks come one after the other and the box is made at  --
+		-- the end of them                                             --
+		----------------------------------------------------------------
+		frame .pickfr 'Pick' width 66
+			button .pickbt 'Pick 4 Points' width 16 call |!This.PickPoints()|
+
+			para .pahint  at xmin.pickbt ymax.pickbt+0.3 text 'P1 -> P2  one edge of the frame, and the first level (U of P1)' width 62
+			para .pahint2 at xmin.pahint ymax.pahint+0.1  text 'P3        anywhere off that edge - how far off is the other size' width 62
+			para .pahint3 at xmin.pahint ymax.pahint2+0.1 text 'P4        only its U is used, it is the second level' width 62
+
+			para .pa1  at xmin.pahint ymax.pahint3+0.3 text 'P1  E'
+			text .p1e  at xmax.pa1+0.3  ymin.pa1 width 12 is STRING
+			para .pa1n at xmax.p1e+0.5  ymin.pa1 text 'N'
+			text .p1n  at xmax.pa1n+0.3 ymin.pa1 width 12 is STRING
+			para .pa1u at xmax.p1n+0.5  ymin.pa1 text 'U'
+			text .p1u  at xmax.pa1u+0.3 ymin.pa1 width 12 is STRING
+
+			para .pa2  at xmin.pa1 ymax.pa1+0.2 text 'P2  E'
+			text .p2e  at xmax.pa2+0.3  ymin.pa2 width 12 is STRING
+			para .pa2n at xmax.p2e+0.5  ymin.pa2 text 'N'
+			text .p2n  at xmax.pa2n+0.3 ymin.pa2 width 12 is STRING
+			para .pa2u at xmax.p2n+0.5  ymin.pa2 text 'U'
+			text .p2u  at xmax.pa2u+0.3 ymin.pa2 width 12 is STRING
+
+			para .pa3  at xmin.pa2 ymax.pa2+0.2 text 'P3  E'
+			text .p3e  at xmax.pa3+0.3  ymin.pa3 width 12 is STRING
+			para .pa3n at xmax.p3e+0.5  ymin.pa3 text 'N'
+			text .p3n  at xmax.pa3n+0.3 ymin.pa3 width 12 is STRING
+			para .pa3u at xmax.p3n+0.5  ymin.pa3 text 'U'
+			text .p3u  at xmax.pa3u+0.3 ymin.pa3 width 12 is STRING
+
+			para .pa4  at xmin.pa3 ymax.pa3+0.2 text 'P4  E'
+			text .p4e  at xmax.pa4+0.3  ymin.pa4 width 12 is STRING
+			para .pa4n at xmax.p4e+0.5  ymin.pa4 text 'N'
+			text .p4n  at xmax.pa4n+0.3 ymin.pa4 width 12 is STRING
+			para .pa4u at xmax.p4n+0.5  ymin.pa4 text 'U'
+			text .p4u  at xmax.pa4u+0.3 ymin.pa4 width 12 is STRING
+
+			button .create 'Create Box'   at xmin.pa4     ymax.pa4+0.4 width 12 call |!This.CreateBox()|
+			button .clearp 'Clear Points' at xmax.create+1 ymin.create  width 12 call |!This.ClearPoints()|
+			button .delete 'Delete Box'   at xmax.clearp+1 ymin.create  width 12 call |!This.DeleteBox()|
+			para .createhint at xmin.create ymax.create+0.1 text 'Picking makes the box on its own - Create Box is only for coordinates typed by hand.' width 62
+		exit
+
+		----------------------------------------------------------------
+		-- drawing number and the sheet texts. these end up as TEXT    --
+		-- elements under the EQUI in the 'tag:value' shape the        --
+		-- drawing side reads back                                     --
+		----------------------------------------------------------------
+		frame .infofr 'Info' width 66
+			text .dwgno 'Drawing No.' tagwidth 12 width 40 is STRING
+			para .pano at xmin.dwgno ymax.dwgno+0.1 text 'Leave blank while still sketching - the box is then unnamed and lists as its ref.' width 62
+
+			text .revtext    'Rev'     at xmin.pano     ymax.pano+0.3       tagwidth 12 width 40 is STRING
+			text .title1text 'Title 1' at xmin.revtext  ymax.revtext+0.1    tagwidth 12 width 40 is STRING
+			text .title2text 'Title 2' at xmin.revtext  ymax.title1text+0.1 tagwidth 12 width 40 is STRING
+			text .title3text 'Title 3' at xmin.revtext  ymax.title2text+0.1 tagwidth 12 width 40 is STRING
+
+			para .infohint  at xmin.revtext ymax.title3text+0.3 text 'Select a box in the model, press Read CE to bring its current values in,' width 62
+			para .infohint2 at xmin.revtext ymax.infohint+0.1   text 'change what is needed, then press Apply. A blank field is left as it is -' width 62
+			para .infohint3 at xmin.revtext ymax.infohint2+0.1  text 'Apply never takes information off a box. Drawing No. is checked for a clash.' width 62
+
+			button .inforead  'Read CE' at xmin.infohint  ymax.infohint3+0.3 width 12 call |!This.ReadInfo()|
+			button .infoapply 'Apply'   at xmax.inforead+1 ymin.inforead    width 12 call |!This.ApplyInfo()|
+		exit
+
+		-------------------------------------------
+		-- read the points out of a file from CAD --
+		-------------------------------------------
+		frame .importfr 'Import' width 66
+			text .filetext 'File' tagwidth 6 width 44 is STRING
+			button .filebt 'Browse' at xmax.filetext+0.4 ymin.filetext width 10 call |!This.BrowseFile()|
+
+			para .fmt1 at xmin.filetext ymax.filetext+0.3 text 'One line per drawing, fields separated by ; :' width 62
+			para .fmt2 at xmin.fmt1 ymax.fmt1+0.1 text 'E1;N1;E2;N2;E3;N3;DwgNo;Rev;Title1;Title2;Title3;Ubot;Utop' width 62
+			para .fmt3 at xmin.fmt1 ymax.fmt2+0.2 text 'Only the six coordinates are needed. Ubot/Utop fall back to the' width 62
+			para .fmt4 at xmin.fmt1 ymax.fmt3+0.1 text 'two boxes below when left empty. Lines starting with -- are ignored.' width 62
+
+			text .ubot 'Bottom U' at xmin.fmt1 ymax.fmt4+0.3 tagwidth 12 width 14 is REAL
+			text .utop 'Top U' at xmax.ubot+2 ymin.ubot tagwidth 8 width 14 is REAL
+
+			button .importbt 'Import' at xmin.ubot ymax.ubot+0.3 width 12 call |!This.ImportFile()|
+			list .log 'Result' at xmin.importbt ymax.importbt+0.3 width 62 height 10
+		exit
+
+	exit
+
+	button .Cancel 'Close' at xmin.tabset ymax.tabset+0.3 width 10 call '!This.Close()'
 
 exit
 
+-------------------
+-- form start up --
+-------------------
 define method .DrawingPlan()
-  AID CLEAR ALL
-  !this.fretext.val = ''
-  !this.frntext.val = ''
-  !this.frutext.val = ''
-	
-	!this.tobt.active = false
-	!this.create.active = false
-	!this.delete.active = false	
-	
-	!this.fretext.CALLBACK = |!this.modifyText('Start Position')|
-	!this.frntext.CALLBACK = |!this.modifyText('Start Position')|
-	!this.frutext.CALLBACK = |!this.modifyText('Start Position')|
-	!this.toetext.CALLBACK = |!this.modifyText('End Position')|
-	!this.tontext.CALLBACK = |!this.modifyText('End Position')|
-	!this.toutext.CALLBACK = |!this.modifyText('End Position')|
-	
+	AID CLEAR ALL
+	!this.edgdesc = 'Drawing Plan Box Picking'
+	!this.ClearPoints()
+	!this.ClearInfo()
+	!this.log.clear()
+
+	------------------------------------------------------------------
+	-- the coordinates can be typed as well as picked, so the marks  --
+	-- in the 3D view have to follow the fields either way           --
+	------------------------------------------------------------------
+	!this.p1e.CALLBACK = |!this.RefreshMarks()|
+	!this.p1n.CALLBACK = |!this.RefreshMarks()|
+	!this.p1u.CALLBACK = |!this.RefreshMarks()|
+	!this.p2e.CALLBACK = |!this.RefreshMarks()|
+	!this.p2n.CALLBACK = |!this.RefreshMarks()|
+	!this.p2u.CALLBACK = |!this.RefreshMarks()|
+	!this.p3e.CALLBACK = |!this.RefreshMarks()|
+	!this.p3n.CALLBACK = |!this.RefreshMarks()|
+	!this.p3u.CALLBACK = |!this.RefreshMarks()|
+	!this.p4e.CALLBACK = |!this.RefreshMarks()|
+	!this.p4n.CALLBACK = |!this.RefreshMarks()|
+	!this.p4u.CALLBACK = |!this.RefreshMarks()|
 endmethod
 
-define method .modifyText(!str is string)
-	if (!str eq 'Start Position') then
-	  !this.pointSt.east  = !!DrawingPlan.fretext.val.real()
-	  !this.pointSt.north = !!DrawingPlan.frntext.val.real()
-	  !this.pointSt.up    = !!DrawingPlan.frutext.val.real()
-		!this.MarkText(!this.pointSt, 'Start Position')
-	else
-	  !this.pointEn.east  = !!DrawingPlan.toetext.val.real()
-	  !this.pointEn.north = !!DrawingPlan.tontext.val.real()
-	  !this.pointEn.up    = !!DrawingPlan.toutext.val.real()
-		!this.MarkText(!this.pointEn, 'End Position')
+--------------------------------------------------------------------
+-- geometry and element creation, shared by every tab.             --
+-- returns an empty string when the box was made, otherwise the    --
+-- reason why it was not, so a caller working through a file can   --
+-- log the bad line and carry on with the rest                     --
+--------------------------------------------------------------------
+define method .MakeBox(!p1 is POSITION, !p2 is POSITION, !p3 is POSITION, !ubot is REAL, !utop is REAL, !dwgno is STRING, !rev is STRING, !title1 is STRING, !title2 is STRING, !title3 is STRING) is STRING
+
+	!ucen = (!ubot + !utop) * 0.5
+	!zlen = abs(!utop - !ubot)
+	if (!zlen lt 1) then
+		return 'Bottom U and Top U are the same'
 	endif
+
+	!e1 = !p1.east
+	!n1 = !p1.north
+	!e2 = !p2.east
+	!n2 = !p2.north
+	!e3 = !p3.east
+	!n3 = !p3.north
+
+	-----------------------------------------------------------------
+	-- work on plan only. all three points are put on the same level --
+	-- so the direction taken further down comes out horizontal      --
+	-----------------------------------------------------------------
+	!pfrom = !this.PosOf(!e1, !n1, !ucen)
+	!pto2 = !this.PosOf(!e2, !n2, !ucen)
+	!pto3 = !this.PosOf(!e3, !n3, !ucen)
+
+	!xlen = !pfrom.distance(!pto2)
+	if (!xlen lt 1) then
+		return 'P1 and P2 are the same point'
+	endif
+	!ux = (!e2 - !e1) / !xlen
+	!uy = (!n2 - !n1) / !xlen
+
+	-------------------------------------------------------------------
+	-- foot of the perpendicular dropped from P3 onto the line P1P2.  --
+	-- foot -> P3 is the second axis of the box with the side P3 is   --
+	-- on already built into it, and their distance is the second     --
+	-- length, so neither an angle nor a square root is needed here   --
+	-------------------------------------------------------------------
+	!t = (!e3 - !e1) * !ux + (!n3 - !n1) * !uy
+	!footE = !e1 + !ux * !t
+	!footN = !n1 + !uy * !t
+	!pfoot = !this.PosOf(!footE, !footN, !ucen)
+
+	!ylen = !pfoot.distance(!pto3)
+	if (!ylen lt 1) then
+		return 'P3 is only ' & !ylen.string() & ' away from the line P1 P2. its distance from that line is the other size of the frame, so it has to be picked well off it'
+	endif
+
+	---------------------------------------------------------------------
+	-- the box is centred and symmetric about its own axes, so only Y   --
+	-- has to be given. X then follows from Y and Z and lands along     --
+	-- P1 -> P2, and whether it points forwards or backwards along that --
+	-- edge describes the same box                                      --
+	---------------------------------------------------------------------
+	!ydir = !pfoot.direction(!pto3).string().before('WRT')
+
+	!ecen = !e1 + !ux * !xlen * 0.5 + (!e3 - !footE) * 0.5
+	!ncen = !n1 + !uy * !xlen * 0.5 + (!n3 - !footN) * 0.5
+	!pcen = !this.PosOf(!ecen, !ncen, !ucen)
+
+	!err = !this.GotoBoxSite()
+	if (!err.neq('')) then
+		return !err
+	endif
+
+	!ok = true
+	if (!dwgno.neq('')) then
+		----------------------------------------------------------------
+		-- the user may or may not type the leading slash, and '//name' --
+		-- is not a name PDMS will take                                 --
+		----------------------------------------------------------------
+		!fullname = !dwgno
+		if (!fullname.substring(1,1).neq('/')) then
+			!fullname = '/' & !fullname
+		endif
+		new equi $!fullname
+		handle any
+			!ok = false
+		endhandle
+		if (not(!ok)) then
+			return 'cannot create EQUI ' & !fullname & ' - the name is probably in use already'
+		endif
+	else
+		new equi
+		handle any
+			!ok = false
+		endhandle
+		if (not(!ok)) then
+			return 'cannot create EQUI'
+		endif
+	endif
+
+	var !equi namn of ce
+	!equinav = !this.NavName(!equi)
+
+	!ok = true
+	new box
+	handle any
+		!ok = false
+	endhandle
+	if (not(!ok)) then
+		return 'cannot create BOX under ' & !equi
+	endif
+
+	POS $!pcen
+	------------------------------------------------------------------
+	-- two axes on one ORI have to be joined with 'and' - writing    --
+	-- 'ORI Y is S Z is U' is a syntax error                         --
+	------------------------------------------------------------------
+	ORI Y is $!ydir and Z is U WRT /*
+	XLEN $!xlen
+	YLEN $!ylen
+	ZLEN $!zlen
+	LEVEL 1 5
+
+	!this.SetTagText(!equinav, 'rev', !rev)
+	!this.SetTagText(!equinav, 'title1', !title1)
+	!this.SetTagText(!equinav, 'title2', !title2)
+	!this.SetTagText(!equinav, 'title3', !title3)
+
+	$!equinav
+	return ''
+endmethod
+
+---------------------------------------------------------------------
+-- NAMN answers a name without its leading slash, and '=nnnn/nnnn'  --
+-- when the element has no name at all. neither form can be handed  --
+-- straight to $! to navigate with, so put the slash back on the    --
+-- named ones. same rule DrawingPlan1.Apply() uses on its box list  --
+---------------------------------------------------------------------
+define method .NavName(!namn is STRING) is STRING
+	if (!namn.substring(1,1).eq('=')) then
+		return !namn
+	endif
+	return '/' & !namn
+endmethod
+
+---------------------------------------------------------------------
+-- finds the TEXT under !equinav whose STEXT starts '!tag:', and    --
+-- returns a navigable ref to it, or '' when there is none. shared  --
+-- by .SetTagText() (which needs the element, to overwrite it) and  --
+-- .TagValue() below (which needs what is after the colon)          --
+---------------------------------------------------------------------
+define method .FindTagText(!equinav is STRING, !tag is STRING) is STRING
+	$!equinav
+	!found = ''
+	var !texts coll all text for ce
+	if (not(!texts.unset())) then
+		do !t values !texts
+			!stext = ''
+			var !stext stext of $!t
+			handle any
+				!stext = ''
+			endhandle
+			if (!stext.matchwild(!tag & ':*')) then
+				!found = !t
+			endif
+		enddo
+	endif
+	return !found
+endmethod
+
+---------------------------------------------------------------------
+-- rev / title1..3 travel as TEXT elements under the EQUI, in the   --
+-- same 'tag:value' shape DrawingPlan1.Apply() already scans for.   --
+--                                                                  --
+-- set, not add: an existing tag of the same name is overwritten,   --
+-- so pressing Apply twice on a box, or picking a new box while the --
+-- Info tab still holds the last sheet's titles, cannot leave two   --
+-- 'rev:' texts under one EQUI for the drawing side to choose       --
+-- between. a blank value is left alone rather than clearing the    --
+-- tag, so Apply can never take information off a box by accident   --
+--                                                                  --
+-- navigating back to the EQUI matters - NEW TEXT leaves CE on the  --
+-- text it just made, so without this the four tags would be built  --
+-- one inside the next instead of side by side.                     --
+-- a failure here must not cost the box, so it is swallowed         --
+---------------------------------------------------------------------
+define method .SetTagText(!equinav is STRING, !tag is STRING, !value is STRING)
+	if (!value.eq('')) then
+		return
+	endif
+	!found = !this.FindTagText(!equinav, !tag)
+
+	!ok = true
+	if (!found.neq('')) then
+		$!found
+		handle any
+			!ok = false
+		endhandle
+	else
+		$!equinav
+		new text
+		handle any
+			!ok = false
+		endhandle
+	endif
+
+	if (!ok) then
+		STEXT |$!tag:$!value|
+		handle any
+		endhandle
+	endif
+	$!equinav
+endmethod
+
+---------------------------------------------------------------------
+-- the value after 'tag:' on the box's TEXT, or '' when there is    --
+-- no such tag yet. used by Read CE to bring a box's existing       --
+-- rev/titles into the Info tab                                     --
+---------------------------------------------------------------------
+define method .TagValue(!equinav is STRING, !tag is STRING) is STRING
+	!found = !this.FindTagText(!equinav, !tag)
+	if (!found.eq('')) then
+		return ''
+	endif
+	$!found
+	!stext = ''
+	var !stext stext of ce
+	handle any
+		!stext = ''
+	endhandle
+	$!equinav
+	return !stext.after(!tag & ':')
+endmethod
+
+---------------------------------------------------------------------
+-- the EQUI of the box the user has navigated to, or an empty       --
+-- string when the current element is not one of ours - in which    --
+-- case the reason has already been put on screen.                  --
+-- shared by Delete Box and by Apply on the Info tab                 --
+---------------------------------------------------------------------
+define method .CurrentBoxEqui() is STRING
+	var !projid proj id
+	!sitename = '/' & !projid & '_DrawingPlanBox'
+
+	!ok = true
+	var !site name of site of ce
+	handle any
+		!ok = false
+	endhandle
+	if (not(!ok)) then
+		!!alert.error('Navigate to the box first')
+		return ''
+	endif
+	if (not(!site.eq(!sitename))) then
+		!!alert.error('The current element is not under ' & !sitename)
+		return ''
+	endif
+
+	!ok = true
+	var !equi namn of equi of ce
+	handle any
+		!ok = false
+	endhandle
+	if (not(!ok)) then
+		!!alert.error('The current element is not part of a drawing plan box')
+		return ''
+	endif
+
+	return !equi
+endmethod
+
+---------------------------------------------------------------------
+-- Info tab - put the sheet information on the box the user has     --
+-- navigated to. this is the way the boxes get labelled in          --
+-- practice: pick all the frames first, then go round them one at   --
+-- a time filling in the numbers                                    --
+---------------------------------------------------------------------
+define method .ApplyInfo()
+	!equi = !this.CurrentBoxEqui()
+	if (!equi.eq('')) then
+		return
+	endif
+	!equinav = !this.NavName(!equi)
+
+	!dwgno = !this.dwgno.val
+	if (!dwgno.neq('')) then
+		!fullname = !dwgno
+		if (!fullname.substring(1,1).neq('/')) then
+			!fullname = '/' & !fullname
+		endif
+
+		---------------------------------------------------------------
+		-- E3D refuses a duplicate name, and it refuses it with its   --
+		-- own error rather than anything this form can explain, so   --
+		-- look the drawing number up first and say who has it.       --
+		-- finding it on the very box being labelled is not a clash - --
+		-- that is just Apply pressed a second time                   --
+		---------------------------------------------------------------
+		!taken = false
+		!existing = ''
+		$!fullname
+		handle any
+			!taken = false
+		elsehandle none
+			!taken = true
+			var !existing namn of ce
+		endhandle
+		$!equinav
+
+		if (!taken and !existing.neq(!equi)) then
+			!!alert.error('Drawing No. ' & !dwgno & ' is already used by /' & !existing)
+			return
+		endif
+
+		!ok = true
+		NAME $!fullname
+		handle any
+			!ok = false
+		endhandle
+		if (not(!ok)) then
+			!!alert.error('Cannot name the box ' & !fullname)
+			return
+		endif
+
+		var !equi namn of ce
+		!equinav = !this.NavName(!equi)
+	endif
+
+	!this.SetTagText(!equinav, 'rev', !this.revtext.val)
+	!this.SetTagText(!equinav, 'title1', !this.title1text.val)
+	!this.SetTagText(!equinav, 'title2', !this.title2text.val)
+	!this.SetTagText(!equinav, 'title3', !this.title3text.val)
+	$!equinav
+endmethod
+
+---------------------------------------------------------------------
+-- Info tab - Read CE. loads the Info tab from the box the user has --
+-- navigated to, so Apply is not working blind: without this, an    --
+-- Apply with a blank Rev would look harmless but is only safe      --
+-- because blanks are left alone (see .SetTagText()) - the user     --
+-- still has to know what is already there before deciding what to  --
+-- change. an unnamed box (ref name, '=nnnn/nnnn') leaves the       --
+-- Drawing No. field blank rather than showing the ref               --
+---------------------------------------------------------------------
+define method .ReadInfo()
+	!equi = !this.CurrentBoxEqui()
+	if (!equi.eq('')) then
+		return
+	endif
+	!equinav = !this.NavName(!equi)
+
+	if (!equi.substring(1,1).eq('=')) then
+		!this.dwgno.val = ''
+	else
+		!this.dwgno.val = !equi
+	endif
+
+	!this.revtext.val    = !this.TagValue(!equinav, 'rev')
+	!this.title1text.val = !this.TagValue(!equinav, 'title1')
+	!this.title2text.val = !this.TagValue(!equinav, 'title2')
+	!this.title3text.val = !this.TagValue(!equinav, 'title3')
+endmethod
+
+---------------------------------------------------------------------
+-- navigate to <projid>_DrawingPlanBox, creating the site and a     --
+-- zone under it when they are not there yet. this replaces the     --
+-- hard coded db address the form used to jump to, which dropped    --
+-- the boxes wherever that address happened to point on the day     --
+---------------------------------------------------------------------
+define method .GotoBoxSite() is STRING
+	var !projid proj id
+	!sitename = '/' & !projid & '_DrawingPlanBox'
+
+	!found = true
+	$!sitename
+	handle any
+		!found = false
+	endhandle
+
+	if (not(!found)) then
+		!ok = true
+		WORLD
+		handle any
+			!ok = false
+		endhandle
+		if (not(!ok)) then
+			return 'cannot get to WORLD to create ' & !sitename
+		endif
+
+		!ok = true
+		new site $!sitename
+		handle any
+			!ok = false
+		endhandle
+		if (not(!ok)) then
+			return 'cannot create site ' & !sitename & ' - check that a writable design DB is in your MDB'
+		endif
+
+		------------------------------------------------------------------
+		-- a new SITE lands in whatever DB happens to be current, which --
+		-- is exactly the thing the old hard coded db address got wrong, --
+		-- so say so. the DB name is only nice to have - it cannot be    --
+		-- asked for from the level of a SITE in every setup, so a       --
+		-- failure here just drops that half of the message              --
+		------------------------------------------------------------------
+		!dbname = ''
+		var !dbname dbname of ce
+		handle any
+			!dbname = ''
+		endhandle
+		if (!dbname.eq('')) then
+			!!alert.message('Created site ' & !sitename & ' - please check it landed in the DB you want')
+		else
+			!!alert.message('Created site ' & !sitename & ' in DB ' & !dbname)
+		endif
+	endif
+
+	var !type type of ce
+	if (not(!type.eqnocase('SITE'))) then
+		return !sitename & ' exists but is not a SITE'
+	endif
+
+	--------------------------------------------------------------
+	-- an EQUI cannot hang straight off a SITE, there has to be  --
+	-- a ZONE in between                                         --
+	--------------------------------------------------------------
+	!zonename = !sitename & '_Z1'
+	var !zones coll all zone for ce
+	!nozone = true
+	if (not(!zones.unset())) then
+		if (!zones.size().gt(0)) then
+			!nozone = false
+		endif
+	endif
+
+	if (!nozone) then
+		!ok = true
+		new zone $!zonename
+		handle any
+			!ok = false
+		endhandle
+		if (not(!ok)) then
+			return 'cannot create a ZONE under ' & !sitename
+		endif
+	else
+		!ok = true
+		!zone = !zones[1]
+		$!zone
+		handle any
+			!ok = false
+		endhandle
+		if (not(!ok)) then
+			return 'cannot get to the ZONE under ' & !sitename
+		endif
+	endif
+
+	return ''
+endmethod
+
+---------------------------------------------------------------------
+-- Pick tab - four points from the 3D view off one button press.    --
+--                                                                  --
+-- the four picks are four EDGPACKETs in a chain, each one hooked   --
+-- up by the action of the one before it.                           --
+--                                                                  --
+-- two things had to be got right here:                             --
+--                                                                  --
+-- putting four definePosition() calls on a single packet does NOT  --
+-- give four prompts in a row - they overwrite each other, the      --
+-- packet still collects one position, and the action fires with    --
+-- only !this.return[1] filled in                                   --
+--                                                                  --
+-- and adding the next packet while the previous one is still       --
+-- registered makes E3D put up 'OK to replace currently active      --
+-- major application/utility "Basic Position"?' and the chain dies  --
+-- there. so every packet carries the same description and is taken --
+-- out by that description before the next one goes in. remove is   --
+-- left FALSE so the framework never also removes one behind our    --
+-- back - if it did that after the action returned it would take    --
+-- out the packet we had just added and the chain would stop with   --
+-- no message at all                                                --
+---------------------------------------------------------------------
+define method .PickPoints()
+	AID CLEAR ALL
+	!this.ClearPointFields()
+	!this.PickOne(1)
+endmethod
+
+define method .PickOne(!idx is REAL)
+	!prompt = 'P1 - one end of an edge of the frame'
+	if (!idx eq 2) then
+		!prompt = 'P2 - the other end of that edge'
+	elseif (!idx eq 3) then
+		!prompt = 'P3 - off to the far side'
+	elseif (!idx eq 4) then
+		!prompt = 'P4 - the second level'
+	endif
+
+	!this.DropPicking()
+
+	!packet = object EDGPACKET()
+	!packet.definePosition(!prompt)
+	!packet.description = !this.edgdesc
+	!packet.action = |!!DrawingPlan.PickDone(!this.return[1].position, $!idx)|
+	!packet.remove = false
+	if (!!edgCntrl.add(!packet)) then
+	endif
+endmethod
+
+------------------------------------------------------------------
+-- takes our own packet back out of the event system. safe to    --
+-- call when there is nothing registered                         --
+------------------------------------------------------------------
+define method .DropPicking()
+	!!edgCntrl.remove(!this.edgdesc)
+	handle any
+	endhandle
+endmethod
+
+define method .PickDone(!pos is POSITION, !idx is REAL)
+	!!DrawingPlan.SetPoint(!idx, !pos)
+	!!DrawingPlan.RefreshMarks()
+	if (!idx lt 4) then
+		!next = !idx + 1
+		!!DrawingPlan.PickOne(!next)
+	else
+		!!DrawingPlan.DropPicking()
+		!!DrawingPlan.CreateBox()
+	endif
+endmethod
+
+define method .SetPoint(!idx is REAL, !pos is POSITION)
+	!posw = !pos.wrt(WORL)
+	!estr = !posw.east.string('D4')
+	!nstr = !posw.north.string('D4')
+	!ustr = !posw.up.string('D4')
+	if (!idx eq 1) then
+		!this.p1e.val = !estr
+		!this.p1n.val = !nstr
+		!this.p1u.val = !ustr
+	elseif (!idx eq 2) then
+		!this.p2e.val = !estr
+		!this.p2n.val = !nstr
+		!this.p2u.val = !ustr
+	elseif (!idx eq 3) then
+		!this.p3e.val = !estr
+		!this.p3n.val = !nstr
+		!this.p3u.val = !ustr
+	else
+		!this.p4e.val = !estr
+		!this.p4n.val = !nstr
+		!this.p4u.val = !ustr
+	endif
+endmethod
+
+define method .RefreshMarks()
+	AID CLEAR ALL
+	!this.MarkOne(!this.p1e.val, !this.p1n.val, !this.p1u.val, 'P1')
+	!this.MarkOne(!this.p2e.val, !this.p2n.val, !this.p2u.val, 'P2')
+	!this.MarkOne(!this.p3e.val, !this.p3n.val, !this.p3u.val, 'P3')
+	!this.MarkOne(!this.p4e.val, !this.p4n.val, !this.p4u.val, 'P4')
+endmethod
+
+define method .MarkOne(!estr is STRING, !nstr is STRING, !ustr is STRING, !tag is STRING)
+	if (!estr.eq('') or !nstr.eq('')) then
+		return
+	endif
+	!e = !this.NumOf(!estr)
+	!n = !this.NumOf(!nstr)
+	!u = 0
+	if (!ustr.neq('')) then
+		!u = !this.NumOf(!ustr)
+	endif
+	------------------------------------------------------------------
+	-- the coordinates are written out one by one rather than as a   --
+	-- POSITION. a POSITION expands with a 'WRT /*' tail on the end, --
+	-- which AID will not take                                       --
+	------------------------------------------------------------------
+	AID TEXT |$!tag| AT E $!e N $!n U $!u
+	AID SPHERE E $!e N $!n U $!u DIA 300
+endmethod
+
+---------------------------------------------------------------------
+-- REAL.string() brings the unit out with it ('-245010.0000mm') and --
+-- STRING.real() cannot parse that back, so the unit has to come    --
+-- off first. same thing DrawingPlan1.Apply() does to WVOL          --
+---------------------------------------------------------------------
+define method .NumOf(!str is STRING) is REAL
+	return !str.replace('mm', '').trim().real()
+endmethod
+
+---------------------------------------------------------------------
+-- a POSITION made with object POSITION() and then filled in field  --
+-- by field carries no coordinate system, and .distance() and       --
+-- .direction() on it fail with 'Error in conversion to world       --
+-- co-ordinates. Check for unset objects'. building it from a       --
+-- string ending in WRT /* gives it one.                            --
+-- the compass letter is flipped instead of writing a negative      --
+-- number, so the string is always one PDMS will take               --
+---------------------------------------------------------------------
+define method .PosOf(!e is REAL, !n is REAL, !u is REAL) is POSITION
+	------------------------------------------------------------------
+	-- PML will not take a method call on a bracketed expression -    --
+	-- (0 - !e).string() is a syntax error - so the flipped sign     --
+	-- goes into a variable of its own first.                        --
+	-- .string() on a value that came out of a POSITION or a REAL    --
+	-- gadget carries the unit with it, so it is taken off again     --
+	-- here and the number left to be read in project units          --
+	------------------------------------------------------------------
+	!ev = !e
+	!eword = 'E '
+	if (!e lt 0) then
+		!ev = 0 - !e
+		!eword = 'W '
+	endif
+	!nv = !n
+	!nword = ' N '
+	if (!n lt 0) then
+		!nv = 0 - !n
+		!nword = ' S '
+	endif
+	!uv = !u
+	!uword = ' U '
+	if (!u lt 0) then
+		!uv = 0 - !u
+		!uword = ' D '
+	endif
+
+	!str = !eword & !ev.string().replace('mm', '')
+	!str = !str & !nword & !nv.string().replace('mm', '')
+	!str = !str & !uword & !uv.string().replace('mm', '')
+	return object POSITION(!str & ' WRT /*')
+endmethod
+
+define method .ClearPoints()
+	!this.ClearPointFields()
+endmethod
+
+------------------------------------------------------------------
+-- blanks the Info tab. only called once, from .DrawingPlan() at  --
+-- form start up - there is no Clear button any more. Read CE      --
+-- already does a better job of resetting the tab for any box       --
+-- that is actually selected, this is only for the state before     --
+-- the user has picked or navigated to anything at all               --
+------------------------------------------------------------------
+define method .ClearInfo()
+	!this.dwgno.val = ''
+	!this.revtext.val = ''
+	!this.title1text.val = ''
+	!this.title2text.val = ''
+	!this.title3text.val = ''
+endmethod
+
+------------------------------------------------------------------
+-- the coordinates on their own. a fresh round of picking wipes   --
+-- the old points but must not throw away a drawing number the    --
+-- user has already typed in                                      --
+------------------------------------------------------------------
+define method .ClearPointFields()
+	AID CLEAR ALL
+	!this.p1e.val = ''
+	!this.p1n.val = ''
+	!this.p1u.val = ''
+	!this.p2e.val = ''
+	!this.p2n.val = ''
+	!this.p2u.val = ''
+	!this.p3e.val = ''
+	!this.p3n.val = ''
+	!this.p3u.val = ''
+	!this.p4e.val = ''
+	!this.p4n.val = ''
+	!this.p4u.val = ''
 endmethod
 
 define method .CreateBox()
-  AID CLEAR ALL
-  !xcen = str(!this.pointSt.east  + (!this.pointEn.east  - !this.pointSt.east) * 0.5)
-  !ycen = str(!this.pointSt.north + (!this.pointEn.north - !this.pointSt.north) * 0.5)
-  !zcen = str(!this.pointSt.up + (!this.pointEn.up - !this.pointSt.up) * 0.5)
-  !xlen = abs(!this.pointEn.east  - !this.pointSt.east)
-  !ylen = abs(!this.pointEn.north  - !this.pointSt.north)
-  !zlen = abs(!this.pointEn.up  - !this.pointSt.up)
-	=2013286748/281463
-	handle any
-	  !!alert.error ('No EQUI is available')
-	elsehandle none
-	  new box pos e $!xcen n $!ycen u $!zcen xlen $!xlen ylen $!ylen zlen $!zlen level 1 5
-	endhandle
-  
-  
-endmethod
+	if (!this.p1e.val.eq('') or !this.p1n.val.eq('') or !this.p2e.val.eq('') or !this.p2n.val.eq('') or !this.p3e.val.eq('') or !this.p3n.val.eq('')) then
+		!!alert.error('P1, P2 and P3 are all needed')
+		return
+	endif
+	------------------------------------------------------------------
+	-- the two levels of the box come from the picks, not from the   --
+	-- form - P1 carries the first one and P4 the second. only P4's  --
+	-- U is used, its E and N are ignored                            --
+	------------------------------------------------------------------
+	if (!this.p1u.val.eq('') or !this.p4u.val.eq('')) then
+		!!alert.error('the U of P1 and the U of P4 are the two levels of the box, both are needed')
+		return
+	endif
 
-define method .PickPoint(!str is string)
-  !packet = object EDGPACKET()
-  !packet.definePosition('Pick Position')
---  !packet.action = |!!MarkText(!this.return[1].position, '$!str')|
-  !packet.action = |!!DrawingPlan.MarkText(!this.return[1].position, '$!str')|
-	!packet.remove = true	
-  !!edgCntrl.add(!packet)
-endmethod
+	!p1 = !this.PosOf(!this.NumOf(!this.p1e.val), !this.NumOf(!this.p1n.val), 0)
+	!p2 = !this.PosOf(!this.NumOf(!this.p2e.val), !this.NumOf(!this.p2n.val), 0)
+	!p3 = !this.PosOf(!this.NumOf(!this.p3e.val), !this.NumOf(!this.p3n.val), 0)
+	!ubot = !this.NumOf(!this.p1u.val)
+	!utop = !this.NumOf(!this.p4u.val)
 
-define method .MarkText(!pos is position, !str1 is string)
-	!posw = !pos.wrt(WORL)
+	------------------------------------------------------------------
+	-- Pick only ever makes a blank box - no name, no rev, no        --
+	-- titles. naming and labelling is entirely the Info tab's job,  --
+	-- done afterwards with Read CE / Apply once the box exists.     --
+	-- keeping the two apart means a box in progress on the Info     --
+	-- tab (read in, half edited, not yet Applied) can never leak    --
+	-- into a new box picked in the meantime                         --
+	------------------------------------------------------------------
+	!err = !this.MakeBox(!p1, !p2, !p3, !ubot, !utop, '', '', '', '', '')
+	if (!err.neq('')) then
+		!!alert.error(!err)
+		return
+	endif
+
+	------------------------------------------------------------------
+	-- no dialog on success - picking is meant to run one frame      --
+	-- after another without anything to click away                 --
+	------------------------------------------------------------------
 	AID CLEAR ALL
-	if (!str1 eq 'Start Position') then
-	  !!DrawingPlan.fretext.val = !posw.east.string('D4')
-	  !!DrawingPlan.frntext.val = !posw.north.string('D4')
-	  !!DrawingPlan.frutext.val = !posw.up.string('D4')
-		!!DrawingPlan.tobt.active = true
-    !!DrawingPlan.pointSt = !posw
-		AID TEXT |Start Position| AT $!pos
-		AID SPHERE $!pos DIA 300
-    if (!!DrawingPlan.pointEn.set()) then
-      if (!!DrawingPlan.fretext.val.real() eq !!DrawingPlan.toetext.val.real() or !!DrawingPlan.frntext.val.real() eq !!DrawingPlan.tontext.val.real() or !!DrawingPlan.frutext.val.real() eq !!DrawingPlan.toutext.val.real()) then
-        !!DrawingPlan.create.active = false
-        !!DrawingPlan.delete.active = false
-      else
-        !!DrawingPlan.create.active = true
-        !!DrawingPlan.delete.active = true
-      endif
-      AID TEXT |End Position| AT $!!DrawingPlan.pointEn
-			AID SPHERE $!!DrawingPlan.pointEn DIA 300
-    endif
-	else
-	  !!DrawingPlan.toetext.val = !posw.east.string('D4')
-	  !!DrawingPlan.tontext.val = !posw.north.string('D4')
-	  !!DrawingPlan.toutext.val = !posw.up.string('D4')
-		if (!!DrawingPlan.fretext.val.real() eq !!DrawingPlan.toetext.val.real() or !!DrawingPlan.frntext.val.real() eq !!DrawingPlan.tontext.val.real() or !!DrawingPlan.frutext.val.real() eq !!DrawingPlan.toutext.val.real()) then
-			!!DrawingPlan.create.active = false
-			!!DrawingPlan.delete.active = false
-		else
-			!!DrawingPlan.create.active = true
-			!!DrawingPlan.delete.active = true
-		endif
-    !!DrawingPlan.pointEn = !posw
-    AID TEXT |Start Position| AT $!!DrawingPlan.pointSt
-		AID SPHERE $!!DrawingPlan.pointSt DIA 300
-    AID TEXT |End Position| AT $!pos
-		AID SPHERE $!pos DIA 300
+endmethod
+
+---------------------------------------------------------------------
+-- deletes the whole EQUI the current element sits in, but only     --
+-- inside the DrawingPlanBox site, so a CE left somewhere else by   --
+-- mistake cannot take a piece of the real model with it            --
+---------------------------------------------------------------------
+define method .DeleteBox()
+	!equi = !this.CurrentBoxEqui()
+	if (!equi.eq('')) then
+		return
+	endif
+
+	!ans = !!alert.confirm('Delete ' & !equi & ' ?')
+	if (not(!ans.eq('YES'))) then
+		return
+	endif
+
+	!equinav = !this.NavName(!equi)
+	$!equinav
+	var !owner namn of owner of ce
+	!ownernav = !this.NavName(!owner)
+
+	!ok = true
+	delete equi
+	handle any
+		!ok = false
+	endhandle
+	if (not(!ok)) then
+		!!alert.error('Cannot delete ' & !equi)
+		return
+	endif
+
+	$!ownernav
+	AID CLEAR ALL
+	!!alert.message('Deleted ' & !equi)
+endmethod
+
+----------------------------------------------
+-- Import tab - three points from a CAD file --
+----------------------------------------------
+define method .BrowseFile()
+	using namespace 'Aveva.Core.Presentation'
+	!browser = object PMLFILEBROWSER('OPEN')
+	!browser.show(!this.userevar, '*.csv', 'CAD box file', false, 'csv files (*.csv)|*.csv|txt files (*.txt)|*.txt', 2)
+	if (!browser.file().neq('')) then
+		!this.userevar = !browser.file()
+		!this.filetext.val = !browser.file()
 	endif
 endmethod
 
+define method .ImportFile()
+	!file = !this.filetext.val
+	if (!file.eq('')) then
+		!!alert.error('Choose a file first')
+		return
+	endif
+
+	!opened = true
+	!ff = object FILE(!file)
+	!ff.open('READ')
+	handle any
+		!opened = false
+	endhandle
+	if (not(!opened)) then
+		!!alert.error('Cannot open ' & !file)
+		return
+	endif
+	!lines = !ff.readfile()
+	!ff.close()
+
+	if (not(!lines.set())) then
+		!!alert.error(!file & ' is empty')
+		return
+	endif
+
+	------------------------------------------------------------------
+	-- the two Elevation boxes are the fallback for every line that  --
+	-- does not carry its own, so read them once and remember        --
+	-- whether they were filled in at all                            --
+	------------------------------------------------------------------
+	!defbot = 0
+	!deftop = 0
+	!havedef = false
+	if (not(!this.ubot.val.unset()) and not(!this.utop.val.unset())) then
+		!defbot = !this.ubot.val
+		!deftop = !this.utop.val
+		!havedef = true
+	endif
+
+	!log = ARRAY()
+	!ok = 0
+	!ng = 0
+	!row = 0
+
+	do !raw values !lines
+		!row = !row + 1
+		!line = !raw.trim()
+		if (!line.neq('') and (not(!line.matchwild('--*')))) then
+			!f = !this.SplitKeep(!line, ';')
+			if (!f.size().lt(6)) then
+				!ng = !ng + 1
+				!log.append('line ' & !row.string() & ' - skipped, needs at least six coordinates')
+			else
+				!ubot = !defbot
+				!utop = !deftop
+				!haveelev = !havedef
+				!botstr = !this.Field(!f, 12)
+				!topstr = !this.Field(!f, 13)
+				if (!botstr.neq('') and !topstr.neq('')) then
+					!ubot = !this.NumOf(!botstr)
+					!utop = !this.NumOf(!topstr)
+					!haveelev = true
+				endif
+
+				if (not(!haveelev)) then
+					!ng = !ng + 1
+					!log.append('line ' & !row.string() & ' - skipped, no elevation on the line and none in the Elevation boxes')
+				else
+					!p1 = !this.PosOf(!this.NumOf(!this.Field(!f, 1)), !this.NumOf(!this.Field(!f, 2)), 0)
+					!p2 = !this.PosOf(!this.NumOf(!this.Field(!f, 3)), !this.NumOf(!this.Field(!f, 4)), 0)
+					!p3 = !this.PosOf(!this.NumOf(!this.Field(!f, 5)), !this.NumOf(!this.Field(!f, 6)), 0)
+
+					!err = !this.MakeBox(!p1, !p2, !p3, !ubot, !utop, !this.Field(!f, 7), !this.Field(!f, 8), !this.Field(!f, 9), !this.Field(!f, 10), !this.Field(!f, 11))
+					if (!err.neq('')) then
+						!ng = !ng + 1
+						!log.append('line ' & !row.string() & ' - ' & !err)
+					else
+						!ok = !ok + 1
+						var !equi namn of ce
+						!log.append('line ' & !row.string() & ' - created ' & !equi)
+					endif
+				endif
+			endif
+		endif
+	enddo
+
+	!log.append('')
+	!log.append(!ok.string() & ' box(es) created, ' & !ng.string() & ' line(s) skipped')
+	!this.log.dtext = !log
+	!!alert.message(!ok.string() & ' box(es) created, ' & !ng.string() & ' line(s) skipped - see the Result list')
+endmethod
+
+define method .Field(!f is ARRAY, !i is REAL) is STRING
+	if (!f.size().lt(!i)) then
+		return ''
+	endif
+	return !f[!i].trim()
+endmethod
+
+---------------------------------------------------------------------
+-- STRING.split() drops empty tokens, which would shift every       --
+-- optional field along the line as soon as one is left blank, so   --
+-- the separators are walked by hand and empty fields are kept      --
+---------------------------------------------------------------------
+define method .SplitKeep(!str is STRING, !sep is STRING) is ARRAY
+	!out = ARRAY()
+	!rest = !str
+	!pat = '*' & !sep & '*'
+	do while (!rest.matchwild(!pat))
+		!out.append(!rest.before(!sep))
+		!rest = !rest.after(!sep)
+	enddo
+	!out.append(!rest)
+	return !out
+endmethod
+
 define method .Close()
-   kill !!DrawingPlan
+	!this.DropPicking()
+	AID CLEAR ALL
+	kill !!DrawingPlan
 endmethod

@@ -1446,7 +1446,7 @@ endif
   4. `.delete` 按鈕呼叫 `!This.DeleteBox()`，但檔案內（155行，已全讀）**沒有 `.DeleteBox()` 這個 method**，按下去會報錯
   5. `design/functions/MarkText.pmlfnc` 有一份幾乎相同邏輯的獨立函式，但表單裡呼叫它的那行被註解掉了（`--!packet.action = |!!MarkText(...)|`），改成 inline 版的 `.MarkText()` method，看起來是舊版殘留
 
-**下一步待辦**：跟使用者確認 `DrawingPlan.pmlfrm` 是否就是他說的那支程式（還是要重新找/在更新後的目錄裡再找一次）。
+**已解決（2026-08-17）**：使用者確認 `design/forms/DrawingPlan.pmlfrm` 就是切圖程式，沒有別的版本。上面列的 5 個問題連同三點法、CAD 匯入一起處理掉了，見下面「改寫：`DrawingPlan.pmlfrm` 改成三點法 + CAD 匯入」。
 
 ### 方式 B：依結構網格自動切 box（未來項目）
 
@@ -1655,6 +1655,222 @@ PML 的 `handle` 區塊是掛在**它前面那一個敘述**上的（這一點�
 
 1. 用出錯的那個舊存檔再按一次 `Load`，確認不再跳錯誤視窗，而且 `northrottext` 以外的欄位都有正確讀回來。
 2. 重新 `Save` 一個新檔再 `Load`，確認 `NorthArrow` 三個欄位（含 real 型式的 `Scale`）都正確回填。
+
+## 改寫：`DrawingPlan.pmlfrm` 改成三點法 + CAD 匯入（2026-08-17，**尚未實機驗證**）
+
+切圖範圍（box）的建立方式整支改寫。程式位置：`design/forms/DrawingPlan.pmlfrm`（DESIGN 模組，`!!DrawingPlan`，不是 DRAFT 的 `!!DrawingPlan1`）。
+
+### 使用者定案的需求
+
+1. **CAD 圖由使用者自己縮放到 1:1 並放到正確位置**，E3D 端不做任何座標轉換（明確要求不要多這一層）
+2. **高程（Z）由表單輸入**，CAD 2D 圖沒有這個資訊
+3. **三個點決定一個圖框**，角度由點自己算出來
+4. **沒有圖號也要能建 box**，草圖階段常常只是要知道會切成幾張圖
+5. **不做重複判斷**。原本設計過用一個 CAD 端唯一 ID（entity handle）存成 `cadid:` TEXT 當比對鍵，使用者否決：那個 ID 在 E3D 裡看不到，使用者無法把清單上的 box 對應回 CAD 上哪一格。改用「使用者自訂短代號」也不行——E3D 不接受重名，讓使用者自由輸入遲早撞名。結論是**草圖階段能轉出正確範圍的圖面就夠了，重複匯入就重複建**
+
+### 三點如何變成 box（`.MakeBox()`）
+
+- `P1 -> P2` 是第一條邊，長短邊不限，程式自己算
+- `P3` 落在該線之外，決定另一個方向的長度和圖框往哪一側長
+- 作法：求 P3 在 P1P2 上的垂足，`垂足 -> P3` 就是 box 的第二軸（側邊符號已經內含在方向裡），兩點距離就是第二個邊長。**不需要三角函數也不需要開根號**，只用到 `POSITION.distance()` 和 `POSITION.direction()`，兩者 repo 內都有現成用例（`DrawingPlan1GridAnnotation.pmlfnc:95`、`ImportATTAtoATE.pmlfnc:57`）
+- 只設 `ORI Y is <dir> Z is U`，X 軸由 Y、Z 推導出來，會落在 P1->P2 這條線上。X 指向正或反描述的是同一個 box（box 對自己的軸對稱），所以不必處理符號
+- `.Apply()` 的 `efpla`/`nfpla` 判斷會自己把 box 的軸對應到 E/N，所以長邊被指派成 X 還是 Y 都無所謂
+
+### 表單結構（為了以後擴充）
+
+改成 tabset，目前兩個分頁，共用底下的 `Elevation` 欄位（`Bottom U` / `Top U`）：
+
+- **Pick 分頁**：在 3D 點三點（`EDGPACKET` + `definePosition`），可空的 `Drawing No.`，Create / Clear Points / Delete Box
+- **Import 分頁**：選檔、格式說明、Import、結果清單
+
+**關鍵：分頁只負責把三個點和高程湊齊，然後呼叫同一支 `.MakeBox()`。** 導 site、命名、建 EQUI/BOX/TEXT、防呆全部只有一份。使用者確認以後還會有第三種方式（例如依結構網格自動切），到時候只要新增分頁接上 `.MakeBox()`。
+
+### 匯入檔格式
+
+```
+E1;N1;E2;N2;E3;N3;DwgNo;Rev;Title1;Title2;Title3;Ubot;Utop
+```
+
+只有前六個座標必填。`Ubot`/`Utop` 留空就吃表單的 Elevation 欄位。`--` 開頭的行忽略。
+
+**`.SplitKeep()` 不能改用 `STRING.split()`**：PML 的 `split()` 會把空 token 丟掉，只要使用者留空一個選填欄位，後面所有欄位就整排位移。所以自己用 `.before()`/`.after()` 走分隔符，保留空欄位。
+
+CAD 端還需要一支 LISP：讓使用者依序點三點、append 一行到 CSV。**尚未撰寫。**
+
+### 順手修掉的既有問題
+
+1. **寫死的 `=2013286748/281463` 拿掉**，改成 `.GotoBoxSite()`：導到 `/<projid>_DrawingPlanBox`，site 不存在就 `WORLD` 後 `new site`（並跳訊息告知建在哪個 DB，因為新元素會落在當下的 DB，這點要讓使用者看得到）。**EQUI 不能直接掛在 SITE 底下**，所以還要找/建一個 ZONE（`/<projid>_DrawingPlanBox_Z1`）
+2. **`.DeleteBox()` 補上了**（原本按鈕呼叫一個不存在的 method，按下去必報錯）。加了防呆：只有 CE 在 `/<projid>_DrawingPlanBox` 底下才准刪，刪整個 EQUI，刪前跳確認
+3. **`new text` 之後 CE 會停在剛建立的 TEXT 上**，原本連建 rev/title1~3 四個 tag 會變成一個套在另一個底下。`.MakeTagText()` 每次進來先 `$!equi` 導回去
+4. **匯入時單筆失敗不中斷整批**：`.MakeBox()` 成功回傳空字串、失敗回傳原因字串，呼叫端記到結果清單繼續跑。圖號撞名是最可能的失敗原因
+5. **`return` 不寫在 `handle any` 區塊裡面，也不用巢狀 `handle`**，一律改成 `!ok = true` / `handle any` 設 false / `endhandle` 後才判斷。PML 在這兩處的行為沒把握，扁平寫法比較安全
+6. **刪掉的死 UI**：`Calculate by Drawinglist`、`Margin`、那排 lock toggle、`Apply` 按鈕——全部沒有 `call` 也沒有任何程式碼
+
+### 實機驗證結果：Pick 分頁點完第一點就噴 Syntax error（2026-08-17，已修，待再驗）
+
+使用者貼 `error.png`：點完 P1 之後跳 `Aborted !!DrawingPlan.MarkPoint(!this.return[1].position, 1) (Removed) - (47,15) CP: Syntax error.`。
+
+關鍵線索是**表單上的 P1 欄位已經填好了**（`-245010.0000mm` / `4565676.0000mm`），所以 `.MarkPoint()` 前半段有跑完，錯在後面的 `.RefreshMarks()` → `.MarkOne()`。兩個獨立的 bug 疊在一起：
+
+1. **`REAL.string('D4')` 會把單位一起帶出來**，欄位存的是 `-245010.0000mm`，而 `STRING.real()` 解析不了尾巴的 `mm`。`.Apply()` 讀 `WVOL` 時本來就是 `.replace('mm','').real()`，這裡漏了。加了 `.NumOf()` 統一處理，Pick / Import 兩邊讀數字全部走它。
+   - 附註：舊版 `.modifyText()` 也是直接 `.val.real()`，同樣的問題，只是那個 method 只有文字欄位 CALLBACK 會呼叫，使用者大概從來沒觸發過。
+2. **`AID TEXT |P1| AT $!pos` 的 `$!pos` 展開會帶 `WRT /*` 尾巴**，AID 不吃。錯誤訊息裡的 column 47 剛好就是 `AID TEXT |P1| AT E -245010mm N 4565676mm U 0mm` 之後 `WRT` 開始的位置。改成把 E/N/U 一個一個寫出來。
+
+**這個 `$!pos` 帶 `WRT` 尾巴的陷阱要記住**：丟進 `AID` 會死，丟進 `POS` 反而是對的（見下一節，`POS $!pcen` 就是刻意這樣寫）。
+
+### 實機驗證結果：`Create Box` 在 `.distance()` 就死（2026-08-17，已修，待再驗）
+
+Command Window：
+
+```
+(2,869)  Error in conversion to world co-ordinates. Check for unset objects
+ In line 155 of PML function drawingplan.MAKEBOX
+    !xlen = !pfrom.distance(!pto2)
+```
+
+**`object POSITION()` 建出來再逐項填 `.east`/`.north`/`.up` 的 POSITION，身上沒有座標系**，`.distance()` 和 `.direction()` 要轉世界座標時就抓不到東西。上一節那個 `$!pos` 會帶出 `WRT /*` 尾巴的現象，其實就是同一件事的另一面——正常的 POSITION 本來就帶著它。
+
+改法：加 `.PosOf(!e, !n, !u)`，用字串建 POSITION 並在尾巴補上 `WRT /*`。負座標不寫負號，改成翻轉方位字母（`E -245010` 寫成 `W 245010`），確保產生的字串一定是 PDMS 吃得下的形式（這個專案的座標是 `E -245010 / N 4565676` 這種等級的數字，一定會遇到負值）。
+
+全部建 POSITION 的地方（`.MakeBox()` 的四個、Pick 分頁的三個、Import 分頁的三個）都改走 `.PosOf()`。box 的 `POS` 也順便改成 `POS $!pcen`，省掉自己在命令列上處理負數。
+
+### 實機驗證結果：`.PosOf()` 本身語法錯誤（2026-08-17，已修，待再驗）
+
+```
+(47,15)  CP: Syntax error
+ In line 440 of PML function drawingplan.POSOF
+    !estr = 'W ' & (0 - !e)^^.string().replace('mm', '')
+```
+
+**PML 不接受在括號運算式上直接呼叫 method**，`(0 - !e).string()` 是語法錯誤，訊息裡的 `^^` 剛好標在 `)` 和 `.string()` 中間。翻正負號要先存進變數再呼叫。
+
+注意這跟 method 串接是兩回事：`!str.replace('mm','').trim().real()`、`!this.files.dtext.size().gt(0)` 這種在變數或前一個 method 回傳值上繼續串是正常的，repo 裡到處都是。壞掉的只有「括號包住的算式」後面接 method 這一種。
+
+### 實機驗證結果：幾何過關了，卡在 `.GotoBoxSite()` 查 DB 名稱（2026-08-17，已修，待再驗）
+
+```
+(2,111)  Cannot access element type DB from the level of SITE /400999DAC_DrawingPlanBox
+    var !dbname name of db of ce
+ Called from line 182 of PML function drawingplan.MAKEBOX
+```
+
+**三點法的幾何運算（`.PosOf` / `.distance()` / 垂足 / `.direction()`）全部跑完沒事**，這是第一次走到建立元素的階段。
+
+`var !dbname name of db of ce` 在 SITE 層級不合法。這行純粹是為了跳訊息告訴使用者新 site 建在哪個 DB，結果反而把流程打斷。改成包 `handle any`，查不到就只講「建好了，請自己確認 DB」。
+
+**這次的副作用要注意**：`/400999DAC_DrawingPlanBox` 這個 site 已經被建出來了（`new site` 成功之後才死在下一行），但底下還沒有 ZONE。下一次執行會走 `!found = true` 的路徑跳過建立、然後補上 ZONE，會自己收斂，不用手動清。**但要確認這個 site 落在正確的 DB**——`new site` 會建在當下的 DB，這正是原本寫死 db 位址想避免又沒避免掉的問題。
+
+### 實機驗證結果：`ORI` 兩個軸中間要有 `and`（2026-08-17，已修，待再驗）
+
+```
+(47,15)  CP: Syntax error
+ In line 227 of PML function drawingplan.MAKEBOX
+    ORI Y is S  ^^Z is U WRT /*
+```
+
+`^^` 標在 `Z` 前面。PDMS 的 `ORI` 一次給兩個軸時中間必須有 `and`，`ORI Y is S Z is U` 是語法錯誤，要寫 `ORI Y is $!ydir and Z is U WRT /*`。
+
+這次 SITE → ZONE → `EQUI 1` → `BOX 1` 都建出來了，`POS` 也下完，死在下一行，所以 `XLEN`/`YLEN`/`ZLEN`/`LEVEL` 都還沒設。**tree 裡會留下一個半成品 `EQUI 1`，用表單的 `Delete Box` 清掉即可**（導到那個 BOX 或 EQUI 再按）。
+
+### 實機驗證結果：box 建出來了；接著改成四點、單一 Pick 鍵（2026-08-17）
+
+加上 `and` 之後 box 順利建立，**三點法 + site/zone/equi/box 這條路整條打通**。
+
+使用者接著提出改版需求：
+
+1. **只要一顆 Pick 按鈕**，按一次就連續點四個點
+2. **改成四點**：前三點的意義跟原本一樣（P1→P2 一條邊、P3 決定深度），**第四點只取它的 U，當第二個高程**；第一個高程取 **P1 的 U**
+3. **點完第四點直接建立 box**，不用再按 Create Box
+
+作法：
+
+- `.PickPoints()` → `.PickOne(!idx)` → `.PickDone(!pos, !idx)` → `.PickOne(!idx+1)`，**四個 EDGPACKET 接力**，每一個在自己的 action 裡掛下一個，第四個點完直接呼叫 `.CreateBox()`
+- **一開始寫成「一個 packet 掛四個 `definePosition()`」是錯的**，實機噴 `(2,752) Array element 2 does not exist`，而且提示框顯示的是 P4 的文字。四次 `definePosition()` 只是**互相覆蓋同一個輸入**（提示文字被最後一個蓋掉），packet 仍然只收一個點就觸發 action，所以 `!this.return[2]` 不存在。`!this.return[1]` 這個索引寫法會讓人以為支援多個回傳值，實際上不是這樣用的。
+- 欄位從 3 列 E/N 變成 4 列 E/N/U——高程改由取點決定，所以 U 一定要看得到、也要能手動改
+- **表單根部的 `Elevation` frame 移進 Import 分頁**。Pick 分頁的高程來自 P1/P4 的 U，但 Import 分頁沒有取點，仍需要這兩個欄位當 CSV 留空時的預設值
+- `Create Box` 按鈕保留，但只是給「手動打字修改座標後重建」用，畫面上加了說明
+
+`.MakeBox()` 完全沒動——它的介面本來就是「三個平面點 + 兩個高程」，這次的改動全部落在取點與湊參數這一層。這正是當初把它抽出來共用的目的。
+
+### 實機驗證結果：接力取點被「是否取代目前作用中的公用程式」對話框打斷（2026-08-17，已修，待再驗）
+
+使用者回報：按 `Pick 4 Points` 選完第一點後跳出
+
+```
+Confirm
+OK to replace currently active major application/utility "Basic Position" ?
+   [Yes]  [No]
+```
+
+然後就停止選點，四個座標欄位全是空的。
+
+原因：**在前一個 packet 還掛在事件系統上的時候去 add 下一個**，E3D 認為你要換掉目前作用中的 utility（`Basic Position` 就是定位取點這支），於是跳確認框把整條接力打斷。`.PickOne(!idx+1)` 是在 `.PickDone()` 裡呼叫的，而 `.PickDone()` 本身就是前一個 packet 的 action，執行當下那個 packet 還沒被移除。
+
+解法照 `design/forms/componentcreation.pmlfrm:5879-5900` 的既有寫法（這是 repo 裡唯一另一支用 EDGPACKET 的程式）：
+
+- `!packet.description` 給一個固定字串（`member .edgdesc`），`!!edgCntrl.remove(<description>)` 就能依它把自己的 packet 取下來
+- `.PickOne()` 每次 **先 `.DropPicking()` 再 add**，加進去的時候事件系統是乾淨的，就不會跳確認框
+- `!packet.remove` 改成 **FALSE**。原本是 TRUE，等於 framework 會在 action 結束後自己再移除一次——但那時候我們已經把下一個 packet 掛上去了，它移除的會是**剛加進去的那個**，接力會無聲無息地停掉。改成 FALSE 之後移除只有我們自己在做，時機完全確定
+- `!!edgCntrl.add()` 有回傳值（`if (!!edgCntrl.add(!packet)) then endif`），照既有寫法接住
+- `.Close()` 也要 `.DropPicking()`，否則關掉表單後 packet 還留在事件系統裡
+
+### 實機驗證結果：四點建立 box 成功（2026-08-17）
+
+`Pick 4 Points` → 依序點四點 → box 自動建立，整條流程通了。使用者接著提出兩個調整：
+
+1. **建立成功不要跳對話框**。取點的用意就是一張接一張連續切，每張都要按掉一個視窗很煩
+2. **圖號和其它圖面資訊移到新的 `Info` 分頁**
+
+作法：
+
+- 新增 `frame .infofr 'Info'`，含 `Drawing No.`、`Rev`、`Title 1~3`，`Drawing No.` 從 Pick 分頁搬過來
+- `.CreateBox()` 把這五個欄位一起傳進 `.MakeBox()`（原本 rev/title 四個參數都是傳空字串），所以 `rev:` / `title1:` 那幾個 TEXT 元素現在真的會被建出來
+- 拿掉成功時的 `!!alert.message('Created ...')`。**錯誤訊息全部保留**，失敗還是要講
+- **建立成功後只清空 `Drawing No.`**，`Rev` 和三個 title 留著。圖號每張圖唯一，不清掉的話連續切下一張一定撞名報錯；但 title 通常整套圖共用，清掉反而要重打。這是我自己下的判斷，不是使用者指定的
+- `.ClearPoints()` 不再管圖號（那個欄位已經不在 Pick 分頁），Info 分頁自己有一顆 `Clear`
+
+### 新增：Info 分頁的 `Apply`，套用到目前選取的 box（2026-08-17，**尚未實機驗證**）
+
+使用者說明實際工作流程：**先把所有 box 都點完，再一個一個選取、輸入圖面資訊**。所以 Info 分頁要有 `Apply`，作用在目前導覽到的那個 box 上。另外圖號怕重名，按下 Apply 時要先檢查。
+
+- `.ApplyInfo()`：從 CE 找出所屬 EQUI → 檢查圖號 → 改名 → 寫入 rev/title 的 TEXT
+- **圖號重名檢查**：先 `$/圖號` 試著導覽過去，導得到就代表名字被佔用了，跳錯訊息並指出是誰佔用（`Drawing No. xxx is already used by /yyy`）。**導到的如果就是正在標的這個 box，不算衝突**——那只是 Apply 按了第二次。E3D 自己也會擋重名，但它的錯誤訊息說不清楚是撞到哪一個
+- `.CurrentBoxEqui()` 抽出來共用：確認 CE 在 `<projid>_DrawingPlanBox` 底下、取得所屬 EQUI，失敗時自己跳訊息並回傳空字串。`Delete Box` 也改成走它，兩條路的判斷不會再各寫一份
+- **`.MakeTagText()` 改名 `.SetTagText()` 並改成「有就覆寫、沒有才新增」**。原本一律 `new text`，Apply 按兩次就會在同一個 EQUI 底下留下兩個 `rev:`，`DrawingPlan1.Apply()` 掃到哪一個是碰運氣。**空白欄位維持不動**，不會清掉 box 上已有的資料——因為表單不會把選取 box 的現有資訊載回來，「所見即所得」在這裡是危險的
+- Apply 成功不跳訊息，跟建立 box 的處理一致；錯誤照跳
+
+### 新增：Info 分頁的 `Read CE`（2026-08-18，**尚未實機驗證**）
+
+使用者提出：Apply 只會覆寫有填的欄位、空白欄位不動——但表單本身不會顯示 box 目前已經有什麼，等於盲改。加一顆 `Read CE`，把目前選取 box 的既有 `Drawing No.` / `Rev` / `Title1~3` 讀回表單，改完再 Apply。
+
+- `.FindTagText(!equinav, !tag)` 從 `.SetTagText()` 裡拆出來獨立成一個 method：找出 `tag:*` 那個 TEXT 的 ref，兩邊共用同一段掃描邏輯
+- `.TagValue(!equinav, !tag)` 用 `.FindTagText()` 定位、導過去讀 `STEXT`、取 `:` 後面的值，找不到回傳空字串
+- `.ReadInfo()`：`.CurrentBoxEqui()` 取得所屬 EQUI，`namn` 開頭是 `=`（無名 box）就把 `Drawing No.` 留空，否則填入名稱；四個 tag 值分別讀回四個欄位
+- Pick / Import / Info 三個分頁現在共用同一套「先找、再判斷有沒有、要嘛覆寫要嘛新增」的邏輯，`.SetTagText()` 本身沒有變化，只是內部的掃描搬到 `.FindTagText()`
+
+### 改動：Pick 分頁和 Info 分頁徹底切開，拿掉 Info 的 `Clear`（2026-08-18，**尚未實機驗證**）
+
+使用者問「Info 的 Clear 按鍵是否還有存在必要」，討論後發現一個比按鍵本身更重要的問題：**`.CreateBox()` 一直都在讀 Info 分頁的 `Drawing No.`/`Rev`/`Title1~3`**，這是分頁還沒拆開時留下的行為。照使用者的實際流程（先把所有 box 都點完、不命名，再一個一個用 Info 分頁 `Read CE` + 改 + `Apply`），這代表：如果在用 Info 分頁改某個 box 的資訊、還沒按 `Apply` 就切回 `Pick` 分頁點下一個 box，**新 box 會悄悄繼承 Info 分頁裡還沒套用的那些值**。
+
+使用者確認要徹底切開，兩件事一起做：
+
+- **`.CreateBox()` 一律建立無名、無 rev/title 的 box**：呼叫 `.MakeBox()` 時 `dwgno`/`rev`/`title1~3` 全部傳空字串。命名和填資訊完全交給 `Info` 分頁的 `Apply`。這樣 Info 分頁裡任何還沒套用的內容都不可能滲透進新建立的 box
+- **拿掉 `Info` 分頁的 `Clear` 按鈕**。`.ClearInfo()` 這個 method 留著，但只在 `.DrawingPlan()` 表單啟動時呼叫一次，用來把欄位歸零；不再綁按鈕。理由：`Read CE` 對「已經選好的 box」做得比 `Clear` 更好（載入真實現況，而不是盲目清空），`Clear` 唯一顧得到、`Read CE` 顧不到的情況（沒有選到有效 box、`Read CE` 什麼都不做）在切開兩個分頁之後已經不會再有殘留資料造成的副作用——不會有東西可以「不小心用到」
+
+`.MakeBox()` 本身完全沒動，它的介面一直都是「三個平面點 + 兩個高程 + 五個可留空的字串」，這次改動一樣全部落在呼叫端。
+
+### 待實機驗證（都沒在 E3D 上跑過）
+
+1. `ORI Y is <dir> Z is U WRT /*` 這個語法能不能被接受，以及建出來的 box 角度對不對。**這是最需要先確認的一項**，整個三點法都靠它
+2. `new text` 能不能建在 EQUI 底下（README 舊記錄寫「box 底下的 TEXT」，實際掛在 EQUI 還是 BOX 底下沒有確認過）。`.Apply()` 用 `coll all text for <equi>` 收，掛在 EQUI 底下應該收得到。失敗的話 `.MakeTagText()` 會靜默跳過，box 還是會建出來，但 rev/title 會遺失
+3. `.GotoBoxSite()` 在 site 不存在時能不能順利建 SITE + ZONE，以及建到哪個 DB
+4. 匯入一個含空欄位的 CSV，確認 `.SplitKeep()` 的欄位對應沒有位移
+5. 建好的 box 拿到 DRAFT 的 `!!DrawingPlan1` 清單裡，確認 `.AllBoxes()` 收得到、`.Apply()` 轉得出正確範圍（**這才是真正的驗收點**）
+6. 轉過角度的 box 大量出現後，`.Apply()` 挑比例那段（`forms/DrawingPlan1.pmlfrm:708`）的疑慮見下
+
+### 明確決定「先不動」的項目
+
+`.Apply()` 挑比例用 `!boxXlen`/`!boxYlen`（box 自己的軸）去配 500/400（圖紙的軸），但前面算 `!elen`/`!nlen` 就是為了把 box 的軸對應到圖紙的軸。box 正交時兩者一致所以看不出來，一旦大量出現轉過的 box，當 box 的 X 軸對到圖紙的 Y 方向時就會拿錯邊算比例。**使用者要求先不要改，他要自己再測。**
 
 ## 其他已讀程式時發現的疑點（尚未確認是否為真正 bug，僅供之後查證）
 
