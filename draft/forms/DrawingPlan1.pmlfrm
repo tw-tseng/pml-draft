@@ -3346,10 +3346,16 @@ define method .SuptAnnotation(!name is string)
 		if (not(!this.InViewOnSheet(!apos1))) then
 			skip
 		endif
+		--------------------------------------------------------------
+		-- only annotate supports whose STEXT actually has a value  --
+		--------------------------------------------------------------
+		var !stext stext of $!inst
+		if (!stext.eq('') or !stext.matchwild('*unset*')) then
+			skip
+		endif
 		NEW SLAB
 		DDNA $!inst
 		!ce = ref
-		var !stext stext of $!inst
 		if !this.supttog1.val then
 			!this.SuptAnnotation(!name, !stext)
 			!height = !this.annotext.val.real() * 1.2
