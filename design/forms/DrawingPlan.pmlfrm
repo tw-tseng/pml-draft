@@ -32,6 +32,25 @@ layout form !!DrawingPlan dialog dock
 	member .userevar is STRING
 	member .edgdesc  is STRING
 
+	------------------------------------------------------------------
+	-- Split tab - the box being split is looked up and its geometry --
+	-- cached once, at Show Box time, so the split itself works off  --
+	-- these even if CE has moved on to something else by the time   --
+	-- the split point is picked                                     --
+	------------------------------------------------------------------
+	member .splitequi     is STRING
+	member .splitcen      is POSITION
+	member .splitpickpos  is POSITION
+	member .splitxdirstr  is STRING
+	member .splitydirstr  is STRING
+	member .splitxlen     is REAL
+	member .splitylen     is REAL
+	member .splitzlen     is REAL
+	member .splitrev      is STRING
+	member .splittitle1   is STRING
+	member .splittitle2   is STRING
+	member .splittitle3   is STRING
+
 	!this.formTitle = 'Create Drawing Plan Box'
 
 	frame .tabset tabset
@@ -44,11 +63,7 @@ layout form !!DrawingPlan dialog dock
 		frame .pickfr 'Pick' width 66
 			button .pickbt 'Pick 4 Points' width 16 call |!This.PickPoints()|
 
-			para .pahint  at xmin.pickbt ymax.pickbt+0.3 text 'P1 -> P2  one edge of the frame, and the first level (U of P1)' width 62
-			para .pahint2 at xmin.pahint ymax.pahint+0.1  text 'P3        anywhere off that edge - how far off is the other size' width 62
-			para .pahint3 at xmin.pahint ymax.pahint2+0.1 text 'P4        only its U is used, it is the second level' width 62
-
-			para .pa1  at xmin.pahint ymax.pahint3+0.3 text 'P1  E'
+			para .pa1  at xmin.pickbt ymax.pickbt+0.3 text 'P1  E'
 			text .p1e  at xmax.pa1+0.3  ymin.pa1 width 12 is STRING
 			para .pa1n at xmax.p1e+0.5  ymin.pa1 text 'N'
 			text .p1n  at xmax.pa1n+0.3 ymin.pa1 width 12 is STRING
@@ -79,7 +94,6 @@ layout form !!DrawingPlan dialog dock
 			button .create 'Create Box'   at xmin.pa4     ymax.pa4+0.4 width 12 call |!This.CreateBox()|
 			button .clearp 'Clear Points' at xmax.create+1 ymin.create  width 12 call |!This.ClearPoints()|
 			button .delete 'Delete Box'   at xmax.clearp+1 ymin.create  width 12 call |!This.DeleteBox()|
-			para .createhint at xmin.create ymax.create+0.1 text 'Picking makes the box on its own - Create Box is only for coordinates typed by hand.' width 62
 		exit
 
 		----------------------------------------------------------------
@@ -89,19 +103,32 @@ layout form !!DrawingPlan dialog dock
 		----------------------------------------------------------------
 		frame .infofr 'Info' width 66
 			text .dwgno 'Drawing No.' tagwidth 12 width 40 is STRING
-			para .pano at xmin.dwgno ymax.dwgno+0.1 text 'Leave blank while still sketching - the box is then unnamed and lists as its ref.' width 62
 
-			text .revtext    'Rev'     at xmin.pano     ymax.pano+0.3       tagwidth 12 width 40 is STRING
+			text .revtext    'Rev'     at xmin.dwgno    ymax.dwgno+0.3      tagwidth 12 width 40 is STRING
 			text .title1text 'Title 1' at xmin.revtext  ymax.revtext+0.1    tagwidth 12 width 40 is STRING
 			text .title2text 'Title 2' at xmin.revtext  ymax.title1text+0.1 tagwidth 12 width 40 is STRING
 			text .title3text 'Title 3' at xmin.revtext  ymax.title2text+0.1 tagwidth 12 width 40 is STRING
 
-			para .infohint  at xmin.revtext ymax.title3text+0.3 text 'Select a box in the model, press Read CE to bring its current values in,' width 62
-			para .infohint2 at xmin.revtext ymax.infohint+0.1   text 'change what is needed, then press Apply. A blank field is left as it is -' width 62
-			para .infohint3 at xmin.revtext ymax.infohint2+0.1  text 'Apply never takes information off a box. Drawing No. is checked for a clash.' width 62
+			button .inforead  'Read CE' at xmin.revtext   ymax.title3text+0.3 width 12 call |!This.ReadInfo()|
+			button .infoapply 'Apply'   at xmax.inforead+1 ymin.inforead      width 12 call |!This.ApplyInfo()|
+		exit
 
-			button .inforead  'Read CE' at xmin.infohint  ymax.infohint3+0.3 width 12 call |!This.ReadInfo()|
-			button .infoapply 'Apply'   at xmax.inforead+1 ymin.inforead    width 12 call |!This.ApplyInfo()|
+		----------------------------------------------------------------
+		-- name a multi-selection of boxes in one go: Prefix + a       --
+		-- running sequence, ordered by two axes (2nd breaks ties on   --
+		-- the 1st) rather than by selection/click order               --
+		----------------------------------------------------------------
+		frame .batchfr 'Batch' width 66
+			text .batchprefix 'Prefix'   tagwidth 10 width 14 is STRING
+			text .batchstart  'Start at' at xmax.batchprefix+1 ymin.batchprefix tagwidth 10 width 10 is STRING
+
+			option .batchdir  'Order by (1st)' at xmin.batchprefix ymax.batchprefix+0.3 width 22
+			option .batchdir2 'Order by (2nd)' at xmin.batchdir    ymax.batchdir+0.2   width 22
+			toggle .batchskip at xmin.batchdir2 ymax.batchdir2+0.2 'Skip already-named'
+
+			button .batchgo 'Assign Numbers' at xmin.batchskip ymax.batchskip+0.3 width 16 call |!This.AssignNumbers()|
+
+			para .batchresult at xmin.batchgo ymax.batchgo+0.3 text '' width 62
 		exit
 
 		-------------------------------------------
@@ -111,16 +138,43 @@ layout form !!DrawingPlan dialog dock
 			text .filetext 'File' tagwidth 6 width 44 is STRING
 			button .filebt 'Browse' at xmax.filetext+0.4 ymin.filetext width 10 call |!This.BrowseFile()|
 
-			para .fmt1 at xmin.filetext ymax.filetext+0.3 text 'One line per drawing, fields separated by ; :' width 62
-			para .fmt2 at xmin.fmt1 ymax.fmt1+0.1 text 'E1;N1;E2;N2;E3;N3;DwgNo;Rev;Title1;Title2;Title3;Ubot;Utop' width 62
-			para .fmt3 at xmin.fmt1 ymax.fmt2+0.2 text 'Only the six coordinates are needed. Ubot/Utop fall back to the' width 62
-			para .fmt4 at xmin.fmt1 ymax.fmt3+0.1 text 'two boxes below when left empty. Lines starting with -- are ignored.' width 62
-
-			text .ubot 'Bottom U' at xmin.fmt1 ymax.fmt4+0.3 tagwidth 12 width 14 is REAL
+			text .ubot 'Bottom U' at xmin.filetext ymax.filetext+0.3 tagwidth 12 width 14 is REAL
 			text .utop 'Top U' at xmax.ubot+2 ymin.ubot tagwidth 8 width 14 is REAL
 
 			button .importbt 'Import' at xmin.ubot ymax.ubot+0.3 width 12 call |!This.ImportFile()|
 			list .log 'Result' at xmin.importbt ymax.importbt+0.3 width 62 height 10
+		exit
+
+		----------------------------------------------------------------
+		-- cut an existing box into 2 (or more) along its own X/Y/Z.   --
+		-- Show Box locks in which box and draws its axes; the split   --
+		-- itself works off that cached geometry, not off CE, so       --
+		-- looking around the model in between does not lose the      --
+		-- target                                                      --
+		----------------------------------------------------------------
+		frame .splitfr 'Split/Merge' width 66
+			button .showbox 'Show Box' width 16 call |!This.ShowBox()|
+
+			para .splitax at xmin.showbox ymax.showbox+0.3 text 'Split along          Offset'
+
+			toggle .splitx at xmin.splitax ymax.splitax+0.2 'X'
+			text .splitxoff at xmax.splitx+3.3 ymin.splitx width 10 is REAL
+			para .splitxmm at xmax.splitxoff+0.2 ymin.splitx text 'mm'
+
+			toggle .splity at xmin.splitx ymax.splitx+0.1 'Y'
+			text .splityoff at xmax.splity+3.3 ymin.splity width 10 is REAL
+			para .splitymm at xmax.splityoff+0.2 ymin.splity text 'mm'
+
+			toggle .splitz at xmin.splity ymax.splity+0.1 'Z'
+			text .splitzoff at xmax.splitz+3.3 ymin.splitz width 10 is REAL
+			para .splitzmm at xmax.splitzoff+0.2 ymin.splitz text 'mm'
+
+			button .splitpick 'Pick Split Point' at xmin.splitax ymax.splitz+0.3 width 16 call |!This.PickSplitPoint()|
+
+			para .mergesep at xmin.splitpick ymax.splitpick+0.4 text 'Merge'
+			button .mergebt 'Merge Selected' at xmin.mergesep ymax.mergesep+0.1 width 16 call |!This.MergeBoxes()|
+
+			para .splitresult at xmin.mergebt ymax.mergebt+0.3 text '' width 62
 		exit
 
 	exit
@@ -138,6 +192,68 @@ define method .DrawingPlan()
 	!this.ClearPoints()
 	!this.ClearInfo()
 	!this.log.clear()
+	!this.splitresult.val = ''
+	!this.splitequi = ''
+
+	------------------------------------------------------------------
+	-- most drawing plan boxes are cut into storeys, so Z is the     --
+	-- axis split along most often - default it on, X/Y off          --
+	------------------------------------------------------------------
+	!this.splitz.val = true
+
+	------------------------------------------------------------------
+	-- Batch's Order By choices, 1st and 2nd share the same list.   --
+	-- default is 'Bottom -> Top (U)' then 'West -> East (E)' -      --
+	-- storey first, left to right within a storey second, which is  --
+	-- the combination the user actually asked for. 'left to right'  --
+	-- only has a fixed meaning on a plan that follows the north-up  --
+	-- convention, where it reads as West -> East - the options are  --
+	-- spelled out in compass terms instead of guessing that         --
+	-- convention silently                                           --
+	------------------------------------------------------------------
+	!dirs = ARRAY()
+	!dirs.append('Bottom -> Top (U)')
+	!dirs.append('Top -> Bottom (U)')
+	!dirs.append('West -> East (E)')
+	!dirs.append('East -> West (E)')
+	!dirs.append('South -> North (N)')
+	!dirs.append('North -> South (N)')
+	!this.batchdir.dtext = !dirs
+	!this.batchdir.val = 1
+	------------------------------------------------------------------
+	-- 2nd also offers '(none)' - not every batch needs a tie        --
+	-- breaker, and forcing one would sort ties by whichever axis    --
+	-- happened to be picked rather than leaving them as found        --
+	------------------------------------------------------------------
+	!dirs2 = ARRAY()
+	!dirs2.append('(none)')
+	!dirs2.append('Bottom -> Top (U)')
+	!dirs2.append('Top -> Bottom (U)')
+	!dirs2.append('West -> East (E)')
+	!dirs2.append('East -> West (E)')
+	!dirs2.append('South -> North (N)')
+	!dirs2.append('North -> South (N)')
+	!this.batchdir2.dtext = !dirs2
+	!this.batchdir2.val = 4
+	!this.batchskip.val = true
+	!this.batchresult.val = ''
+
+	------------------------------------------------------------------
+	-- Batch Number defaults. Start at is STRING, not REAL - typing  --
+	-- '001' both sets the starting number and, by how many          --
+	-- characters were typed, the zero padding, so one field does    --
+	-- the job the separate Start at / Digits pair did before        --
+	------------------------------------------------------------------
+	!this.batchprefix.val = 'DWGNO-'
+	!this.batchstart.val = '001'
+
+	------------------------------------------------------------------
+	-- default elevation range for the Import tab, so a first import --
+	-- does not skip every line for want of a number nobody has      --
+	-- typed in yet. only a starting point - change per project      --
+	------------------------------------------------------------------
+	!this.ubot.val = 0
+	!this.utop.val = 50000
 
 	------------------------------------------------------------------
 	-- the coordinates can be typed as well as picked, so the marks  --
@@ -221,6 +337,16 @@ define method .MakeBox(!p1 is POSITION, !p2 is POSITION, !p3 is POSITION, !ubot 
 	!ncen = !n1 + !uy * !xlen * 0.5 + (!n3 - !footN) * 0.5
 	!pcen = !this.PosOf(!ecen, !ncen, !ucen)
 
+	return !this.MakeBoxAt(!pcen, !ydir, !xlen, !ylen, !zlen, !dwgno, !rev, !title1, !title2, !title3)
+endmethod
+
+---------------------------------------------------------------------
+-- the element-creation half of box making, on its own so Split Box --
+-- (below) can reuse it: a split piece already has a centre, a      --
+-- length on each axis and the parent box's own Y direction - it    --
+-- never needs the three-point geometry above                       --
+---------------------------------------------------------------------
+define method .MakeBoxAt(!pcen is POSITION, !ydirstr is STRING, !xlen is REAL, !ylen is REAL, !zlen is REAL, !dwgno is STRING, !rev is STRING, !title1 is STRING, !title2 is STRING, !title3 is STRING) is STRING
 	!err = !this.GotoBoxSite()
 	if (!err.neq('')) then
 		return !err
@@ -270,7 +396,7 @@ define method .MakeBox(!p1 is POSITION, !p2 is POSITION, !p3 is POSITION, !ubot 
 	-- two axes on one ORI have to be joined with 'and' - writing    --
 	-- 'ORI Y is S Z is U' is a syntax error                         --
 	------------------------------------------------------------------
-	ORI Y is $!ydir and Z is U WRT /*
+	ORI Y is $!ydirstr and Z is U WRT /*
 	XLEN $!xlen
 	YLEN $!ylen
 	ZLEN $!zlen
@@ -514,6 +640,292 @@ define method .ReadInfo()
 	!this.title1text.val = !this.TagValue(!equinav, 'title1')
 	!this.title2text.val = !this.TagValue(!equinav, 'title2')
 	!this.title3text.val = !this.TagValue(!equinav, 'title3')
+endmethod
+
+---------------------------------------------------------------------
+-- builds one candidate name from a sequence number: the number,   --
+-- left padded with zeros to !digits wide (0 or blank = no          --
+-- padding), with !prefix in front. !seq is only ever a plain count --
+-- (from a form REAL gadget, not a length), but .string() is        --
+-- stripped of 'mm' anyway for the same reason .PosOf() does it -   --
+-- cheap, and there is no case where it should ever matter here     --
+---------------------------------------------------------------------
+define method .BatchName(!prefix is STRING, !seq is REAL, !digits is REAL) is STRING
+	!num = !seq.string().replace('mm', '')
+	if (!digits.gt(0)) then
+		!need = !digits - !num.length()
+		do !pad from 1 to !need
+			!num = '0' & !num
+		enddo
+	endif
+	return !prefix & !num
+endmethod
+
+---------------------------------------------------------------------
+-- Info tab - Batch Number. numbers a multi-selection of boxes in   --
+-- one go with Prefix + a running sequence, ordered by Order By     --
+-- rather than by selection/click order - PML has no way to read    --
+-- back the order the user clicked things in, only which things are --
+-- selected, so the sequence has to come from somewhere else         --
+--                                                                  --
+-- gathering the selection is the same scan .MergeBoxes() uses      --
+-- (SELECTION() -> BOX or step down from EQUI -> must be under      --
+-- <projid>_DrawingPlanBox, anything else silently skipped), with   --
+-- one addition: Skip already-named leaves boxes that already have  --
+-- a real Drawing No. untouched, so a batch run cannot accidentally --
+-- renumber something that was already named on purpose. unticked,  --
+-- every box in the selection is renumbered regardless               --
+--                                                                  --
+-- the sequence never overwrites an existing name - a collision     --
+-- just moves on to the next number, so the same prefix can be run  --
+-- again later to pick up where it left off, or two prefixes can    --
+-- share the site without stepping on each other                    --
+---------------------------------------------------------------------
+define method .AssignNumbers()
+	!prefix = !this.batchprefix.val
+	if (!prefix.eq('')) then
+		!!alert.error('Type a prefix first')
+		return
+	endif
+
+	------------------------------------------------------------------
+	-- Start at doubles as the padding width: '001' both starts the --
+	-- count at 1 and, by being 3 characters, sets 3 digit padding.  --
+	-- typing '1' starts at 1 with no padding                        --
+	------------------------------------------------------------------
+	!startstr = !this.batchstart.val
+	if (!startstr.eq('')) then
+		!startstr = '1'
+	endif
+	!start = !startstr.real()
+	!digits = !startstr.length()
+
+	!dir1 = !this.batchdir.selection()
+	!axis1 = 'U'
+	!ascend1 = true
+	if (!dir1.eq('Bottom -> Top (U)')) then
+		!axis1 = 'U'
+		!ascend1 = true
+	elseif (!dir1.eq('Top -> Bottom (U)')) then
+		!axis1 = 'U'
+		!ascend1 = false
+	elseif (!dir1.eq('West -> East (E)')) then
+		!axis1 = 'E'
+		!ascend1 = true
+	elseif (!dir1.eq('East -> West (E)')) then
+		!axis1 = 'E'
+		!ascend1 = false
+	elseif (!dir1.eq('South -> North (N)')) then
+		!axis1 = 'N'
+		!ascend1 = true
+	else
+		!axis1 = 'N'
+		!ascend1 = false
+	endif
+
+	!dir2 = !this.batchdir2.selection()
+	!use2 = true
+	!axis2 = 'E'
+	!ascend2 = true
+	if (!dir2.eq('(none)')) then
+		!use2 = false
+	elseif (!dir2.eq('Bottom -> Top (U)')) then
+		!axis2 = 'U'
+		!ascend2 = true
+	elseif (!dir2.eq('Top -> Bottom (U)')) then
+		!axis2 = 'U'
+		!ascend2 = false
+	elseif (!dir2.eq('West -> East (E)')) then
+		!axis2 = 'E'
+		!ascend2 = true
+	elseif (!dir2.eq('East -> West (E)')) then
+		!axis2 = 'E'
+		!ascend2 = false
+	elseif (!dir2.eq('South -> North (N)')) then
+		!axis2 = 'N'
+		!ascend2 = true
+	else
+		!axis2 = 'N'
+		!ascend2 = false
+	endif
+
+	var !projid proj id
+	!sitename = '/' & !projid & '_DrawingPlanBox'
+
+	!sele = object selection()
+	!sele.getcurrent()
+	!sels = !sele.getselection()
+
+	!names = ARRAY()
+	!keys1 = ARRAY()
+	!keys2 = ARRAY()
+
+	do !sel values !sels
+		!ok = true
+		$!sel
+		handle any
+			!ok = false
+		endhandle
+
+		if (!ok) then
+			var !cetype type of ce
+			if (!cetype.eqnocase('EQUI')) then
+				!err = !this.BoxUnderEqui()
+				if (!err.neq('')) then
+					!ok = false
+				endif
+			elseif (not(!cetype.eqnocase('BOX'))) then
+				!ok = false
+			endif
+		endif
+
+		if (!ok) then
+			var !site name of site of ce
+			if (not(!site.eq(!sitename))) then
+				!ok = false
+			endif
+		endif
+
+		if (!ok) then
+			var !equi namn of equi of ce
+			!include = true
+			if (!this.batchskip.val) then
+				if (not(!equi.substring(1,1).eq('='))) then
+					!include = false
+				endif
+			endif
+			if (!include) then
+				if !names.find(!equi).size().eq(0) then
+					var !boxpos worpos
+					!pos = !boxpos.position()
+					!key1 = !pos.up
+					if (!axis1.eq('E')) then
+						!key1 = !pos.east
+					elseif (!axis1.eq('N')) then
+						!key1 = !pos.north
+					endif
+					!key2 = !pos.up
+					if (!axis2.eq('E')) then
+						!key2 = !pos.east
+					elseif (!axis2.eq('N')) then
+						!key2 = !pos.north
+					endif
+					!names.append(!equi)
+					!keys1.append(!key1)
+					!keys2.append(!key2)
+				endif
+			endif
+		endif
+	enddo
+
+	if (!names.size().lt(1)) then
+		!!alert.error('Nothing eligible in the current selection - check the model selection and Skip already-named')
+		return
+	endif
+
+	------------------------------------------------------------------
+	-- selection sort on the parallel !keys1/!keys2 arrays. these    --
+	-- lists are at most a few dozen boxes at a time, so the O(n^2)  --
+	-- cost does not matter and this avoids needing a sort-by-key    --
+	-- builtin, which nothing else in this codebase uses.            --
+	--                                                                --
+	-- 2nd only breaks ties on 1st, and "tie" allows a small          --
+	-- tolerance rather than exact equality - boxes on what is        --
+	-- obviously the same storey can differ by floating point noise  --
+	-- even though they came from the same split                      --
+	------------------------------------------------------------------
+	!tol = 1
+	!n = !names.size()
+	do !i from 1 to !n
+		!best = !i
+		!jstart = !i + 1
+		do !j from !jstart to !n
+			!d1 = !keys1[!j] - !keys1[!best]
+			if (not(!ascend1)) then
+				!d1 = 0 - !d1
+			endif
+			!swap = false
+			if (!d1.lt(0 - !tol)) then
+				!swap = true
+			elseif (!d1.lt(!tol) and !use2) then
+				!d2 = !keys2[!j] - !keys2[!best]
+				if (not(!ascend2)) then
+					!d2 = 0 - !d2
+				endif
+				if (!d2.lt(0)) then
+					!swap = true
+				endif
+			endif
+			if (!swap) then
+				!best = !j
+			endif
+		enddo
+		if (!best.neq(!i)) then
+			!tmpname = !names[!i]
+			!names[!i] = !names[!best]
+			!names[!best] = !tmpname
+			!tmpkey = !keys1[!i]
+			!keys1[!i] = !keys1[!best]
+			!keys1[!best] = !tmpkey
+			!tmpkey = !keys2[!i]
+			!keys2[!i] = !keys2[!best]
+			!keys2[!best] = !tmpkey
+		endif
+	enddo
+
+	!seq = !start
+	!assigned = 0
+	!failed = ARRAY()
+
+	do !nm values !names
+		!avail = false
+		!fullname = ''
+		do !try from 1 to 10000
+			!candidate = !this.BatchName(!prefix, !seq, !digits)
+			!fullname = '/' & !candidate
+			!taken = false
+			$!fullname
+			handle any
+				!taken = false
+			elsehandle none
+				!taken = true
+			endhandle
+			if (!taken) then
+				!seq = !seq + 1
+			else
+				!avail = true
+				break
+			endif
+		enddo
+
+		if (not(!avail)) then
+			!failed.append(!nm)
+		else
+			!equinav = !this.NavName(!nm)
+			!ok = true
+			$!equinav
+			handle any
+				!ok = false
+			endhandle
+			if (!ok) then
+				NAME $!fullname
+				handle any
+					!ok = false
+				endhandle
+			endif
+			if (!ok) then
+				!assigned = !assigned + 1
+				!seq = !seq + 1
+			else
+				!failed.append(!nm)
+			endif
+		endif
+	enddo
+
+	!this.batchresult.val = !assigned.string() & ' box(es) numbered'
+	if (!failed.size().gt(0)) then
+		!!alert.error(!failed.size().string() & ' box(es) could not be named - check the model for what changed underneath')
+	endif
 endmethod
 
 ---------------------------------------------------------------------
@@ -787,6 +1199,21 @@ define method .PosOf(!e is REAL, !n is REAL, !u is REAL) is POSITION
 	return object POSITION(!str & ' WRT /*')
 endmethod
 
+---------------------------------------------------------------------
+-- the reverse of .PosOf() - E/N/U of a POSITION as one string,     --
+-- for AID commands that take coordinates directly (E .. N .. U ..) --
+-- rather than through AT/DIRECTION. this is the pattern .MarkOne() --
+-- already uses and has been tested in the field; a raw POSITION    --
+-- handed to AID as $!pos carries a 'WRT /*' tail that AID will     --
+-- not take, the same trap noted on .MakeBoxAt()'s POS line          --
+---------------------------------------------------------------------
+define method .EnuOf(!pos is POSITION) is STRING
+	!estr = !pos.east.string().replace('mm', '')
+	!nstr = !pos.north.string().replace('mm', '')
+	!ustr = !pos.up.string().replace('mm', '')
+	return 'E ' & !estr & ' N ' & !nstr & ' U ' & !ustr
+endmethod
+
 define method .ClearPoints()
 	!this.ClearPointFields()
 endmethod
@@ -880,11 +1307,6 @@ define method .DeleteBox()
 		return
 	endif
 
-	!ans = !!alert.confirm('Delete ' & !equi & ' ?')
-	if (not(!ans.eq('YES'))) then
-		return
-	endif
-
 	!equinav = !this.NavName(!equi)
 	$!equinav
 	var !owner namn of owner of ce
@@ -902,7 +1324,708 @@ define method .DeleteBox()
 
 	$!ownernav
 	AID CLEAR ALL
-	!!alert.message('Deleted ' & !equi)
+endmethod
+
+----------------------------------------------
+-- Split tab - cut an existing box in two   --
+-- (or more) along its own X/Y/Z            --
+----------------------------------------------
+---------------------------------------------------------------------
+-- CE must already be on the EQUI. steps CE down onto the one BOX   --
+-- under it - one BOX per EQUI is how this form always builds them  --
+-- - and leaves it there. returns '' on success, an error message   --
+-- otherwise, in which case CE has not moved. shared by             --
+-- .CurrentSplitBox() (CE starts on the EQUI) and .MergeBoxes()     --
+-- (every entry on the Boxes list is an EQUI name)                  --
+---------------------------------------------------------------------
+define method .BoxUnderEqui() is STRING
+	!ok = true
+	var !boxes coll all box for ce
+	handle any
+		!ok = false
+	endhandle
+	!nobox = true
+	if (!ok) then
+		if (not(!boxes.unset())) then
+			if (!boxes.size().gt(0)) then
+				!nobox = false
+			endif
+		endif
+	endif
+	if (!nobox) then
+		return 'this EQUI has no BOX under it'
+	endif
+	!box = !boxes[1]
+	$!box
+	return ''
+endmethod
+
+define method .CurrentSplitBox() is STRING
+	!ok = true
+	var !cetype type of ce
+	handle any
+		!ok = false
+	endhandle
+	if (not(!ok)) then
+		!!alert.error('Navigate to a box first')
+		return ''
+	endif
+
+	if (!cetype.eqnocase('EQUI')) then
+		------------------------------------------------------------------
+		-- one BOX per EQUI is how this form always builds them, so CE   --
+		-- on the EQUI is as good as CE on the BOX itself - step down    --
+		-- automatically rather than making the user do it by hand       --
+		------------------------------------------------------------------
+		!err = !this.BoxUnderEqui()
+		if (!err.neq('')) then
+			!!alert.error(!err)
+			return ''
+		endif
+	elseif (not(!cetype.eqnocase('BOX'))) then
+		!!alert.error('The current element is a ' & !cetype & ', not a BOX or an EQUI')
+		return ''
+	endif
+
+	return !this.CurrentBoxEqui()
+endmethod
+
+------------------------------------------------------------------
+-- button handler for Show Box - a plain toggle. a second press   --
+-- while a box is already shown just hides it again; .PickSplitPoint() --
+-- does not go through here, it calls .RefreshBox() directly so it --
+-- always ends up showing whatever CE is right now rather than     --
+-- toggling off something that happened to be shown already        --
+------------------------------------------------------------------
+define method .ShowBox()
+	if (!this.splitequi.neq('')) then
+		AID CLEAR ALL
+		!this.splitequi = ''
+		return
+	endif
+	!this.RefreshBox()
+endmethod
+
+---------------------------------------------------------------------
+-- reads the box's own geometry and caches it on the form, then     --
+-- draws its centre and X/Y/Z axes. cached rather than re-read at   --
+-- split time because CE can move on to something else before Pick --
+-- Split Point is pressed - the split still has to act on the box  --
+-- that was shown                                                   --
+---------------------------------------------------------------------
+define method .RefreshBox()
+	AID CLEAR ALL
+	!this.splitequi = ''
+	!equi = !this.CurrentSplitBox()
+	if (!equi.eq('')) then
+		return
+	endif
+	!equinav = !this.NavName(!equi)
+
+	var !boxpos worpos
+	var !xlen xlength
+	var !ylen ylength
+	var !zlen zlength
+	var !ori ori wrt worl
+
+	!this.splitequi = !equi
+	!this.splitcen = !boxpos.position()
+	!this.splitxdirstr = !ori.orientation().xdir().string().before('WRT')
+	!this.splitydirstr = !ori.orientation().ydir().string().before('WRT')
+	!this.splitxlen = !xlen.real()
+	!this.splitylen = !ylen.real()
+	!this.splitzlen = !zlen.real()
+
+	------------------------------------------------------------------
+	-- the sheet texts live on the EQUI, not the BOX, same as        --
+	-- everywhere else in this form                                  --
+	------------------------------------------------------------------
+	!this.splitrev = !this.TagValue(!equinav, 'rev')
+	!this.splittitle1 = !this.TagValue(!equinav, 'title1')
+	!this.splittitle2 = !this.TagValue(!equinav, 'title2')
+	!this.splittitle3 = !this.TagValue(!equinav, 'title3')
+
+	!this.DrawBoxAxes()
+endmethod
+
+---------------------------------------------------------------------
+-- Z is taken as world Up rather than read off the box's own ORI -  --
+-- there is no .zdir() used anywhere else in this codebase to       --
+-- confirm that call exists, and every box this form ever builds   --
+-- is made with 'Z is U' anyway (see .MakeBoxAt()), so a box worth  --
+-- showing here is level by construction. a box tilted out of that --
+-- plane by some other route would show (and split) its Z wrong    --
+---------------------------------------------------------------------
+define method .DrawBoxAxes()
+	!cen = !this.splitcen
+	!xdir = object direction(!this.splitxdirstr)
+	!ydir = object direction(!this.splitydirstr)
+	!zdir = object direction('U')
+
+	!halfx = !this.splitxlen * 0.5
+	!halfy = !this.splitylen * 0.5
+	!halfz = !this.splitzlen * 0.5
+
+	------------------------------------------------------------------
+	-- SPHERE and TEXT are written the same E/N/U way as .MarkOne(), --
+	-- the one AID pattern in this form already proven in the field. --
+	-- ARROW has no precedent of our own, so it follows the only     --
+	-- AID ARROW in the whole tree (componentcreation.pmlfrm:1525),  --
+	-- position/direction/height passed as $!<...>                   --
+	------------------------------------------------------------------
+	!censtr = !this.EnuOf(!cen)
+	AID SPHERE $!censtr DIA 200
+
+	!ptx = !cen.offset(!xdir, !halfx)
+	!ptxstr = !this.EnuOf(!ptx)
+	AID ARROW NUMBER 1 AT $!<cen> DIRECTION $!<xdir> HEIGH $!<halfx> PROPORTION 0.15
+	AID TEXT |X| AT $!ptxstr
+
+	!pty = !cen.offset(!ydir, !halfy)
+	!ptystr = !this.EnuOf(!pty)
+	AID ARROW NUMBER 1 AT $!<cen> DIRECTION $!<ydir> HEIGH $!<halfy> PROPORTION 0.15
+	AID TEXT |Y| AT $!ptystr
+
+	!ptz = !cen.offset(!zdir, !halfz)
+	!ptzstr = !this.EnuOf(!ptz)
+	AID ARROW NUMBER 1 AT $!<cen> DIRECTION $!<zdir> HEIGH $!<halfz> PROPORTION 0.15
+	AID TEXT |Z| AT $!ptzstr
+endmethod
+
+---------------------------------------------------------------------
+-- picks the single split point. Show Box must have run first -     --
+-- there is nothing cached to split against otherwise, and no axis  --
+-- checked means the pick would not cut anything                    --
+---------------------------------------------------------------------
+------------------------------------------------------------------
+-- Show Box is a courtesy preview, not a required first step -    --
+-- pressing Pick Split Point straight away re-runs the same       --
+-- lookup off whatever CE is right now, so the two buttons always --
+-- agree on what a pick is about to act on                        --
+------------------------------------------------------------------
+define method .PickSplitPoint()
+	!this.RefreshBox()
+	if (!this.splitequi.eq('')) then
+		return
+	endif
+	if (not(!this.splitx.val) and not(!this.splity.val) and not(!this.splitz.val)) then
+		!!alert.error('Check at least one of X / Y / Z to split along')
+		return
+	endif
+
+	!this.DropPicking()
+	!packet = object EDGPACKET()
+	!packet.definePosition('Split point - anywhere inside the box, off to the side you want to cut')
+	!packet.description = !this.edgdesc
+	!packet.action = |!!DrawingPlan.SplitPointPicked(!this.return[1].position)|
+	!packet.remove = false
+	if (!!edgCntrl.add(!packet)) then
+	endif
+endmethod
+
+------------------------------------------------------------------
+-- re-passing a POSITION that arrived as one method's own typed  --
+-- parameter into a SECOND method as that method's only argument --
+-- failed in the field with 'Method DOSPLITAT(<UNTYPED>) not     --
+-- found' - .DoSplitAt(!pos) is not found even though it is      --
+-- declared to take exactly that. .PickDone()/.SetPoint() pass a --
+-- POSITION on to a second method too and that works, so the     --
+-- difference is not the hop count - it is that .SetPoint() also --
+-- takes a REAL alongside it and, more importantly, is a sink     --
+-- (writes into members, calls nothing further with the position) --
+-- while nothing here relies on guessing why; the position is    --
+-- written into a member instead and .DoSplitAt() reads it back, --
+-- avoiding the failing call shape entirely                       --
+------------------------------------------------------------------
+define method .SplitPointPicked(!pos is POSITION)
+	!!DrawingPlan.splitpickpos = !pos
+	!!DrawingPlan.DropPicking()
+	!!DrawingPlan.DoSplitAt()
+endmethod
+
+---------------------------------------------------------------------
+-- turns the picked point into an offset along the box's own X/Y   --
+-- (and world Up for Z), splits every checked axis in two at that  --
+-- offset, and builds one new box per combination - 1 axis checked --
+-- makes 2 boxes, 2 axes make 4, 3 axes make 8.                    --
+--                                                                 --
+-- everything is validated before anything is created. the         --
+-- original box is only deleted once every piece exists; if a      --
+-- piece fails partway through, the pieces already made are rolled --
+-- back and the original is left exactly as it was                 --
+---------------------------------------------------------------------
+define method .DoSplitAt()
+	!posw = !this.splitpickpos.wrt(WORL)
+	!cen = !this.splitcen
+	!xdir = object direction(!this.splitxdirstr)
+	!ydir = object direction(!this.splitydirstr)
+
+	!halfx = !this.splitxlen * 0.5
+	!halfy = !this.splitylen * 0.5
+	!halfz = !this.splitzlen * 0.5
+
+	------------------------------------------------------------------
+	-- project the picked point onto the box's own X and Y.          --
+	--                                                                --
+	-- a coordinate difference (.east - .east) still carries the     --
+	-- DIST unit, so multiplying two of them together, as the dot    --
+	-- product below does, gives PDMS an area (SQDI) - 'DIMENSION    --
+	-- (UNIT) MISMATCH ... cannot combine physical quantities DIST   --
+	-- and SQDI' in the field. dividing the offset point's E/N/U     --
+	-- difference by the offset's own DIST length (from .distance(), --
+	-- not the bare number handed to .offset()) cancels the unit the --
+	-- same way .MakeBox() already does for !ux/!uy - '!ux = (!e2 -  --
+	-- !e1) / !xlen' - leaving a genuinely dimensionless component   --
+	-- that is then safe to multiply against a DIST again            --
+	------------------------------------------------------------------
+	!refx = !cen.offset(!xdir, 1000)
+	!lenx = !cen.distance(!refx)
+	!uxE = (!refx.east - !cen.east) / !lenx
+	!uxN = (!refx.north - !cen.north) / !lenx
+	!uxU = (!refx.up - !cen.up) / !lenx
+
+	!refy = !cen.offset(!ydir, 1000)
+	!leny = !cen.distance(!refy)
+	!uyE = (!refy.east - !cen.east) / !leny
+	!uyN = (!refy.north - !cen.north) / !leny
+	!uyU = (!refy.up - !cen.up) / !leny
+
+	!dE = !posw.east - !cen.east
+	!dN = !posw.north - !cen.north
+	!dU = !posw.up - !cen.up
+
+	!localx = !dE * !uxE + !dN * !uxN + !dU * !uxU
+	!localy = !dE * !uyE + !dN * !uyN + !dU * !uyU
+	!localz = !dU
+
+	------------------------------------------------------------------
+	-- Offset shifts the cut away from the point actually picked -   --
+	-- e.g. the user clicks the underside of a steel beam to snap to --
+	-- something, but the real cut is 50mm further down (Z offset    --
+	-- -50). blank is 0mm, same as .ubot.val/.utop.val elsewhere      --
+	------------------------------------------------------------------
+	!xoff = 0
+	if (not(!this.splitxoff.val.unset())) then
+		!xoff = !this.splitxoff.val
+	endif
+	!yoff = 0
+	if (not(!this.splityoff.val.unset())) then
+		!yoff = !this.splityoff.val
+	endif
+	!zoff = 0
+	if (not(!this.splitzoff.val.unset())) then
+		!zoff = !this.splitzoff.val
+	endif
+	!localx = !localx + !xoff
+	!localy = !localy + !yoff
+	!localz = !localz + !zoff
+
+	------------------------------------------------------------------
+	-- a split half thinner than 1mm is not a usable drawing frame,  --
+	-- so a checked axis whose point is too close to an end - or     --
+	-- past it entirely, which happens whenever the point picked to  --
+	-- line the cut up (an elbow, a beam) is not itself inside the   --
+	-- box on every axis - is not an error any more. that axis is    --
+	-- just left uncut, the same as if it had not been checked, and  --
+	-- .splitresult says so afterwards. only every checked axis      --
+	-- being unusable at once is an error, since then there would be --
+	-- nothing left to split                                         --
+	------------------------------------------------------------------
+	!usex = false
+	!usey = false
+	!usez = false
+	!skipped = ARRAY()
+
+	if (!this.splitx.val) then
+		if (!localx.lt(0 - !halfx + 1) or !localx.gt(!halfx - 1)) then
+			!skipped.append('X')
+		else
+			!usex = true
+		endif
+	endif
+	if (!this.splity.val) then
+		if (!localy.lt(0 - !halfy + 1) or !localy.gt(!halfy - 1)) then
+			!skipped.append('Y')
+		else
+			!usey = true
+		endif
+	endif
+	if (!this.splitz.val) then
+		if (!localz.lt(0 - !halfz + 1) or !localz.gt(!halfz - 1)) then
+			!skipped.append('Z')
+		else
+			!usez = true
+		endif
+	endif
+
+	if (not(!usex) and not(!usey) and not(!usez)) then
+		!!alert.error('The picked point is too close to (or outside) every checked axis - nothing to split')
+		return
+	endif
+
+	------------------------------------------------------------------
+	-- one axis not checked = one state, offset 0mm, the full length --
+	-- one axis checked = two states, the low half and the high half --
+	-- looping every axis from 1 to its bound and multiplying them   --
+	-- out this way visits every combination without needing an      --
+	-- array of arrays, which nothing else in this codebase does     --
+	------------------------------------------------------------------
+	!xoffs = ARRAY()
+	!xoffs.append(0)
+	!xoffs.append(0)
+	!xlens = ARRAY()
+	!xlens.append(!this.splitxlen)
+	!xlens.append(!this.splitxlen)
+	!xbound = 1
+	if (!usex) then
+		!xoffs[1] = (!localx - !halfx) / 2
+		!xoffs[2] = (!localx + !halfx) / 2
+		!xlens[1] = !localx + !halfx
+		!xlens[2] = !halfx - !localx
+		!xbound = 2
+	endif
+
+	!yoffs = ARRAY()
+	!yoffs.append(0)
+	!yoffs.append(0)
+	!ylens = ARRAY()
+	!ylens.append(!this.splitylen)
+	!ylens.append(!this.splitylen)
+	!ybound = 1
+	if (!usey) then
+		!yoffs[1] = (!localy - !halfy) / 2
+		!yoffs[2] = (!localy + !halfy) / 2
+		!ylens[1] = !localy + !halfy
+		!ylens[2] = !halfy - !localy
+		!ybound = 2
+	endif
+
+	!zoffs = ARRAY()
+	!zoffs.append(0)
+	!zoffs.append(0)
+	!zlens = ARRAY()
+	!zlens.append(!this.splitzlen)
+	!zlens.append(!this.splitzlen)
+	!zbound = 1
+	if (!usez) then
+		!zoffs[1] = (!localz - !halfz) / 2
+		!zoffs[2] = (!localz + !halfz) / 2
+		!zlens[1] = !localz + !halfz
+		!zlens[2] = !halfz - !localz
+		!zbound = 2
+	endif
+
+	!zdir = object direction('U')
+
+	!created = ARRAY()
+	!failed = ''
+
+	do !ix from 1 to !xbound
+		do !iy from 1 to !ybound
+			do !iz from 1 to !zbound
+				!newcen = !cen.offset(!xdir, !xoffs[!ix])
+				!newcen = !newcen.offset(!ydir, !yoffs[!iy])
+				!newcen = !newcen.offset(!zdir, !zoffs[!iz])
+
+				!err = !this.MakeBoxAt(!newcen, !this.splitydirstr, !xlens[!ix], !ylens[!iy], !zlens[!iz], '', !this.splitrev, !this.splittitle1, !this.splittitle2, !this.splittitle3)
+				if (!err.neq('')) then
+					!failed = !err
+				else
+					var !newequi namn of ce
+					!created.append(!newequi)
+				endif
+			enddo
+		enddo
+	enddo
+
+	if (!failed.neq('')) then
+		----------------------------------------------------------------
+		-- roll back whatever did get made rather than leave the       --
+		-- model half split. the original box has not been touched    --
+		----------------------------------------------------------------
+		do !nm values !created
+			!nmnav = !this.NavName(!nm)
+			$!nmnav
+			delete equi
+			handle any
+			endhandle
+		enddo
+		!!alert.error('Split failed (' & !failed & ') - no changes made')
+		AID CLEAR ALL
+		return
+	endif
+
+	!equinav = !this.NavName(!this.splitequi)
+	$!equinav
+	!ok = true
+	delete equi
+	handle any
+		!ok = false
+	endhandle
+	if (not(!ok)) then
+		!!alert.error('The ' & !created.size().string() & ' new box(es) were created, but the original box could not be deleted - please delete it by hand')
+	endif
+
+	AID CLEAR ALL
+	!msg = !created.size().string() & ' box(es) created'
+	if (!skipped.size().gt(0)) then
+		!skipstr = ''
+		do !s values !skipped
+			!skipstr = !skipstr & !s
+		enddo
+		!msg = !msg & ' (' & !skipstr & ' skipped - point too close/outside)'
+	endif
+	!this.splitresult.val = !msg
+	!this.splitequi = ''
+endmethod
+
+----------------------------------------------
+-- Merge (shares the Split tab) - the        --
+-- opposite of Split: replace several boxes  --
+-- with the one box that covers all of them  --
+----------------------------------------------
+---------------------------------------------------------------------
+-- what is 'selected' is whatever the user has picked in the model  --
+-- or the Design Explorer (ctrl-click for several) - object          --
+-- SELECTION()/.getcurrent()/.getselection() reads that back as an   --
+-- array of navigable refs. a selected EQUI is stepped down onto     --
+-- its BOX the same as CE is on the Split side; anything that is     --
+-- not a BOX, not under an EQUI, or not under                        --
+-- <projid>_DrawingPlanBox is silently skipped rather than rejecting --
+-- the whole merge over one stray thing caught in a multi-select     --
+--                                                                  --
+-- everything the shared X/Y/Z direction and world-Up-for-Z only    --
+-- mean anything if every selected box points the same way, so that --
+-- is checked next (by comparing each one's Y direction string to   --
+-- the first box's - boxes this form builds always agree exactly).  --
+-- the merged box is the UNION of each selected box's own extent    --
+-- along the shared X/Y/Z, projected the same offset-and-divide-by- --
+-- distance way .DoSplitAt() projects a picked point, just run once --
+-- per box instead of once per pick. this does not check the boxes  --
+-- are actually adjacent or that there is no gap between them - it  --
+-- just wraps a single box around whatever was selected              --
+--                                                                  --
+-- the new box is only created after every selected box has been    --
+-- read successfully; the sources are only deleted after the new    --
+-- box exists. a failure deleting a source is a warning, not a      --
+-- rollback - the merge itself already succeeded by that point      --
+---------------------------------------------------------------------
+define method .MergeBoxes()
+	var !projid proj id
+	!sitename = '/' & !projid & '_DrawingPlanBox'
+
+	!sele = object selection()
+	!sele.getcurrent()
+	!sels = !sele.getselection()
+
+	!names = ARRAY()
+	do !sel values !sels
+		!ok = true
+		$!sel
+		handle any
+			!ok = false
+		endhandle
+
+		if (!ok) then
+			var !cetype type of ce
+			if (!cetype.eqnocase('EQUI')) then
+				!err = !this.BoxUnderEqui()
+				if (!err.neq('')) then
+					!ok = false
+				endif
+			elseif (not(!cetype.eqnocase('BOX'))) then
+				!ok = false
+			endif
+		endif
+
+		if (!ok) then
+			var !site name of site of ce
+			if (!site.eq(!sitename)) then
+				var !equi namn of equi of ce
+				if !names.find(!equi).size().eq(0) then
+					!names.append(!equi)
+				endif
+			endif
+		endif
+	enddo
+
+	if (!names.size().lt(2)) then
+		!!alert.error('Select at least two boxes (or their EQUIs) under ' & !sitename & ' in the model, then press Merge')
+		return
+	endif
+
+	!haveref = false
+	!ydirstr = ''
+	!badori = false
+	!bad = ''
+
+	do !nm values !names
+		!equinav = !this.NavName(!nm)
+		!ok = true
+		$!equinav
+		handle any
+			!ok = false
+		endhandle
+		if (not(!ok)) then
+			!!alert.error('Cannot navigate to ' & !nm)
+			return
+		endif
+
+		!err = !this.BoxUnderEqui()
+		if (!err.neq('')) then
+			!!alert.error(!nm & ' - ' & !err)
+			return
+		endif
+
+		var !boxpos worpos
+		var !xlen xlength
+		var !ylen ylength
+		var !zlen zlength
+		var !ori ori wrt worl
+		!thisydir = !ori.orientation().ydir()
+		!thishalfx = !xlen.real() * 0.5
+		!thishalfy = !ylen.real() * 0.5
+		!thishalfz = !zlen.real() * 0.5
+
+		if (not(!haveref)) then
+			----------------------------------------------------------
+			-- the first box in the list becomes the reference frame --
+			-- everything else is measured against                   --
+			----------------------------------------------------------
+			!refcen = !boxpos.position()
+			!xdir = !ori.orientation().xdir()
+			!ydir = !thisydir
+			!ydirstr = !ydir.string().before('WRT')
+			!haveref = true
+
+			!minx = 0 - !thishalfx
+			!maxx = !thishalfx
+			!miny = 0 - !thishalfy
+			!maxy = !thishalfy
+			!minz = 0 - !thishalfz
+			!maxz = !thishalfz
+		else
+			--------------------------------------------------------------
+			-- a box is symmetric about its own axes, so Y pointing the  --
+			-- opposite way describes the exact same box (the same trap  --
+			-- noted in .MakeBox()) - two boxes that plainly should      --
+			-- merge came back as 'Y is N 12.523 E' and 'Y is S 12.523   --
+			-- W' in the field, 180 degrees apart and physically         --
+			-- identical. .angle() only ever answers 0-180 with no sign, --
+			-- so both 0 (same) and 180 (opposite) count as a match -    --
+			-- anything else is a real difference                        --
+			--------------------------------------------------------------
+			!ang = !thisydir.angle(!ydir)
+			if (!ang.gt(0.5) and !ang.lt(179.5)) then
+				!badori = true
+				!bad = !nm
+			endif
+
+			if (not(!badori)) then
+				!thiscen = !boxpos.position()
+
+				!refx = !refcen.offset(!xdir, 1000)
+				!lenx = !refcen.distance(!refx)
+				!uxE = (!refx.east - !refcen.east) / !lenx
+				!uxN = (!refx.north - !refcen.north) / !lenx
+				!uxU = (!refx.up - !refcen.up) / !lenx
+
+				!refy = !refcen.offset(!ydir, 1000)
+				!leny = !refcen.distance(!refy)
+				!uyE = (!refy.east - !refcen.east) / !leny
+				!uyN = (!refy.north - !refcen.north) / !leny
+				!uyU = (!refy.up - !refcen.up) / !leny
+
+				!dE = !thiscen.east - !refcen.east
+				!dN = !thiscen.north - !refcen.north
+				!dU = !thiscen.up - !refcen.up
+
+				!ox = !dE * !uxE + !dN * !uxN + !dU * !uxU
+				!oy = !dE * !uyE + !dN * !uyN + !dU * !uyU
+				!oz = !dU
+
+				!lo = !ox - !thishalfx
+				!hi = !ox + !thishalfx
+				if (!lo.lt(!minx)) then
+					!minx = !lo
+				endif
+				if (!hi.gt(!maxx)) then
+					!maxx = !hi
+				endif
+
+				!lo = !oy - !thishalfy
+				!hi = !oy + !thishalfy
+				if (!lo.lt(!miny)) then
+					!miny = !lo
+				endif
+				if (!hi.gt(!maxy)) then
+					!maxy = !hi
+				endif
+
+				!lo = !oz - !thishalfz
+				!hi = !oz + !thishalfz
+				if (!lo.lt(!minz)) then
+					!minz = !lo
+				endif
+				if (!hi.gt(!maxz)) then
+					!maxz = !hi
+				endif
+			endif
+		endif
+	enddo
+
+	if (!badori) then
+		!!alert.error(!bad & ' is not the same orientation as the rest of the selection - cannot merge')
+		return
+	endif
+
+	!mcx = (!minx + !maxx) / 2
+	!mcy = (!miny + !maxy) / 2
+	!mcz = (!minz + !maxz) / 2
+	!mxlen = !maxx - !minx
+	!mylen = !maxy - !miny
+	!mzlen = !maxz - !minz
+
+	!mergecen = !refcen.offset(!xdir, !mcx)
+	!mergecen = !mergecen.offset(!ydir, !mcy)
+	!mergecen = !mergecen.offset(object direction('U'), !mcz)
+
+	------------------------------------------------------------------
+	-- the merged box comes out unnamed with no rev/titles - the     --
+	-- boxes being merged could each have had their own, and there   --
+	-- is no single right answer to pick between them                --
+	------------------------------------------------------------------
+	!err = !this.MakeBoxAt(!mergecen, !ydirstr, !mxlen, !mylen, !mzlen, '', '', '', '', '')
+	if (!err.neq('')) then
+		!!alert.error('Merge failed (' & !err & ') - no changes made')
+		return
+	endif
+
+	!ndel = 0
+	do !nm values !names
+		!equinav = !this.NavName(!nm)
+		!ok = true
+		$!equinav
+		handle any
+			!ok = false
+		endhandle
+		if (!ok) then
+			delete equi
+			handle any
+				!ok = false
+			endhandle
+		endif
+		if (!ok) then
+			!ndel = !ndel + 1
+		endif
+	enddo
+
+	AID CLEAR ALL
+	if (!ndel.lt(!names.size())) then
+		!nleft = !names.size() - !ndel
+		!!alert.error(!nleft.string() & ' of the merged box(es) could not be deleted - please delete them by hand')
+	endif
+	!this.splitresult.val = 'Merged ' & !ndel.string() & ' box(es) into 1'
 endmethod
 
 ----------------------------------------------
@@ -1026,7 +2149,8 @@ define method .SplitKeep(!str is STRING, !sep is STRING) is ARRAY
 	!out = ARRAY()
 	!rest = !str
 	!pat = '*' & !sep & '*'
-	do while (!rest.matchwild(!pat))
+	do !i from 1 to 500
+		break if (not(!rest.matchwild(!pat)))
 		!out.append(!rest.before(!sep))
 		!rest = !rest.after(!sep)
 	enddo

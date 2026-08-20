@@ -262,15 +262,35 @@ endmethod
 -----------------------------------
 define method .AllBoxes()
 	var !projid proj id
-	var !equis coll all equi with (matchwild(name of site, |/$!projid_DrawingPlanBox|))
+	!sitename = '/' & !projid & '_DrawingPlanBox'
 	!str = object array()
-	do !equi values !equis
-		var !equi namn of $!equi
-		if !str.find(!equi).size().eq(0) then
-			!str.append(!equi)
-		endif
-	enddo
-	!str.sort()
+
+	----------------------------------------------------------------------
+	-- old code did 'coll all equi with (matchwild(name of site, ...))' --
+	-- which walks every EQUI in the whole project to test its site      --
+	-- name. scoping the collect to the box site's own subtree instead   --
+	-- is what makes this fast on large projects. the site may not exist --
+	-- yet (nobody has built a box here), so check first and skip        --
+	----------------------------------------------------------------------
+	!ce = ref
+	!found = true
+	$!sitename
+	handle any
+		!found = false
+	endhandle
+	$!ce
+
+	if (!found) then
+		var !equis coll all equi for $!sitename
+		do !equi values !equis
+			var !equi namn of $!equi
+			if !str.find(!equi).size().eq(0) then
+				!str.append(!equi)
+			endif
+		enddo
+		!str.sort()
+	endif
+
 	!this.files1.dtext = !str
 endmethod
 

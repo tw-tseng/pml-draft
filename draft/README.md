@@ -1872,6 +1872,14 @@ OK to replace currently active major application/utility "Basic Position" ?
 
 `.Apply()` 挑比例用 `!boxXlen`/`!boxYlen`（box 自己的軸）去配 500/400（圖紙的軸），但前面算 `!elen`/`!nlen` 就是為了把 box 的軸對應到圖紙的軸。box 正交時兩者一致所以看不出來，一旦大量出現轉過的 box，當 box 的 X 軸對到圖紙的 Y 方向時就會拿錯邊算比例。**使用者要求先不要改，他要自己再測。**
 
+### 優化：`DrawingPlan1.pmlfrm` 的 `.AllBoxes()` 載入速度（2026-08-19，**已實機驗證**）
+
+使用者反映案子比較大時，載入 `DrawingPlan1.pmlfrm`（表單建構子 `.DrawingPlan1()` 一開始就會呼叫 `.AllBoxes()`）會變慢。原因：`.AllBoxes()`（`forms/DrawingPlan1.pmlfrm:263`）用 `coll all equi with (matchwild(name of site, |/$!projid_DrawingPlanBox|))`，沒有 `for`/`within` 限縮範圍，等於對整個 project 的**所有 DB 的所有 EQUI** 做一次全域掃描，逐一比對每個 EQUI 所屬 SITE 的名稱——掃描量跟全專案 EQUI 總數成正比，不是跟真正的 DrawingPlanBox 數量成正比。
+
+改成先確認 `/<projid>_DrawingPlanBox` 這個 site 是否存在（`$!sitename` 包 `handle any` 判斷，寫法跟 `design/forms/DrawingPlan.pmlfrm` 的 `.GotoBoxSite()` 一致），存在的話才用 `coll all equi for $!sitename` 只掃該 site 底下的子樹；不存在就直接給空清單，不報錯。CE 用 `!ce = ref` / `$!ce` 存回，掃描前後不改動使用者原本所在位置。
+
+**實機驗證結果**：使用者確認清單內容跟舊寫法一致，載入效率提升不少。
+
 ## 其他已讀程式時發現的疑點（尚未確認是否為真正 bug，僅供之後查證）
 
 1. **`functions/DrawingPlan1EquiAnnotation.pmlfnc:143-161, 212, 218, 415`**：多處使用 `!namedir` 判斷 up/down/left/right，但整支函式內都沒有對 `!namedir` 賦值。
@@ -1884,3 +1892,496 @@ OK to replace currently active major application/utility "Basic Position" ?
 - `draft` 目錄是獨立 git repo，目前 branch `master`
 - Remote：`https://github.com/tw-tseng/pml-draft`（已 push，含 2 個 commit：`5e35eed` Initial baseline、`28c5c9f` "claude未修改的版本"）
 - `functions/DrawingPlan1LineNoAnnotation.pmlfnc` 曾有一次縮排/清理的 commit（修正 `handle any` 縮排、移除未用的 `viewdirup`/`viewdirleft` 變數宣告）
+
+## 新增：CAD 端取點程式 `cad/DrawingPlanBox.lsp`（2026-08-19，**尚未實機驗證**）
+
+README 先前停在「CAD 端還需要一支 LISP：讓使用者依序點三點、append 一行到 CSV。**尚未撰寫。**」——這次寫了，檔案在 `cad/DrawingPlanBox.lsp`，指令 `E3DBOX`。
+
+### 使用者定案的兩點
+
+1. **高程（Ubot/Utop）預設留空，由 E3D 表單的 Elevation 欄位決定**，但 LISP 開頭提供一次性輸入（P1 提示列的 `Elev` 選項），設了就寫進之後每一行。**不是每格問一次**——同一張 CAD 平面圖幾乎一定同一層樓，每格問是重複勞動又容易打錯；而一個 dwg 擺兩三層樓的情況也真的有，所以留一個整批設定的入口。預設留空的理由是高程是 E3D 端的概念（model 座標），錯了改表單一個欄位就好，寫死在 CSV 裡要改就得編檔案或重點。
+2. **CAD 端只出座標，圖號/Rev/Title 一律在 E3D 的 `Info` 分頁填**。所以第 7~11 欄永遠寫空字串，`.Field()` 讀到空的照樣安全（`.MakeBox()` 對這五個參數本來就允許空）。
+
+### 幾個實作上的決定
+
+- **座標一律 `(trans p 1 0)` 轉成 WCS**。使用者若轉過 UCS，直接拿 `getpoint` 的回傳值會是 UCS 座標，寫出去就整批偏掉。
+- **數字用 `rtos` mode 2 精度 4，並在前後強制 `DIMZIN` 為 0**。`DIMZIN` 有些設定會把 `0.5` 縮成 `.5`，PML 的 `STRING.real()` 解析不了。
+- **每切一格就在 `E3D_DWGBOX` 圖層畫出 box 的四角外框加編號**。外框是照 `.MakeBox()` 同一套算法（P1P2 當一邊、P3 的垂足向量當另一邊）算出來的**真正四角**，不是三個點連線——所以使用者在 CAD 上看到的就是 E3D 會建出來的範圍。編號是**該筆在 CSV 裡的實體行號**，E3D 匯入結果清單講的也是同一個行號（`line 7 - created ...`），所以填圖號那一輪可以拿畫面上的號碼對回 E3D 的清單。這正好補上當初否決 `cadid:` 時留下的缺口（那次否決的理由是 ID 在 E3D 裡看不到）。圖層可以隨時凍結或刪掉，程式不會回頭讀它。
+- **每筆寫完在命令列 echo 出圖框尺寸（mm）**。CAD 圖沒縮到 1:1 的話這裡會直接看出來（`40000 x 30000` vs `40 x 30`），不用等到 E3D 建出一堆小 box 才發現。
+- **幾何防呆在 CAD 端也做一次**（P1=P2、P3 落在 P1P2 線上），跟 `.MakeBox()` 的判斷一致。與其讓它變成匯入時的一行 skipped，不如當場講。
+- **提示文字全用 ASCII**。LISP 檔是照系統 codepage 讀的，中文在某些 AutoCAD 版本會變亂碼。
+- 檔名預設是 `<dwg 檔名>_e3dbox.csv` 放在 dwg 同目錄，不用先選檔就能開始；`File` 選項可以改。**既有檔案一律用附加（`open` 的 `"a"`），不會覆蓋**——`getfiled` 用 flag 1 會跳「檔案已存在，是否取代」的確認框，那是對話框自己的行為，按確定也不會清掉檔案內容。
+- 新建檔案時寫兩行 `--` 開頭的表頭（E3D 會跳過），讓 CSV 用文字編輯器打開時看得懂欄位順序。
+
+### 待實機驗證
+
+1. `E3DBOX` 在使用者的 AutoCAD 版本能不能載入、`entmake` 的 LWPOLYLINE / TEXT 有沒有正確產生
+2. 寫出來的 CSV 丟進 E3D `!!DrawingPlan` 的 Import 分頁，`.SplitKeep()` 的欄位對應正不正確（**這同時也驗證了 README 上面那條掛著的「匯入含空欄位的 CSV」項目**——本程式產生的每一行第 7~11 欄都是空的）
+3. 匯進去的 box 拿到 DRAFT 的 `!!DrawingPlan1`，確認範圍跟 CAD 上畫出來的外框一致
+
+### 實機驗證結果：`.SplitKeep()` 的 `do while` 不是合法 PML（2026-08-19，已修，待再驗）
+
+按 `Import` 直接噴：
+
+```
+(47,15)  CP: Syntax error
+ In line 1029 of PML function drawingplan.SPLITKEEP
+    do ^^while (!rest.matchwild(!pat))
+ Called from line 969 of PML function drawingplan.IMPORTFILE
+    !f = !this.SplitKeep(!line, ';')
+```
+
+`^^` 標在 `while` 上。**PML 沒有 `do while` 這個迴圈**——全 repo 搜尋 `do while` 只有這一行，其他地方一律是 `do !i from 1 to n` / `do !x values !arr` / 空的 `do`，配 `break` 或 `break if (...)` 跳出（例：`design/forms/componentcreation.pmlfrm:1698`、`:6252`）。
+
+改成：
+
+```pml
+do !i from 1 to 500
+	break if (not(!rest.matchwild(!pat)))
+	!out.append(!rest.before(!sep))
+	!rest = !rest.after(!sep)
+enddo
+```
+
+用有上限的 `do !i from 1 to 500` 而不是空的 `do`，是因為失控的迴圈會把 E3D 整個卡死；500 遠大於這個格式的 13 個欄位，正常資料碰不到。
+
+**這是 `.pmlfrm`，要 `kill !!DrawingPlan` 再 `show !!DrawingPlan` 才會生效。**
+
+### 實機驗證結果：`.SplitKeep()` 過關了，但每一行都因為沒有高程被跳過（2026-08-19，已修，待再驗）
+
+```
+line 3 - skipped, no elevation on the line and none in the Elevation boxes
+line 4 - skipped, no elevation on the line and none in the Elevation boxes
+line 5 - skipped, no elevation on the line and none in the Elevation boxes
+line 6 - skipped, no elevation on the line and none in the Elevation boxes
+
+0 box(es) created, 4 line(s) skipped
+```
+
+不是 bug——`do while` 那個問題確實修好了（沒有再跳語法錯誤）。原因是 `Bottom U`/`Top U` 這兩個欄位**表單啟動時從來沒有給過內定值**，每次開表單都是空的，`cad/DrawingPlanBox.lsp` 產生的 CSV 本身第 12、13 欄也照設計留空（高程刻意留給 E3D 端決定），兩邊都空自然整批 skip。
+
+使用者上一輪講的「Bottom U 內定值設為 0，Top U 內定值設為 50000」原來是要這兩個值**寫進表單的啟動內定值**，不是每次手動填。`.DrawingPlan()` 加了：
+
+```pml
+!this.ubot.val = 0
+!this.utop.val = 50000
+```
+
+50000 只是起始值，之後每個專案自己在 Import 分頁改掉即可。
+
+### 新增：`Split` 分頁，把既有 box 沿 X/Y/Z 切成 2 個（或以上）（2026-08-19，**尚未實機驗證**）
+
+使用者提出四點需求：判斷 CE 是不是 box → 在 box 中心顯示 X/Y/Z 方向（箭頭+文字）→ 表單用 checkbox 選要切哪幾個方向 → 選一個點，切成 2 個（或以上）box。
+
+### 整體設計
+
+- **`Show Box`**：確認 CE 是 BOX、在 `<projid>_DrawingPlanBox` 底下（沿用 `.CurrentBoxEqui()` 的安全檢查，跟 `Delete Box`/`Apply` 同一套），讀出 box 的 `worpos`/`xlength`/`ylength`/`zlength`/`ori wrt worl`，**存進表單 member**，然後畫出中心球 + X/Y/Z 三支箭頭（`AID ARROW`，箭頭末端加文字標籤）
+- **存成 member 而不是每次現查**：因為選分割點（`Pick Split Point`）是另一次使用者互動，中間 CE 可能已經移動到別的地方，分割一定要對「按 Show Box 當下那顆 box」動手，不能依賴分割當下的 CE
+- **checkbox（`toggle .splitx/.splity/.splitz`）+ `Pick Split Point`**：只點一個點，同時勾幾個軸就切幾刀。勾 1 個軸 = 2 個 box，2 個軸 = 4 個，3 個軸 = 8 個（笛卡兒積）
+- **原 box 的 rev/title1~3 會複製到每一個新 box，但圖號不會**——圖號本來就必須每張圖唯一，切完的每一片都要在 `Info` 分頁重新命名；rev/title 通常整套圖共用，延續下去比清空更省事（沿用先前 `Apply`/`Read CE` 就已經定案的邏輯）
+- **原 box 只有在全部新 box 都成功建立後才刪除**；中途若有一片失敗，已建立的那幾片會回滾刪除，原 box 完全不動——避免「切一半」的狀態發生
+
+### 重構：把 `.MakeBox()` 拆成兩半
+
+`.MakeBox()`（3 點版）原本從算幾何一路做到 `new equi`/`new box`/`POS`/`ORI`/`XLEN`/`SetTagText`。這次把後半段（拿到 pcen/ydir 字串/xlen/ylen/zlen 之後才做的事）抽成新的 `.MakeBoxAt(!pcen, !ydirstr, !xlen, !ylen, !zlen, !dwgno, !rev, !title1, !title2, !title3)`，`.MakeBox()` 算完幾何後直接呼叫它。Split 用的是同一支 `.MakeBoxAt()`——不用點三個點，直接算好中心跟長寬高丟進去。純粹的邏輯搬移，`.MakeBox()` 原本的行為完全沒變。
+
+### 分割點怎麼換算成 box 自己的座標
+
+`Show Box` 存下來的是 box 的 X/Y/Z 方向（每個軸用字串形式存，如 `!this.splitxdirstr`），配合 `.offset(dir, 1mm)` 前後兩點的 E/N/U 差，反推出這個方向在世界座標裡的單位向量分量，再跟「撿到的點 - box 中心」做點積，得到撿到的點在 box 自己 X/Y 軸上的偏移量。這跟 `forms/DrawingPlan1.pmlfrm` 的 `.Apply()` 算 `efpla`/`nfpla` 用的「偏移再相減」手法是同一招，只是反過來用。Z 軸的分量因為假設永遠是世界 Up，直接就是 `dU`。
+
+### 明確的假設與已知限制
+
+1. **Z 軸永遠當作世界 Up**，不是從 box 自己的 ORI 讀出來的。全 repo 找不到任何 `.zdir()` 的用例可以確認 ORIENTATION 物件有沒有這個方法；但這個工具建出來的 box 全部都是 `ORI ... Z is U`（見 `.MakeBoxAt()`），所以拿來切的 box 本來就應該是水平的。如果之後要切一顆不是這樣建出來的、Z 軸真的歪掉的 box，這裡的 Z 軸顯示和切割都會是錯的。
+2. **`AID ARROW` 全 repo 只有一個先例**（`design/forms/componentcreation.pmlfrm:1525`），這支表單自己從沒用過。已经照那個先例的語法照抄（`$!<...>` 傳 POSITION/DIRECTION/REAL，帶 `NUMBER`），但沒有實機跑過，箭頭畫不畫得出來、方向對不對、`PROPORTION 0.15` 好不好看都还不知道。中心球和 X/Y/Z 文字標籤沿用 `.MarkOne()` 已經實測過的 E/N/U 拆解寫法，這部分風險低很多。
+3. **`member .splitcen is POSITION` 這個型別沒有在目前這支重寫過的檔案裡實測過**（舊版 `DrawingPlan.pmlfrm` 用過 `member .pointSt is POSITION`，但那是我重寫前的版本）。原本也想把 X/Y 方向存成 `member ... is DIRECTION`，但全 repo 完全找不到這種用法的先例，改成存字串（`.splitxdirstr`/`.splitydirstr`）、要用的時候再 `object direction(!str)` 現組，降低這裡的風險。
+4. **切割防呆的門檻是 1mm**：撿到的點在某個要切的軸上，離兩端都要留至少 1mm，否則整批不建立、直接報錯，訊息會指出是哪個軸太靠邊。
+
+### 待實機驗證
+
+1. `Show Box` 對著一顆已經用 Import 建出來的 box 按下去，中心球和三支箭頭會不會正確顯示（**這是目前最大的未知數，`AID ARROW` 完全沒測過**）
+2. 三支箭頭的方向對不對得上 box 實際的長寬高方向，長度是不是延伸到面上
+3. 只勾 X：撿一個點，是否正確切成 2 個 box，範圍對不對
+4. 同時勾 X 和 Y：是否正確切成 4 個，四個角落的範圍對不對
+5. 撿的點太靠邊（<1mm）會不會正確擋下、不建立任何東西
+6. 切完之後原 box 是否被刪除、新 box 是否能在 `Info` 分頁 `Read CE` 讀到複製過來的 rev/title
+7. 故意讓某一片建立失敗（例如先手動占用某個名稱——不過這次圖號全部留空，比較難自然觸發，可能要另外設計測試方式），確認回滾邏輯真的會把已建立的幾片清掉、原 box 保持原樣
+
+### 實機驗證結果：`Pick Split Point` 選完點後噴 `DOSPLITAT(<UNTYPED>) not found`（2026-08-19，已修，待再驗）
+
+`Show Box` 本身順利跑完（tree 上看得到 `EQUIPMENT 1` 底下的 `BOX 1`，畫面也導到那顆 box），Split 分頁勾了 X、按 `Pick Split Point`、選完點後：
+
+```
+Aborted $!!edgCntrl.navigateAction (Reinstated) - (2,779)
+Method <FORM>.DOSPLITAT(<UNTYPED>) not found.
+```
+
+### 原因
+
+`.SplitPointPicked(!pos is POSITION)` 本身確實有跑（錯誤指名的是 `DOSPLITAT`，不是 `SPLITPOINTPICKED`），代表 EDGPACKET 回傳的 position 第一次交給一個宣告 `is POSITION` 的方法沒問題。問題出在**第二次**：`.SplitPointPicked()` 把自己收到的 `!pos`（已經是型別化的方法參數）**原封不動當唯一引數**再傳給 `.DoSplitAt(!pos is POSITION)`，這一步失敗，PDMS 判定引數是 `<UNTYPED>`，找不到吻合的方法。
+
+沒有把握這確切是 PML 的什麼規則（可能跟「只有一個引數」有關，也可能跟別的因素有關）——`.PickDone(!pos is POSITION, !idx is REAL)` 傳給 `.SetPoint(!idx, !pos)` 是同樣「收到型別化參數再轉手」的寫法，卻沒有出這個錯，兩者間唯一明顯的差異是 `.SetPoint()` 是兩個引數、`.DoSplitAt()` 原本只有一個。既然原因抓不準，**改成完全避開這個傳遞形狀**，而不是猜一個修法。
+
+### 作法
+
+參照 `.PickDone()` 到最後一步 `.CreateBox()` 的方式——那一步用的是**零引數**方法，資料是先寫進表單 member，再由 `.CreateBox()` 自己讀回來，POSITION 從來沒有被當成引數轉手兩次。`.SplitPointPicked()` 照同一個模式改：
+
+```pml
+define method .SplitPointPicked(!pos is POSITION)
+	!!DrawingPlan.splitpickpos = !pos
+	!!DrawingPlan.DropPicking()
+	!!DrawingPlan.DoSplitAt()
+endmethod
+```
+
+新增 `member .splitpickpos is POSITION`，`.DoSplitAt()` 改成零引數，開頭讀 `!this.splitpickpos.wrt(WORL)` 取代原本的參數 `!pos`。`.DoSplitAt()` 內部其餘邏輯完全沒動。
+
+**這個坑要記住**：POSITION（可能其他物件型別也一樣）當成方法參數收下來之後，**不要再原封不動當唯一引數轉手給下一個方法**——先寫進 member，讓下一個方法自己讀回來。
+
+### 待實機驗證
+
+1. 這次的修法本身有沒有解決問題——`Pick Split Point` 選完點後應該要繼續往下跑到 `.DoSplitAt()` 的正文（防呆檢查、建立新 box、刪除原 box），而不是卡在方法找不到
+2. 前一輪列的「三支箭頭方不方向對」「切出來的 box 範圍對不對」等項目都還沒驗到，這次要是這關過了才輪得到
+
+### 實機驗證結果：`Show Box` 的箭頭真的畫出來了，Z 軸切割也成功了；X 軸切割噴單位不合的錯誤（2026-08-19）
+
+使用者這輪回報的截圖帶來兩個好消息，順便一個新 bug：
+
+1. **`AID ARROW` 沒問題**——3D 畫面上 X/Y/Z 三個標籤都正確顯示，這是這個功能最大的未知數，過關了
+2. **勾 Z、切一刀，成功了**——Result 清單有兩筆 `created =67128186/19424560`／`created =67128186/19424562`，代表 `.DoSplitAt()` 整條路（防呆、建立、刪原 box、回報）都走通了
+3. **但勾 X 再切，噴** `DIMENSION(UNIT) MISMATCH in real arithmetic (+-*/ POW): cannot combine physical quantities DIST and SQDI`
+
+### 原因
+
+算 X/Y 方向單位向量時，直接拿「偏移 1mm 後的座標」減去「中心座標」（`!refx.east - !cen.east`），這個差值本身還帶著「長度」的單位標籤（DIST）。後面 `!dE * !uxE`（長度 × 長度）就被 PDMS 判定成「面積」（SQDI），跟其他純長度的量混在一起就報單位不合。
+
+Z 軸沒事是因為 Z 那條路完全沒有這個乘法（`!localz = !dU` 是直接賦值，不是點積），只有 X/Y 這條「投影到 box 自己軸向」的路徑才會踩到。
+
+`.MakeBox()` 原本沒這問題，是因為它算方向分量用的是「長度差 ÷ 長度」（`!ux = (!e2-!e1)/!xlen`）——除法會讓單位互相抵消變成純數字，才能拿去再乘別的長度。我這次少做了那個除法。
+
+### 作法
+
+改成除以偏移點與中心的實際距離（用 `.distance()` 取得，跟 `.MakeBox()` 的 `!xlen = !pfrom.distance(!pto2)` 是同一招），而不是相信自己傳給 `.offset()` 的那個裸數字：
+
+```pml
+!refx = !cen.offset(!xdir, 1000)
+!lenx = !cen.distance(!refx)
+!uxE = (!refx.east - !cen.east) / !lenx
+!uxN = (!refx.north - !cen.north) / !lenx
+!uxU = (!refx.up - !cen.up) / !lenx
+```
+
+Y 軸同樣處理。Z 軸的 `!localz = !dU` 完全沒動（本來就沒問題）。
+
+**這個坑要記住**：POSITION 的 `.east`/`.north`/`.up` 差值帶著 DIST 單位，可以互相加減、可以乘一個「已經確認是純數字」的量，但**不能兩個差值直接相乘**——要嘛先除掉一個同單位的量變成純數字，要嘛就不要乘。
+
+## 使用者這輪同時要求的三個調整（一併做了）
+
+1. **CE 是 EQUI 時自動跳到底下的 BOX，不要報「不是 BOX」**。`.CurrentSplitBox()` 加了一段：CE 是 EQUI 的話先 `coll all box for ce` 找底下唯一的那個 BOX（這個工具建的 box 本來就是一個 EQUI 配一個 BOX），自動導過去再往下走；CE 已經是 BOX 就跟原本一樣直接用；兩者都不是才報錯
+2. **`Pick Split Point` 不用先按過 `Show Box`**。`.PickSplitPoint()` 開頭直接呼叫 `!this.ShowBox()`，用當下的 CE 重新鎖定目標、重畫箭頭，`Show Box` 從此變成「純預覽、非必要」的按鈕——兩顆按鈕永遠對同一份邏輯，不會有「先按過的那次」跟「現在要切的」是兩顆不同 box 的落差。配合這個改動，`.ShowBox()` 開頭加了 `!this.splitequi = ''`，確保失敗的時候不會殘留上一次成功時的舊資料
+3. **`Split along Z` 內定打勾**（X/Y 維持不勾）。`.DrawingPlan()` 表單啟動時設 `!this.splitz.val = true`——大部分切圖是按樓層切，Z 是最常用的方向
+
+### 待實機驗證
+
+1. X 軸單位修好之後，勾 X 切一刀能不能成功（這次的重點）
+2. 同時勾 X+Y（甚至 X+Y+Z）切出來的 4 個（或 8 個）box 範圍對不對
+3. CE 導在 EQUI 上直接按 `Pick Split Point`（不先按 `Show Box`）能不能正常運作
+
+### 調整：`Show Box` 改成開關、X/Y/Z 直排並加偏移量欄位、Result 改用單行文字（2026-08-19，**尚未實機驗證**）
+
+使用者三個要求：
+
+1. **`Show Box` 變成開關**：按一次顯示，再按一次隱藏
+2. **X/Y/Z 改直排，各配一個偏移量輸入欄**：例如切高程時常常只能點到鋼構底面，但真正要切的位置在那之下 50mm，就是靠這個欄位補
+3. **`Split` 分頁的 `Result` 不需要清單，只要一行文字講建了幾個 box**
+
+### `Show Box` 開關 vs `Pick Split Point` 不用先按過它——兩個需求會互相打架，拆成兩支方法解決
+
+上一輪才把「`Pick Split Point` 不用先按 `Show Box`」做成內部呼叫 `!this.ShowBox()`。這次 `Show Box` 一變成開關，若還是呼叫同一支方法，`Pick Split Point` 有可能在「使用者剛好前一刻按過 Show Box、箭頭正顯示著」的狀況下，反而把顯示關掉而不是重新鎖定目標——兩個需求對同一個方法有衝突的期待。
+
+拆開：
+
+- **`.RefreshBox()`**：真正做事的方法（原本 `.ShowBox()` 的全部內容——確認 CE、鎖定目標、存 geometry、畫箭頭），沒有開關語意，每次呼叫就是「用目前的 CE 重新來一次」
+- **`.ShowBox()`**：純粹是按鈕的開關邏輯——`!this.splitequi` 有值代表正顯示著，再按一次就 `AID CLEAR ALL` + 清空後直接 return；沒有值才呼叫 `.RefreshBox()`
+- **`Pick Split Point` 改呼叫 `.RefreshBox()`**，不再經過會開關的 `.ShowBox()`，永遠確保重新鎖定「當下 CE」，不受使用者之前有沒有按過 `Show Box`、箭頭現在是顯示還是隱藏狀態影響
+
+### 偏移量欄位
+
+X/Y/Z 三個 `toggle` 直排，每個右邊配一個 `is REAL` 的偏移量欄位（`.splitxoff`/`.splityoff`/`.splitzoff`），留空當 0（跟 `.ubot.val`/`.utop.val` 判斷 `.unset()` 同一招）。`.DoSplitAt()` 在算出撿到的點在 box 自己 X/Y/Z 上的投影座標（`!localx`/`!localy`/`!localz`）之後，直接加上對應的偏移量，之後所有防呆檢查和切割計算都用調整過的座標。
+
+**正負號的意義**：偏移量往該軸的正方向移動用正數，往負方向用負數。以 Z 為例，Z 軸固定對應世界 Up，往下 50mm 就是輸入 `-50`。表單上的提示文字有講這個例子。
+
+### `Result` 改成一行文字
+
+`list .splitlog` 換成 `para .splitresult`（初始 `text ''`，PSD.pmlfrm 也有這個空字串預設值的先例）。`.DoSplitAt()` 原本每建一個 box 就 `!log.append('created ' & !newequi)`，這次拿掉，只保留 `!created`（回滾要用，不能拿掉），成功時改成：
+
+```pml
+!this.splitresult.val = !created.size().string() & ' box(es) created'
+```
+
+失敗時的行為完全沒變——還是 `!!alert.error(...)` 跳錯誤視窗，不寫進這個 paragraph。
+
+### 待實機驗證
+
+1. `Show Box` 按兩下，第二下箭頭有沒有正確消失
+2. CE 沒有先按過 `Show Box`（或箭頭正被上一次按 Show Box 隱藏著）的狀態下，直接按 `Pick Split Point` 能不能正常運作、重新鎖定目標
+3. Z 偏移量填 `-50`（或任意值），切出來的高程分界是不是真的往下移了 50mm，不是往上
+4. `Result` 那行文字在成功後有沒有正確顯示數量
+
+### 實機驗證結果：Split 分頁全部功能都測過了，OK（2026-08-19，**已實機驗證，結案**）
+
+使用者確認：`Show Box` 開關、直排的 X/Y/Z 加偏移量、`Result` 單行文字，全部照預期運作。截圖顯示 `Split along Z` 打勾、Offset 填 `-100`，`Pick Split Point` 後 `Result` 正確顯示 `2 box(es) created`。
+
+**`Split` 分頁（判斷 box、顯示軸向、勾選切割方向、偏移量、選點分割）到此收尾，功能完整可用。**
+
+### 調整：拿掉三段說明文字，太占空間（2026-08-19）
+
+使用者貼的截圖裡三段說明文字都被紅框標出來——`Show Box` 下方兩行、Offset 下方兩行、`Pick Split Point` 下方四行——要求全部拿掉。
+
+移除：`.showhint`/`.showhint2`（Show Box 用法）、`.splithint0`/`.splithint0b`（Offset 說明）、`.splithint`~`.splithint4`（Pick Split Point 用法）。拿掉之後把 `Split along/Offset` 標題、X/Y/Z 三排、`Pick Split Point` 按鈕、`Result` 文字重新接起來，中間沒有留空隙。這些說明只存在於畫面上，不影響任何邏輯，純版面調整。
+
+### 新增：`Merge` 功能，跟 `Split` 共用同一個頁籤，改名 `Split/Merge`（2026-08-19，**尚未實機驗證**）
+
+使用者提出：多選幾個 box，按 Merge 合併成一個。順帶問「要不要跟 Split 放同一頁籤」——同意，Merge 只有一個按鈕，單獨開一頁太空曠，而且兩者都是「重新整理既有 box 的範圍」，操作對象和底層機制高度重疊。頁籤標籤從 `Split` 改成 `Split/Merge`（frame 內部代號 `.splitfr` 沒有動，只改顯示文字）。
+
+### 怎麼選多個 box
+
+沒有用 3D 多選（PML 沒有現成、有把握的方式讀出「使用者在 Explorer/3D 裡 ctrl 選了哪些元素」），改用這個專案已經有先例的做法：`draft/forms/DrawingPlan1.pmlfrm` 的 Drawing 分頁本來就是用一個 `multiple` 的 `list` 讓使用者多選 box（`.files1`/`.files`），照抄同一套：
+
+- `list .mergelist 'Boxes' multiple`，`.RefreshMergeList()` 填內容——查詢照抄 `DrawingPlan1.AllBoxes()`（`coll all equi for $!sitename` 只在 `<projid>_DrawingPlanBox` 這個子樹底下找，不掃全專案；site 還不存在時安全跳過），這支已經在姊妹工具裡驗證過效能和正確性
+- `Refresh List` 按鈕手動刷新（表單開啟時也會自動跑一次）。因為 Pick／Import／Split／Merge 都可能在同一次開表單期間建立新 box，用按鈕明確刷新比自動同步簡單、行為好預測
+- `.MergeBoxes()` 讀 `!this.mergelist.selection()`（多選清單的既有寫法，`DrawingPlan1.pmlfrm` 的 `.selectce()` 已經在用），少於 2 個直接擋
+
+### 合併範圍怎麼算
+
+**前提：所有選到的 box 方向要完全一樣**——用 Y 軸方向字串（跟 Split 用同一招，`.ori.orientation().ydir().string().before('WRT')`）互相比對，不一樣就整批擋下、講清楚是哪一個 box 方向不對。沒有這個前提，「合併」在數學上沒有意義（不同方向的 box 沒辦法用一個 axis-aligned 的新 box 同時包住）。
+
+以清單裡第一個 box 當參照座標系，其餘每個 box 的中心點都用 `.DoSplitAt()` 已經驗證過的「偏移 1000mm、除以 `.distance()` 得到單位向量、點積」手法投影到參照 box 的 X/Y（Z 固定世界 Up，跟 Split 同一個假設），算出每個 box 在這個共同座標系裡的範圍，**取所有 box 範圍的聯集**（每軸分別取最小下界、最大上界），聯集的中點和長度就是合併後新 box 的中心和長寬高。
+
+**這不會檢查選到的 box 是否真的相鄰、中間有沒有縫**——只是把選到的全部包起來，跟這個工具一貫「草圖階段能框出正確範圍就好」的定位一致。如果選了兩個離很遠的 box，合併出來的新 box 會涵蓋中間一大片沒被選到的空間，這是預期行為，不是 bug。
+
+### 建立順序：先建新 box，成功才刪舊的
+
+跟 Split 同一個安全原則——`.MakeBoxAt()` 失敗就整批不動，不刪任何東西；新 box 建立成功後才逐一刪除被合併的來源 EQUI，如果某個來源刪不掉只跳警告（新 box 已經是好的，不會因為刪舊的失敗就撤銷合併）。
+
+### 合併後的名稱/Rev/Title
+
+**新 box 一律無名、rev/title 全空**。被合併的幾個來源可能各自有不同的圖號和 rev/title（尤其常見於「先 Split 切開、後來又想合回去」這種情境），沒有一個天經地義該保留誰的，所以乾脆全部清空，交給使用者事後在 `Info` 分頁重新填。
+
+### 順手做的重構
+
+`.CurrentSplitBox()` 裡「CE 在 EQUI 上、找底下唯一的 BOX 並導過去」那段邏輯抽成 `.BoxUnderEqui()`——現在 Merge 的清單迴圈裡每一筆也要做同樣的事，兩個呼叫點共用同一份判斷，不會有改一邊忘了改另一邊的風險。
+
+### 待實機驗證
+
+1. `Refresh List` 能不能正確列出 `<projid>_DrawingPlanBox` 底下所有 box（含剛剛 Split 出來的那幾個）
+2. 選兩個方向相同的 box 按 `Merge`，合併出來的範圍對不對（尤其是拿一組先前 Split 出來的 box 合回去，範圍應該要跟原本切之前的 box 幾乎一樣）
+3. 選兩個方向不同的 box，能不能正確擋下並指出是哪一個
+4. 合併後 `Result` 文字、清單有沒有正確刷新（原本被合併的幾個名字應該從清單消失，新的無名 box 出現）
+
+### 改法：Merge 改用 `object SELECTION()` 讀 3D/Explorer 多選，拿掉清單 widget（2026-08-19，**尚未實機驗證**）
+
+使用者指到 `CHECK.TXT`（`D:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\CHECK.TXT`，PML 端寫的是 `L:\...`，兩台機器同一個資料夾，見 memory 裡的路徑對應筆記），內容：
+
+```pml
+!sele = object selection()
+!sele.getcurrent()
+!sels = !sele.getselection()
+!boxes = object array()
+do !sel values !sels
+	var !type type of $!sel
+	if !type.eqnocase('BOX') then
+		var !equi name of equi of $!sel
+		if !equi.matchwild('*_DrawingPlan') then
+			!boxes.append(!sel)
+		endif
+	endif
+enddo
+```
+
+這證實 PDMS 有現成的方式讀出「使用者在 Design Explorer / 3D 裡目前選了哪些元素」（`object SELECTION()` → `.getcurrent()` → `.getselection()`，回傳一個可導覽的 ref 陣列）。上一輪因為沒有把握這件事，改用清單 widget（`multiple` 的 `list`，仿照 `DrawingPlan1.pmlfrm` 的 Drawing 分頁）繞過去——現在有了依據，換掉。
+
+### 跟原本清單版的差異
+
+- **拿掉 `.mergelist`/`.mergerefresh`，也拿掉 `.RefreshMergeList()`**。不再需要維護一份快取的清單、不需要「刷新」的概念——`Merge Selected` 按下去就是讀當下即時的選取，永遠是最新的
+- **`Merge` 區塊縮成一顆按鈕**：畫面上只剩 `Merge` 標籤 + `Merge Selected` 按鈕，比清單版更省空間（延續使用者上一輪對版面精簡的要求）
+- **驗證邏輯沒有照抄 `CHECK.TXT` 的 `matchwild('*_DrawingPlan')`（比對 EQUI 名稱）**，改成沿用這整支表單一貫的規則——比對**所屬 SITE** 是不是 `/<projid>_DrawingPlanBox`（跟 `.CurrentBoxEqui()`／`.GotoBoxSite()` 同一套判斷）。`CHECK.TXT` 那行比對的是 EQUI 名稱字串，跟這支表單建立 box 時用的「SITE 名稱」規則是兩個不同的東西，用 SITE 判斷才會跟其他分頁一致
+- **選到 EQUI 也接受，自動往下找 BOX**（沿用 `.BoxUnderEqui()`，跟 Split 那邊 CE 在 EQUI 上的處理一致）
+- **選到不相關的東西（不是 BOX/EQUI、或不在我們的 site 底下）就靜靜跳過，不報錯**。這是掃描一批多選結果、篩出「看起來像我們的 box」的情境，跟 Split 那種「使用者明確選了一個東西、告訴他錯在哪」的情境不一樣——如果使用者多選時不小心多框到一根管子，不該讓整個 Merge 因此擋下來
+
+`.MergeBoxes()` 從蒐集完 `!names`（合格的 EQUI 名稱陣列）之後的邏輯完全沒動——方向一致性檢查、投影算聯集、建新 box、刪舊 box，全部沿用上一輪已經寫好的部分。
+
+### 待實機驗證
+
+1. `object selection()`/`.getcurrent()`/`.getselection()` 這組 API 能不能在這個環境正常運作（`CHECK.TXT` 是使用者提供的參考，這支表單自己還沒跑過）
+2. 在 3D 或 Explorer 裡 ctrl 選兩個以上的 box，按 `Merge Selected`，能不能正確蒐集到、算出正確的合併範圍
+3. 選取內容混了一些不相關的元素（例如一根管子），確認會被安靜跳過，不影響其餘 box 的合併
+4. 只選到 EQUI（沒選到底下的 BOX）能不能正確自動往下找
+
+### 調整：Delete Box 拿掉確認/結果對話框、Pick 和 Import 分頁再拿掉說明文字（2026-08-19）
+
+使用者一次提四點，前三點已在對話中處理，第四點補上：
+
+1. **確認合併邏輯（方向一致性檢查、投影算聯集）是否完整**——重新讀了一次目前 `.MergeBoxes()` 的內容，`!thisydirstr.neq(!ydirstr)` 的方向比對、`!ox`/`!oy`/`!oz` 投影、`!minx`~`!maxz` 的聯集計算全部都在，上一輪換成 `object SELECTION()` 讀取選取時只換了蒐集 `!names` 的那一段，後面的合併運算完全沒被動到，不是殘缺的。
+2. **`Delete Box` 拿掉確認對話框和成功訊息**，直接刪除。錯誤訊息保留（刪不掉還是要講）
+3. **Pick 分頁拿掉兩段說明**：`P1 -> P2 ... / P3 ... / P4 ...` 那三行，以及 `Create Box` 下面「Picking makes the box on its own...」那一行
+4. **Import 分頁拿掉四行格式說明**（`One line per drawing...` 到 `Lines starting with -- are ignored.`）
+
+拿掉的都是畫面上的靜態說明文字，沒有任何邏輯或欄位跟著被動到——欄位名稱、call 目標、資料流全部不變。目前四個分頁（Pick / Info / Import / Split-Merge）都已經照使用者要求把純說明性文字清掉，只剩必要的欄位標籤和按鈕。
+
+### 實機驗證結果：7 個 box 成功合併，但 3 個 box 誤判成「方向不同」（2026-08-19，已修，待再驗）
+
+好消息先講：**`Merge` 端到端真的跑通了**——`Result` 顯示 `Merged 7 box(es) into 1`，`object SELECTION()` 讀取 3D/Explorer 多選這條路確認可用。
+
+使用者接著選 3 個從圖面上看明顯該合併的 box，卻被擋下說方向不同。使用者在 Command Window 對三顆分別下 `q ori`：
+
+```
+Orientation Y is N 12.523 E and Z is U
+Orientation Y is S 12.523 W and Z is U
+Orientation Y is S 12.523 W and Z is U
+```
+
+### 原因
+
+`N 12.523 E` 跟 `S 12.523 W` 剛好相差 180 度——對一個以自身軸對稱的 box 來說，Y 指向正的還是反的描述的是**同一個實體方向**（`.MakeBox()` 的註解本來就寫過這件事：「whether it points forwards or backwards along that edge describes the same box」）。原本的比對是 `!thisydirstr.neq(!ydirstr)`，單純比字串是否完全相等，沒有把「互為相反」算進去，所以把這種物理上相同、只是符號相反的方向誤判成不同。
+
+### 作法
+
+改用 `.angle()`（跟 `forms/DrawingPlan1.pmlfrm` 的 `.Apply()` 判斷 `efpla`/`nfpla` 同一個方法）比對兩個 Y 方向的夾角，而不是比字串：
+
+```pml
+!ang = !thisydir.angle(!ydir)
+if (!ang.gt(0.5) and !ang.lt(179.5)) then
+	!badori = true
+	!bad = !nm
+endif
+```
+
+`.angle()` 只會回傳 0~180（沒有正負號），**夾角接近 0（同向）或接近 180（反向）都算通過**，只有真正不同角度（例如 90 度）才判定方向不合。留 0.5 度的容差是為了浮點數誤差。
+
+**這個改動不影響合併範圍的計算**：投影用的 `!xdir`/`!ydir` 從頭到尾都是「清單第一個 box 自己的方向」，其他 box 只是拿它們的中心點和長寬高去投影、取聯集，跟每個 box 自己的方向符號無關，本來就不會因為某個 box 的 Y 反過來而算錯範圍——錯的只有「要不要放行」這一關的判斷。
+
+### 待實機驗證
+
+1. 這次修好的方向容差，能不能讓那 3 個 box 順利通過檢查並正確合併
+2. 合併出來的範圍跟圖面上原本三個 box 框起來的範圍是否一致
+
+### 新增：`Info` 分頁的 `Batch Number`，前綴字+序號批次命名，加「跳過已命名」開關（2026-08-19，**尚未實機驗證**）
+
+使用者已經用 Split/Import 切出很多沒有圖號的 box，想要批次指定圖號：前綴字+序號，序號順序由「方向」決定（例如由下往上）。設計討論定案：
+
+- **選取方式沿用 `Merge` 已驗證的 `object SELECTION()`**——3D/Explorer 多選要編號的 box，不用另外做清單，實際編號順序完全由「Order by」決定，跟選取/點擊順序無關（PML 沒有辦法讀出多選的點擊順序，只能讀出「選了哪些」）
+- **「由左至右」不猜，改成明確的座標軸選項**：`Bottom -> Top (U)` / `Top -> Bottom (U)` / `West -> East (E)` / `East -> West (E)` / `South -> North (N)` / `North -> South (N)`，用 `option` 單選 gadget（`.batchdir`）。使用者確認「由左至右」在北上平面圖慣例下對應西到東，內定選項是 `Bottom -> Top (U)`（樓層切割最常見）
+- **前綴字 + 起始序號 + 補零位數**：`Prefix`/`Start at`/`Digits` 三個欄位，起始值留空當 1、位數留空不補零
+- **`Skip already-named` 開關**（使用者這輪加的）：打勾（預設）只動目前還沒有圖號的 box（ref 名稱 `=nnnn/nnnn`）；不打勾則選取範圍內全部 box 都重新編號，不管原本有沒有圖號——用來整批重新編號用
+
+### 排序怎麼做
+
+沒有「依 key 排序」的內建工具可用（這個 codebase 只在 STRING 陣列上見過 `.sort()`，沒有帶 key 的版本），改成手刻**選擇排序**：`!names`（EQUI 名稱）跟 `!keys`（該 box 中心點在選定座標軸上的世界座標）兩個平行陣列，用巢狀迴圈找最小/最大值互換位置。box 數量頂多幾十個，O(n²) 完全不是問題，換來的是不用去猜測、依賴不確定的排序 API。
+
+### 命名怎麼避免撞名
+
+`.BatchName(prefix, seq, digits)` 產生候選名稱字串（含補零）；命名迴圈裡每一個候選名稱先用「導覽看看存不存在」判斷是否已被佔用（跟 `.ApplyInfo()` 判斷圖號重複同一招），撞到就把序號加一繼續找，最多試 10000 次。這代表**同一個前綴可以分批跑、跑到哪算到哪**，或者兩個不同前綴共用同一個 site 也不會互撞。
+
+### 蒐集邏輯完全沿用 `.MergeBoxes()`
+
+BOX 或自動從 EQUI 往下找、必須在 `<projid>_DrawingPlanBox` 底下、其他不相關的東西安靜跳過——這段掃描邏輯跟 `Merge` 一模一樣，只是多了 `Skip already-named` 這一層過濾，以及順便記下每個 box 的排序用座標。
+
+### 待實機驗證
+
+1. `option` 這個 gadget類型（`.batchdir`）在這支表單裡是第一次用，`.dtext`/`.val`/`.selection()` 這組存取方式能不能正常運作
+2. 選幾個沒有圖號的 box，`Order by` 選 `Bottom -> Top (U)`，按 `Assign Numbers`，編號順序是不是真的由下往上
+3. `Skip already-named` 打勾時，選取範圍裡混著已命名的 box 會不會被正確跳過；取消勾選時，已命名的 box 會不會被正確覆蓋重新編號
+4. 補零位數（`Digits`）填 3 的時候，產生的名稱是不是 `P-001`、`P-002` 這種形式
+
+### 調整：`Batch Number` 拆成獨立 `Batch` 分頁、加第二個 `Order by`、Info 分頁清空說明文字（2026-08-19，**尚未實機驗證**）
+
+使用者四點：
+
+1. `Order by` 要有兩個
+2. `Prefix` 內定 `"DWGNO-"`、`Start at` 內定 1、`Digits` 內定 3
+3. Batch Number 要不要跟 Info 分開
+4. Info 分頁所有說明文字都殺掉，怕介面太大
+
+第 3 點使用者是用問的，但跟第 4 點（Info 太大）其實是同一件事——直接把 Batch Number 整區搬到新分頁 `Batch`，Info 分頁自然就瘦下來，兩點一次處理掉。分頁順序：`Pick / Info / Batch / Import / Split/Merge`。
+
+### 兩個 `Order by`
+
+`.batchdir`（1st）/ `.batchdir2`（2nd），都是同一組六個座標軸選項（跟原本一樣，不猜「左右」，明講 E/N/U）。**2nd 只在 1st 打平的時候才生效**，例如 1st 選「由下往上」、2nd 選「西到東」，效果就是先分樓層，同一樓層內再由左到右編號——這正是使用者原本說的「由下往上或由左至右」，只是兩個條件同時生效而不是二選一。內定值：1st = `Bottom -> Top (U)`、2nd = `West -> East (E)`。
+
+**排序邏輯改成兩層比較**，不是把兩個 key 硬湊成一個數字（那樣容易因為座標尺度不同而互相干擾出錯）。改成明確的比較器：先比對兩個 box 在軸 1 的座標，差距在 1mm 以內視為「打平」（同一樓層可能因為浮點數誤差沒有完全相等），打平才去比軸 2。這個容差跟排序本身都是自己刻的選擇排序（`.MergeBoxes()` 也沒有現成的「依 key 排序」工具可用，同一個限制）。
+
+### 三個欄位的內定值
+
+`.DrawingPlan()` 表單啟動時設定 `!this.batchprefix.val = 'DWGNO-'`、`!this.batchstart.val = 1`、`!this.batchdigits.val = 3`——一開表單三個欄位就有值，不用每次手動打。
+
+### Info 分頁瘦身
+
+拿掉 `.pano`（Drawing No. 下面「Leave blank while still sketching...」那行）跟 `.infohint`/`.infohint2`/`.infohint3`（「Select a box... Read CE... Apply...」那三行）。Info 分頁現在只剩 `Drawing No.`/`Rev`/`Title1~3` 五個欄位加 `Read CE`/`Apply` 兩顆按鈕，沒有任何說明文字。
+
+### 待實機驗證
+
+1. `Batch` 分頁的兩個 `option`（`Order by (1st)`/`(2nd)`）能不能正確顯示、切換、內定值對不對
+2. 找一批分佈在多個樓層、同樓層內東西向也分散的無圖號 box，1st 選 U、2nd 選 E，跑出來的順序是不是「先分樓層、樓層內再左到右」
+3. Prefix/Start at/Digits 的內定值（`DWGNO-`/1/3）開表單時有沒有正確帶出來
+
+### 調整：`Start at` 和 `Digits` 合併、`Prefix`/`Start at` 同一行、`Order by (2nd)` 加 `(none)`（2026-08-19，**尚未實機驗證**）
+
+使用者三點：
+
+1. `Start at`/`Digits` 合併成一個欄位——輸入 `001` 就同時表示起始值 1、補零到 3 位
+2. `Prefix`/`Start at` 放同一行
+3. `Order by (2nd)` 要有 `(none)` 選項
+
+### `Start at` 合併
+
+**型別改成 STRING**（原本是 REAL）——這是關鍵，REAL 欄位打 `001` 存進去只會剩 `1`，前面的零會被吃掉，沒辦法拿字元數當補零位數。改成 STRING 之後直接讀使用者打了幾個字元：
+
+```pml
+!startstr = !this.batchstart.val
+!start = !startstr.real()
+!digits = !startstr.length()
+```
+
+打 `001` → 起始值 1、補零 3 位。打 `1` → 起始值 1、不補零（長度 1，`.BatchName()` 判斷 `!digits.gt(0)` 且需要的位數已經夠，不會再加零）。`.batchdigits` 欄位整個拿掉，`.BatchName()` 本身不用改，一樣是「prefix + 補零字串」，只是 `!digits` 現在從 `Start at` 自己的字元數推算，不再是另一個獨立欄位。
+
+內定值從原本的 `1`/`3` 改成一個 `.batchstart.val = '001'`，效果跟原本一樣（起始 1、補 3 位），但現在只用一個欄位表達。
+
+### `Prefix`/`Start at` 同一行
+
+拿掉原本的直排，`Start at` 改成 `at xmax.batchprefix+1 ymin.batchprefix`，跟 `Prefix` 並排。
+
+### `Order by (2nd)` 的 `(none)`
+
+清單開頭加一個 `(none)` 選項（內定 2nd 還是 `West -> East (E)`，只是清單裡多了這個選擇，索引位置跟著往後移一位）。選了 `(none)` 時設 `!use2 = false`，排序比較器裡「軸 1 打平才比軸 2」那個分支多加一個條件 `and !use2`——`(none)` 的時候永遠不會比對軸 2，打平的 box 就維持掃描到的順序，不會被沒有意義的第二軸硬排。
+
+### 待實機驗證
+
+1. `Start at` 打 `001`，跑出來的圖號是不是 `DWGNO-001`、`DWGNO-002`……而不是 `DWGNO-1`、`DWGNO-2`
+2. `Start at` 只打 `1`（不含前導零），確認不補零
+3. `Order by (2nd)` 選 `(none)`，同一 U 高程的 box 順序是不是保持原樣（不會被硬用某個軸排序）
+
+### 實機驗證結果：Batch 分頁確認 OK；Split 撿到 box 外的點會整批擋下（2026-08-19，已修，待再驗）
+
+`Batch` 分頁使用者確認可以了。
+
+接著回報 `Split`：切一個 box 時，參考點選在一個高程落在 box 外的彎頭上，畫面顯示 X/Y/Z 都勾了，錯誤訊息 `The picked point is too close to the Z ends of the box (or outside it)`——整個 Split 被擋下，即使 X、Y 那兩軸的投影其實是在 box 範圍內的。
+
+使用者說明：切圖時常常會拿 box 外的東西（例如彎頭）當參考點對齊,不是每次都要點在 box 裡面。
+
+### 原因
+
+`.DoSplitAt()` 原本的邏輯是「勾選的軸只要有一個驗證失敗（太靠邊或在範圍外）就整批中止」。這對「參考點剛好只有某一軸落在 box 外」的情況太嚴格——使用者其實只是想用那個點對齊 X/Y，Z 有沒有落在 box 內根本不重要。
+
+### 作法
+
+改成**單軸失敗不再中止整個操作，只是那一軸不切**，等同於使用者根本沒勾選那一軸。只有「勾選的軸全部都失敗」才真正擋下（這種情況代表整個點都用不上，沒東西可切）。
+
+具體改法：把原本「驗證失敗就 `!!alert.error()` + `return`」，改成把失敗的軸記進 `!skipped` 陣列、對應的 `!usex`/`!usey`/`!usez` 維持 `false`；後面建立分割片段那三段（原本用 `!this.splitx.val` 判斷要不要切那一軸）改成用 `!usex`/`!usey`/`!usez`。切完之後 `Result` 文字會附註哪些軸被跳過，例如 `2 box(es) created (Z skipped - point too close/outside)`，讓使用者知道實際上只切了哪幾軸，不是靜默發生。
+
+**「太靠邊（1mm 內）」和「完全在範圍外」這次用同一套處理**——都算那一軸不能用，跳過就好，不特別區分兩種情況分別報錯或跳過，行為比較一致好預期。
+
+### 待實機驗證
+
+1. 同樣的場景（Z 落在 box 外，X/Y 在範圍內）再切一次，確認只切 X/Y 兩軸，Z 不受影響
+2. `Result` 文字有沒有正確顯示被跳過的軸
+3. 三個勾選軸全部都失敗的情況，確認會正確跳出「沒東西可切」的錯誤，不會建立奇怪的 box
