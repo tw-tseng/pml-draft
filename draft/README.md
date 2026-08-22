@@ -848,7 +848,7 @@ return (!checked.size().gt(0))
 ### 還沒做，需要使用者決定
 
 - **`ReachedServerErrorNumbers` 要對真的 SVR26 校準**：目前四個錯誤碼是常見值，不保證跟這台 SQL Server 版本/防火牆設定回傳的一致。建議先在 `catch` 裡暫時印一次 `ex.Number`，離線跑一次、用錯密碼在線上跑一次，兩邊數字都記下來再調整清單。
-- **編譯與部署**：`AteSort.csproj` 的 PostBuildEvent 會直接把編譯結果 xcopy 到 `C:\AVEVA\Everything3D2.10`（正式安裝目錄），這是共用環境，且會影響 `LineNoAnnotation`、`EquiAnnotation`、`MatchLine` 等其他還在用這兩個類別排序的地方——建置與部署需要使用者自己動手驗證，還沒有人幫忙 build。
+- **編譯與部署**：`AteSort.csproj` 的 PostBuildEvent 會直接把編譯結果 xcopy 到 `C:/AVEVA\Everything3D2.10`（正式安裝目錄），這是共用環境，且會影響 `LineNoAnnotation`、`EquiAnnotation`、`MatchLine` 等其他還在用這兩個類別排序的地方——建置與部署需要使用者自己動手驗證，還沒有人幫忙 build。
 - **主機名稱白名單 `PANB19052`**：這次沒拿掉，只是排到 `ReachedServer` 判斷之後當備援。要不要整個拿掉（改成別的離線開發繞過方式）由使用者決定。
 
 ### 提醒：`.pmlfrm` 改了要重載
@@ -2385,3 +2385,877 @@ BOX 或自動從 EQUI 往下找、必須在 `<projid>_DrawingPlanBox` 底下、�
 1. 同樣的場景（Z 落在 box 外，X/Y 在範圍內）再切一次，確認只切 X/Y 兩軸，Z 不受影響
 2. `Result` 文字有沒有正確顯示被跳過的軸
 3. 三個勾選軸全部都失敗的情況，確認會正確跳出「沒東西可切」的錯誤，不會建立奇怪的 box
+
+## 新增：View 分頁的 `Representation Style` / `Hatching Style`（2026-08-21，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+使用者要求：在 View 分頁 `Backing Sheet` 底下再加兩個控制項，格式跟 `Backing Sheet` 一樣（文字方塊 + CE 按鍵 + 型別提示），分別對應 view 的 `rrsf`、`hrsf` 兩個屬性。
+
+### 表單（`forms/DrawingPlan1.pmlfrm:43`、`:46`）
+
+```pml
+text .rrsftext 'Representation Style' ... 
+button .rrsfbutn 'CE' ... call |!This.typepick('RRST', 'rrsftext')|
+paragraph .rrsfpara ... text 'RRST'
+text .hrsftext 'Hatching Style' ...
+button .hrsfbutn 'CE' ... call |!This.typepick('HRST', 'hrsftext')|
+paragraph .hrsfpara ... text 'HRST'
+```
+
+沿用既有的 `.typepick()`，所以 CE 按鍵一樣會檢查目前 CE 的型別（`RRST`／`HRST`），型別不對就跳錯誤訊息，不會把錯的東西塞進欄位。
+
+順帶動到的兩行既有排版：
+
+1. `Backing Sheet` 的 tag 從 `tagwidth 12 width 38` 改成 `tagwidth 20 width 30`——`Representation Style` 有 20 個字元，三行要對齊就得用同一個 tagwidth；總寬度 50 沒變，右邊 CE 按鍵的位置不動。
+2. `.framebutn` 原本沒寫 `at`，靠內定位置擺；現在補上 `at xmax.frametext+0.4 ymin.frametext`，跟 Keyplan／NorthArrow 兩個 frame 的寫法一致。新加的兩列也都寫明 `at`，不依賴內定排版規則，免得新舊列的行為不一樣互相疊到。
+3. `.gridorthogonal` 的錨點從 `ymax.frametext` 改成 `ymax.hrsftext`，讓它落在新的兩列下面。
+
+### 內定值（`:199`）
+
+就是原本寫死在程式裡的那兩個路徑，行為跟改之前一樣：
+
+```pml
+!this.rrsftext.val = |/TT/DRA/PRJ/REPRW/GEN/PIPE|
+!this.hrsftext.val = |/TT/DRA/PRJ/HRUL/PIPE/Hatch-Gen|
+```
+
+### 建 view 的地方（`:717`）
+
+原本是兩行寫死的 `rrsf /TT/DRA/PRJ/REPRW/GEN/PIPE`／`hrsf /TT/DRA/PRJ/HRUL/PIPE/Hatch-Gen`，改成讀欄位，並且跟 `bsrf` 一樣用 `neq('')` 包起來——欄位清空就整段不設，view 維持該屬性的預設值，不會因為空字串去設一個無效參考。
+
+### Save/Load（`:1598`）
+
+`.Save()` 加了兩筆 `writerecord`；`.Load()` 不用改，它對純量欄位是走 `$!option = $!val` 的通用分支。舊的存檔沒有這兩行，載入後欄位維持內定值，不會出錯。
+
+### 待實機驗證
+
+1. View 分頁三列（Backing Sheet／Representation Style／Hatching Style）有沒有對齊、CE 按鍵跟型別提示有沒有跑版
+2. 導到一個 `RRST`／`HRST` 按 CE，欄位有沒有正確帶入名稱；導到別種型別按下去要跳錯誤訊息
+3. 出圖後 `q rrsf`／`q hrsf` 查 view，是不是欄位裡設定的那兩個
+4. 欄位清空再出圖，確認 view 不會被設成無效參考
+5. Save 一次再 Load，兩個欄位有沒有正確還原
+
+### 實機驗證結果：View 分頁三列排版 OK；`Load` 跳出亂碼 Warning（2026-08-21，已修，待再驗）
+
+使用者貼 `error.png`：View 分頁三列（Backing Sheet／Representation Style／Hatching Style）排版正常，CE 按鍵也能正確從 `RRST` 帶入名稱（狀態列顯示 `DRA/PRJ/REPR/GEN/BASIC`）。但按下 `Load` 之後跳出一個 Warning 對話框，內容整串亂碼：`å·²å„²å­˜çš„ Drawing Box ... ï¼š111`。
+
+### 原因
+
+**不是 Load 壞掉，是那行警告訊息的中文變成亂碼。** 這個 .pmlfrm 是 UTF-8，但 E3D 讀 PML 原始碼是用系統的 ANSI 編碼（正體中文環境是 Big5），所以**字串常值裡的中文**在跑起來的表單上就成了亂碼。訊息原文是 `.Load()`（`:1750`）的：
+
+> 已儲存的 Drawing Box 在目前專案中找不到，已略過：111
+
+也就是存檔裡記的 box `111` 在目前專案的 box site 底下已經找不到（被刪掉或改名了），Load 只是把它跳過、其餘欄位照常載入——這是 2026-08-14 那次為了避免 `.clear()` 整個 Load 陣亡而刻意加的行為，不是錯誤。
+
+### 作法
+
+把 `.Load()` 裡兩則會顯示給使用者看的中文 `!!alert.warning` 改成英文（`:1750` 的 missing box、`:1783` 的 missing Destination）。`--` 註解跟這份 README 的中文不受影響，E3D 不會把它們當要顯示的文字去解析。
+
+以後這個 repo 的 PML **字串常值一律用英文/ASCII**（alert 訊息、gadget 標籤、paragraph 文字、Result 欄位），中文只寫在註解和文件裡。
+
+### 待實機驗證
+
+1. 再按一次 `Load`，Warning 的英文訊息是不是可讀，而且有列出找不到的 box 名稱
+2. 其餘欄位（含新加的 Representation Style／Hatching Style）有沒有照常載入
+
+## 已改：Representation Style 內定值、Keyplan 圖面框填充、0 尺寸線（2026-08-21，**尚未實機驗證**）
+
+使用者一次提三件事。
+
+### 1. Representation Style 內定值
+
+`.DrawingPlan1()`（`forms/DrawingPlan1.pmlfrm:199`）的 `!this.rrsftext.val` 從沿用舊寫死值 `/TT/DRA/PRJ/REPRW/GEN/PIPE` 改成 `/DRA/PRJ/REPR/GEN/BASIC/PIPE`。Hatching Style 的內定值沒動。
+
+### 2. Keyplan 圖面位置框的填充線
+
+Keyplan 上標出本張圖範圍的那個 `OUTL`（`:1008`，`note 1` 底下、四個 `VRTX` 之前），`fstyle` 從 `SystemStyle 3` 改成 `SystemStyle 9`——原本的填充線太疏。
+
+### 3. 標成 0 的尺寸線
+
+使用者貼 `error.png`，兩個紅框各圈出一條標值為 0 的尺寸線（一條在 H 柱線、一條在 18 柱線），指出這是多餘的。
+
+#### 原因
+
+`DrawingPlan1LineNoAnnotation.pmlfnc` 每一邊的 `LDIM` 依序放三種 DPOI：先是有標籤的元件點（`:819` 的迴圈），再是柱線與 view 邊框的交點（`:1039` 的迴圈），最後是 view 的兩個角點（`:1113` 起）。**一條管剛好沿著柱線走的時候，同一個座標會被放兩次**——一次是它自己的標籤點，一次是柱線交點。兩點在「尺寸量測方向」上的座標一樣，量出來就是 0，而且第二條投影線會從那個點一路畫過整張圖，就是紅框裡看到的東西。
+
+角點原本有一道防重複的檢查（`!attapos.distance(!attapos1).lt(5)`），但擋不住這種情況：
+
+1. 它比的是**三維距離**。兩個點只要「深度」（伸進 view 的那一軸）不同就算不同點，可是尺寸量的只有另一軸，深度差多少都不影響量出來的 0。
+2. 第二個角點那段更弱——比距離時 `!attapos` 還沒做 `gridgap` 的偏移，等於拿邊框上的點去比一堆已經被推開 3mm/vsca 的點，永遠不會相等。
+3. 它比對的 `!dpois` 是在第一個角點建立**之前**收集的，所以第二個角點看不到第一個。
+
+柱線交點那段則根本沒有任何防重複。
+
+#### 作法
+
+每一邊建 `LDIM` 時開一個 `!dimalong` 陣列，記下每個已放上去的點**沿尺寸方向**的座標（左右兩邊是圖紙 y、上下兩邊是圖紙 x，兩者都是既有變數 `!ptx`／`!pty`，不必另外算）。柱線交點和兩個角點在建立前都先用新的 `!!DrawingPlan1.DimAlongIsNew()`（`forms/DrawingPlan1.pmlfrm:2935`）比對這個陣列，同座標就不建。角點原本的三維距離檢查保留，新的檢查加在它後面。
+
+**有標籤的點永遠不會被丟掉**，只是把座標登記進 `!dimalong`——它們各自帶著自己的 `Pltxt`，丟掉就少一個管號。所以這次處理的是「柱線交點／角點壓在標籤點上」與「兩條柱線同座標」，**兩個標籤點自己疊在一起的情況不在這次範圍內**，如果之後還看到 0，就是那一種。
+
+容許值 `!dimtol = 1 * !!DrawingPlan1.vsca`，也就是模型的 1mm 換算成圖紙 mm——只有近到「標出來會是 0」的兩點才算同一點。要連很小但不是 0 的尺寸一起拿掉，把那個 1 調大即可。
+
+### 待實機驗證
+
+1. 原本紅框那兩處還有沒有 0，以及橫跨整張圖的多餘投影線有沒有消失
+2. 柱線的尺寸鏈其他數字（2985／4449／4857／585 那些）有沒有跟著跑掉或少一段
+3. Keyplan 上的圖面框填充是不是變密了
+4. View 分頁 Representation Style 內定值是不是 `/DRA/PRJ/REPR/GEN/BASIC/PIPE`
+
+## 新增：View 分頁的 `Exclude from View` 清單（2026-08-21，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+使用者要求：`Hatching Style` 底下加一個約四行高的 list，用來指定哪些物件不要在 view 裡顯示，右邊配 `Add CE`／`Remove CE`／`Remove All` 三個按鍵，最後 view 的 drawing list 要把清單裡的東西移除掉。
+
+### 表單（`forms/DrawingPlan1.pmlfrm:49`）
+
+```pml
+list .excllist 'Exclude from View' at xmin.hrsftext ymax.hrsftext+0.2 multiple width 34 height 4
+button .excladdbutn 'Add CE'     ... call '!This.ExclAddCe()'
+button .exclrembutn 'Remove CE'  ... call '!This.ExclRemoveCe()'
+button .exclallbutn 'Remove All' ... call '!This.ExclRemoveAll()'
+```
+
+`multiple` 讓使用者可以在清單裡複選。`.gridorthogonal` 的錨點跟著改成 `ymax.excllist+0.3`，落在清單下面。
+
+### 三個按鍵（`:1895` 起）
+
+- `Add CE`：先用新的 `.IsModelElement()` 判斷 CE 是不是模型物件，是才把它的 `name` 加進清單；已經在清單裡就只提示不重複加；不是模型物件就跳錯誤訊息。
+- `Remove CE`：讀 `.excllist.selection()`，有選才逐一 `.clear(!str)` 移除（跟 Drawing 分頁 `.removece()` 同一套寫法），沒選就提示要先選。
+- `Remove All`：`.excllist.clear()`。
+
+### 怎麼判斷「模型物件」（`.IsModelElement()`）
+
+沿著 `owner` 往上爬，看得到 `WORL` 或 `SITE` 就算是 design 資料庫的元件——DRAFT／CATA 的元件爬上去都不會遇到這兩種。本來只打算認 `WORL`，多認一個 `SITE` 是保險：萬一某些設定的最頂層不是 `WORL`，SITE 這一關還是擋得住，而 DRAFT 裡不存在 SITE。迴圈上限 50 層（PML 沒有 `do while`），中途 `type of`／`owner of` 失敗就當作不是。
+
+### Drawing list（`:492`）
+
+`add all zone within ...`／`add all REFGRD within ...` 後面接：
+
+```pml
+do !excl values !excls
+	remove $!excl
+	handle any
+	endhandle
+enddo
+```
+
+`REMOVE` 一定要放在 `ADD` 後面——drawing list 是照成員排列順序讀的，先 REMOVE 再 ADD 會被 ADD 蓋回去。清單裡的東西如果從加入之後被刪掉或改名，`remove` 會失敗，`handle any` 讓它跳過繼續跑。
+
+### Save/Load（`:1620`／`:1789`）
+
+清單是陣列不是純量，所以跟 Drawing 分頁的 box 清單一樣用逗號串成一行存，`.Load()` 加一個對應的 `elseif` 分支拆回陣列。這裡**不**檢查名稱在目前專案中還在不在（box 清單那邊有檢查是因為 `.clear()` 會整個 Load 陣亡），出圖時 `remove` 自己會跳過。
+
+### 待實機驗證
+
+1. 清單和三個按鍵的排版、清單高度是不是四行
+2. 導到一個模型元件（EQUI／BRAN／STRU…）按 `Add CE`，名稱有沒有進清單；導到 DRAFT 元件（例如 view 本身）按下去要跳錯誤訊息
+3. `Remove CE` 單選、複選各試一次；沒選就按要跳提示
+4. 出圖後查 drawing list（`$!name/SS/DRAWLIST/DRWG_R...`）底下有沒有對應的 `REME`，而且圖上真的沒畫出來
+5. Save 一次再 Load，清單有沒有正確還原
+
+### 實機驗證結果：清單本身 OK，三處要修（2026-08-21，已修，待再驗）
+
+使用者貼 `error.png`：清單、`Add CE` 都能用（`/brown_pipes_EQUIPMENT_0226_V7.dgn` 這個 ZONE 已經進到清單裡），但提出三點。
+
+#### 1. 用 DBTYPE 判斷模型物件
+
+使用者指出：查該物件的 `dbtype`，值是 `DESI` 就是模型物件。比原本爬 `owner` 找 `WORL`／`SITE` 直接得多——那是從階層去猜 `DBTYPE` 本來就直接回答的事。`.IsModelElement()` 整個換掉，不再需要參數：
+
+```pml
+!dbt = ''
+!dbt = dbtype
+handle any
+	!dbt = ''
+endhandle
+return !dbt.eqnocase('DESI')
+```
+
+AVEVA 自己的 `draft/forms/dra3dview.pmlfrm`（`.viewRem()`）也是用 `if (dbtype neq 'DESI')` 這一招。
+
+#### 2. 三個按鍵往下移
+
+`Add CE` 原本用 `ymin.excllist` 對齊，那是**清單標籤那一列**的上緣，所以壓在 `Exclude from View` 這個標籤上。改成 `ymin.excllist+0.75`，讓 `Add CE` 的上緣落在清單框的上緣（使用者畫的紅線位置）。
+
+#### 3. `REMOVE` 指令沒有效果
+
+使用者回報清單裡的 ZONE 還是畫在圖上。原本那行是 `remove $!excl`，外面包了 `handle any`——不管那個指令做了什麼還是報了什麼錯，都被吞掉了。
+
+改用 **`IDLIST` 物件**，這是 AVEVA 自己「Remove from View」在用的 API（`C:/AVEVA/Everything3D2.10/PMLLIB/draft/forms/dra3dview.pmlfrm` 的 `.viewRem()`／`.viewAdd()`）：
+
+```pml
+!idlname = |$!name/SS/DRAWLIST/DRWG_R$!this.rev|
+!idli = object IDLIST(!idlname.dbref())
+do !excl values !excls
+	!exclref = object DBREF()
+	!exclref = !excl.dbref()
+	handle any
+	endhandle
+	if (not(!exclref.badref())) then
+		!idli.remove(!exclref)
+		handle any
+		endhandle
+	endif
+enddo
+$!name/SS/DRAWLIST/DRWG_R$!this.rev
+```
+
+`IDLIST` 有 `.add()`／`.remove()`／`.clear()`，接受 DBREF、陣列或 SELECTION。名稱轉 DBREF 用 `STRING.dbref()`，找不到的元件 `.badref()` 會是 true，直接跳過。最後那行是導回 drawing list——後面的 `LIMITS` 是設在它身上的。
+
+**寫 PML 之前先去 `C:/AVEVA/Everything3D2.10/PMLLIB` 找 AVEVA 自己怎麼做**，比猜指令語法可靠得多。
+
+#### 待實機驗證
+
+1. `Add CE` 導到模型元件要能加入、導到 DRAFT 元件（例如 view）要跳錯誤訊息
+2. 三個按鍵的高度是不是對齊清單框
+3. 出圖後清單裡的 ZONE 有沒有真的從圖上消失，drawing list 底下有沒有對應的 `REME`
+
+## 已修：CE 在 DESIGN 資料庫時 `show !!DrawingPlan1` 會整個掛掉（2026-08-21，**尚未實機驗證**）
+
+使用者 `show !!DrawingPlan1` 跳錯：
+
+> (2,111) Cannot access element type DEPT from the level of WORLD /*
+> In line 244 of PML function drawingplan1.DRAWINGPLAN1 ... dept 1
+
+### 原因
+
+建構式 `.DrawingPlan1()` 裡「自動挑第一個 REGI 當 Destination」那段原本是：
+
+```pml
+!ce = ref
+worl
+dept 1
+regi 1
+```
+
+`worl` 走到的是**目前這個資料庫**的 world。CE 在 DRAFT 時沒問題；但 CE 在 DESIGN 時 `worl` 走到 `/*`，接著 `dept 1` 當然找不到 DEPT，直接拋錯。
+
+**而且錯誤是在建構式裡拋的，等於整個建構式中斷**——後面的 BorderText 內定位置、Keyplan 內定值、`.AllBoxes()` 全都沒跑到，所以表單開起來 `All`／`In Use` 兩個清單都是空的（截圖看得到）。
+
+新加的 `Exclude from View` 讓這件事從「偶爾」變成「常態」：使用者現在會先在 Model Explorer 選模型元件按 `Add CE`，CE 自然停在 DESIGN 資料庫，這時 kill/show 就必中。
+
+### 作法
+
+改用不指定範圍的 `COLL ALL REGI`——不管 CE 在哪個資料庫都找得到，而且完全不動 CE：
+
+```pml
+!regis = object array()
+var !regis coll all REGI
+handle any
+	!regis = object array()
+endhandle
+if (not(!regis.unset())) then
+	if (!regis.size().gt(0)) then
+		!this.dest.val = !regis[1]
+	endif
+endif
+```
+
+`.unset()` 那層是因為 collect 沒東西時可能回傳 unset，直接 `.size()` 會拋錯——跟 `design/forms/DrawingPlan.pmlfrm` 裡 `var !zones coll all zone for ce` 的防法一樣。找不到 REGI 就把欄位留空給使用者自己用 CE 按鍵設，不再有任何會中斷建構式的路徑。
+
+AVEVA 自己的 `aba/Forms/abaregistry.pmlfrm` 也是 `VAR !allRegi COLL ALL REGI`（他們還多濾一層 `dbwrite`，只留可寫的；這裡維持原本「取第一個」的行為，沒有跟著加）。
+
+### 待實機驗證
+
+1. CE 停在模型元件（例如剛才那個 ZONE）時 kill/show，表單要正常開、不跳錯
+2. `All` 清單有沒有正常列出 box（代表 `.AllBoxes()` 有跑到）
+3. `Destination` 有沒有自動帶到一個 REGI
+4. CE 停在 DRAFT 元件時再開一次，行為要跟以前一樣
+
+## 改寫：管線編號改用 GLAB 標，尺寸點不再帶 Pltxt（2026-08-21，**尚未實機驗證**）
+
+使用者指定的作法：dimension 保留，但把 project text（原本放管線編號與高程）設為空值；管號與高程改由 `GLAB` 標，`LSHAPE` 設 `Bent`、`BPOF` 給兩個轉折點，而且引線要剛好接在原本 dimension 的 projection line 端點上。四個問題都問過並確認：**全部標籤都改用 GLAB**、接點座標**由程式從 DPOI + DOFFSET 推算**、轉折幾何**先給可調常數**、GLAB **與 dimension 同層**。
+
+### 屬性怎麼查到的
+
+先在 `C:/AVEVA/Everything3D2.10/Aveva.Core.Database.xml` 對答案（`DbAttributeInstance.*` 都附 summary）：
+
+| 屬性 | summary |
+|---|---|
+| `BPOF` | Leader bend point offset |
+| `APOF` | Leaderline attachment point |
+| `CPOF` | Leaderline connection point wrt. text origin |
+| `ATEX` | Label Text |
+| `OSET` | Offset/VIEW position flag |
+
+再到 PMLLIB 找實際用法，兩個關鍵發現：
+
+1. `draft/forms/dralabelattributes.pmlfrm` 的 `.reShape()`：`LSHAPE` 是 `Bent` 時 **`BPOF` 的 size 為 2 就是一個轉折點、為 4 就是兩個**（對應互動指令 `LEAD BENT @` 與 `LEAD BENT @ @`）；非互動的寫法是同一支程式裡的 `LSHAPE $!shape BPOFFSET $!bpoffset`。
+2. `aba/Tasks/abaarrange.pmlfrm`：`BPOF -17 29.99` 一組兩個數字（X Y），`LSHA` 的值有 `STRA`／`AV`／`AH`。
+
+而且**這個 repo 本來就有 GLAB 的寫法**（NOZZ、REDU 的標籤）：`NEW GLAB` + `DDNA` + `BTEXT` + `Justification` + `Alignment` + `ABSO` + `AT`（圖紙絕對座標）+ `XYPO`（相對接點的位移）。新的程式沿用同一套，只多加 `LSHAPE BENT BPOFFSET`。
+
+### 改了什麼
+
+**1. 尺寸點不再帶文字**（`:1044`）
+
+`NEW DPOI POS $!attapos DDNA $!mem`——`Pltxt` 整個拿掉。原本為了把文字往旁邊推而在字串前後補空白、四個方向各一種寫法的那 12 個 `NEW DPOI` 分支，收斂成一個；文字內容照舊（`#PIPE(c2:)` 由 `DDNA` 解、BOP 數字由 PML 算好接上去），只是改成用 `&` 串接而不是靠 `$!` 代換。
+
+**2. 每個標籤記一筆**（`:1053`）
+
+`!glabrec` 一筆一個字串：`文字~元件~字高~沿尺寸方向的座標`。另一個座標是尺寸線自己的位置，要等 `DOFFSET` 設完才知道。
+
+**3. `SORT DIM`／`DOFFSET` 之後畫 GLAB**（`:1310` 起）
+
+- **尺寸線在哪**：DOFFSET 是從第一個尺寸點量的，所以取排序後第 1 個 DPOI 的圖紙座標加上 `!dimoff`（右/上 +15、左/下 -15，跟 `DOFFSET` 同一個數字）。**引線接點 = 標籤沿尺寸方向的座標 ＋ 尺寸線的座標**，也就是該點 projection line 的端點。
+- **排序**：`!glabrec` 用插入排序照沿線座標排好，「前一個」才會是圖面上的鄰居（PML 的 `.sort()` 不能指定 key，直接排會變成照文字排）。
+- **方向**：右邊 `ADEG 0` + `JUST Right`、左邊 `ADEG 0` + `JUST Left`、上下 `ADEG 90`（跟原本 Pltxt 一樣是直排）。文字一律從尺寸線往圖面內側延伸。
+- **錯開**：跟前一個標籤距離小於 `!glabgap` 就往外跳一階，`XYPO` 多加 `階數 × !glabstep`，並補上 `LSHAPE BENT BPOFFSET` 兩個轉折點（先沿原線走 `!glabrun`，再斜切 `!glabdiag` 到新的那條線）。一群裡的第一個永遠不動，間隔夠大就歸零。
+
+可調常數都在 `!dimtol` 下面，單位圖紙 mm：`!glabgap 5`／`!glabstep 5`／`!glabmax 3`／`!glabclr 3`／`!glabrun 3`／`!glabdiag 3`／`!glabchei 3`／`!glabceqi 4`（設備標籤字高，等同原本的 `Ptchtx '4mm'`）。
+
+### 唯一沒把握的地方
+
+**`BPOF` 的兩個轉折點是相對誰量的**。程式現在假設跟 `AT` 同一個基準（也就是接點），跟 `XYPO` 一致。如果實機看到轉折跑到別的地方，就是這個假設要修——`LSHAPE BENT BPOFFSET` 那行外面包了 `handle any`，語法不對時標籤還是會建出來，只是引線維持直線，不會整個掛掉。
+
+使用者手動作的那個 GLAB 如果還在，`Q ATT` 貼出來就能一次確認。
+
+### 待實機驗證
+
+1. 原本相撞的兩個管號有沒有分開、下面那個有沒有轉折引線
+2. 引線端點有沒有**剛好**落在 projection line 端點上（整批一致偏移的話就是 `!dimoff` 的假設要修）
+3. 沒有相撞的標籤位置跟改之前像不像（`!glabclr` 調前後距離）
+4. 上下兩邊的直排標籤方向對不對（`ADEG 90` + `JUST`）
+5. 設備標籤字高是不是還是 4mm
+6. `q pltxt` 尺寸點應該都沒有文字了
+
+### check.txt 回來了：`BPOF` 的基準確認，順帶撿到三個細節（2026-08-21，仍待實機驗證）
+
+使用者把手動作的那個 GLAB `Q ATT` 貼進 check.txt：
+
+```
+Xyposition -87mm -4mm        Oset true
+Cpoftx  X 2mm Y -1mm
+Bpoftx  X -5mm Y 0mm X -8mm Y -5mm      Lshape Bent
+Justification Left           Alignment Base
+Cheitx 3mm                   Lbstrf /PW-LEAD_NOFRAME
+Ddname ELBOW 4 of BRANCH /0150CB04_CSL_0015_P_672802/B1
+Btext  #PIPE(c2:) BOP EL+6193
+```
+
+把引線路徑攤開：接點 (0,0) → (-5,0) → (-8,-5) → 文字連接點 (-85,-5)。**`BPOF` 的兩個轉折點確實是相對「接點」量的**，跟 `XYPO` 同一個基準——原本程式裡註記為唯一沒把握的假設，成立。轉折在尺寸線那一端，不是在文字那一端；文字之所以在 -87mm，是因為使用者把它拖到那裡，中間那段長水平線是引線不是文字底線。
+
+順帶三個原本會做錯的地方，都已照著改：
+
+1. `Alignment` 是 **`Base`** 不是 `Hbody`
+2. **`Lbstrf /PW-LEAD_NOFRAME`**——這個圖層是 `Lframe true`，不指這個 style 每個標籤都會長出外框。加成常數 `!glabstyle`，外面包 `handle any`，沒有這個 style 的專案就維持有框，不會整批失敗
+3. `Bpoftx`／`Cpoftx` 用的是 `'X -5mm Y 0mm X -8mm Y -5mm'` 這種字串形式，跟程式裡既有的 `Dtoftx 'X 0mm Y 4mm'` 同一種寫法。指令因此改成 `LSHAPE Bent` + `BPOFTX '...'` 兩行（原本寫的是 `LSHAPE BENT BPOFFSET` 加一串裸數字），`CPOFTX` 也照著設：`JUST Right` 用 `X -2mm Y -1mm`、`JUST Left` 用 `X 2mm Y -1mm`
+
+`!glabrun` 從 3 改成 **5**，跟手動那顆一致（`!glabdiag 3`、`!glabstep 5` 本來就對上）。另外**被錯開的標籤**改成從轉折結束的地方起算（`!glabrun + !glabdiag`），引線正好接在文字邊緣，不會從文字底下穿出來；沒被錯開的仍用 `!glabclr 3`，維持原本緊貼尺寸線的樣子。
+
+### 實機第一次跑就掛：`(2,766) This function does not return a result`（2026-08-21，已修，待再驗）
+
+```
+(2,766) This function does not return a result
+ In line 1014 of PML function drawingplan1linenoannotation
+     if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
+```
+
+record 的第 6 欄是「這一筆要不要標 BOP 高程」的旗標，但**只有 TYPE 1 的管線 record 有**（`:330` 那行結尾的 `& '!y'`）。設備的 record（`:636`）和 TYPE 2a／2b／3／4（`:441`／`:503`／`:557`／`:677`／`:695`）都只到第 5 欄，去要第 6 欄就會拋這個錯。
+
+舊程式只在 BRAN 和「其他」兩個分支裡問這一句，剛好沒踩到；改寫後變成每個點都先問一次，設備第一個就中。
+
+改成先把欄位切出來、數夠不夠 6 欄再取：
+
+```pml
+!labparts = object array()
+!labparts = !resultl.split('~').getindexed(3).split('!')
+handle any
+	!labparts = object array()
+endhandle
+!labwantbop = 'n'
+if (!labparts.size().geq(6)) then
+	!labwantbop = !labparts.getindexed(6)
+endif
+if (!labwantbop.eqnocase('y')) then
+```
+
+沒有第 6 欄就當作 `'n'`，跟舊行為一致（那些 record 本來就不標 BOP）。
+
+### 實機第二次：標籤全部擠成一堆（2026-08-21，已修，待再驗）
+
+使用者回報「管線編號都擠在一起」，圖上所有管號疊在 view 中間的一小塊，引線從那一堆放射出去接到各自的尺寸線上。
+
+### 原因：`XYPO` 被當成絕對座標
+
+AVEVA 自己的 `aba/Tasks/abaarrange.pmlfnc`（`:200` 附近）講得很白：
+
+```pml
+-- Put each label at zero offset from ddnm & get page position
+OSET TRUE
+XYPO 0 0
+OSET FALSE
+```
+
+**`OSET TRUE` = `XYPO` 是位移，`OSET FALSE` = `XYPO` 是絕對頁面座標。**（`aba/UserTasks/aaagrids.pmlfnc:327` 的 `OSET TRUE XYPO 0 0 OSET FALSE` 也是同一套用法。）
+
+程式裡沿用了 repo 既有 NOZZ／REDU 標籤的 `ABSO`，但 `ABSO` 並不會把 OSET 設成 true。於是每個標籤的 `XYPO` 都被當成同一個絕對座標——沒被錯開的一律 (-3, 0)、錯開一階的一律 (-8, -5)……所以疊成幾堆，位置數量剛好等於階數。
+
+> 那幾支既有的 NOZZ／REDU 標籤看起來沒事，是因為它們的 `AT` 本來就是元件自己的位置、`XYPO 5 5` 又很小，疊在元件上看不太出來。這次的 `AT` 在尺寸線上、文字要拉到 8mm 外，差異才浮現。
+
+### 作法
+
+`AT` 之後、`XYPO` 之前補一行 `OSET TRUE`（外面照 AVEVA 的寫法包 `handle any`）。`ABSO` 留著給 `AT` 用。手動作的那顆標籤 `Oset true` + `Xyposition -87mm -4mm`，跟這個解釋一致——-87mm 是相對它自己 position 的位移，不是頁面座標。
+
+### 實機第三次：標籤黏在元件上、而且有外框（2026-08-21，已修，待再驗）
+
+使用者貼圖：標籤不再擠成一堆（`OSET TRUE` 有效了），但**位置不在 projection line 端點**，而是各自貼在自己的元件旁邊、散在 view 裡面；而且每個標籤都有黃色外框。
+
+### 位置：`ABSO` + `AT` 沒有設到 label 的 POSITION
+
+標籤既然是「以元件為基準往外偏一點點」，就表示它的 position 還是 DDNA 元件自己的位置——`AT` 給的圖紙座標沒被吃進去。
+
+回頭看手動那顆的 dump：`Position W 250093mm N 4816876mm U 8600mm`，是**模型座標**。所以改成直接設 `POSITION E .. N .. U ..`：
+
+```pml
+!gcdx = !gatx - !trans[1]
+!gcdy = !gaty - !trans[2]
+!gate = !trans[3] + (!gcdx * !trans[8] - !gcdy * !trans[7]) / !trans[9]
+!gatn = !trans[4] + (!gcdy * !trans[5] - !gcdx * !trans[6]) / !trans[9]
+!gpos = 'E ' & !gate.string('D3') & 'mm N ' & !gatn.string('D3') & 'mm U ' & !gup.string('D3') & 'mm'
+...
+POSITION $!gpos
+handle any
+endhandle
+```
+
+反算公式就是 `.Apply()` 裡把 view 四角從圖紙帶回模型的那一組（`.ViewSheetTransform()` 的逆）。U 不影響平面圖的落點，用元件自己的 U，所以 record 多帶一欄 U。`ABSO` / `AT` 留著，`POSITION` 在它後面覆蓋，兩邊哪一個有效都不會更糟。
+
+### 外框：不要只靠 style
+
+`LBSTRF /PW-LEAD_NOFRAME` 顯然沒擋住——圖層是 `Lframe true`，每個標籤都繼承。改成在標籤自己身上再下一次 `Lframe false`，不依賴任何 style 存不存在。
+
+### 這次順便加了診斷
+
+每一邊的**第一個** GLAB 建好之後，把「要求的值」與「實際讀回來的值」寫進 check.txt：
+
+```
+GLAB right asked pos=... at=... xypo=... tier=... dimline=...
+GLAB right got position = ...
+GLAB right got xypo = ...
+GLAB right got oset = ...
+GLAB right got apoftx = ...
+GLAB right got bpoftx = ...
+GLAB right got lshape / lbstrf / lframe / ddname / justification = ...
+```
+
+位置如果還是不對，這份就能直接看出 `POSITION` / `AT` / `XYPO` 到底哪一個被聽進去了，不必再猜。**位置調對之後要把這段拿掉。**
+
+### check.txt 抓到兩個問題：`position = unset` 與多出來的 `mm`（2026-08-21，已修，待再驗）
+
+外框修好了（`lframe = false` 有讀回來），位置還是錯。診斷這次直接給了答案：
+
+```
+GLAB right asked pos=E -310100.850mmmm N 294460.020mmmm U 107421.000mm at=X 452.545mm Y 188.977mm xypo=-3.000 0.000
+GLAB right got position = unset
+GLAB right got xypo = -3mm 0mm    oset = true    lframe = false    lshape = Straight
+```
+
+1. **`position = unset`**——`ABSO` + `AT` 對 GLAB 的 POSITION 完全沒作用（連被設過的痕跡都沒有）。position 沒設，標籤就退回用 DDNA 元件的位置，所以每個都黏在自己的元件旁邊。
+2. **`-310100.850mmmm`**——`!trans[3]` 是帶單位的量，`.string()` 出來已經含 `mm`，我又接了一個 `mm`。`POSITION` 因此語法錯誤，被 `handle any` 吃掉，於是 position 維持 unset。
+
+### 作法：用既有的 `ENUPOS OF`
+
+根本不需要自己反算座標。這支程式處理柱線交點時早就在用 E3D 自己的換算（`:1108` 附近）：
+
+```pml
+!intsh = 'x ' & string(!ptx) & ' y ' & string(!pty)
+var !temppos enupos of $!intsh
+!attapos = object position(!temppos)
+```
+
+GLAB 照抄同一套，再把 position 物件餵給指令（`NEW DPOI POS $!attapos` 也是這樣用的）：
+
+```pml
+!gsh = 'x ' & string(!gatx) & ' y ' & string(!gaty)
+var !gpos enupos of $!gsh
+!gposobj = object position(!gpos)
+...
+POSITION $!gposobj
+```
+
+單位問題連帶消失（`enupos` 回來的字串本來就是完整的 `E .. N .. U ..`），`.ViewSheetTransform()` 的手工反算也整段拿掉。診斷仍然留著，下一次 check.txt 的 `got position` 應該就不是 unset 了。
+
+### 位置對了一半：`POSITION` 生效，但文字方向做反了（2026-08-21，已修，待再驗）
+
+`POSITION $!gposobj` 這次吃進去了，check.txt：
+
+```
+GLAB right asked pos=W 310100.849873mm N 294460.019992mm U 104109.999765mm  at=X 452.545mm Y 188.977mm
+GLAB right got position = W 310100.849873mm N 294460.019992mm U 104109.999765mm
+```
+
+錨點確實落在 projection line 端點上，外框也沒了。但文字**往圖面內側**延伸，跟圖上的管線疊在一起。
+
+使用者用紅框標出要的位置：**在尺寸線外側的空白紙面上**，不是圖裡面。
+
+這才是整件事的重點——把管號從圖面上搬出去，所以才需要 GLAB 加轉折引線。我第一版照著舊 Pltxt 的方向做（往內），等於把文字又放回圖上。
+
+四個邊的 `!gout*` 全部反向，`!gjust` 跟著換邊（文字原點是靠近尺寸線的那一端）：
+
+| 邊 | out | justification |
+|---|---|---|
+| right | +X | Left |
+| left | -X | Right |
+| up | +Y | Left |
+| down | -Y | Right |
+
+轉折點是用 `!gout*` 算的，所以引線的折法自動跟著往外。`!glabclr` 從 3 改成 **6**——文字現在要跨過尺寸數字（它們在離線 2.2mm 處、字高 2mm），3mm 會壓到。
+
+### 引線要直的、跟 projection line 同一條線（2026-08-21，已修，待再驗）
+
+位置與方向都對了，使用者只剩一點：管號 GLAB 的引線要**直的**，位置跟 projection line 一樣（附圖紅框標出正確的那一個，其餘的引線都是斜的）。
+
+原因是 `CPOFTX 'X 2mm Y -1mm'`——照抄手動那顆的值。那組偏移把引線的終點從文字基線推開，所以每條引線都歪。手動那顆是水平標籤、引線本來就要繞到文字底下，情況不一樣。
+
+改成 `CPOFTX 'X 0mm Y 0mm'`，也就是文字原點本身。原點在文字基線上，而基線正好在 projection line 上（`XYPO` 只沿線方向偏移、垂直方向是 0），所以引線一定是直的而且共線。
+
+被錯開的那些不受影響：它們的第二個轉折點算出來就等於文字原點，最後一段長度是零，引線維持「直出去 + 斜切」的折線。
+
+### 引線要沿著整個文字延伸（2026-08-21，已修，待再驗）
+
+引線直了，但只有尺寸線到文字起點那一小段。使用者用紅線標出要的長度：從尺寸線一路沿著整串文字拉到另一端。
+
+作法是把 `CPOF`（連接點）從文字原點移到文字的**另一端**。文字長度用 repo 既有的估算法——`EXBTEXT`（巨集展開後的實際字串）的字數 × (字高 + 0.5) × 0.65，跟 `DrawingPlan1.pmlfrm` 裡 NOZZ／REDU 標籤存位置資訊時用的是同一套，係數也一樣（加成常數 `!glabwfac`）。
+
+`CPOF` 因此要在 `NEW GLAB` 與 `BTEXT` 之後才算得出來（要先有 `EXBTEXT`），所以那段搬到 `XYPO` 後面。方向跟著 justification 走：`JUST Left` 用 `+寬度`、`JUST Right` 用 `-寬度`。Y 維持 0，引線才會保持直的、跟 projection line 共線。
+
+被錯開的那些一併受惠：最後一段從第二個轉折點沿著整串文字拉過去，就是使用者一開始貼的參考圖裡那條長橫線。
+
+### 轉折距離自訂，順帶查為什麼錯開沒發生（2026-08-21，待驗）
+
+使用者貼圖標出想要的轉折樣子（文字整條往旁邊挪、靠尺寸線那端用一小段斜切接回自己的 projection line），並說轉折距離由我決定。
+
+### 選的數字
+
+```pml
+!glabgap = 5     -- 多近算擁擠（圖紙 mm）
+!glabstep = 5    -- 每一階往旁邊挪多少
+!glabclr = 6     -- 沒被錯開的標籤離尺寸線多遠
+!glabrun = 2     -- 先直直出去多少才轉
+!glabdiag = 4    -- 斜切段跨出去多少
+```
+
+`!glabrun + !glabdiag = !glabclr = 6`，所以**被錯開的標籤，文字起點跟沒被錯開的一樣遠離尺寸線**，一整排的近端會對齊，跟附圖一致。
+
+### 但錯開似乎根本沒發生
+
+從上一張圖看，相鄰尺寸值是 316／212／379mm，1:100 之下是圖紙 3.2／2.1／3.8mm，都小於 `!glabgap` 的 5mm，照理每一個都該被判定擁擠並往旁邊跳一階——可是圖上每個標籤都還乖乖待在自己的 projection line 上。
+
+兩件事下去查：
+
+1. **插入排序的下標改用變數**。原本寫 `!glaba[!j + 1] = ...`，`[]` 裡放運算式是這個 codebase 從來沒對 PML 要求過的寫法。如果 PML 把它當成別的意思，排序就會亂掉，「前一個」就不是圖面上的鄰居，`!gtier` 自然一直是 0。改成先算 `!jn = !j + 1` 再用。
+2. **每個標籤寫一行診斷**到 check.txt：
+
+```
+GLABROW up i=3 along=294.190 prev=291.030 gap=3.160 tier=1 xypo=5.000 6.000 text=#PIPE(c2:) BOP EL+107233
+```
+
+`gap` 和 `tier` 一看就知道是判斷沒過（gap 算出來很大＝排序壞了）還是判斷過了但偏移沒生效（tier 有值、xypo 卻沒跟著動）。**這兩段診斷等位置定案後要一起拿掉。**
+
+### 錯開通了，換引線沒折（2026-08-21，已修，待再驗）
+
+check.txt 的 `GLABROW` 證明排序與階數都對了：
+
+```
+GLABROW up i=2 along=414.332 prev=367.206 gap=47.126 tier=0 xypo=0.000 6.000
+GLABROW up i=3 along=418.184 prev=414.332 gap=3.852  tier=1 xypo=5.000 6.000
+GLABROW up i=4 along=421.905 prev=418.184 gap=3.720  tier=2 xypo=10.000 6.000
+```
+
+（順帶確認：`[!j + 1]` 那種下標寫法就是之前排序壞掉、`tier` 一直是 0 的原因。這張圖的比例是 1:30——47.126mm 圖紙對 1414mm 模型。）
+
+但圖上引線是從尺寸線一路斜拉到文字頂端的**一條直線**，沒有折。也就是 `LSHAPE Bent` / `BPOFTX` 沒吃進去，而它們都包在 `handle any` 裡，失敗完全沒有聲音。
+
+`BPOFTX 'X -5mm Y 0mm X -8mm Y -5mm'` 這個字串形式是照 `Q ATT` 的輸出寫的，但 AVEVA 自己的程式（`aba/Tasks/abaarrange.pmlfrm`）用的是**裸數字**：`BPOF -17 29.99`（兩個數字＝一個轉折點）。改成 `BPOF x1 y1 x2 y2` 四個裸數字，後面再下 `LSHAPE Bent`。
+
+診斷範圍從每邊第一個標籤放寬到前四個（`!i.le(4)`），並加查 `adegrees` 與 `cpoftx`——這樣被錯開的那幾個（up 側是 i=3、i=4）的 `lshape`／`bpoftx` 實際值也會進 check.txt。
+
+### 只差兩點：文字黏著引線、第一個轉折點打到標註數字（2026-08-21，已修，待再驗）
+
+`BPOF` 改裸數字之後轉折出來了，使用者確認「很好，只差一點點」：
+
+1. 文字黏在引線上，要有間隙
+2. 第一個轉折點太近，會跟標註數字打到——**但下方與右邊不用調整**
+
+第 2 點的理由對得起來：尺寸數字畫在尺寸線的哪一側是固定的，up／left 兩邊剛好落在標籤這一側才會打到，down／right 在另一側本來就沒事。
+
+### 作法
+
+**間隙**：新常數 `!glabtxtgap = 1`（圖紙 mm）。文字往「橫越引線」的方向挪一點——左右兩側是圖紙 Y、上下兩側是圖紙 X，也就是尺寸量測的那個軸。同時 `CPOF` 的 Y 分量補回同樣的量，把引線留在原位，所以引線仍然是直的、跟 projection line 共線。
+
+`CPOF` 的 Y 是「橫越文字方向」，對應到哪個圖紙軸取決於 `ADEG`，所以 `ADEG 0` 與 `ADEG 90` 兩種各給一個符號。**如果哪一邊的引線出現輕微傾斜，就是這個符號要翻。**
+
+**避開數字**：新常數 `!glabfig = 5`（圖紙 mm），只加在 up 與 left 兩側：
+
+```pml
+!gclrb = !glabclr
+!grun = !glabrun
+if (!dir.eq('up') or !dir.eq('left')) then
+	!gclrb = !glabclr + !glabfig
+	!grun = !glabrun + !glabfig
+endif
+```
+
+第一個轉折點與文字起點一起往外推，所以 `run + diag` 仍然等於 `clr`（up／left 是 7+4=11、down／right 是 2+4=6），一整排的近端還是對齊的。down 與 right 完全沒動。
+
+### 引線比文字長（2026-08-21，已修，待再驗）
+
+轉折出來了、形狀也對了，剩下引線的長度：三條都超出文字頂端一截。
+
+原因是文字寬度估太大。目前用的 `(字高 + 0.5) × 0.65` 是照 `DrawingPlan1.pmlfrm` 裡 NOZZ／REDU 標籤的算法抄來的，但那是給碰撞框用的、本來就偏寬。
+
+從這張圖量：比例 1:30（379mm 模型對 65px），22 個字、字高 3mm 的標籤佔 210px = 40.8mm，也就是 **1.85mm 一個字**；估算式給的是 2.28mm，每個標籤多算約 9mm，引線就多伸那一段（量到的超出量約 7.8mm，對得上）。
+
+`!glabwfac` 從 0.65 改成 **0.52**（1.85 ÷ 3.5）。引線短一點點比超出去好看，所以這個數字寧可往下取。
+
+### 間隙推錯邊：引線穿過字身（2026-08-21，已修，待再驗）
+
+check.txt 證明所有屬性都照設定進去了，`BPOF` 的裸數字形式也生效：
+
+```
+GLAB up got bpoftx = X 0mm Y 7mm X 5mm Y 11mm    lshape = Bent
+GLAB up got xypo = 6mm 11mm    cpoftx = X 40mm Y 1mm    adegrees = 90degree
+```
+
+轉折、階數（`tier=1` → 沿線 5mm + 間隙 1mm = 6mm）、寬度 40mm（新係數算得準）全部正確。
+
+問題在那 1mm 的間隙推錯邊。`Alignment Base` 讓字身長在基線的 local +Y 側，而 `ADEG 90` 的 local +Y 對應圖紙 **-X**——所以圖上字在引線左邊。把文字往 +X 推 1mm，基線變成 x=+1、字身佔 -2..+1，引線還在 x=0，等於**引線穿過字身**，比原本貼著更糟。
+
+上下兩側的 `!ggapx` 改成 `-1`。左右兩側（`ADEG 0`）字身在基線上方、原本推 +Y 是對的，不動。
+
+補償量順帶簡化：既然「往字身那一側推」是共通規則，取消時就一律是 local `-Y`，`ADEG` 的分支可以整個拿掉（`!gcpofy = !glabtxtgap * -1`）。
+
+### 右邊的標籤互相疊在一起：錯開方向與排序方向相反（2026-08-21，已修，待再驗）
+
+上下兩側位置對了，右邊有問題。check.txt 一看就懂：
+
+```
+GLABROW right i=1 along=198.977 tier=0 xypo=6.000  1.000
+GLABROW right i=2 along=203.512 tier=1 xypo=6.000 -4.000
+GLABROW right i=3 along=207.829 tier=2 xypo=6.000 -9.000
+```
+
+沿線座標是**遞增**的（198.98 → 203.51 → 207.83），但右／左兩側的 `!gstepy = -1` 是往回推：i=2 被推到 203.51 - 5 + 1 = 199.5，正好壓在 i=1（199.98）身上；i=3 推到 198.8，也疊上去。上下兩側 `!gstepx = +1` 剛好順著排序方向，所以看起來沒事。
+
+### 作法：改成排擠，不再用固定階數
+
+只把符號翻過來治標不治本——往前推一樣可能撞到下一個。改成真正的一維排擠：
+
+```pml
+!gplace = !galong
+if (not(!gfirstlab)) then
+	!gmin = !gprevplace + !glabmin
+	if (!gplace lt !gmin) then
+		!gplace = !gmin
+	endif
+endif
+!gstep = !gplace - !galong
+!gprevplace = !gplace
+```
+
+每個標籤照自己的位置放，離前一個不足 `!glabmin` 就往前推到剛好讓開；推了多少就是 `!gstep`，有被推到的才給轉折引線。因為是拿「前一個**實際放的位置**」比，不管多密都不會疊，而且位移只取需要的量。
+
+`!glabgap`／`!glabstep`／`!glabmax` 三個常數收斂成一個 `!glabmin = 4`（圖紙 mm，字高 3mm 加一點空隙）。左右兩側的 `!gstepy` 改成 `+1`，跟排序方向一致。診斷的 `tier=` 欄位換成 `step=`。
+
+### rcode = left（view 轉了 90 度）時整批標籤跟著轉（2026-08-21，已修，待再驗）
+
+使用者回報：rcode = up（view 沒轉）時位置都對，rcode = left 就整批歪掉——左右兩側的標籤變成直排、上下兩側變成橫排，剛好差 90 度。
+
+### 原因
+
+這個 codebase 早就解過同一個問題。`.CreateGridSymbolwithIntersection()`（`forms/DrawingPlan1.pmlfrm:2378`）的註解寫得很清楚：
+
+> `!x !y !xap !yap` 是圖紙座標（來自 shpos），但 **XYPO 和 APOF 是 view 座標**。rcode = left 時 view 在圖紙上逆時針轉了 90 度，寫入前要轉回去。
+
+而且它還有一行 `Adegrees -90`「把符號轉正」。
+
+GLAB 這邊兩件都沒做：`XYPO`／`BPOF` 是 view 座標卻餵了圖紙座標，`ADEG` 也沒扣掉 view 自己的旋轉。
+
+### 作法
+
+照抄同一套：
+
+```pml
+-- 角度（每邊算完之後、迴圈之前）
+if (!!DrawingPlan1.rcode.eqnocase('left')) then
+	!gadeg = !gadeg - 90
+endif
+
+-- XYPO 與兩個轉折點（圖紙 → view）
+if (!!DrawingPlan1.rcode.eqnocase('left')) then
+	!gtmp = !gtxx
+	!gtxx = !gtxy
+	!gtxy = !gtmp * -1
+endif
+```
+
+`POSITION` 不用轉——它是模型座標（`enupos of` 出來的），跟 view 的旋轉無關。`CPOF` 也不用——它是相對文字自己的方向，會跟著 `ADEG` 一起轉。
+
+### 引線延長量長短不一：改成同一條線收尾（2026-08-21，待驗）
+
+加了 `!glabover = 5` 之後使用者回報，各條引線延長出去的長度看起來不一樣。
+
+量了一下（比例 1:30）：22 字的兩個剛好 5mm（等於設定值），19 字的 `11111 BOP EL+107248` 是 7.4mm，8 字的 `100-A-18` 只有 2.1mm。差額正好是**文字寬度估算誤差**——PML 問不到文字實際佔多寬，程式是用「字數 × (字高+0.5) × 係數」推的，而字體是比例字：`11111` 裡五個 `1` 很窄（估太寬→延長變長），`100-A-18` 幾乎全是寬字（估太窄→延長變短）。
+
+所以「每條延長一樣多」在估算式下做不到。改成**所有引線在同一條線上收尾**：
+
+```pml
+!greach = !glabreach - !gclr        -- 距尺寸線 !glabreach 的那條線
+!glong = !gwide + !glabover
+if (!glong.gt(!greach)) then        -- 除非這個標籤本身就比那條線長
+	!greach = !glong
+endif
+```
+
+`!glabreach = 55`（圖紙 mm，從尺寸線量起）。上／左兩側的 `!gclr` 是 11、下／右是 6，但因為是從尺寸線量，四邊的收尾線一樣齊。比 `!glabreach` 還長的標籤（罕見）會自己延長，不會讓引線停在文字中間。
+
+**如果想回到「文字尾端再加固定一段」**，把 `!greach` 改回 `!gwide + !glabover` 就好——但那樣就會保留上述的參差。
+
+### 使用者提示：外框貼合文字，代表文字尺寸查得出來（2026-08-21，探測中）
+
+使用者指出：GLAB 的 frame 在 box gap 為 0 時會緊貼文字四周，所以 E3D 一定算得出文字實際的長寬——那寬度就不必用字數去估。
+
+他說得對，而且 `Q ATT` 沒列到不代表查不到：那張表只有**存起來的**屬性，`EXBTEXT` 也不在上面卻查得出來。
+
+在既有的診斷區塊（每邊前四個標籤）加了一批候選屬性：`xysc`／`xysize`／`gbox`／`bmargin`／`exbtext`／`gaps`／`tsiztx`／`cspatx`。最有希望的是 **`XYSC`**，AVEVA 的屬性表把它註為 *Label XY size*。
+
+查不到的會回 `ERR`（每個都包了 `handle any`），所以一次就能篩出哪個給得出真正的尺寸。
+
+**如果查得到**：把 `!gwide` 從估算改成讀那個屬性，`!glabover` 的「文字尾端再加固定一段」就會完全準確，`!glabreach` 那條共同收尾線可以拿掉，回到使用者原本要的樣子。
+
+### 沒有可查的文字尺寸，改用逐字寬度表（2026-08-21，待驗）
+
+使用者在一個 GLAB 上實測：
+
+```
+Q XYSC    -> Element GLABEL 5 ... does not have ...
+Q XYSIZE  -> CP: Syntax error
+Q GBOX    -> Gbox 0mm
+Q EXBTEXT -> Exbtext 11111 BOP EL+107248
+```
+
+外框確實貼合文字（`Gbox 0mm`），但那個尺寸 E3D 不對外開放，`XYSC` 在 GLABEL 上根本不存在。估算是唯一的路，那就把估算做準。
+
+### 逐字加總
+
+之前用單一平均字寬，誤差來自字體是比例字。用前幾張圖回推：
+
+| 標籤 | 字數 | 實際平均字寬 |
+|---|---|---|
+| `100-A-18 BOP EL+107358` | 22 | 1.85mm（延長正好 5mm，估算準） |
+| `11111 BOP EL+107248` | 19 | 1.72mm（五個 `1` 很窄，延長多了 2.4mm） |
+
+改成一個字一個字加，寬度是字高的倍數：一般字 `!glabwchr 0.7`、`1` 用 `!glabwnar 0.35`、空白與 `-` 用 `!glabwthin 0.45`、`.` `,` `:` 用 `!glabwdot 0.3`。
+
+驗算：22 字那個得 13.25 × 3mm = 39.75mm（實測 40mm），19 字那個得 10.6 × 3mm = 31.8mm，比平均法少 2.8mm——正好對上量到的 2.4mm 誤差。
+
+`!glabreach`（共同收尾線）那套跟著拿掉，回到使用者本來要的「文字尾端 + `!glabover`」。字寬表不準的字（例如大寫 I 或 W）還是會有 1mm 上下的誤差，但已經不是肉眼看得出的參差了。
+
+## 新增：View 分頁的圖面比例欄位，並修好 Load 沒還原 canvas 的問題（2026-08-21，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+使用者說明：一個案子通常整套同一個比例（例如全部 1:30），而且**視窗中心對版次比對很重要**——不同版次如果視窗中心跑掉，比對時整張圖都會被畫雲狀線。
+
+### 1. `Drawing Scale 1:` 欄位（`forms/DrawingPlan1.pmlfrm:55`）
+
+`Exclude from View` 底下加一個文字欄位，填 `30` 就是 1:30（填 `1:30` 也吃得下，程式會把 `1:` 去掉）。
+
+作法是讓既有的自動套比例照跑，跑完再用欄位的值覆蓋：
+
+```pml
+if (!scalestr.neq('')) then
+	!scaleden = !scalestr.real()
+	handle any
+		!scaleden = 0
+	endhandle
+	if (!scaleden.gt(0)) then
+		!this.vsca = 1 / !scaleden
+	else
+		!!alert.error(...)
+	endif
+endif
+```
+
+這樣欄位留空時行為完全不變，也不用把那一長串 `!ratio le ...` 的分支搬進 if 裡。
+
+**塞不下會回報**：自動比例一定塞得進 canvas，指定比例則不一定。`!sizeX/!sizeY` 超過 canvas 的圖會記進 `!scalemiss`，整批跑完之後用**一則**訊息列出來（不是每張跳一次），內容是「這張圖需要 620x480mm、canvas 只有 372x320mm」。
+
+`.Save()` 多存一筆；`.Load()` 不用改，純量欄位走通用分支。
+
+### 2. 順手修掉的 bug：`.Load()` 沒有還原 `canvassize`
+
+`Pick Canvas Size` 設的是成員 `!this.canvassize`（`.Apply()` 真正讀的那個），但 `.Save()` 寫出去的是段落文字 `.canvasp.val`，`.Load()` 也只還原段落——**`canvassize` 從來沒被還原**，只有 `.canvaspick()` 會設它。
+
+後果：載入設定檔之後，表單上顯示著正確的 canvas，`.Apply()` 卻用內建的 500×400、中心 X357 Y315。**同一張圖換一次載入就換了視窗中心**，正是使用者擔心的雲狀線來源。
+
+`.Load()` 加了一個 `!this.canvasp.val` 的專屬分支，還原段落的同時也把 `canvassize` 設回去（`X unset Y unset` 這種預設字串會跳過）。
+
+### 圖面比例改成下拉選單（2026-08-21，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+文字欄位改成下拉選單：`auto`、1:1 1:2 1:3 1:5 1:10 1:20 1:25 1:30 1:50 1:75 1:100 1:150 1:200 1:250 1:500 1:750 1:1000 1:1250 1:2000 1:2500、`User Define`。內定 `auto`（維持原本的自動套比例）。
+
+### 兩個踩到的語法坑
+
+1. **`callback` 不合法**——`(47,15) CP: Syntax error` 指在 `callback` 上。這支表單是 `layout form` 的舊式語法，回呼關鍵字是 **`call`**（`button ... call '!This.selectce()'` 一直都這樣寫）。當初是照 `design/forms/componentcreation.pmlfrm` 抄的，那支是 `setup form` 新式寫法。
+2. **`option` 根本不吃回呼**——改成 `call` 之後，錯誤位置移到後面的字串上。所以 `option` 這個 gadget 在這個語法裡沒有回呼可用。
+
+回呼本來只是要把旁邊的自訂欄位變灰，直接拿掉：欄位一直可用，反正只有選 `User Define` 時 `.Apply()` 才會讀它。`.ScalePick()` 方法與 `.Load()` 裡的呼叫一併移除。
+
+### 下拉選單不能輸入
+
+使用者實測確認 PML 的 `option` 不能打字（E3D ribbon 上那個可輸入的比例框是 WPF 控制項，不是表單 gadget）。所以自訂比例還是靠旁邊那格，選項名稱從 `Other` 改成 `User Define`。
+
+### 比例是「比值」，不是只有縮小
+
+使用者指出可能要放大（例如 `2:1`），所以自訂欄位不再顯示 `1:` 前綴，改成整個比值自己填。`.Apply()` 兩邊都讀：
+
+```pml
+if (!scalestr.matchwild('*:*')) then
+	!scalenum = !scalestr.before(':').real()
+	!scaleden = !scalestr.after(':').real()
+else
+	!scaleden = !scalestr.real()      -- 只打數字就當成 1:那個
+endif
+if (!scalenum.gt(0) and !scaleden.gt(0)) then
+	!this.vsca = !scalenum / !scaleden
+endif
+```
+
+清單裡的 `1:30` 走的是同一條路徑。`.trim()` 沒用（不確定無參數形式在這版可不可以），改用 `.replace(' ', '')` 去空白，那是這個 codebase 早就在用的寫法。
+
+### 自訂欄位要跟著選項變灰：回呼改成在方法裡指派（2026-08-21，待驗）
+
+使用者要求：選到 `User Define` 時旁邊的欄位才能輸入，其餘時候要是灰的。
+
+`option` 在這支表單的 layout 行裡不吃回呼（`callback` 和 `call` 都是 `CP: Syntax error`），但 AVEVA 自己的 `draft/forms/dralabeloffset.pmlfrm` 示範了另一條路——**在方法裡指派 `.callback` 成員**：
+
+```pml
+!this.standard.callback = |CPOF STANDARD
+!this.origin.callback   = |CPOF ORIGIN
+```
+
+所以改成在建構式掛上去：
+
+```pml
+!this.scaleopt.callback = '!this.ScalePick()'
+handle any
+endhandle
+!this.ScalePick()
+handle any
+endhandle
+```
+
+兩個都包了 `handle any`：萬一 option 連這個成員都不給指派，表單照樣開得起來，只是自訂欄位一直可用（就是上一版的行為），不會整支掛掉。`.Load()` 還原選項之後也補叫一次 `.ScalePick()`，載入的狀態才會一致。
+
+### 拿掉 `Rotate View to Orthogonal`（2026-08-21，**要 kill/show**）
+
+使用者問這個控制項還有沒有作用，查完是**沒有**：
+
+1. `.Apply()` 裡唯一讀它的地方是個空的 if（`if (!!DrawingPlan1.gridorthogonal.val) then` / `endif`）
+2. 真正的實作只留在封存版 `DrawingPlan1GridAnnotation(until20250302).pmlfnc:141`，現行版一次都沒引用
+3. 但 `.Save()` 還在存它
+
+會變成這樣是因為現在 `.Apply()` **一律**把 view 轉到 box 的方向（那段有「40 度測試」註解的 `Adegrees`），「轉正」成了預設行為，開關就被掏空。
+
+討論後確認不需要「正北朝上、box 斜擺」的圖：這套程式的標註機制整個假設 view 邊框就是 box 邊框（四邊掃描帶、柱線圈落在邊框交點、尺寸量到邊框），而且有指北箭頭分頁正是因為圖面不是正北。所以直接移除三處：gadget、空 if、`.Save()` 那行。
+
+`.portrait` 原本寫 `at xmin ymax+0.1`（相對前一個 gadget），移除後前一個變成靠右的 `.scaletext`，所以把 `.gridorthogonal` 的錨點 `at xmin.frametext ymax.scaletext+0.2` 接手給它，版面才不會整排跳到右邊。
+
+舊存檔裡多出來的那一筆不用處理，`.Load()` 對表單已經沒有的欄位會跳過（2026-08-14 為了 `northrottext` 做過同樣的處理）。

@@ -37,11 +37,24 @@ layout form !!DrawingPlan1 dialog dock
 			button .Cancel 'Cancel'          at xmax.apply+15 ymin.apply width 12 call '!This.Close()'
 		exit
 		frame .viewframe 'View' width 40
-			text .frametext 'Backing Sheet'   tagwidth 12 width 38 is string 
-			button .framebutn 'CE' width 5 call |!This.typepick('BACK', 'frametext')|
+			text .frametext 'Backing Sheet' tagwidth 20 width 30 is string 
+			button .framebutn 'CE' at xmax.frametext+0.4 ymin.frametext width 5 call |!This.typepick('BACK', 'frametext')|
 			paragraph .framepara at xmax.framebutn+0.5 ymin.framebutn+0.1 text 'BACK'
-			toggle .gridorthogonal at xmin.frametext ymax.frametext+0.1 'Rotate View to Orthogonal'
-			toggle .portrait at xmin ymax+0.1 'Portrait to Landscape'
+			text .rrsftext 'Representation Style' at xmin.frametext ymax.frametext+0.1 tagwidth 20 width 30 is string 
+			button .rrsfbutn 'CE' at xmax.rrsftext+0.4 ymin.rrsftext width 5 call |!This.typepick('RRST', 'rrsftext')|
+			paragraph .rrsfpara at xmax.rrsfbutn+0.5 ymin.rrsfbutn+0.1 text 'RRST'
+			text .hrsftext 'Hatching Style' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 20 width 30 is string 
+			button .hrsfbutn 'CE' at xmax.hrsftext+0.4 ymin.hrsftext width 5 call |!This.typepick('HRST', 'hrsftext')|
+			paragraph .hrsfpara at xmax.hrsfbutn+0.5 ymin.hrsfbutn+0.1 text 'HRST'
+			list .excllist 'Exclude from View' at xmin.hrsftext ymax.hrsftext+0.2 multiple width 34 height 4
+			-- +0.75 drops the three buttons clear of the list's own tag row, so that
+			-- Add CE lines up with the top of the list box and not with the label
+			button .excladdbutn 'Add CE'     at xmax.excllist+0.5 ymin.excllist+0.75  width 12 call '!This.ExclAddCe()'
+			button .exclrembutn 'Remove CE'  at xmin.excladdbutn  ymax.excladdbutn+0.3 width 12 call '!This.ExclRemoveCe()'
+			button .exclallbutn 'Remove All' at xmin.excladdbutn  ymax.exclrembutn+0.3 width 12 call '!This.ExclRemoveAll()'
+			option .scaleopt 'Drawing Scale' at xmin.excllist ymax.excllist+0.3 tagwidth 20 width 10
+			text .scaletext 'User Define' at xmax.scaleopt+1 ymin.scaleopt tagwidth 11 width 10 is string
+			toggle .portrait at xmin.frametext ymax.scaletext+0.2 'Portrait to Landscape'
 			button .canvas  'Pick Canvas Size' at xmin.portrait ymax.portrait+0.1 width 15 call |!This.canvaspick()|
 			paragraph .canvasp at xmax.canvas+1 ymin.canvas text 'X unset Y unset' width 25
 			toggle .openshee at xmin.canvas ymax.canvas+0.1   'Open SHEE after finish'
@@ -190,6 +203,57 @@ exit
 -------------
 define method .DrawingPlan1()
   !this.frametext.val = |/TT/DRA/PRJ/BACKS/MET/BLACKA1_TEST|
+  !this.rrsftext.val = |/DRA/PRJ/REPR/GEN/BASIC/PIPE|
+  !this.hrsftext.val = |/TT/DRA/PRJ/HRUL/PIPE/Hatch-Gen|
+	----------------------------------------------------------------------
+	-- the scales a job normally draws at, auto first for the fit the    --
+	-- program used to make on its own, Other last for anything not in   --
+	-- the list. User Define is the only one which reads the field       --
+	-- beside it, and that field takes a whole ratio -- a drawing is not --
+	-- always a reduction, 2:1 is as good an answer as 1:30              --
+	----------------------------------------------------------------------
+	!scales = object array()
+	!scales[1] = 'auto'
+	!scales[2] = '1:1'
+	!scales[3] = '1:2'
+	!scales[4] = '1:3'
+	!scales[5] = '1:5'
+	!scales[6] = '1:10'
+	!scales[7] = '1:20'
+	!scales[8] = '1:25'
+	!scales[9] = '1:30'
+	!scales[10] = '1:50'
+	!scales[11] = '1:75'
+	!scales[12] = '1:100'
+	!scales[13] = '1:150'
+	!scales[14] = '1:200'
+	!scales[15] = '1:250'
+	!scales[16] = '1:500'
+	!scales[17] = '1:750'
+	!scales[18] = '1:1000'
+	!scales[19] = '1:1250'
+	!scales[20] = '1:2000'
+	!scales[21] = '1:2500'
+	!scales[22] = 'User Define'
+	!this.scaleopt.dtext = !scales
+	!this.scaleopt.val = 1
+	!this.scaletext.val = ''
+	----------------------------------------------------------------------
+	-- the callback goes on the gadget here rather than on its line in   --
+	-- the layout: an option gadget in this form's dialect will not take --
+	-- 'callback' nor 'call' up there (both came back CP: Syntax error,  --
+	-- 2026-08-21). assigning the member is how AVEVA's own              --
+	-- draft/forms/dralabeloffset.pmlfrm does it                         --
+	--                                                                   --
+	-- if even that is refused the form still comes up, with the User    --
+	-- Define field simply left alive the whole time                     --
+	----------------------------------------------------------------------
+	!this.scaleopt.callback = '!this.ScalePick()'
+	handle any
+	endhandle
+	!this.ScalePick()
+	handle any
+	endhandle
   !this.griddist.val = 50
   !this.gridgap.val = 3
   !this.gridhei.val = 3
@@ -225,13 +289,34 @@ define method .DrawingPlan1()
 	-- select the first REGI as destination --
 	------------------------------------------
 	if !this.dest.val.eq('') then
-		!ce = ref
-		worl
-		dept 1
-		regi 1
-		var !ref ref
-		!this.dest.val = |$!ref|
-		$!ce
+		-------------------------------------------------------------------
+		-- this was 'worl / dept 1 / regi 1', which only reaches a REGI    --
+		-- when CE happens to be in the DRAFT database. showing the form   --
+		-- while CE was a design element (which is now the normal way to   --
+		-- work, the View tab's exclude list is filled from model          --
+		-- elements) sent 'worl' to the design world and 'dept 1' then     --
+		-- raised 'Cannot access element type DEPT from the level of       --
+		-- WORLD /*' (2026-08-21). that killed the whole constructor: the  --
+		-- BorderText and Keyplan defaults below and .AllBoxes() never     --
+		-- ran, so the form came up with both box lists empty              --
+		--                                                                 --
+		-- an unscoped COLL ALL REGI finds the registries from wherever CE --
+		-- is, the way AVEVA's own abaregistry.pmlfrm does it, and it      --
+		-- never moves CE. if it finds nothing the field is simply left    --
+		-- for the user to set with the CE button                          --
+		-------------------------------------------------------------------
+		!regis = object array()
+		var !regis coll all REGI
+		handle any
+			!regis = object array()
+		endhandle
+		-- an empty collect can come back unset, .size() on that would raise --
+		if (not(!regis.unset())) then
+			if (!regis.size().gt(0)) then
+				!firstregi = !regis[1]
+				!this.dest.val = !firstregi
+			endif
+		endif
 	endif
 	!this.apply.active = false	
 	!this.dwgnopos.val = '700,55'
@@ -381,6 +466,8 @@ define method .Apply()
 		!!alert.error('Cannot verify office network connection - Create Drawings is only available inside the company network')
 		return
 	endif
+	-- drawings whose view came out bigger than the canvas, see below --
+	!scalemiss = object array()
 	$!this.dest.val
 	do !equistr values !this.files.dtext
 		if !equistr.substring(1,1).eqnocase('=') then
@@ -477,6 +564,46 @@ define method .Apply()
 				!maxU = !wvol.part(6).replace('mm', '').real()
 				add all zone within E $!minE N $!minN U $!minU to E $!maxE N $!maxN U $!maxU
 				add all REFGRD within E $!minE N $!minN U $!minU to E $!maxE N $!maxN U $!maxU
+				------------------------------------------------------------------
+				-- whatever sits in the View tab's exclude list is taken back    --
+				-- out of the drawing list again, so the view does not draw it.  --
+				--                                                               --
+				-- 2026-08-21: this ran a plain 'REMOVE <name>' command and the  --
+				-- element stayed in the drawing (user reported the .dgn ZONE    --
+				-- still drawn); whatever the command did, the handler below was --
+				-- swallowing it. the IDLIST object is what AVEVA's own 'Remove  --
+				-- from View' uses (draft/forms/dra3dview.pmlfrm .viewRem), so   --
+				-- the REME is filed through that instead                        --
+				--                                                               --
+				-- it still has to come after the ADDs, a drawing list is read   --
+				-- in the order its members are filed in. an element deleted or  --
+				-- renamed since it was put in the list comes back as a bad ref  --
+				-- and is stepped over                                           --
+				------------------------------------------------------------------
+				!excls = object array()
+				!excls = !this.excllist.dtext
+				handle any
+					!excls = object array()
+				endhandle
+				if (!excls.size().gt(0)) then
+					!idlname = |$!name/SS/DRAWLIST/DRWG_R$!this.rev|
+					!idli = object IDLIST(!idlname.dbref())
+					do !excl values !excls
+						!exclref = object DBREF()
+						!exclref = !excl.dbref()
+						handle any
+						endhandle
+						if (not(!exclref.badref())) then
+							!idli.remove(!exclref)
+							handle any
+							endhandle
+						endif
+					enddo
+					----------------------------------------------------------
+					-- back to the drawing list, LIMITS below is set on it   --
+					----------------------------------------------------------
+					$!name/SS/DRAWLIST/DRWG_R$!this.rev
+				endif
 				------------------------------------------------------------------------
 				-- keep the world bounding box of the box element. it is the same as   --
 				-- the box itself while the box is orthogonal, and contains the box    --
@@ -694,11 +821,6 @@ define method .Apply()
 					Adegrees $!temp
 				endif
 				
-				-------------------------------
-				-- Rotate View to Orthogonal --
-				-------------------------------
-				if (!!DrawingPlan1.gridorthogonal.val) then
-				endif
 				
 				
 				
@@ -706,8 +828,12 @@ define method .Apply()
 				------------------------------------------
 				-- reprensetation rules and hatch rules --
 				------------------------------------------
-				rrsf /TT/DRA/PRJ/REPRW/GEN/PIPE
-				hrsf /TT/DRA/PRJ/HRUL/PIPE/Hatch-Gen
+				if (!this.rrsftext.val.neq('')) then
+					rrsf $!this.rrsftext.val
+				endif
+				if (!this.hrsftext.val.neq('')) then
+					hrsf $!this.hrsftext.val
+				endif
 				
 				Crsf Nulref
 				Agmode 'OFF'
@@ -785,8 +911,64 @@ define method .Apply()
 				elseif (!ratio le 10000) then
 					!this.vsca = 0.0001
 				endif
+				------------------------------------------------------------------
+				-- a scale typed on the View tab wins over the one the fit above  --
+				-- picked. a job normally draws every plan at the same scale, and --
+				-- letting each drawing pick its own also moves the view between  --
+				-- revisions, which clouds the whole sheet when they are compared --
+				--                                                                --
+				-- the fit is still run: it costs nothing and its answer is what  --
+				-- the field is left empty for                                    --
+				------------------------------------------------------------------
+				!scalestr = !this.scaleopt.selection()
+				if (!scalestr.eqnocase('User Define')) then
+					!scalestr = !this.scaletext.val
+				elseif (!scalestr.eqnocase('auto')) then
+					!scalestr = ''
+				endif
+				!scalestr = !scalestr.replace(' ', '')
+				if (!scalestr.neq('')) then
+					---------------------------------------------------------------
+					-- a scale is a ratio and it is not always a reduction: 2:1   --
+					-- is as good an answer as 1:30, so both halves are read. a   --
+					-- bare number is taken as 1:that, which is what the entries  --
+					-- of the list amount to anyway                               --
+					---------------------------------------------------------------
+					!scalenum = 1
+					!scaleden = 0
+					if (!scalestr.matchwild('*:*')) then
+						!scalenum = 0
+						!scalenum = !scalestr.before(':').real()
+						handle any
+							!scalenum = 0
+						endhandle
+						!scaleden = !scalestr.after(':').real()
+						handle any
+							!scaleden = 0
+						endhandle
+					else
+						!scaleden = !scalestr.real()
+						handle any
+							!scaleden = 0
+						endhandle
+					endif
+					if (!scalenum.gt(0) and !scaleden.gt(0)) then
+						!this.vsca = !scalenum / !scaleden
+					else
+						!!alert.error('Drawing Scale on the View tab is not a ratio: ' & !scalestr & '. Pick one from the list, or choose User Define and type a ratio such as 1:30 or 2:1. The fitted scale has been used instead.')
+					endif
+				endif
 				!sizeX = !elen.real() * !this.vsca
 				!sizeY = !nlen.real() * !this.vsca
+				------------------------------------------------------------------
+				-- at a scale of its own choosing the view always fitted the      --
+				-- canvas. at a scale which was typed in it may not, and the      --
+				-- annotation outside it then runs off the sheet, so keep a note  --
+				-- and say so once at the end rather than stopping each drawing   --
+				------------------------------------------------------------------
+				if (!sizeX.gt(!tempsize1) or !sizeY.gt(!tempsize2)) then
+					!scalemiss.append(!name & ' needs ' & !sizeX.string('D0') & 'x' & !sizeY.string('D0') & 'mm, canvas is ' & !tempsize1.string('D0') & 'x' & !tempsize2.string('D0') & 'mm')
+				endif
 				size $!sizeX $!sizeY
 				
 				--------------------------------------
@@ -993,7 +1175,7 @@ define method .Apply()
 					-- moves down into NOTE 1 / the new OUTL to actually draw the box      --
 					----------------------------------------------------------------------
 					note 1
-					new outl lclosed true fstyle SystemStyle 3 NLColour cyan FColour cyan
+					new outl lclosed true fstyle SystemStyle 9 NLColour cyan FColour cyan
 					!!ce.PrBlnkFlag = |false|
 					do !i from 1 to 4
 						!de = !cornerEs[!i] - !keytrans[3]
@@ -1342,6 +1524,20 @@ define method .Apply()
 			endif
 		endhandle
 	enddo
+	------------------------------------------------------------------
+	-- one message for the whole run, not one per drawing            --
+	------------------------------------------------------------------
+	if (!scalemiss.size().gt(0)) then
+		!scalemsg = ''
+		do !m values !scalemiss
+			if (!scalemsg.eq('')) then
+				!scalemsg = !m
+			else
+				!scalemsg = !scalemsg & ' / ' & !m
+			endif
+		enddo
+		!!alert.warning('These views do not fit the canvas at the scale set on the View tab, so their annotation will run outside it: ' & !scalemsg)
+	endif
 endmethod
 
 define method .NozzleAnnotation(!name is string)
@@ -1577,12 +1773,25 @@ define method .Save()
 		enddo
 		!ff.writerecord('!this.files.dtext' & '=|' & !filestr & '|')
 		!ff.writerecord('!this.dest.val' & '=|' & !this.dest.val & '|')
-		!ff.writerecord('!this.gridorthogonal.val' & '=' & !this.gridorthogonal.val)
 		!ff.writerecord('!this.portrait.val' & '=' & !this.portrait.val)
 		!ff.writerecord('!this.canvasp.val' & '=|' & !this.canvasp.val & '|')
 		!ff.writerecord('!this.openshee.val' & '=' & !this.openshee.val)
 		!ff.writerecord('!this.delshee.val' & '=' & !this.delshee.val)
 		!ff.writerecord('!this.frametext.val' & '=|' & !this.frametext.val & '|')
+		!ff.writerecord('!this.rrsftext.val' & '=|' & !this.rrsftext.val & '|')
+		!ff.writerecord('!this.hrsftext.val' & '=|' & !this.hrsftext.val & '|')
+		!ff.writerecord('!this.scaleopt.selection()' & '=|' & !this.scaleopt.selection() & '|')
+		!ff.writerecord('!this.scaletext.val' & '=|' & !this.scaletext.val & '|')
+		-- the exclude list is an array, joined the same way as the box list above --
+		!exclstr = ''
+		do !e values !this.excllist.dtext
+			if (!exclstr.eq('')) then
+				!exclstr = !e
+			else
+				!exclstr = !exclstr & ',' & !e
+			endif
+		enddo
+		!ff.writerecord('!this.excllist.dtext' & '=|' & !exclstr & '|')
 		!ff.writerecord('!this.dwgnopos.val' & '=|' & !this.dwgnopos.val & '|')
 		!ff.writerecord('!this.dwgnohei.val' & '=|' & !this.dwgnohei.val & '|')
 		!ff.writerecord('!this.scalepos.val' & '=|' & !this.scalepos.val & '|')
@@ -1733,12 +1942,64 @@ define method .Load()
 								!msg = !msg & ',' & !m
 							endif
 						enddo
-						!!alert.warning('已儲存的 Drawing Box 在目前專案中找不到，已略過：' & !msg)
+						!!alert.warning('These saved Drawing Boxes are not in this project any more and have been skipped: ' & !msg)
 					endif
 					if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
 						!this.apply.active = true
 					else
 						!this.apply.active = false
+					endif
+				elseif (!option.eq('!this.excllist.dtext')) then
+					---------------------------------------------------------------------
+					-- the View tab's exclude list is an array like the box list above, --
+					-- so it is rebuilt from the comma joined string the same way. the  --
+					-- names are not checked against the model, .Apply() already steps  --
+					-- over one which has gone                                          --
+					---------------------------------------------------------------------
+					!exclstr = !val
+					if (!exclstr.length() gt 0 and !exclstr.substring(1,1).eq('|')) then
+						!exclstr = !exclstr.substring(2, !exclstr.length() - 2)
+					endif
+					if (!exclstr.neq('')) then
+						!this.excllist.dtext = !exclstr.split(',')
+					else
+						!this.excllist.clear()
+					endif
+				elseif (!option.eq('!this.scaleopt.selection()')) then
+					---------------------------------------------------------------------
+					-- the scale is stored as what it says, not as its place in the      --
+					-- list, so a file still loads if the list ever gains an entry        --
+					---------------------------------------------------------------------
+					!scstr = !val
+					if (!scstr.length() gt 0 and !scstr.substring(1,1).eq('|')) then
+						!scstr = !scstr.substring(2, !scstr.length() - 2)
+					endif
+					!scitems = !this.scaleopt.dtext
+					do !si from 1 to !scitems.size()
+						if (!scitems[!si].eqnocase(!scstr)) then
+							!this.scaleopt.val = !si
+							break
+						endif
+					enddo
+					!this.ScalePick()
+					handle any
+					endhandle
+				elseif (!option.eq('!this.canvasp.val')) then
+					---------------------------------------------------------------------
+					-- .canvasp is only the text shown on the form. the canvas .Apply()  --
+					-- actually reads is the member .canvassize, and only .canvaspick()  --
+					-- ever set it -- so a loaded file put the right canvas on the form  --
+					-- and still drew with the built in 500x400 at X357 Y315. that is a  --
+					-- silent change of view centre between one run and the next, which  --
+					-- clouds the whole sheet when two revisions are compared            --
+					---------------------------------------------------------------------
+					!canvstr = !val
+					if (!canvstr.length() gt 0 and !canvstr.substring(1,1).eq('|')) then
+						!canvstr = !canvstr.substring(2, !canvstr.length() - 2)
+					endif
+					!this.canvasp.val = !canvstr
+					if (!canvstr.neq('') and not(!canvstr.matchwild('*unset*'))) then
+						!this.canvassize = !canvstr
 					endif
 				elseif (!option.eq('!this.dest.val')) then
 					-----------------------------------------------------------------------
@@ -1766,7 +2027,7 @@ define method .Load()
 							!this.dest.val = !destref
 						else
 							!this.dest.val = ''
-							!!alert.warning('已儲存的 Destination 位置在目前資料庫中找不到了，請重新用 Destination 旁的 CE 按鈕設定')
+							!!alert.warning('The saved Destination no longer exists in this database. Please set it again with the CE button next to Destination.')
 						endif
 						handle any
 						elsehandle none
@@ -1827,6 +2088,71 @@ define method .typepick(!type1 is string, !gedget is string)
 		$!option = |$!name|
 	else
 		!!alert.error('You must be at a ' & !type1 & ', to set this reference')
+	endif
+endmethod
+
+----------------------------------------------------------------------
+-- 'Exclude from View' list, View tab. what the user puts in here is --
+-- taken back out of the drawing list of every drawing .Apply()      --
+-- creates, so it is not drawn in the view                           --
+----------------------------------------------------------------------
+define method .ExclAddCe()
+	!ce = ce
+	if (!this.IsModelElement()) then
+		var !name name of $!ce
+		!items = !this.excllist.dtext
+		if (!items.find(!name).size().gt(0)) then
+			!!alert.message(!name & ' is already in the list')
+		else
+			!items.append(!name)
+			!this.excllist.dtext = !items
+		endif
+	else
+		!!alert.error('You must be at a model element (design database) to add it to the list')
+	endif
+endmethod
+
+define method .ExclRemoveCe()
+	!strs = !this.excllist.selection()
+	if (!strs.size().gt(0)) then
+		do !str values !strs
+			!this.excllist.clear(!str)
+		enddo
+	else
+		!!alert.error('Select one or more items in the list first')
+	endif
+endmethod
+
+define method .ExclRemoveAll()
+	!this.excllist.clear()
+endmethod
+
+--------------------------------------------------------------------------
+-- true when CE lives in the design database, ie something that can      --
+-- appear in a view at all. DBTYPE answers which database the element   --
+-- is in and 'DESI' is the design one -- the same test AVEVA's own      --
+-- 'Remove from View' makes (draft/forms/dra3dview.pmlfrm). this        --
+-- replaces an owner walk looking for a WORL or a SITE, which was       --
+-- guessing at from the hierarchy what DBTYPE says outright             --
+--------------------------------------------------------------------------
+define method .IsModelElement() is boolean
+	!dbt = ''
+	!dbt = dbtype
+	handle any
+		!dbt = ''
+	endhandle
+	return !dbt.eqnocase('DESI')
+endmethod
+
+----------------------------------------------------------------------
+-- the field beside the scale list is only for a scale which is not  --
+-- in it, so it is only alive while User Define is the choice        --
+----------------------------------------------------------------------
+define method .ScalePick()
+	if (!this.scaleopt.selection().eqnocase('User Define')) then
+		!this.scaletext.active = true
+	else
+		!this.scaletext.active = false
 	endif
 endmethod
 
@@ -2915,6 +3241,26 @@ define method .NearEndOfGrid(!gridline is line, !p1sh is string, !p2sh is string
 			endif
 		endif
 	endif
+	return !answer
+endmethod
+
+--------------------------------------------------------------------------
+-- true when nothing already on this dimension line sits at the same     --
+-- coordinate ALONG the dimension direction as !val. two points which    --
+-- share that coordinate measure 0 between them, so the drawing gets a   --
+-- 0 dimension and a second projection line drawn across the view for    --
+-- no gain -- which is what a pipe running along a grid line used to do. --
+-- the depth of the two points does not matter, only the coordinate the  --
+-- dimension is measured in, so this cannot be a 3d distance test        --
+--------------------------------------------------------------------------
+define method .DimAlongIsNew(!alongs is array, !val is real, !tol is real) is boolean
+	!answer = true
+	do !a values !alongs
+		if (abs(!a - !val) lt !tol) then
+			!answer = false
+			break
+		endif
+	enddo
 	return !answer
 endmethod
 

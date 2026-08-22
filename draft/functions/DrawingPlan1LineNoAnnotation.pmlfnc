@@ -816,6 +816,90 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			DIR $!viewdirright
 		endif
 
+		----------------------------------------------------------------------
+		-- every point put on this side's dimension, by the coordinate it   --
+		-- falls on ALONG the dimension direction (sheet y for the left and --
+		-- right sides, sheet x for up and down). two points sharing that   --
+		-- coordinate measure 0 between them, which is what put a 0         --
+		-- dimension and a projection line right across the drawing next to --
+		-- grid H and grid 18 (2026-08-21) -- a pipe running along a grid   --
+		-- line, dimensioned once as a labelled point and again as the grid --
+		-- crossing. the grid crossings and the two view corners are        --
+		-- checked against this list before they are created; labelled      --
+		-- points are never dropped, each carries its own Pltxt             --
+		--                                                                  --
+		-- !dimtol is 1mm of the MODEL turned into sheet mm, ie only points --
+		-- close enough that the dimension between them would read 0 count  --
+		-- as the same point. raise the 1 if small but non-zero dimensions  --
+		-- should go too                                                    --
+		----------------------------------------------------------------------
+		!dimalong = object array()
+		!dimtol = 1 * !!DrawingPlan1.vsca
+
+		----------------------------------------------------------------------
+		-- the pipe numbers are not written on the dimension points any more --
+		-- (see the labelled loop below), they are collected here and drawn  --
+		-- as GLABs of their own once the dimension line is in place. all    --
+		-- of these are sheet mm and are meant to be tuned by eye            --
+		--                                                                   --
+		--   !glabmin   the least room two labels may have between them      --
+		--              along the dimension. one which would land closer     --
+		--              than this to the one before is pushed on until it    --
+		--              clears it, and gets a bent leader back to its own    --
+		--              projection line                                      --
+		--   !glabclr   gap between the dimension line and the text, for a   --
+		--              label which has not been stepped. a stepped one     --
+		--              starts where its leader stops turning instead.      --
+		--              it has to clear the dimension figures, which sit    --
+		--              2.2mm off the line and are 2mm tall                 --
+		--   !glabrun   how far the bent leader runs before it turns        --
+		--   !glabdiag  how far across the diagonal of that bend reaches    --
+		--   !glabchei  label character height, and !glabceqi for equipment --
+		--              which is what the old Ptchtx 4mm did                --
+		--   !glabstyle label style. the layer is Lframe true, so without a --
+		--              no-frame style every label comes out boxed          --
+		--   !glabtxtgap  air between the text and the leader running along  --
+		--              it, so the two do not touch                          --
+		--   !glabover  how far the leader carries on past the end of the    --
+		--              text                                                 --
+		--   !glabwchr  how wide a character is as a fraction of the          --
+		--              character height, and !glabwnar / !glabwthin /        --
+		--              !glabwdot for the narrow ones. the font is            --
+		--              proportional, so a single average width made the      --
+		--              leaders overshoot by different amounts on different   --
+		--              labels (2026-08-21): '11111 BOP EL+107248' is five    --
+		--              narrow 1s and came out 2.4mm short of the estimate    --
+		--              while '100-A-18 BOP EL+107358' was spot on. adding    --
+		--              the characters up one at a time gets both right --    --
+		--              22 characters at 3mm measured 40mm on the sheet and   --
+		--              this table gives 39.75mm                              --
+		--   !glabfig   extra room on the sides where the dimension figures   --
+		--              sit between the line and the label. they are 2mm tall --
+		--              at 2.2mm off the line, and the first bend used to     --
+		--              land in among them. only up and left need it: on down --
+		--              and right the figures fall on the other side of the   --
+		--              dimension line, clear of the labels                   --
+		--                                                                  --
+		-- !glabrun and !glabdiag started from the numbers read off the    --
+		-- label the user built by hand (2026-08-21, check.txt):           --
+		-- Bpoftx X -5mm Y 0mm X -8mm Y -5mm                               --
+		----------------------------------------------------------------------
+		!glabmin = 4
+		!glabclr = 6
+		!glabrun = 2
+		!glabdiag = 4
+		!glabchei = 3
+		!glabceqi = 4
+		!glabstyle = '/PW-LEAD_NOFRAME'
+		!glabtxtgap = 1
+		!glabfig = 5
+		!glabover = 5
+		!glabwchr = 0.7
+		!glabwnar = 0.35
+		!glabwthin = 0.45
+		!glabwdot = 0.3
+		!glabrec = object array()
+
 		do !i from 1 to !result.size()
 			!resultl = !result[!i]
 			!mem = !resultl.split('~').getindexed(3).split('!').getindexed(4)
@@ -894,6 +978,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			endif
 			if (!ptok) then
 				--------------------------------------------------------------------
+				-- a labelled point is always drawn, but remember where it falls   --
+				-- along the dimension so that a grid crossing or a view corner    --
+				-- landing on the same spot is not added on top of it              --
+				--------------------------------------------------------------------
+				if (!dir.eq('right') or !dir.eq('left')) then
+					!dimalong.append(!pty)
+				else
+					!dimalong.append(!ptx)
+				endif
+				--------------------------------------------------------------------
 				-- temporary diagnostic 2026-08-12: prints one line per label that --
 				-- actually gets drawn, with the element it is attached to and     --
 				-- which TYPE found it, so a label seen on the sheet can be traced --
@@ -926,91 +1020,98 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!dpoiseq = !dpoiseq + 1
 					!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=labelled pipe=' & !dbgpipe & ' mem=' & !mem & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 				endif
-				if (!type.eqnocase('BRAN')) then
-					if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
-						if (!bopu.geq(0)) then
-							if (!dir.eq('right') or !dir.eq('down')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!bopu'
-							elseif (!dir.eq('left')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!bopu      '
-							elseif (!dir.eq('up')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL+$!bopu'
-							endif
-						else
-							if (!dir.eq('right') or !dir.eq('down')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!bopu'
-							elseif (!dir.eq('left')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!bopu      '
-							elseif (!dir.eq('up')) then	
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL$!bopu'
-							endif
-						endif
-					else
-						if (!dir.eq('right') or !dir.eq('down')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)'
-						elseif (!dir.eq('left')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)      '
-						elseif (!dir.eq('up')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:)'
-						endif
-					endif
-				elseif (!type.eqnocase('EQUI')) then
-					if (!dir.eq('right') or !dir.eq('down')) then
-						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#EQUI(c2:)'
-					elseif (!dir.eq('left')) then
-						NEW DPOI POS $!attapos DDNA $!mem Pltxt '#EQUI(c2:)    '
-					elseif (!dir.eq('up')) then
-						NEW DPOI POS $!attapos DDNA $!mem Pltxt '    #EQUI(c2:)'
-					endif
-					Ptchtx '4mm'
-				else
-					---------------------------------------------------------------------
-					-- 2026-08-13, confirmed live via Q PLTXT: this branch (a component  --
-					-- which is neither BRAN nor EQUI, picked up by TYPE 1) was leaving   --
-					-- Pltxt at its default #DEF. '#PABOPU+' / '#PLBOPU+' below were not  --
-					-- real PDMS text macros -- unlike '#PIPE(c2:)', which is -- so PDMS  --
-					-- could not parse them and dropped the whole Pltxt string. !pabop /  --
-					-- !plbop were worked out and compared against !bop to choose an end, --
-					-- but the chosen value was never actually substituted into the       --
-					-- string, the way $!bopu is in the BRAN branch above. this fixes it  --
-					-- the same way: round the chosen end's up position and substitute it --
-					-- with $!, with the same +/no-plus sign the BRAN branch already has  --
-					-- and this branch was missing entirely                               --
-					---------------------------------------------------------------------
-					if (!resultl.split('~').getindexed(3).split('!').getindexed(6).eqnocase('y')) then
+				---------------------------------------------------------------------
+				-- 2026-08-21: the pipe number and the elevation used to be the     --
+				-- Pltxt of this point, which E3D draws along its projection line.  --
+				-- two points close together on the sheet then printed their text   --
+				-- one over the other and neither could be read. the point is now   --
+				-- created with no text at all and the wording goes on a GLAB of    --
+				-- its own further down, which can be stepped clear of its          --
+				-- neighbour and given a bent leader back to the end of this        --
+				-- point's own projection line                                      --
+				--                                                                  --
+				-- the leading and trailing spaces the Pltxt used to carry have     --
+				-- gone with it. they were there to shove the text sideways off     --
+				-- the point; a GLAB is placed with XYPO and JUST instead, so the   --
+				-- four sides no longer need a string each                          --
+				--                                                                  --
+				-- the wording itself does not change: '#PIPE(c2:)' is resolved by  --
+				-- E3D from the DDNA, which the GLAB carries too, and the BOP       --
+				-- figure is still worked out here and put into the text            --
+				---------------------------------------------------------------------
+				!labbop = 0
+				!labhasbop = false
+				---------------------------------------------------------------------
+				-- field 6 of the record is the 'this one wants a BOP figure' flag, --
+				-- and only the TYPE 1 pipe records carry it (:330). every other    --
+				-- record -- equipment, and TYPE 2a/2b/3/4 -- stops at field 5, and --
+				-- asking for field 6 there raises 'This function does not return a --
+				-- result' (2026-08-21, reported live). the old code asked only     --
+				-- inside its BRAN and 'other' branches and happened not to hit it; --
+				-- this version asks once per point, so it counts the fields first  --
+				---------------------------------------------------------------------
+				!labparts = object array()
+				!labparts = !resultl.split('~').getindexed(3).split('!')
+				handle any
+					!labparts = object array()
+				endhandle
+				!labwantbop = 'n'
+				if (!labparts.size().geq(6)) then
+					!labwantbop = !labparts.getindexed(6)
+				endif
+				if (!labwantbop.eqnocase('y')) then
+					if (!type.eqnocase('BRAN')) then
+						!labbop = !bopu
+						!labhasbop = true
+					elseif (not(!type.eqnocase('EQUI'))) then
+						-------------------------------------------------------------------
+						-- 2026-08-13, confirmed live via Q PLTXT: this branch (a         --
+						-- component which is neither BRAN nor EQUI, picked up by TYPE 1) --
+						-- was leaving its text at the default #DEF. '#PABOPU+' /         --
+						-- '#PLBOPU+' were not real PDMS text macros -- unlike            --
+						-- '#PIPE(c2:)', which is -- so PDMS could not parse them and     --
+						-- dropped the whole string. !pabop / !plbop were worked out and  --
+						-- compared against !bop to choose an end, but the chosen value   --
+						-- was never actually put into the text                           --
+						-------------------------------------------------------------------
 						var !pabop abop of $!mem
 						var !plbop lbop of $!mem
 						if (abs(!pabop.position().up - !bop) le 5) then
-							!endbopu = !pabop.position().up.nint().value()
+							!labbop = !pabop.position().up.nint().value()
 						else
-							!endbopu = !plbop.position().up.nint().value()
+							!labbop = !plbop.position().up.nint().value()
 						endif
-						if (!endbopu.geq(0)) then
-							if (!dir.eq('right') or !dir.eq('down')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!endbopu'
-							elseif (!dir.eq('left')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL+$!endbopu      '
-							elseif (!dir.eq('up')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL+$!endbopu'
-							endif
+						!labhasbop = true
+					endif
+				endif
+				if (!type.eqnocase('EQUI')) then
+					!labtext = '#EQUI(c2:)'
+					!labchei = !glabceqi
+				else
+					!labtext = '#PIPE(c2:)'
+					!labchei = !glabchei
+					if (!labhasbop) then
+						if (!labbop.geq(0)) then
+							!labtext = !labtext & ' BOP EL+' & !labbop.string()
 						else
-							if (!dir.eq('right') or !dir.eq('down')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!endbopu'
-							elseif (!dir.eq('left')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:) BOP EL$!endbopu      '
-							elseif (!dir.eq('up')) then
-								NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:) BOP EL$!endbopu'
-							endif
-						endif
-					else
-						if (!dir.eq('right') or !dir.eq('down')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)'
-						elseif (!dir.eq('left')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '#PIPE(c2:)      '
-						elseif (!dir.eq('up')) then
-							NEW DPOI POS $!attapos DDNA $!mem Pltxt '      #PIPE(c2:)'
+							!labtext = !labtext & ' BOP EL' & !labbop.string()
 						endif
 					endif
+				endif
+				NEW DPOI POS $!attapos DDNA $!mem
+				---------------------------------------------------------------------
+				-- everything the GLAB will need, one string per label: the wording, --
+				-- the element the text is resolved from, the character height, and  --
+				-- where the label sits ALONG the dimension (sheet y for the left    --
+				-- and right sides, sheet x for up and down). the other coordinate is --
+				-- the dimension line itself, which is not known until DOFFSET has    --
+				-- been set, so it is worked out down there                           --
+				---------------------------------------------------------------------
+				!labup = !attapos.up.nint().value()
+				if (!dir.eq('right') or !dir.eq('left')) then
+					!glabrec.append(!labtext & '~' & !mem & '~' & !labchei.string() & '~' & !pty.string() & '~' & !labup.string())
+				else
+					!glabrec.append(!labtext & '~' & !mem & '~' & !labchei.string() & '~' & !ptx.string() & '~' & !labup.string())
 				endif
 				---------------------------------------------------------------------
 				-- 2026-08-13: reads DDNA straight back off the DPOI just created,   --
@@ -1077,29 +1178,45 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!pty = min(max(!nearpt.part(4).replace('mm', '').real(), !vwy1), !vwy2)
 					endif
 				endif
-				!intsh = 'x ' & string(!ptx) & ' y ' & string(!pty)
-				var !temppos enupos of $!intsh
-				!attapos = object position(!temppos)
-				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
-				if (!dbgln and !dir.eq('up')) then
-					--------------------------------------------------------------------
-					-- 2026-08-13: .allintersections now carries the refgln's own NAME  --
-					-- after a second '~' (see DrawingPlan1GridAnnotation.pmlfnc), so a --
-					-- section=grid DPOI can be traced back to which grid line it is.   --
-					-- remove once answered                                             --
-					--------------------------------------------------------------------
-					!gridname = ''
-					!gridname = !intersection.split('~').getindexed(3)
-					handle any
-						-- old-format entry with no name field, leave !gridname blank --
-					endhandle
-					!dpoiseq = !dpoiseq + 1
-					!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=grid refgln=' & !gridname & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
+				----------------------------------------------------------------
+				-- a pipe running along this grid line has already been put on --
+				-- the dimension by the labelled loop above, at the same       --
+				-- coordinate. adding the crossing as well only measures 0     --
+				-- between the two and drags a second projection line across   --
+				-- the view, so leave it out -- the labelled point holds the   --
+				-- place and carries the text as well                          --
+				----------------------------------------------------------------
+				if (!dir.eq('right') or !dir.eq('left')) then
+					!alongv = !pty
+				else
+					!alongv = !ptx
 				endif
-				NEW DPOI POS $!attapos
-				if (!dbgln and !dir.eq('up')) then
-					var !liveddna ddna of ce
-					!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=grid liveddna=' & !liveddna)
+				if (!!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)) then
+					!dimalong.append(!alongv)
+					!intsh = 'x ' & string(!ptx) & ' y ' & string(!pty)
+					var !temppos enupos of $!intsh
+					!attapos = object position(!temppos)
+					!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
+					if (!dbgln and !dir.eq('up')) then
+						--------------------------------------------------------------------
+						-- 2026-08-13: .allintersections now carries the refgln's own NAME  --
+						-- after a second '~' (see DrawingPlan1GridAnnotation.pmlfnc), so a --
+						-- section=grid DPOI can be traced back to which grid line it is.   --
+						-- remove once answered                                             --
+						--------------------------------------------------------------------
+						!gridname = ''
+						!gridname = !intersection.split('~').getindexed(3)
+						handle any
+							-- old-format entry with no name field, leave !gridname blank --
+						endhandle
+						!dpoiseq = !dpoiseq + 1
+						!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=grid refgln=' & !gridname & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
+					endif
+					NEW DPOI POS $!attapos
+					if (!dbgln and !dir.eq('up')) then
+						var !liveddna ddna of ce
+						!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=grid liveddna=' & !liveddna)
+					endif
 				endif
 			endif
 		enddo
@@ -1112,12 +1229,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		
 		if (!dir.eq('right')) then
 			var !temppos enupos of $!!DrawingPlan1.viewURsh
+			!alongv = !!DrawingPlan1.viewURsh.part(4).real()
 		elseif (!dir.eq('left')) then
 			var !temppos enupos of $!!DrawingPlan1.viewULsh
+			!alongv = !!DrawingPlan1.viewULsh.part(4).real()
 		elseif (!dir.eq('down')) then
 			var !temppos enupos of $!!DrawingPlan1.viewLLsh
+			!alongv = !!DrawingPlan1.viewLLsh.part(2).real()
 		elseif (!dir.eq('up')) then
 			var !temppos enupos of $!!DrawingPlan1.viewULsh
+			!alongv = !!DrawingPlan1.viewULsh.part(2).real()
 		endif
 		
 		!attapos = object position(!temppos)
@@ -1131,7 +1252,17 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!run = false
 			endif
 		enddo
+		-------------------------------------------------------------------
+		-- the distance test above is a 3d one and misses a point which   --
+		-- shares this corner's coordinate along the dimension but sits   --
+		-- at a different depth -- exactly the pair that measures 0. it   --
+		-- also compares against !dpois, read before this corner existed  --
+		-------------------------------------------------------------------
 		if (!run) then
+			!run = !!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)
+		endif
+		if (!run) then
+			!dimalong.append(!alongv)
 			if (!dbgln and !dir.eq('up')) then
 				!dpoiseq = !dpoiseq + 1
 				!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=corner1 attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
@@ -1145,12 +1276,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 
 		if (!dir.eq('right')) then
 			var !temppos enupos of $!!DrawingPlan1.viewLRsh
+			!alongv = !!DrawingPlan1.viewLRsh.part(4).real()
 		elseif (!dir.eq('left')) then
 			var !temppos enupos of $!!DrawingPlan1.viewLLsh
+			!alongv = !!DrawingPlan1.viewLLsh.part(4).real()
 		elseif (!dir.eq('down')) then
 			var !temppos enupos of $!!DrawingPlan1.viewLRsh
+			!alongv = !!DrawingPlan1.viewLRsh.part(2).real()
 		elseif (!dir.eq('up')) then
 			var !temppos enupos of $!!DrawingPlan1.viewURsh
+			!alongv = !!DrawingPlan1.viewURsh.part(2).real()
 		endif
 		!attapos = object position(!temppos)
 		!run = true
@@ -1162,7 +1297,17 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!run = false
 			endif
 		enddo
+		-------------------------------------------------------------------
+		-- same as the first corner. this one's distance test was even    --
+		-- weaker: !attapos is still un-offset when it runs, so it was    --
+		-- comparing a point on the border against points already pushed  --
+		-- gridgap away from it and could never match                     --
+		-------------------------------------------------------------------
 		if (!run) then
+			!run = !!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)
+		endif
+		if (!run) then
+			!dimalong.append(!alongv)
 			!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 			if (!dbgln and !dir.eq('up')) then
 				!dpoiseq = !dpoiseq + 1
@@ -1177,10 +1322,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		
 		OWNER
 		SORT DIM
+		-- !dimoff is the same number as DOFFSET, kept so that the GLAB block --
+		-- below can work out where the dimension line ended up               --
 		if (!dir.eq('right') or !dir.eq('up')) then
 			DOFFSET 15 $( (10 - $!!DrawingPlan1.griddist.val) $)
+			!dimoff = 15
 		elseif (!dir.eq('left') or !dir.eq('down')) then
 			DOFFSET -15
+			!dimoff = -15
 		endif
 		
 		----------------------------------------------------------
@@ -1215,6 +1364,461 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endif
 				endif
 				OWNER
+			enddo
+		endif
+
+		----------------------------------------------------------------------
+		-- the pipe numbers, as labels of their own                          --
+		--                                                                   --
+		-- one GLAB per labelled point, filed on the same layer as the       --
+		-- dimensions. its leader is aimed at the end of that point's own    --
+		-- projection line: the point is DOFFSET away from the dimension     --
+		-- line, so that end is the point's coordinate along the dimension   --
+		-- paired with the dimension line's own coordinate, and the          --
+		-- dimension line is DOFFSET from the first point of the dimension   --
+		--                                                                   --
+		-- labels which crowd together are stepped off the line one after    --
+		-- the other and get a bent leader back to the same place, so the    --
+		-- text moves but it is still plain which point it belongs to. the   --
+		-- first label of a crowd never moves                                --
+		----------------------------------------------------------------------
+		if (!glabrec.size().gt(0)) then
+			------------------------------------------------------------------
+			-- where the dimension line ended up                             --
+			------------------------------------------------------------------
+			$!name/SS/S1/V1/ateLINE_$!dir_R$!!DrawingPlan1.rev
+			!gfirst = 1
+			$!gfirst
+			var !gfpos pos
+			var !gfshpos shpos of $!gfpos
+			if (!dir.eq('right') or !dir.eq('left')) then
+				!dimline = !gfshpos.part(2).replace('mm','').real() + !dimoff
+			else
+				!dimline = !gfshpos.part(4).replace('mm','').real() + !dimoff
+			endif
+			OWNER
+			------------------------------------------------------------------
+			-- sort the labels along the dimension, so that 'the one before'  --
+			-- means the neighbour on the sheet. insertion sort -- PML has no --
+			-- sort which can be given a key, and .sort() on the records      --
+			-- would order them by their text                                 --
+			------------------------------------------------------------------
+			!glaba = object array()
+			do !i from 1 to !glabrec.size()
+				!glaba[!i] = !glabrec[!i].split('~').getindexed(4).real()
+			enddo
+			do !i from 2 to !glabrec.size()
+				!gka = !glaba[!i]
+				!gkr = !glabrec[!i]
+				!j = !i - 1
+				-- the subscripts are worked out into their own variable: an --
+				-- expression inside [] is not something the rest of this    --
+				-- codebase ever asks PML to parse                           --
+				do !k from 1 to !i
+					break if (!j lt 1)
+					break if (!glaba[!j] le !gka)
+					!jn = !j + 1
+					!glaba[!jn] = !glaba[!j]
+					!glabrec[!jn] = !glabrec[!j]
+					!j = !j - 1
+				enddo
+				!jn = !j + 1
+				!glaba[!jn] = !gka
+				!glabrec[!jn] = !gkr
+			enddo
+			------------------------------------------------------------------
+			-- which way the text runs from the dimension line, and which    --
+			-- way a crowded label is stepped. the text of the up and down   --
+			-- sides is turned 90 degree, as its Pltxt used to be            --
+			--                                                               --
+			-- it runs OUTWARD, away from the view, into the clear paper past --
+			-- the dimension line -- that is the whole point of moving the    --
+			-- pipe numbers onto labels of their own (user marked the wanted  --
+			-- positions in red, 2026-08-21). the first attempt ran them      --
+			-- inward the way the old Pltxt did, which just put the text back --
+			-- on top of the drawing                                          --
+			--                                                               --
+			-- justification follows: the text origin is its own leading end, --
+			-- so the end nearest the dimension line is the justified one     --
+			------------------------------------------------------------------
+			!goutx = 0
+			!gouty = 0
+			!gstepx = 0
+			!gstepy = 0
+			!gadeg = 0
+			!gjust = 'Right'
+			if (!dir.eq('right')) then
+				!goutx = 1
+				!gstepy = 1
+				!gjust = 'Left'
+			elseif (!dir.eq('left')) then
+				!goutx = -1
+				!gstepy = 1
+				!gjust = 'Right'
+			elseif (!dir.eq('up')) then
+				!gouty = 1
+				!gstepx = 1
+				!gadeg = 90
+				!gjust = 'Left'
+			else
+				!gouty = -1
+				!gstepx = 1
+				!gadeg = 90
+				!gjust = 'Right'
+			endif
+			------------------------------------------------------------------
+			-- rcode = left turns the whole view 90 degree anticlockwise on   --
+			-- the sheet, and a label's ADEG is read in the view, not on the  --
+			-- sheet. so the angle worked out above, which is the angle       --
+			-- wanted on the sheet, has the view's own turn taken back off    --
+			-- it -- exactly what .CreateGridSymbolwithIntersection() does    --
+			-- with its Adegrees -90 (2026-08-21: without this every label    --
+			-- came out square to the view instead of square to the sheet)    --
+			------------------------------------------------------------------
+			if (!!DrawingPlan1.rcode.eqnocase('left')) then
+				!gadeg = !gadeg - 90
+			endif
+			------------------------------------------------------------------
+			-- which way the text is nudged clear of its own leader. the     --
+			-- leader runs along the text, so the air has to be across it:   --
+			-- the sheet axis the dimension itself is measured in            --
+			--                                                               --
+			-- and it has to be the side the letters are on. Alignment Base  --
+			-- puts them on the +Y side of their own baseline, which for the --
+			-- turned text of the up and down sides is sheet -X: nudging     --
+			-- those +X walked the leader into the middle of the letters     --
+			-- instead of away from them (2026-08-21, reported live)         --
+			------------------------------------------------------------------
+			!ggapx = 0
+			!ggapy = 0
+			if (!dir.eq('right') or !dir.eq('left')) then
+				!ggapy = 1
+			else
+				!ggapx = -1
+			endif
+			------------------------------------------------------------------
+			-- the dimension figures sit between the line and the label on    --
+			-- the up and left sides, so both the first bend and the start of --
+			-- the text have to clear them there. down and right are already  --
+			-- clear -- the figures fall on the other side of the line, which --
+			-- is why the user asked for those two to be left alone           --
+			------------------------------------------------------------------
+			!gclrb = !glabclr
+			!grun = !glabrun
+			if (!dir.eq('up') or !dir.eq('left')) then
+				!gclrb = !glabclr + !glabfig
+				!grun = !glabrun + !glabfig
+			endif
+			------------------------------------------------------------------
+			-- and draw them                                                 --
+			------------------------------------------------------------------
+			$!name/SS/S1/V1/ateLINE_R$!!DrawingPlan1.rev
+			!gprev = 0
+			!gprevplace = 0
+			!gfirstlab = true
+			do !i from 1 to !glabrec.size()
+				!gparts = !glabrec[!i].split('~')
+				!gtext = !gparts.getindexed(1)
+				!gelem = !gparts.getindexed(2)
+				!gchei = !gparts.getindexed(3)
+				!galong = !gparts.getindexed(4).real()
+				!gup = !gparts.getindexed(5).real()
+				-------------------------------------------------------------
+				-- pack the labels along the dimension: each one goes where  --
+				-- it belongs unless that is less than !glabmin from the one --
+				-- before, in which case it is pushed on just far enough to  --
+				-- clear it. !gstep is how far it had to move, and anything  --
+				-- which had to move gets a bent leader back to its own      --
+				-- projection line                                           --
+				--                                                           --
+				-- the list is sorted ascending, so the push is always       --
+				-- forwards. the first try stepped a fixed 5mm in -Y on the  --
+				-- right and left sides, ie backwards, which dropped every   --
+				-- crowded label straight onto its predecessor -- check.txt  --
+				-- had i=2 at 203.512 pushed to 199.5 and i=1 sitting at     --
+				-- 199.98 (2026-08-21). a fixed step forwards is no better:  --
+				-- it just lands on whatever comes next. pushing only as far --
+				-- as needed, from one label to the next, cannot collide     --
+				-------------------------------------------------------------
+				!gplace = !galong
+				if (not(!gfirstlab)) then
+					!gmin = !gprevplace + !glabmin
+					if (!gplace lt !gmin) then
+						!gplace = !gmin
+					endif
+				endif
+				!gstep = !gplace - !galong
+				!gprevplace = !gplace
+				-------------------------------------------------------------
+				-- the end of this point's projection line, in sheet        --
+				-- coordination, is what the leader is aimed at             --
+				-------------------------------------------------------------
+				if (!dir.eq('right') or !dir.eq('left')) then
+					!gatx = !dimline
+					!gaty = !galong
+				else
+					!gatx = !galong
+					!gaty = !dimline
+				endif
+				!gat = 'X ' & !gatx.string('D3') & 'mm Y ' & !gaty.string('D3') & 'mm'
+				-------------------------------------------------------------
+				-- a label which has not been stepped keeps the old look:   --
+				-- text right up against the dimension line, sitting on its --
+				-- own projection line. a stepped one starts where its      --
+				-- leader stops turning, so the leader meets the text at    --
+				-- its edge instead of poking out from under it             --
+				-------------------------------------------------------------
+				if (!gstep.gt(0.01)) then
+					!gclr = !grun + !glabdiag
+				else
+					!gclr = !gclrb
+				endif
+				!gtxx = !goutx * !gclr + !gstepx * !gstep + !ggapx * !glabtxtgap
+				!gtxy = !gouty * !gclr + !gstepy * !gstep + !ggapy * !glabtxtgap
+				-------------------------------------------------------------
+				-- everything above is worked out on the sheet, but XYPO is  --
+				-- read in the view. when rcode = left the view is turned 90 --
+				-- degree anticlockwise, so the offset is turned back the    --
+				-- same way before it is written -- the same conversion      --
+				-- .CreateGridSymbolwithIntersection() makes for its own     --
+				-- XYPO and APOF                                             --
+				-------------------------------------------------------------
+				if (!!DrawingPlan1.rcode.eqnocase('left')) then
+					!gtmp = !gtxx
+					!gtxx = !gtxy
+					!gtxy = !gtmp * -1
+				endif
+				!gxypo = !gtxx.string('D3') & ' ' & !gtxy.string('D3')
+				-- one line per label while the stepping is being settled --
+				if (!dbgln) then
+					-- abs() cannot be asked for a method straight off, it needs a variable --
+					!ggap = abs(!galong - !gprev)
+					!dbgf.writerecord('GLABROW ' & !dir & ' i=' & !i.string() & ' along=' & !galong.string('D3') & ' prev=' & !gprev.string('D3') & ' gap=' & !ggap.string('D3') & ' step=' & !gstep.string('D3') & ' xypo=' & !gxypo & ' text=' & !gtext)
+				endif
+				-------------------------------------------------------------
+				-- the same point as a model position. a label's POSITION is --
+				-- a model one -- the label the user built by hand reads     --
+				-- Position W 250093mm N 4816876mm U 8600mm -- and ABSO / AT --
+				-- with a sheet position does not touch it: check.txt came   --
+				-- back 'position = unset' for every label, which is why     --
+				-- they all fell back on their own element's position and    --
+				-- sat out in the middle of the view (2026-08-21)            --
+				--                                                           --
+				-- ENUPOS OF <sheet position> is E3D's own way back to the   --
+				-- model and the grid crossings above already use it, so     --
+				-- there is no need to invert .ViewSheetTransform() by hand  --
+				-- (the first attempt at that also appended a second 'mm' to --
+				-- a value which already carried one, so the command was     --
+				-- never accepted in the first place)                        --
+				-------------------------------------------------------------
+				!gsh = 'x ' & string(!gatx) & ' y ' & string(!gaty)
+				var !gpos enupos of $!gsh
+				!gposobj = object position(!gpos)
+				NEW GLAB
+				DDNA $!gelem
+				BTEXT |$!gtext|
+				CHEI $!gchei
+				Justification $!gjust
+				Alignment Base
+				ADEG $!gadeg
+				ABSO
+				AT $!gat
+				POSITION $!gposobj
+				handle any
+				endhandle
+				-------------------------------------------------------------
+				-- OSET says how XYPO is read: TRUE means it is an offset    --
+				-- from the label's own position, FALSE means it is an       --
+				-- absolute page position. AVEVA's abaarrange.pmlfnc uses    --
+				-- both in one breath and says so: 'put each label at zero   --
+				-- offset from ddnm & get page position' around OSET TRUE /  --
+				-- XYPO 0 0 / OSET FALSE                                     --
+				--                                                           --
+				-- ABSO alone does not set it. without this line every label --
+				-- read its XYPO as a page position and they all landed on   --
+				-- the same few spots, one per step of the fan, in a heap in --
+				-- the middle of the view (2026-08-21, reported live)        --
+				-------------------------------------------------------------
+				OSET TRUE
+				handle any
+				endhandle
+				XYPO $!gxypo
+				-------------------------------------------------------------
+				-- the leader runs the whole length of the text, from the   --
+				-- dimension line to the far end of the wording, the way    --
+				-- the user marked it in red (2026-08-21). that is the      --
+				-- connection point: the text's own far end, in the text's  --
+				-- frame, so the leader is drawn along the baseline         --
+				--                                                          --
+				-- Y stays 0. the baseline sits on the projection line      --
+				-- (XYPO only offsets ALONG the line), so a zero Y is what  --
+				-- keeps the leader straight and in line with it -- the     --
+				-- Cpoftx X 2mm Y -1mm copied off the hand built label was  --
+				-- what made every leader lean                              --
+				--                                                          --
+				-- EXBTEXT is the wording with the macros already resolved. --
+				-- the width estimate is the one the NOZZ and REDU labels   --
+				-- in DrawingPlan1.pmlfrm use, factor and all               --
+				-------------------------------------------------------------
+				!gexb = ''
+				var !gexb exbtext
+				handle any
+					!gexb = ''
+				endhandle
+				-------------------------------------------------------------
+				-- how wide the wording really is, added up a character at   --
+				-- a time. '1' is a narrow one, so is a space and a dash,    --
+				-- and a single average over the lot is what left the        --
+				-- leaders ending at different distances past their text     --
+				-------------------------------------------------------------
+				!gsum = 0
+				!gchn = !gexb.length()
+				do !k from 1 to !gchn
+					!gc = !gexb.substring(!k, 1)
+					!gcw = !glabwchr
+					if (!gc.eq('1')) then
+						!gcw = !glabwnar
+					elseif (!gc.eq(' ') or !gc.eq('-')) then
+						!gcw = !glabwthin
+					elseif (!gc.eq('.') or !gc.eq(',') or !gc.eq(':')) then
+						!gcw = !glabwdot
+					endif
+					!gsum = !gsum + !gcw
+				enddo
+				!gwide = !gsum * !gchei.real()
+				-------------------------------------------------------------
+				-- the text has been nudged !glabtxtgap across its own      --
+				-- leader, so the connection point takes the same amount    --
+				-- out again and the leader is left where it was: straight, --
+				-- and in line with the projection line                     --
+				--                                                          --
+				-- Y here is across the text's own direction. the nudge is  --
+				-- always towards the letters, ie the +Y side of the        --
+				-- baseline, so taking it out is always -Y, whatever ADEG   --
+				-- has turned that into on the sheet                        --
+				-------------------------------------------------------------
+				!gcpofy = !glabtxtgap * -1
+				!greach = !gwide + !glabover
+				if (!gjust.eq('Right')) then
+					!gcpof = 'X -' & !greach.string('D2') & 'mm Y ' & !gcpofy.string('D2') & 'mm'
+				else
+					!gcpof = 'X ' & !greach.string('D2') & 'mm Y ' & !gcpofy.string('D2') & 'mm'
+				endif
+				CPOFTX '$!gcpof'
+				handle any
+				endhandle
+				-------------------------------------------------------------
+				-- the layer is Lframe true, so without a no-frame style     --
+				-- every label comes out in a box. the hand built one uses   --
+				-- /PW-LEAD_NOFRAME. a project without that style keeps its  --
+				-- frames rather than the whole run failing                  --
+				-------------------------------------------------------------
+				LBSTRF $!glabstyle
+				handle any
+				endhandle
+				-------------------------------------------------------------
+				-- and belt and braces on the frame: the style above is a    --
+				-- project one and may not be there, while the layer's       --
+				-- Lframe true is inherited by every label and boxed them    --
+				-- all (2026-08-21, reported live). switching it off on the  --
+				-- label itself depends on no style at all                   --
+				-------------------------------------------------------------
+				Lframe false
+				handle any
+				endhandle
+				if (!gstep.gt(0.01)) then
+					----------------------------------------------------------
+					-- a bent leader: a short run out from the dimension     --
+					-- line along the point's own line, then a diagonal      --
+					-- across to the line the text has been stepped onto,    --
+					-- and the rest of the way in to the text                --
+					--                                                       --
+					-- both bend points are measured from the same place AT  --
+					-- is, confirmed 2026-08-21 from the label the user made --
+					-- by hand: Bpoftx X -5mm Y 0mm X -8mm Y -5mm on a label --
+					-- whose text sat at Xyposition -87mm -4mm, ie the bends --
+					-- are next to the dimension line, not next to the text  --
+					----------------------------------------------------------
+					!gb1x = !goutx * !grun
+					!gb1y = !gouty * !grun
+					!gb2x = !goutx * (!grun + !glabdiag) + !gstepx * !gstep
+					!gb2y = !gouty * (!grun + !glabdiag) + !gstepy * !gstep
+					-- the bend points are offsets like XYPO, so they turn too --
+					if (!!DrawingPlan1.rcode.eqnocase('left')) then
+						!gtmp = !gb1x
+						!gb1x = !gb1y
+						!gb1y = !gtmp * -1
+						!gtmp = !gb2x
+						!gb2x = !gb2y
+						!gb2y = !gtmp * -1
+					endif
+					----------------------------------------------------------
+					-- bare numbers, four of them, which is how AVEVA's own   --
+					-- aba/Tasks/abaarrange.pmlfrm writes it: BPOF -17 29.99  --
+					-- (two numbers there, one bend point). the 'X -5mm Y 0mm --
+					-- X -8mm Y -5mm' string form, copied off Q ATT, was not  --
+					-- accepted -- the leader stayed straight and ran from    --
+					-- the dimension line to the far end of the text in one   --
+					-- long diagonal (2026-08-21, reported live)              --
+					----------------------------------------------------------
+					!gbpof = !gb1x.string('D2') & ' ' & !gb1y.string('D2') & ' ' & !gb2x.string('D2') & ' ' & !gb2y.string('D2')
+					BPOF $!gbpof
+					handle any
+					endhandle
+					LSHAPE Bent
+					handle any
+					endhandle
+				endif
+				-------------------------------------------------------------
+				-- the first label of each side, as it actually came out,   --
+				-- next to what it was asked for. this is what settles      --
+				-- which of POSITION / AT / XYPO the label really listens   --
+				-- to. take it out once the placement is right              --
+				-------------------------------------------------------------
+				if (!dbgln and !i.leq(4)) then
+					!dbgf.writerecord('GLAB ' & !dir & ' asked pos=' & !gpos & ' at=' & !gat & ' xypo=' & !gxypo & ' step=' & !gstep.string('D3') & ' dimline=' & !dimline.string())
+					!gatts = object array()
+					!gatts[1] = 'position'
+					!gatts[2] = 'xypo'
+					!gatts[3] = 'oset'
+					!gatts[4] = 'apoftx'
+					!gatts[5] = 'bpoftx'
+					!gatts[6] = 'lshape'
+					!gatts[7] = 'lbstrf'
+					!gatts[8] = 'lframe'
+					!gatts[9] = 'ddname'
+					!gatts[10] = 'justification'
+					!gatts[11] = 'adegrees'
+					!gatts[12] = 'cpoftx'
+					----------------------------------------------------------
+					-- the user's point: a frame with a zero box gap sits     --
+					-- tight around the text, so E3D knows what the text      --
+					-- really measures and the width may not have to be       --
+					-- estimated from the character count at all. Q ATT only  --
+					-- lists stored attributes -- EXBTEXT is not on it either --
+					-- and still answers -- so these are worth asking for.    --
+					-- XYSC is the promising one, AVEVA's attribute table     --
+					-- calls it 'Label XY size'                               --
+					----------------------------------------------------------
+					!gatts[13] = 'xysc'
+					!gatts[14] = 'xysize'
+					!gatts[15] = 'gbox'
+					!gatts[16] = 'bmargin'
+					!gatts[17] = 'exbtext'
+					!gatts[18] = 'gaps'
+					!gatts[19] = 'tsiztx'
+					!gatts[20] = 'cspatx'
+					do !ga values !gatts
+						!gq = 'ERR'
+						var !gq $!ga
+						handle any
+							!gq = 'ERR'
+						endhandle
+						!dbgf.writerecord('GLAB ' & !dir & ' got ' & !ga & ' = ' & !gq)
+					enddo
+				endif
+				!gprev = !galong
+				!gfirstlab = false
 			enddo
 		endif
 	enddo
