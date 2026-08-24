@@ -4,6 +4,17 @@
 -- Date     : 2025/01/08      --
 --------------------------------
 define function !!DrawingPlan1GridAnnotation(!name is string)
+	----------------------------------------------------------------------
+	-- where every grid bubble of this drawing ends up on the sheet, so  --
+	-- that !!DrawingPlan1LineNoAnnotation can keep the pipe numbers out --
+	-- of them. filled in by .CreateGridSymbol() and                     --
+	-- .CreateGridSymbolwithIntersection(), one 'side~x~y' per bubble    --
+	--                                                                   --
+	-- a global rather than a member of the form: the two files are read --
+	-- at different times (a .pmlfnc on every call, the form only on     --
+	-- kill/show), so a member breaks every run made in between          --
+	----------------------------------------------------------------------
+	!!DrawingPlan1GridBubbles = object array()
 	NEW LAYE $!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
 	Purpose GRIDA
 	Lvisibility true

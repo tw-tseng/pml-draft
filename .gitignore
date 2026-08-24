@@ -13,3 +13,9 @@ pml.index
 # check.txt/check2.txt/check3.txt... are debug dumps
 check*.txt
 error.png
+CreateBoxInAutoCAD/drawing index_e3dbox.csv
+CreateBoxInAutoCAD/drawing index.dwg
+CreateBoxInAutoCAD/e3dbox_light.mnr
+CreateBoxInAutoCAD/e3dbox.bak.cuix
+CreateBoxInAutoCAD/E3DBOX.cuix
+CreateBoxInAutoCAD/e3dbox.mnr

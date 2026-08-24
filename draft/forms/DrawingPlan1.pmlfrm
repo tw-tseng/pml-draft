@@ -194,6 +194,10 @@ layout form !!DrawingPlan1 dialog dock
 	member .rev is string         $( for revision  $)
 	member .supttmp is string     $( for support callout template  $)
 	member .rcode is string       $( view rcode, 'up' or 'left'  $)
+	member .labbandup is real       $( how far the annotation reaches past  $)
+	member .labbanddown is real     $( the border of the view on each side, $)
+	member .labbandleft is real     $( in sheet mm. filled in by            $)
+	member .labbandright is real    $( DrawingPlan1LineNoAnnotation         $)
 	
 
 exit
@@ -466,8 +470,6 @@ define method .Apply()
 		!!alert.error('Cannot verify office network connection - Create Drawings is only available inside the company network')
 		return
 	endif
-	-- drawings whose view came out bigger than the canvas, see below --
-	!scalemiss = object array()
 	$!this.dest.val
 	do !equistr values !this.files.dtext
 		if !equistr.substring(1,1).eqnocase('=') then
@@ -960,15 +962,6 @@ define method .Apply()
 				endif
 				!sizeX = !elen.real() * !this.vsca
 				!sizeY = !nlen.real() * !this.vsca
-				------------------------------------------------------------------
-				-- at a scale of its own choosing the view always fitted the      --
-				-- canvas. at a scale which was typed in it may not, and the      --
-				-- annotation outside it then runs off the sheet, so keep a note  --
-				-- and say so once at the end rather than stopping each drawing   --
-				------------------------------------------------------------------
-				if (!sizeX.gt(!tempsize1) or !sizeY.gt(!tempsize2)) then
-					!scalemiss.append(!name & ' needs ' & !sizeX.string('D0') & 'x' & !sizeY.string('D0') & 'mm, canvas is ' & !tempsize1.string('D0') & 'x' & !tempsize2.string('D0') & 'mm')
-				endif
 				size $!sizeX $!sizeY
 				
 				--------------------------------------
@@ -1506,6 +1499,147 @@ define method .Apply()
 					!ff.close()
 				endif
 				
+				------------------------------------------------------------------
+				-- move the view so that its annotation lands inside the canvas  --
+				--                                                               --
+				-- everything the annotation makes hangs off the view -- the      --
+				-- layers are members of it -- and is placed in model or view     --
+				-- coordination, so moving the view now carries all of it along   --
+				-- and nothing has to be drawn a second time. the border texts,   --
+				-- the keyplan and the north arrow sit on the sheet rather than   --
+				-- on the view and stay where they are                            --
+				--                                                               --
+				-- the view used to be centred on the canvas, which is wrong as   --
+				-- soon as one side carries longer labels than the other. what is --
+				-- centred here is the view together with its annotation          --
+				--                                                               --
+				-- a drawing which is too big for its canvas even after this is   --
+				-- left as it is and not reported: at a fixed scale there is      --
+				-- nothing to be done about it here, and the user goes through    --
+				-- every drawing anyway                                           --
+				------------------------------------------------------------------
+				!cvx1 = 107
+				!cvx2 = 607
+				!cvy1 = 115
+				!cvy2 = 515
+				if (not(!!DrawingPlan1.canvassize.unset())) then
+					!cvx1 = min(!!DrawingPlan1.canvassize.part(2).real(), !!DrawingPlan1.canvassize.part(6).real())
+					!cvx2 = max(!!DrawingPlan1.canvassize.part(2).real(), !!DrawingPlan1.canvassize.part(6).real())
+					!cvy1 = min(!!DrawingPlan1.canvassize.part(4).real(), !!DrawingPlan1.canvassize.part(8).real())
+					!cvy2 = max(!!DrawingPlan1.canvassize.part(4).real(), !!DrawingPlan1.canvassize.part(8).real())
+				endif
+				-- the view, grown by what its annotation reaches on each side --
+				!ocx1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real()) - !this.labbandleft
+				!ocx2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real()) + !this.labbandright
+				!ocy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real()) - !this.labbanddown
+				!ocy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real()) + !this.labbandup
+				-- how far it sticks out of each edge, and the move which fixes it --
+				!ovl = !cvx1 - !ocx1
+				!ovr = !ocx2 - !cvx2
+				!dx = 0
+				if (!ovl.gt(0) and !ovr.gt(0)) then
+					-- wider than the canvas: share what is left over between the two sides --
+					!dx = (!ovl - !ovr) * 0.5
+				elseif (!ovl.gt(0)) then
+					!dx = !ovl
+				elseif (!ovr.gt(0)) then
+					!dx = !ovr * -1
+				endif
+				!ovd = !cvy1 - !ocy1
+				!ovu = !ocy2 - !cvy2
+				!dy = 0
+				if (!ovd.gt(0) and !ovu.gt(0)) then
+					!dy = (!ovd - !ovu) * 0.5
+				elseif (!ovd.gt(0)) then
+					!dy = !ovd
+				elseif (!ovu.gt(0)) then
+					!dy = !ovu * -1
+				endif
+				!adx = abs(!dx)
+				!ady = abs(!dy)
+				if (!adx.gt(0.05) or !ady.gt(0.05)) then
+					$!name/SS/S1/V1_R$!this.rev
+					!vxy = ''
+					var !vxy xyposition
+					handle any
+						!vxy = ''
+					endhandle
+					if (!vxy.neq('')) then
+						!nvx = !vxy.part(2).replace('mm', '').real() + !dx
+						!nvy = !vxy.part(4).replace('mm', '').real() + !dy
+						!nxy = 'X ' & !nvx.string('D3') & 'mm Y ' & !nvy.string('D3') & 'mm'
+						xyposition $!nxy
+						handle any
+						endhandle
+						------------------------------------------------------------
+						-- the cached sheet corners describe where the view WAS.   --
+						-- everything read from them after this point would be out --
+						-- by the move, so bring them, and the four lines built    --
+						-- from them, along with it                                --
+						------------------------------------------------------------
+						!this.viewULsh = 'x ' & string(!this.viewULsh.part(2).real() + !dx) & ' y ' & string(!this.viewULsh.part(4).real() + !dy)
+						!this.viewURsh = 'x ' & string(!this.viewURsh.part(2).real() + !dx) & ' y ' & string(!this.viewURsh.part(4).real() + !dy)
+						!this.viewLLsh = 'x ' & string(!this.viewLLsh.part(2).real() + !dx) & ' y ' & string(!this.viewLLsh.part(4).real() + !dy)
+						!this.viewLRsh = 'x ' & string(!this.viewLRsh.part(2).real() + !dx) & ' y ' & string(!this.viewLRsh.part(4).real() + !dy)
+						!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
+						!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
+						!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
+						!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
+						------------------------------------------------------------
+						-- the match line box is the one thing on the drawing that --
+						-- is drawn straight onto the sheet -- new stra fpt <sheet --
+						-- position> -- rather than into the view, so unlike the   --
+						-- dimensions and the labels it does not travel with the   --
+						-- view and was left behind at the old position            --
+						-- (2026-08-24, reported live). its four lines are put     --
+						-- back on the corners here, in the order MatchLine drew   --
+						-- them: top, bottom, right, left                          --
+						------------------------------------------------------------
+						!msfrom = object array()
+						!msto = object array()
+						!msfrom[1] = !this.viewULsh
+						!msto[1] = !this.viewURsh
+						!msfrom[2] = !this.viewLLsh
+						!msto[2] = !this.viewLRsh
+						!msfrom[3] = !this.viewLRsh
+						!msto[3] = !this.viewURsh
+						!msfrom[4] = !this.viewLLsh
+						!msto[4] = !this.viewULsh
+						-- !!DrawingPlan1MatchStras is a global rather than a member of  --
+						-- this form on purpose: DrawingPlan1MatchLine.pmlfnc fills it   --
+						-- in, and a .pmlfnc is re-read on every call while this form is --
+						-- only re-read on kill/show. as a member, editing the two files --
+						-- together broke every run until the form was reloaded          --
+						-- ('Object does not have a member MATCHSTRAS', 2026-08-24)      --
+						-- a global which has never been set at all does not answer     --
+						-- .unset() either, it raises, so the count is read behind a     --
+						-- handler rather than tested                                    --
+						!msn = 0
+						!msn = !!DrawingPlan1MatchStras.size()
+						handle any
+							!msn = 0
+						endhandle
+						if (!msn.gt(4)) then
+							!msn = 4
+						endif
+						do !msi from 1 to !msn
+							!msref = !!DrawingPlan1MatchStras[!msi]
+							!msf = !msfrom[!msi]
+							!mst = !msto[!msi]
+							$!msref
+							handle any
+								skip
+							endhandle
+							FPT $!msf
+							handle any
+							endhandle
+							TPT $!mst
+							handle any
+							endhandle
+						enddo
+					endif
+				endif
+
 				---------------------------
 				-- flow arrow annotation --
 				---------------------------
@@ -1524,20 +1658,6 @@ define method .Apply()
 			endif
 		endhandle
 	enddo
-	------------------------------------------------------------------
-	-- one message for the whole run, not one per drawing            --
-	------------------------------------------------------------------
-	if (!scalemiss.size().gt(0)) then
-		!scalemsg = ''
-		do !m values !scalemiss
-			if (!scalemsg.eq('')) then
-				!scalemsg = !m
-			else
-				!scalemsg = !scalemsg & ' / ' & !m
-			endif
-		enddo
-		!!alert.warning('These views do not fit the canvas at the scale set on the View tab, so their annotation will run outside it: ' & !scalemsg)
-	endif
 endmethod
 
 define method .NozzleAnnotation(!name is string)
@@ -2540,6 +2660,16 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 	!y = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.griddist.val).north - !npptp.north)
 	!xap = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.gridgap.val).east - !npptp.east)
 	!yap = (!this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!griddir, !this.gridgap.val).north - !npptp.north)
+	----------------------------------------------------------------------
+	-- where this bubble lands on the sheet, before the rcode swap below --
+	-- turns the offset into view coordination. !x / !y are measured     --
+	-- from !npptp, so adding it back gives the sheet position itself     --
+	----------------------------------------------------------------------
+	!gbx = !x + !npptp.east
+	!gby = !y + !npptp.north
+	!!DrawingPlan1GridBubbles.append(!agside & '~' & string(!gbx) & '~' & string(!gby))
+	handle any
+	endhandle
 
 	--------------------------------------------------------------------------
 	-- !x !y !xap !yap above are in sheet coordination, because they come   --
@@ -2606,6 +2736,16 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 		!xap = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.gridgap.val).east - !thispossh.position().east
 		!yap = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.gridgap.val).north - !thispossh.position().north
 	endif
+	----------------------------------------------------------------------
+	-- same as .CreateGridSymbolwithIntersection(): the sheet position of --
+	-- the bubble, kept for the pipe number labels to stay clear of. !x / --
+	-- !y are measured from !thispossh here                               --
+	----------------------------------------------------------------------
+	!gbx = !x + !thispossh.position().east
+	!gby = !y + !thispossh.position().north
+	!!DrawingPlan1GridBubbles.append(!agside & '~' & string(!gbx) & '~' & string(!gby))
+	handle any
+	endhandle
 
 	--------------------------------------------------------------------------
 	-- !x !y !xap !yap above are in sheet coordination, because they come   --

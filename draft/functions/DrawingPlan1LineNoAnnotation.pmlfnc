@@ -108,6 +108,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	------------------------------------------------------------------
 	!result = object array()
 	!!DrawingPlan1.equiparray.clear()
+	----------------------------------------------------------------------
+	-- how far the annotation of each side reaches past the border of    --
+	-- the view, in sheet mm. .Apply() shifts the view by these so that  --
+	-- what hangs off it lands inside the canvas instead of off the edge --
+	-- of the drawing                                                    --
+	----------------------------------------------------------------------
+	!!DrawingPlan1.labbandup = 0
+	!!DrawingPlan1.labbanddown = 0
+	!!DrawingPlan1.labbandleft = 0
+	!!DrawingPlan1.labbandright = 0
 	do !jj from 1 to 4
 		!dir = !dirlist.part(!jj)
 		--------------------------------------------------------------------
@@ -873,6 +883,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		--              the characters up one at a time gets both right --    --
 		--              22 characters at 3mm measured 40mm on the sheet and   --
 		--              this table gives 39.75mm                              --
+		--   !glabgrid air left round a grid bubble on top of its own       --
+		--             diameter, which is the Grid tab's Diameter           --
 		--   !glabfig   extra room on the sides where the dimension figures   --
 		--              sit between the line and the label. they are 2mm tall --
 		--              at 2.2mm off the line, and the first bend used to     --
@@ -898,6 +910,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!glabwnar = 0.35
 		!glabwthin = 0.45
 		!glabwdot = 0.3
+		!glabgrid = 2
 		!glabrec = object array()
 
 		do !i from 1 to !result.size()
@@ -1331,6 +1344,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			DOFFSET -15
 			!dimoff = -15
 		endif
+		-- the dimension on its own already reaches this far past the border --
+		!gbandmax = !!DrawingPlan1.gridgap.val + abs(!dimoff)
 		
 		----------------------------------------------------------
 		-- rotate text 90 degree when distance is less than 7mm --
@@ -1397,6 +1412,22 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!dimline = !gfshpos.part(4).replace('mm','').real() + !dimoff
 			endif
 			OWNER
+			------------------------------------------------------------------
+			-- how far the dimension line itself sits past the border of the --
+			-- view. each label below adds its own length to this            --
+			------------------------------------------------------------------
+			if (!dir.eq('right')) then
+				!gdimdist = !dimline - !vwx2
+			elseif (!dir.eq('left')) then
+				!gdimdist = !vwx1 - !dimline
+			elseif (!dir.eq('up')) then
+				!gdimdist = !dimline - !vwy2
+			else
+				!gdimdist = !vwy1 - !dimline
+			endif
+			if (!gdimdist.gt(!gbandmax)) then
+				!gbandmax = !gdimdist
+			endif
 			------------------------------------------------------------------
 			-- sort the labels along the dimension, so that 'the one before'  --
 			-- means the neighbour on the sheet. insertion sort -- PML has no --
@@ -1510,6 +1541,58 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!grun = !glabrun + !glabfig
 			endif
 			------------------------------------------------------------------
+			-- the grid annotation of this side, as bands along the          --
+			-- dimension which a label may not sit across                    --
+			--                                                               --
+			-- a grid line runs from the border of the view out past its     --
+			-- bubble, ie right through the band the labels are written in,  --
+			-- so a label at the same coordinate crosses it whatever its     --
+			-- length -- the user found a pipe number written straight       --
+			-- through the H bubble (2026-08-24). there is nothing to test    --
+			-- against the label's own length: EXBTEXT, which is what the     --
+			-- width is counted from, only exists once the label has been     --
+			-- created                                                       --
+			--                                                               --
+			-- the band is as wide as the bubble, so it covers the worst of   --
+			-- the line as well. the Grid tab's Diameter is the size the user --
+			-- has already set for those bubbles                             --
+			------------------------------------------------------------------
+			!gside = 'Right'
+			if (!dir.eq('left')) then
+				!gside = 'Left'
+			elseif (!dir.eq('up')) then
+				!gside = 'Top'
+			elseif (!dir.eq('down')) then
+				!gside = 'Bottom'
+			endif
+			!gbubs = object array()
+			!gbubs = !!DrawingPlan1GridBubbles
+			handle any
+				!gbubs = object array()
+			endhandle
+			!gblock = object array()
+			do !gbv values !gbubs
+				!gbp = !gbv.split('~')
+				if (!gbp.getindexed(1).eq(!gside)) then
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!gblock.append(!gbp.getindexed(3).replace('mm','').real())
+					else
+						!gblock.append(!gbp.getindexed(2).replace('mm','').real())
+					endif
+				endif
+			enddo
+			!ghalf = !!DrawingPlan1.griddia.val * 0.5 + !glabgrid
+			------------------------------------------------------------------
+			-- the letters sit on one side of the baseline: +Y on the right   --
+			-- and left sides, and -X on the turned text of the up and down   --
+			-- ones, the same side the text is nudged towards                 --
+			------------------------------------------------------------------
+			if (!dir.eq('right') or !dir.eq('left')) then
+				!gloff = 0
+			else
+				!gloff = -1
+			endif
+			------------------------------------------------------------------
 			-- and draw them                                                 --
 			------------------------------------------------------------------
 			$!name/SS/S1/V1/ateLINE_R$!!DrawingPlan1.rev
@@ -1547,7 +1630,81 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!gplace = !gmin
 					endif
 				endif
+				-------------------------------------------------------------
+				-- and out of any grid band it would be written across      --
+				--                                                          --
+				-- which way it steps matters: the leader has to travel     --
+				-- from the attach point to wherever the text ends up, so   --
+				-- stepping across the grid line only trades the text       --
+				-- crossing it for the leader crossing it, which is what    --
+				-- the user saw at the H bubble (2026-08-24). so it steps   --
+				-- out on the side the attach point is already on, and only --
+				-- takes the other side when that one is shut               --
+				--                                                          --
+				-- shut means the label before it is in the way: the labels --
+				-- are placed in ascending order, so stepping back is the   --
+				-- one direction which can collide with what is already     --
+				-- placed. !glowbound is how far back it may go             --
+				--                                                          --
+				-- the outer loop is there because clearing one band can    --
+				-- drop the label into the next one; it can run at most as  --
+				-- many times as there are bands                            --
+				-------------------------------------------------------------
+				!gcheir = !gchei.real()
+				!glowoff = !gloff * !gcheir
+				!glowbound = 0
+				!ghaslow = false
+				if (not(!gfirstlab)) then
+					!glowbound = !gprevplace + !glabmin
+					!ghaslow = true
+				endif
+				-- the side the attach point is on, from the first band it hits --
+				!gback = true
+				do !gbc values !gblock
+					!gb1 = !gbc - !ghalf
+					!gb2 = !gbc + !ghalf
+					!glo = !gplace + !glowoff
+					!ghi = !glo + !gcheir
+					if (!glo lt !gb2 and !ghi gt !gb1) then
+						if (!galong gt !gbc) then
+							!gback = false
+						endif
+						break
+					endif
+				enddo
+				do !kk from 1 to !gblock.size()
+					!gmoved = false
+					do !gbc values !gblock
+						!gb1 = !gbc - !ghalf
+						!gb2 = !gbc + !ghalf
+						!glo = !gplace + !glowoff
+						!ghi = !glo + !gcheir
+						if (!glo lt !gb2 and !ghi gt !gb1) then
+							if (!gback) then
+								!gnew = !gb1 - !gcheir - !glowoff
+								if (!ghaslow and !gnew lt !glowbound) then
+									-- no room behind: go the other way instead --
+									!gback = false
+									!gplace = !gb2 - !glowoff
+								else
+									!gplace = !gnew
+								endif
+							else
+								!gplace = !gb2 - !glowoff
+							endif
+							!gmoved = true
+						endif
+					enddo
+					break if (not(!gmoved))
+				enddo
 				!gstep = !gplace - !galong
+				-- how far it moved, either way. a label which had to step BACK  --
+				-- to stay on its own side of a grid line has a negative !gstep, --
+				-- and the two tests below used to ask .gt(0.01), so those got   --
+				-- neither the bent leader nor the clearance meant for a stepped --
+				-- label: check.txt had step=-6.242 come out lshape=Straight     --
+				-- with bpoftx X 0mm Y 0mm (2026-08-24, reported live)           --
+				!gstepabs = abs(!gstep)
 				!gprevplace = !gplace
 				-------------------------------------------------------------
 				-- the end of this point's projection line, in sheet        --
@@ -1568,7 +1725,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- leader stops turning, so the leader meets the text at    --
 				-- its edge instead of poking out from under it             --
 				-------------------------------------------------------------
-				if (!gstep.gt(0.01)) then
+				if (!gstepabs.gt(0.01)) then
 					!gclr = !grun + !glabdiag
 				else
 					!gclr = !gclrb
@@ -1699,6 +1856,11 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-------------------------------------------------------------
 				!gcpofy = !glabtxtgap * -1
 				!greach = !gwide + !glabover
+				-- how far this one reaches, measured from the border of the view --
+				!gtot = !gdimdist + !gclr + !greach
+				if (!gtot.gt(!gbandmax)) then
+					!gbandmax = !gtot
+				endif
 				if (!gjust.eq('Right')) then
 					!gcpof = 'X -' & !greach.string('D2') & 'mm Y ' & !gcpofy.string('D2') & 'mm'
 				else
@@ -1726,7 +1888,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				Lframe false
 				handle any
 				endhandle
-				if (!gstep.gt(0.01)) then
+				if (!gstepabs.gt(0.01)) then
 					----------------------------------------------------------
 					-- a bent leader: a short run out from the dimension     --
 					-- line along the point's own line, then a diagonal      --
@@ -1820,6 +1982,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!gprev = !galong
 				!gfirstlab = false
 			enddo
+		endif
+		------------------------------------------------------------------
+		-- what this side reaches, for .Apply() to shift the view by      --
+		------------------------------------------------------------------
+		if (!dir.eq('right')) then
+			!!DrawingPlan1.labbandright = !gbandmax
+		elseif (!dir.eq('left')) then
+			!!DrawingPlan1.labbandleft = !gbandmax
+		elseif (!dir.eq('up')) then
+			!!DrawingPlan1.labbandup = !gbandmax
+		else
+			!!DrawingPlan1.labbanddown = !gbandmax
 		endif
 	enddo
 	if (!dbgln) then

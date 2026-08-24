@@ -14,8 +14,30 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 		!!DrawingPlan1MatchLine1(!dir, !projid, !equistr, !format)
 	enddo
 	note 1
+	-------------------------------------------------------------------
+	-- the box round the view. these four are given sheet positions,  --
+	-- so they sit on the sheet and do not travel with the view the   --
+	-- way the dimensions and the labels do. .Apply() moves the view  --
+	-- once it knows how far the annotation reaches, and puts these   --
+	-- back on the corners afterwards -- it needs to know which four  --
+	-- elements they are, and in which order they were drawn: top,    --
+	-- bottom, right, left                                            --
+	--                                                                --
+	-- a global, not a member of the form: this file is re-read on    --
+	-- every call and the form only on kill/show, so a member would   --
+	-- break every run made between editing the two                   --
+	-------------------------------------------------------------------
+	!!DrawingPlan1MatchStras = object array()
 	new stra fpt $!!DrawingPlan1.viewULsh tpt $!!DrawingPlan1.viewURsh NLStyle DChainedThick  NLColour Magenta 
+	var !msref ref
+	!!DrawingPlan1MatchStras.append(!msref)
 	new stra fpt $!!DrawingPlan1.viewLLsh tpt $!!DrawingPlan1.viewLRsh NLStyle DChainedThick  NLColour Magenta 
+	var !msref ref
+	!!DrawingPlan1MatchStras.append(!msref)
 	new stra fpt $!!DrawingPlan1.viewLRsh tpt $!!DrawingPlan1.viewURsh NLStyle DChainedThick  NLColour Magenta 
+	var !msref ref
+	!!DrawingPlan1MatchStras.append(!msref)
 	new stra fpt $!!DrawingPlan1.viewLLsh tpt $!!DrawingPlan1.viewULsh NLStyle DChainedThick  NLColour Magenta
+	var !msref ref
+	!!DrawingPlan1MatchStras.append(!msref)
 endfunction

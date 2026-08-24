@@ -3259,3 +3259,209 @@ endhandle
 `.portrait` 原本寫 `at xmin ymax+0.1`（相對前一個 gadget），移除後前一個變成靠右的 `.scaletext`，所以把 `.gridorthogonal` 的錨點 `at xmin.frametext ymax.scaletext+0.2` 接手給它，版面才不會整排跳到右邊。
 
 舊存檔裡多出來的那一筆不用處理，`.Load()` 對表單已經沒有的欄位會跳過（2026-08-14 為了 `northrottext` 做過同樣的處理）。
+
+## 新增：標註超出圖框時自動移動 view（2026-08-21，**尚未實機驗證**）
+
+使用者定的規則：除非比例設 `auto`，否則一律照指定比例出圖；**擺不下就移動 view**，不是改比例。移不動的也不用回報——每張圖使用者本來就會檢查。
+
+### 為什麼不用重畫
+
+所有標註都掛在 view 底下（`$!name/SS/S1/V1/ate*_R` 這些圖層是 view 的成員），位置又都是模型或 view 座標，所以**移動 view，標註跟著移動**。因此可以「照比例出圖 → 標註完 → 量實際外伸量 → 移 view」，一次搞定，不必出圖兩次。
+
+border 文字、keyplan、指北箭頭掛在 SHEE 底下，不是 view 底下，不會跟著跑。
+
+### 量測（`DrawingPlan1LineNoAnnotation.pmlfnc`）
+
+四個表單成員 `labbandup` / `labbanddown` / `labbandleft` / `labbandright`，函式開頭歸零，每一邊記錄該邊標註**超出 view 邊界**多遠（圖紙 mm）：
+
+- 底線是 `gridgap + |DOFFSET|`（尺寸線本身就在邊界外約 18mm）
+- 有尺寸線之後改用實測的 `!dimline` 與邊界的距離
+- 每個標籤再加上 `!gclr + !greach`，取最大值
+
+### 移動（`.Apply()`，flow arrow 標註之前）
+
+view 矩形往外長四個 band = **實際佔用範圍**，跟 canvas 比對算出四邊超出量：
+
+```pml
+!ovl = !cvx1 - !ocx1        -- 左邊超出多少
+!ovr = !ocx2 - !cvx2        -- 右邊超出多少
+if (!ovl.gt(0) and !ovr.gt(0)) then
+	!dx = (!ovl - !ovr) * 0.5     -- 比 canvas 還寬，兩邊分攤
+elseif (!ovl.gt(0)) then
+	!dx = !ovl
+elseif (!ovr.gt(0)) then
+	!dx = !ovr * -1
+endif
+```
+
+再把 view 的 `xyposition` 加上位移。位移小於 0.05mm 就不動。
+
+這順帶修掉一個一直都在的毛病：原本是把 **view** 置中在 canvas，但四邊標註帶不對稱（某一側管號又多又長）時就會偏。現在置中的是**view + 標註**。
+
+### 拿掉的東西
+
+`!scalemiss` 那組「塞不下就回報」整個移除（init、判斷、整批結束的訊息）——照使用者的決定，移不動也不吭聲。
+
+### 待實機驗證
+
+1. 原本標籤跑出圖框的圖，這次有沒有被拉回來
+2. view 不再置中於 canvas，四邊的留白會依標註長度不同——看起來合不合理
+3. border 文字／keyplan／指北箭頭有沒有跟著跑（不該跑）
+4. 佔用範圍比 canvas 還大的圖，會左右各分攤一半超出量，不會整個偏到一邊
+
+**注意**：這跟「版次之間圖面位置要一致」會衝突（view 現在會依標註長度自動偏移）。使用者說進版的部分之後再談，屆時的分工應該是：第一次出圖自動移動，之後進版繼承上一版的 `XYPOSITION`／`THPOSITION` 不再自動移。
+
+## 已修：view 自動移動之後，match line 留在原地（2026-08-24，**尚未實機驗證**）
+
+使用者貼圖：洋紅色的 match line 方框跟尺寸線圍出來的方框沒有對齊，整個往下差了一段。判斷正確——**移動 view 的時候沒把 match line 一起移**。
+
+### 原因
+
+`DrawingPlan1MatchLine.pmlfnc` 最後那四條框線是這樣畫的：
+
+```pml
+new stra fpt $!!DrawingPlan1.viewULsh tpt $!!DrawingPlan1.viewURsh ...
+```
+
+`viewULsh` 這些是**圖紙座標**，所以這四條 STRA 是釘在圖紙上的。這正好是整張圖上唯一的例外——尺寸、標籤、柱線那些都掛在 view 底下、用模型或 view 座標，view 一移就跟著移（這也是「標註超出圖框自動移動 view」那次可以不重畫的前提）。match line 不跟。
+
+順帶還有第二個問題：`.Apply()` 移完 view 之後，`viewULsh`／`viewURsh`／`viewLLsh`／`viewLRsh` 這四個表單成員還停在舊位置，之後任何從它們讀出來的東西都會差一個位移。
+
+### 作法
+
+**1. 移完 view 就把快取的角點跟著更新**（`forms/DrawingPlan1.pmlfrm:1576`）
+
+四個角點各加上 `!dx`／`!dy`，`viewUlinesh` 那四條線物件跟著重建。
+
+**2. match line 記下自己畫了哪四條**（`functions/DrawingPlan1MatchLine.pmlfnc:23`）
+
+新增表單成員 `.matchstras`，每畫一條 `new stra` 就 `var !msref ref` 記一筆，順序固定是上、下、右、左。
+
+**3. 移完 view 再把那四條放回角點上**（`forms/DrawingPlan1.pmlfrm:1600`）
+
+依序導到那四條 STRA，用更新後的角點重下 `FPT`／`TPT`。AVEVA 自己的 `aba/Tasks/abameasure.pmlfnc` 就是 `NEW STRA` 之後另外下 `FPT`，所以這兩個是可以事後再設的屬性。
+
+### 為什麼不乾脆把 match line 挪到移動之後才畫
+
+因為畫完 match line 緊接著就是 `LIEXEC ... DXFOUT` 匯出 DXF 給 `BlankPos.exe` 找空白位置排標籤（`:1331`）。match line 現在在那份 DXF 裡，排標籤時會避開它；改成事後才畫，Python 就看不到這四條線了。所以維持原地畫、事後校正位置。
+
+### 待實機驗證
+
+1. match line 方框有沒有貼回 view 邊界（跟尺寸線方框同心、間距一致）
+2. 四邊都要對，不只上下——`!dx` 也會動
+3. view 沒被移動的圖（位移小於 0.05mm 就不動）行為要跟以前一樣
+4. match line 上的「接續圖號」標籤位置有沒有跟著對——那些是模型座標，本來就會跟著 view 走，不該受這次改動影響
+
+### `(2,759) Object does not have a member MATCHSTRAS`（2026-08-24，已修，待再驗）
+
+新的 `DrawingPlan1MatchLine.pmlfnc` 去寫 `!!DrawingPlan1.matchstras`，但表單物件還是舊的（member 是這次才加的），於是每次出圖都在那一行中斷。
+
+**`.pmlfnc` 每次呼叫都重讀、`.pmlfrm` 只有 kill/show 才重讀**——兩個檔案一起改的時候，中間必然有一段時間是「新函式配舊表單」。
+
+所以那個陣列改成**全域變數 `!!DrawingPlan1MatchStras`**，不再是表單成員。這樣就算表單還沒重載，出圖也只是 match line 不會被校正（`.Apply()` 是舊版、根本沒有那段程式），不會整批掛掉。
+
+讀取端也不用 `.unset()` 判斷——一個從來沒被設定過的全域連 `.unset()` 都會拋錯——改成直接讀 `.size()` 外面包 `handle any`。
+
+## 新增：管線編號避開柱位線（2026-08-24，**尚未實機驗證，改的是 .pmlfrm，要 kill/show**）
+
+使用者貼圖：`0150CB04_CSL_0080_P_660507 BOP EL+13538` 這條標籤直接從 H 柱位圈裡穿過去，問能不能轉折避讓。
+
+可以，而且用的是既有的機制——標籤本來就會「被前一個標籤擠開就往前挪，挪過的就給折線引線」，只要把柱位線也算成一段不能站的位置就好。
+
+### 柱位圈在哪
+
+`.CreateGridSymbolwithIntersection()` 和 `.CreateGridSymbol()` 算 `XYPO` 的時候，本來就已經算出圈圈的圖紙位置（交點沿柱線方向外推 `griddist`），只是那個值減掉 DDNA 元件位置變成相對位移之後就沒留下來。現在在**做 rcode 旋轉之前**把絕對位置加回來記進全域 `!!DrawingPlan1GridBubbles`，一筆一個 `side~x~y`（`side` 就是它本來就在算的 `Top`／`Bottom`／`Left`／`Right`）。
+
+陣列在 `DrawingPlan1GridAnnotation.pmlfnc` 開頭清空——那支是 `.pmlfnc`，每次呼叫都重讀。用全域而不是表單成員的理由跟 match line 那次一樣：兩個檔案重讀的時機不同，用成員會讓「新函式配舊表單」的那一段時間整批出錯。
+
+### 標籤怎麼讓
+
+`DrawingPlan1LineNoAnnotation.pmlfnc` 排標籤的迴圈裡，算完「被前一個擠開」之後，再多一步：
+
+```pml
+do !kk from 1 to !gblock.size()
+	!gmoved = false
+	do !gbc values !gblock
+		!gb1 = !gbc - !ghalf
+		!gb2 = !gbc + !ghalf
+		!glo = !gplace + !glowoff
+		!ghi = !glo + !gcheir
+		if (!glo lt !gb2 and !ghi gt !gb1) then
+			!gplace = !gb2 - !glowoff
+			!gmoved = true
+		endif
+	enddo
+	break if (not(!gmoved))
+enddo
+```
+
+往前推的方向跟既有的排擠同向，所以不可能推回到前一個標籤身上。外層迴圈是因為讓開一條柱線可能剛好掉進下一條，跑的次數最多就是柱線的數量。推過的標籤 `!gstep` 不為零，**折線引線自動就會有**——不必另外處理。
+
+### 幾個判斷
+
+- **整條柱線都擋，不只圈圈**：柱線從 view 邊界一路往外畫到圈圈之外，正好穿過寫標籤的那條帶，所以同一個座標的標籤不管多長都會壓到線。也沒辦法只用長度判斷——`EXBTEXT`（算字寬的來源）要等標籤建出來才讀得到。
+- **帶寬用 Grid 分頁的 `Diameter`**（內定 10mm）加上新常數 `!glabgrid = 2` 的空隙。`griddia` 這個欄位本來只有存檔在用，實際圈圈大小是 TMRF 樣板決定的；不夠寬就把 Diameter 或 `!glabgrid` 調大。
+- **字在基線的哪一邊**跟著側邊走：左右兩側的字在 +Y、上下兩側轉了 90 度的字在 -X，跟文字被推離引線的方向是同一邊。
+
+### 待實機驗證
+
+1. 原本穿過 H 圈的那條標籤有沒有讓開、有沒有折線引線
+2. 四個邊都要看，特別是上下兩側（字是直排的，讓開方向是 X）
+3. 沒碰到柱線的標籤不該動
+4. 讓開之後標籤之間有沒有反而擠在一起（推的方向跟排擠同向，理論上不會）
+5. 柱位圈很密的圖，會不會有標籤被推得太遠
+
+### 讓開的方向要選邊：不能讓引線改去穿柱位線（2026-08-24，已修，待再驗）
+
+使用者回報：H 那條標籤是讓開了，但它往上跳過柱位帶之後，**引線的斜段反而穿過柱位線**，而下方明明有空間。
+
+### 原因
+
+第一版一律往前（沿線座標增加的方向）推——理由是「跟排擠同向，不會撞到前一個標籤」。但引線要從接點走到文字，接點在柱位線的下方、文字被推到上方，那條斜線就必然跨過柱位線。等於把「文字壓線」換成「引線壓線」。
+
+### 作法
+
+改成**往接點原本所在的那一側讓**：
+
+```pml
+-- 先看第一個撞到的帶，接點在它的哪一邊 --
+!gback = true
+if (!galong gt !gbc) then
+	!gback = false
+endif
+```
+
+往回讓（`!gback`）時貼到帶的下緣，往前讓時貼到上緣。接點跟文字落在同一側，斜段就不會跨過柱位線。
+
+往回是唯一可能撞到既有標籤的方向（標籤是照升冪一個一個放的），所以往回的落點要先跟 `!glowbound = !gprevplace + !glabmin` 比；擠不下就翻回去往前讓——也就是使用者說的「沒空間的話再往另一邊」。
+
+接點剛好落在帶內（管線正壓在柱位線上）的情況，比的是帶的中心，等於挑比較近的那一邊出去，跨過的部分最少。
+
+### 待實機驗證
+
+1. H 那條標籤是不是改成往下讓，引線不再穿過柱位線
+2. 往下沒空間的（前一個標籤就在下面）要能自動翻成往上
+3. 上下兩側（直排字）的讓開方向對不對
+4. 讓開之後標籤之間的間距有沒有小於 `!glabmin`
+
+### 往回讓的標籤沒有折線引線（2026-08-24，已修，待再驗）
+
+使用者回報「引線不對」。check.txt 直接指出來：
+
+```
+GLAB right asked ... xypo=6.000 -5.242 step=-6.242
+GLAB right got bpoftx = X 0mm Y 0mm
+GLAB right got lshape = Straight
+```
+
+對照往前讓的那一個：`step=6.959`／`bpoftx = X 2mm Y 0mm X 6mm Y 7mm`／`lshape = Bent`。
+
+判斷式是 `if (!gstep.gt(0.01))`——**上一次讓 `!gstep` 可以是負的之後，往回讓的標籤就通不過這個條件**，`BPOF` 和 `LSHAPE Bent` 兩行都沒跑，引線退回成一條從接點直接斜拉到文字末端的直線。
+
+`!gstep` 算出來之後多存一個 `!gstepabs = abs(!gstep)`，兩處判斷改用它。轉折點本身的算式不用動——`!gstepx * !gstep` 帶負號進去方向就是對的。
+
+（`!gclr` 那一處其實兩邊算出來的值一樣：右側 `!glabclr` 6 對上 `!grun + !glabdiag` 2+4，左／上側 11 對上 7+4，所以真正有差的只有折線。順手一起改掉比較不會再踩。）
+
+### 順便記一筆：有標籤的文字解出來是 `---`
+
+check.txt 的 `GLAB right got exbtext = ---`（右側第 2 個，`ddname = =67136378/19764949`）。`#PIPE(c2:)` 沒解出東西，整串變成 `---`，寬度只剩 3 個字元。不是這次改動造成的，但值得查一下那個 DDNA 是什麼元件——之後遇到再處理。
