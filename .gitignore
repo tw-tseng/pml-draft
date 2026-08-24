@@ -19,3 +19,27 @@ CreateBoxInAutoCAD/e3dbox_light.mnr
 CreateBoxInAutoCAD/e3dbox.bak.cuix
 CreateBoxInAutoCAD/E3DBOX.cuix
 CreateBoxInAutoCAD/e3dbox.mnr
+
+# everything below is local working clutter, not part of the library.
+# listed one by one rather than by wildcard: the repo is full of .pmlfrm
+# and .pmlfnc files which DO belong in it
+.mcp.json
+ziTgeha5
+_writetest*.txt
+*.zip
+# ...except this one, which is tracked and belongs to the library
+!BOLTxE3D.zip
+*.dll
+AWeld/
+CAF_ADDINS_PATH/
+CAF_UIC_PATH/
+PA_pmllibE3D2.1.old/
+isodraft/forms/
+DesignParameter/padpform3.mac
+design/forms/BOP.pmlfrm
+design/forms/threedBolt.pmlfrm
+design/forms/threedBolt - 複製.pmlfrm
+draft/functions/DrawingPlan1LineNoAnnotation - 複製.pmlfnc
+draft/functions/egg.txt
+draft/functions/egg1.txt
+icons/Grid.png
