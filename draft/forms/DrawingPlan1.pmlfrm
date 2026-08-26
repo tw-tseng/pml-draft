@@ -1637,15 +1637,114 @@ define method .Apply()
 					!!cmsys.executecommand('AVEVA.Draw.OpenSheetByCE')
 				endif
 			else
-				-----------------------------------------------------------------
-				-- update path (has REVI): DRWG/SHEE/VIEW left untouched, no    --
-				-- delete, no rebuild, box-limit/label-band recompute skipped   --
-				-- entirely. per-element annotation diff (DPPT/DPOI/GLAB/SLAB)  --
-				-- and the view-placement-freeze rules land in later steps;    --
-				-- this only proves the branch routes correctly.               --
-				-----------------------------------------------------------------
+				--------------------------------------------------------------------
+				-- update path (has REVI): DRWG/SHEE/VIEW/LIBY/LALB stay exactly    --
+				-- as they are -- no delete, no NEW. LineNoAnnotation still needs   --
+				-- the box limits and the view's own sheet-corner positions, so    --
+				-- they are read back here instead of recalculated the rebuild     --
+				-- way. DRAWLIST/LIMITS/CDLIMITS/VSEC and the SIZE-vs-box-changed  --
+				-- handling are not touched yet (a later step) -- this assumes the --
+				-- box has not changed since the last REVI. only LineNoAnnotation  --
+				-- is called below; the other annotation functions (Equi/Grid/     --
+				-- Flow/MatchLine) do not have reuse logic yet and would duplicate --
+				-- or error if run here, so .allintersections stays empty and grid --
+				-- crossings are simply left untouched this run                    --
+				--------------------------------------------------------------------
+				$!box
+				var !boxPos worpos
+				var !wvol wvol
+				var !boxXlen xlength
+				var !boxYlen ylength
+				var !boxZlen zlength
+				var !ori ori wrt worl
+				!boxXdir = !ori.orientation().xdir()
+				!boxYdir = !ori.orientation().ydir()
+				!minE = !wvol.part(1).replace('mm', '').real()
+				!minN = !wvol.part(2).replace('mm', '').real()
+				!minU = !wvol.part(3).replace('mm', '').real()
+				!maxE = !wvol.part(4).replace('mm', '').real()
+				!maxN = !wvol.part(5).replace('mm', '').real()
+				!maxU = !wvol.part(6).replace('mm', '').real()
+				!efpla = object direction()
+				!nfpla = object direction()
+				if min(abs(!boxYdir.angle(object direction('E'))), abs(!boxYdir.angle(object direction('W')))) lt min(abs(!boxYdir.angle(object direction('N'))), abs(!boxYdir.angle(object direction('S')))) then
+					!efpla1 = !boxYdir
+					!nfpla1 = !boxXdir
+					!elen = !boxYlen
+					!nlen = !boxXlen
+				else
+					!efpla1 = !boxXdir
+					!nfpla1 = !boxYdir
+					!elen = !boxXlen
+					!nlen = !boxYlen
+				endif
+				if abs(!efpla1.angle(object direction('E'))) lt abs(!efpla1.angle(object direction('W'))) then
+					!efpla = !efpla1
+				else
+					!efpla = !efpla1.opposite()
+				endif
+				if abs(!nfpla1.angle(object direction('N'))) lt abs(!nfpla1.angle(object direction('S'))) then
+					!nfpla = !nfpla1
+				else
+					!nfpla = !nfpla1.opposite()
+				endif
+				!maxE1 = !boxPos.position().offset(!efpla,                !elen.real()  * 0.5 + 0.025).east
+				!minE1 = !boxPos.position().offset(!efpla.opposite(),     !elen.real() * 0.5 + 0.025).east
+				!maxN1 = !boxPos.position().offset(!nfpla,                !nlen.real()  * 0.5 + 0.025).north
+				!minN1 = !boxPos.position().offset(!nfpla.opposite(),     !nlen.real()  * 0.5 + 0.025).north
+				!maxU = !boxPos.position().offset(object direction('U'), !boxZlen.real() * 0.5 + 0.025).up
+				!minU = !boxPos.position().offset(object direction('D'), !boxZlen.real() * 0.5 + 0.025).up
+				!maxE = max(!maxE1, !minE1)
+				!minE = min(!maxE1, !minE1)
+				!maxN = max(!maxN1, !minN1)
+				!minN = min(!maxN1, !minN1)
+				!this.maxE = !maxE
+				!this.minE = !minE
+				!this.maxN = !maxN
+				!this.minN = !minN
+				!this.maxU = !maxU
+				!this.minU = !minU
+				!this.wmaxE = !maxE + 0.025
+				!this.wminE = !minE - 0.025
+				!this.wmaxN = !maxN + 0.025
+				!this.wminN = !minN - 0.025
+
+				--------------------------------------------------------------------
+				-- view's own sheet-corner positions and scale, read from the      --
+				-- existing (frozen) view instead of recalculated from the box.    --
+				-- this also makes the update path use the view's real VSCA        --
+				-- rather than the form's Drawing Scale field, ahead of step 7      --
+				--------------------------------------------------------------------
 				$!name/SS/S1/V1
-				!!alert.message(!name & ': has REVI, update path (skeleton) - DRWG/SHEE/VIEW untouched')
+				var !shxypos shxypos
+				var !size size
+				var !rcode rcode
+				var !vsca vsca
+				!this.rcode = !rcode
+				!this.vsca = !vsca
+				if !rcode.eqnocase('up') then
+					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+					!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+					!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+				else
+					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+					!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+					!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+				endif
+				!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
+				!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
+				!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
+				!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
+
+				-------------------------
+				-- line no. annotation --
+				-------------------------
+				$!name/SS/S1/V1
+				1
+				last
+				!!DrawingPlan1LineNoAnnotation(!name, !boxXlen.real(), !boxYlen.real())
 			endif
 		endhandle
 	enddo
