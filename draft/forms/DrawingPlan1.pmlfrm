@@ -484,19 +484,21 @@ define method .Apply()
 		!box = !boxs[1]
 		!this.intersections = object array()
 		!this.allintersections = object array()
+		!hasrevi = false
 		new drwg
 		handle any
 			!!alert.error('cannot create DRWG under this level')
 		elsehandle none
 			delete drwg
+			!drwgexists = true
 			$!name/SS
 			handle any
-				!del = 'none'
+				!drwgexists = false
 			elsehandle none
-	--		  !del = !!alert.confirm('Overwrite Existing DRWG?')
-				!del = 'YES'
+				var !revis coll all revi for ce
+				!hasrevi = !revis.size().gt(0)
 			endhandle
-			if (!del eq 'YES') then
+			if (!drwgexists) and not(!hasrevi) then
 				if (!this.delshee.val) then
 					!order = order
 					delete drwg
@@ -515,7 +517,7 @@ define method .Apply()
 					$!order
 				endif
 			endhandle
-			if (!del neq 'NO') then
+			if (not(!hasrevi)) then
 				new drwg $!name/SS
 				size 841 594
 				new liby $!name/SS/LIBY
@@ -1634,6 +1636,16 @@ define method .Apply()
 					$!name/SS/S1/V1
 					!!cmsys.executecommand('AVEVA.Draw.OpenSheetByCE')
 				endif
+			else
+				-----------------------------------------------------------------
+				-- update path (has REVI): DRWG/SHEE/VIEW left untouched, no    --
+				-- delete, no rebuild, box-limit/label-band recompute skipped   --
+				-- entirely. per-element annotation diff (DPPT/DPOI/GLAB/SLAB)  --
+				-- and the view-placement-freeze rules land in later steps;    --
+				-- this only proves the branch routes correctly.               --
+				-----------------------------------------------------------------
+				$!name/SS/S1/V1
+				!!alert.message(!name & ': has REVI, update path (skeleton) - DRWG/SHEE/VIEW untouched')
 			endif
 		endhandle
 	enddo
