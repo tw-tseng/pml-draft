@@ -1650,6 +1650,9 @@ define method .Apply()
 				-- .allintersections stays empty and grid crossings are simply     --
 				-- left untouched this run                                        --
 				--------------------------------------------------------------------
+				!dbgf3 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check3.txt')
+				!dbgf3.open('overwrite')
+				!dbgf3.writerecord('STEP6 APPLY START name=' & !name)
 				$!box
 				var !boxPos worpos
 				var !wvol wvol
@@ -1762,9 +1765,11 @@ define method .Apply()
 				$!name/SS/S1/V1/TOUP
 				handle any
 					!boxchanged = true
+					!dbgf3.writerecord('STEP6 FPLA TOUP missing -> boxchanged=true')
 				elsehandle none
 					var !oldp position
 					!oldpobj = object position(!oldp)
+					!dbgf3.writerecord('STEP6 FPLA TOUP old.up=' & !oldpobj.up & ' new.maxU=' & !maxU & ' diff=' & (!oldpobj.up - !maxU))
 					if (abs(!oldpobj.up - !maxU) gt 1) then
 						!boxchanged = true
 					endif
@@ -1773,6 +1778,7 @@ define method .Apply()
 					$!name/SS/S1/V1/FRUP
 					var !oldp position
 					!oldpobj = object position(!oldp)
+					!dbgf3.writerecord('STEP6 FPLA FRUP old.up=' & !oldpobj.up & ' new.minU=' & !minU & ' diff=' & (!oldpobj.up - !minU))
 					if (abs(!oldpobj.up - !minU) gt 1) then
 						!boxchanged = true
 					endif
@@ -1781,6 +1787,7 @@ define method .Apply()
 					$!name/SS/S1/V1/TOEP
 					var !oldp position
 					!oldpobj = object position(!oldp)
+					!dbgf3.writerecord('STEP6 FPLA TOEP old.east=' & !oldpobj.east & ' new.maxE=' & !maxE & ' diff=' & (!oldpobj.east - !maxE))
 					if (abs(!oldpobj.east - !maxE) gt 1) then
 						!boxchanged = true
 					endif
@@ -1789,6 +1796,7 @@ define method .Apply()
 					$!name/SS/S1/V1/FREP
 					var !oldp position
 					!oldpobj = object position(!oldp)
+					!dbgf3.writerecord('STEP6 FPLA FREP old.east=' & !oldpobj.east & ' new.minE=' & !minE & ' diff=' & (!oldpobj.east - !minE))
 					if (abs(!oldpobj.east - !minE) gt 1) then
 						!boxchanged = true
 					endif
@@ -1797,6 +1805,7 @@ define method .Apply()
 					$!name/SS/S1/V1/TONP
 					var !oldp position
 					!oldpobj = object position(!oldp)
+					!dbgf3.writerecord('STEP6 FPLA TONP old.north=' & !oldpobj.north & ' new.maxN=' & !maxN & ' diff=' & (!oldpobj.north - !maxN))
 					if (abs(!oldpobj.north - !maxN) gt 1) then
 						!boxchanged = true
 					endif
@@ -1805,10 +1814,12 @@ define method .Apply()
 					$!name/SS/S1/V1/FRNP
 					var !oldp position
 					!oldpobj = object position(!oldp)
+					!dbgf3.writerecord('STEP6 FPLA FRNP old.north=' & !oldpobj.north & ' new.minN=' & !minN & ' diff=' & (!oldpobj.north - !minN))
 					if (abs(!oldpobj.north - !minN) gt 1) then
 						!boxchanged = true
 					endif
 				endif
+				!dbgf3.writerecord('STEP6 boxchanged=' & !boxchanged)
 
 				if (!boxchanged) then
 					!thpoE = !boxPos.position().east
@@ -1895,6 +1906,8 @@ define method .Apply()
 				var !vsca vsca
 				!this.rcode = !rcode
 				!this.vsca = !vsca.real()
+				var !oldsize size
+				!dbgf3.writerecord('STEP6 SIZE old=' & !oldsize.part(1) & ' ' & !oldsize.part(2) & ' shxypos=' & !shxypos.part(1) & ' ' & !shxypos.part(2) & ' rcode=' & !rcode & ' vsca=' & !vsca)
 
 				--------------------------------------------------------------------
 				-- SIZE recalculated symmetric around the existing sheet centre     --
@@ -1915,6 +1928,7 @@ define method .Apply()
 				var !ptNminussh shpos of $!ptNminus
 				!halfX = max(abs(!ptEplussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()), abs(!ptEminussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()))
 				!halfY = max(abs(!ptNplussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()), abs(!ptNminussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()))
+				!dbgf3.writerecord('STEP6 SIZE ptEplussh=' & !ptEplussh & ' ptEminussh=' & !ptEminussh & ' ptNplussh=' & !ptNplussh & ' ptNminussh=' & !ptNminussh & ' halfX=' & !halfX & ' halfY=' & !halfY)
 				if !rcode.eqnocase('up') then
 					!sizePart1 = !halfX * 2
 					!sizePart2 = !halfY * 2
@@ -1922,6 +1936,7 @@ define method .Apply()
 					!sizePart1 = !halfY * 2
 					!sizePart2 = !halfX * 2
 				endif
+				!dbgf3.writerecord('STEP6 SIZE new=' & !sizePart1 & ' ' & !sizePart2)
 				$!name/SS/S1/V1
 				SIZE $!sizePart1 $!sizePart2
 				var !size size
@@ -1941,6 +1956,8 @@ define method .Apply()
 				!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
 				!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
 				!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
+				!dbgf3.writerecord('STEP6 APPLY END viewULsh=' & !this.viewULsh & ' viewURsh=' & !this.viewURsh & ' viewLLsh=' & !this.viewLLsh & ' viewLRsh=' & !this.viewLRsh)
+				!dbgf3.close()
 
 				-------------------------
 				-- line no. annotation --
