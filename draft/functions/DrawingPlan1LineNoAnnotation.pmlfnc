@@ -1154,6 +1154,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					var !eddna ddna of ce
 					if (not(!eddna.unset()) and !eddna.eq(!mem)) then
 						!founddpoi = true
+						!founddpoiref = ce
 						var !epos pos
 						!foundpos = object position(!epos)
 						break
@@ -1162,7 +1163,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			enddo
 			if (!founddpoi) then
 				if (!foundpos.distance(!attapos).geq(5)) then
-					$!edp
+					$!founddpoiref
 					POS $!attapos
 				endif
 			else
