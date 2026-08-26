@@ -221,7 +221,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!tubeelem = !mems[$!i]
 				var !mem mtbe of $!mems[$!i]
 			endif
-			if (!dbgln and !dir.eq('up')) then
+			if (!dbgln and !dir.eq('left')) then
 				!dbgf.writerecord('TYPE1 raw=' & !mems[!i] & ' type=' & !type & ' istube=' & !istube.string() & ' mtbe=' & !mem)
 			endif
 			var !check IDLN for $!mem
@@ -255,7 +255,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!useit = true
 					if (!istube) then
 						!crossenu = !!DrawingPlan1.CrossingOfTube(!tubeelem, !mem, !dir)
-						if (!dbgln and !dir.eq('up')) then
+						if (!dbgln and !dir.eq('left')) then
 							!dbgf.writerecord('TYPE1 tube=' & !tubeelem & ' owner=' & !mem & ' pipe=' & !pipe & ' crossenu=' & !crossenu)
 						endif
 						if (!crossenu.eq('NONE')) then
@@ -345,7 +345,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						if (!memshx.lt(!band[1] - !postol) or !memshx.gt(!band[3] + !postol) or !memshy.lt(!band[2] - !postol) or !memshy.gt(!band[4] + !postol)) then
 							!inband = false
 						endif
-						if (!dbgln and !dir.eq('up')) then
+						if (!dbgln and !dir.eq('left')) then
 							!dbgf.writerecord('TYPE1 CHECK pipe=' & !pipe & ' inband=' & !inband.string() & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string() & ' band=' & !band[1].string() & ' ' & !band[2].string() & ' ' & !band[3].string() & ' ' & !band[4].string())
 						endif
 						if (!inband) then
@@ -358,12 +358,12 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!y'
 							!result[!j] = !memstr
 							!j = !j + 1
-							if (!dbgln and !dir.eq('up')) then
+							if (!dbgln and !dir.eq('left')) then
 								!dbgf.writerecord('TYPE1 KEPT pipe=' & !pipe & ' memenupos=' & !memenupos & ' memshpos=' & !memshpos)
 							endif
 						endif
 					endif
-				elseif (!dbgln and !dir.eq('up')) then
+				elseif (!dbgln and !dir.eq('left')) then
 					----------------------------------------------------------------
 					-- !inband is no longer set at the top of this loop, so it is  --
 					-- not printed here -- referring to it before the band test    --
@@ -469,7 +469,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!memstr = !y & '~' & !x & '~type2a!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
 						!types[!j] = !memstr
 						!j = !j + 1
-						if (!dbgln and !dir.eq('up')) then
+						if (!dbgln and !dir.eq('left')) then
 							!dbgf.writerecord('TYPE2A KEPT pipe=' & !pipe & ' mem=' & !mem & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string())
 						endif
 					endif
@@ -531,7 +531,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!memstr = !y & '~' & !x & '~type2b!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
 						!types[!j] = !memstr
 						!j = !j + 1
-						if (!dbgln and !dir.eq('up')) then
+						if (!dbgln and !dir.eq('left')) then
 							!dbgf.writerecord('TYPE2B KEPT pipe=' & !pipe & ' mem=' & !mem & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string())
 						endif
 					endif
@@ -585,7 +585,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!memstr = !y & '~' & !x & '~type3!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
 						!types[!j] = !memstr
 						!j = !j + 1
-						if (!dbgln and !dir.eq('up')) then
+						if (!dbgln and !dir.eq('left')) then
 							!dbgf.writerecord('TYPE3 KEPT pipe=' & !pipe & ' mem=' & !mem & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string())
 						endif
 					endif
@@ -1054,7 +1054,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- which TYPE found it, so a label seen on the sheet can be traced --
 				-- back to its element without guessing. remove once answered      --
 				--------------------------------------------------------------------
-				if (!dbgln and !dir.eq('up')) then
+				if (!dbgln and !dir.eq('left')) then
 					!dbgsrc  = !resultl.split('~').getindexed(3).split('!').getindexed(1)
 					!dbgpipe = !resultl.split('~').getindexed(3).split('!').getindexed(5)
 					!dbgf.writerecord('LABEL pipe=' & !dbgpipe & ' src=' & !dbgsrc & ' mem=' & !mem & ' type=' & !type & ' mempos=' & !mempos & ' mempossh=' & !mempossh)
@@ -1077,7 +1077,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!attapos = object position(!mempos)
 				endif
 				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
-				if (!dbgln and !dir.eq('up')) then
+				if (!dbgln and !dir.eq('left')) then
 					!dpoiseq = !dpoiseq + 1
 					!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=labelled pipe=' & !dbgpipe & ' mem=' & !mem & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 				endif
@@ -1181,6 +1181,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endif
 				endhandle
 			enddo
+			if (!dbgln and !dir.eq('left')) then
+				!dbgf.writerecord('MATCH mem=' & !mem & ' founddpoi=' & !founddpoi)
+			endif
 			if (!founddpoi) then
 				if (!foundpos.distance(!attapos).geq(5)) then
 					$!founddpoiref
@@ -1216,7 +1219,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- DDNA to the grid point does not happen in this labelled branch.   --
 				-- remove once answered                                              --
 				---------------------------------------------------------------------
-				if (!dbgln and !dir.eq('up')) then
+				if (!dbgln and !dir.eq('left')) then
 					var !liveddna ddna of ce
 					!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=labelled liveddna=' & !liveddna)
 				endif
@@ -1287,7 +1290,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					var !temppos enupos of $!intsh
 					!attapos = object position(!temppos)
 					!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
-					if (!dbgln and !dir.eq('up')) then
+					if (!dbgln and !dir.eq('left')) then
 						--------------------------------------------------------------------
 						-- 2026-08-13: .allintersections now carries the refgln's own NAME  --
 						-- after a second '~' (see DrawingPlan1GridAnnotation.pmlfnc), so a --
@@ -1318,7 +1321,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					enddo
 					if (not(!foundgrid)) then
 						NEW DPOI POS $!attapos
-						if (!dbgln and !dir.eq('up')) then
+						if (!dbgln and !dir.eq('left')) then
 							var !liveddna ddna of ce
 							!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=grid liveddna=' & !liveddna)
 						endif
@@ -1369,12 +1372,12 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		endif
 		if (!run) then
 			!dimalong.append(!alongv)
-			if (!dbgln and !dir.eq('up')) then
+			if (!dbgln and !dir.eq('left')) then
 				!dpoiseq = !dpoiseq + 1
 				!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=corner1 attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 			endif
 			NEW DPOI POS $!attapos
-			if (!dbgln and !dir.eq('up')) then
+			if (!dbgln and !dir.eq('left')) then
 				var !liveddna ddna of ce
 				!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=corner1 liveddna=' & !liveddna)
 			endif
@@ -1415,12 +1418,12 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		if (!run) then
 			!dimalong.append(!alongv)
 			!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
-			if (!dbgln and !dir.eq('up')) then
+			if (!dbgln and !dir.eq('left')) then
 				!dpoiseq = !dpoiseq + 1
 				!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=corner2 attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 			endif
 			NEW DPOI POS $!attapos
-			if (!dbgln and !dir.eq('up')) then
+			if (!dbgln and !dir.eq('left')) then
 				var !liveddna ddna of ce
 				!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=corner2 liveddna=' & !liveddna)
 			endif
@@ -1449,6 +1452,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							break
 						endif
 					enddo
+					if (!dbgln and !dir.eq('left')) then
+						!dbgf.writerecord('CLEANUP eddna=' & !eddna & ' stillcurrent=' & !stillcurrent)
+					endif
 					if (not(!stillcurrent)) then
 						delete dpoi
 					endif
