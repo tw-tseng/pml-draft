@@ -1310,7 +1310,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					do !edp values !existingdpois
 						$!edp
 						var !epos pos
-						if (object position(!epos).distance(!attapos).lt(5)) then
+						if (!epos.distance(!attapos).lt(5)) then
 							!foundgrid = true
 							break
 						endif
@@ -1928,8 +1928,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (!foundglab) then
 					$!foundglabref
 					var !gexistpos position
-					if (object position(!gexistpos).distance(!gposobj).lt(5)) then
-						!gposobj = object position(!gexistpos)
+					if (!gexistpos.distance(!gposobj).lt(5)) then
+						!gposobj = !gexistpos
 					endif
 				else
 					NEW GLAB
