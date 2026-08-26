@@ -941,9 +941,20 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!glabgrid = 2
 		!glabrec = object array()
 
+		--------------------------------------------------------------------
+		-- every !mem this run actually found on this side, so the        --
+		-- cleanup pass further down can tell "still here" from "gone"    --
+		-- by comparing DDNA against this list with .eq() -- .dbref() on  --
+		-- a genuinely broken DDNA does not hand back a bad reference to  --
+		-- check, it raises 'Undefined reference' straight through any    --
+		-- handle any wrapped around it (confirmed live, E3D scenario 2)  --
+		--------------------------------------------------------------------
+		!currentmems = object array()
+
 		do !i from 1 to !result.size()
 			!resultl = !result[!i]
 			!mem = !resultl.split('~').getindexed(3).split('!').getindexed(4)
+			!currentmems.append(!mem)
 			var !type type of $!mem
 			--------------------------------------------------------------------
 			-- the position was worked out when the member was found and is    --
@@ -1407,10 +1418,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 
 		--------------------------------------------------------------------
 		-- update path cleanup: a DPOI from a previous run whose DDNA      --
-		-- element has genuinely been deleted is removed. a DPOI with no  --
-		-- DDNA at all (grid crossings, corners) is left alone -- .unset() --
-		-- catches that before .badref() is asked, since badref() on an   --
-		-- unset reference is not a deletion signal                      --
+		-- element is not among this run's current members is removed. a  --
+		-- DPOI with no DDNA at all (grid crossings, corners) is left      --
+		-- alone -- .unset() catches that. matching is done with .eq()    --
+		-- against !currentmems rather than resolving the DDNA (.dbref()  --
+		-- on a genuinely deleted element's DDNA raises 'Undefined         --
+		-- reference' straight through any handle any wrapped around it,  --
+		-- confirmed live)                                                --
 		--------------------------------------------------------------------
 		do !edp values !existingdpois
 			$!edp
@@ -1418,23 +1432,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			elsehandle none
 				var !eddna ddna of ce
 				if (not(!eddna.unset())) then
-					--------------------------------------------------------------
-					-- .dbref() itself raises 'Undefined reference' instead of  --
-					-- handing back a gracefully bad DBREF when the source      --
-					-- element is really gone (E3D testing: scenario 2, the     --
-					-- source element deleted) -- that error IS the deletion    --
-					-- signal here, same as .badref() would have been          --
-					--------------------------------------------------------------
-					!isbaddpoi = false
-					handle any
-						!isbaddpoi = true
-					elsehandle none
-						!eddnaref = !eddna.dbref()
-						if (!eddnaref.badref()) then
-							!isbaddpoi = true
+					!stillcurrent = false
+					do !cm values !currentmems
+						if (!eddna.eq(!cm)) then
+							!stillcurrent = true
+							break
 						endif
-					endhandle
-					if (!isbaddpoi) then
+					enddo
+					if (not(!stillcurrent)) then
 						delete dpoi
 					endif
 				endif
