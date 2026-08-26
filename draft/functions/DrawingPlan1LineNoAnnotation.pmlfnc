@@ -1416,8 +1416,11 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			handle any
 			elsehandle none
 				var !eddna ddna of ce
-				if (not(!eddna.unset()) and !eddna.badref()) then
-					delete dpoi
+				if (not(!eddna.unset())) then
+					!eddnaref = !eddna.dbref()
+					if (!eddnaref.badref()) then
+						delete dpoi
+					endif
 				endif
 			endhandle
 		enddo
