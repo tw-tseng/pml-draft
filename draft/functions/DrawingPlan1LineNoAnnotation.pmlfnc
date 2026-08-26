@@ -16,7 +16,16 @@ endhandle
 -- which calls this function has to change                               --
 --------------------------------------------------------------------------
 define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real, !boxYlen is real)
-	NEW LAYE $!name/SS/S1/V1/ateLINE
+	--------------------------------------------------------------------
+	-- update path: this LAYE survives from a previous run, so reuse  --
+	-- it instead of erroring on a duplicate name. attribute lines    --
+	-- below always reapply, harmless whether the LAYE is new or old  --
+	--------------------------------------------------------------------
+	$!name/SS/S1/V1/ateLINE
+	handle any
+		NEW LAYE $!name/SS/S1/V1/ateLINE
+	elsehandle none
+	endhandle
 	Purpose LINE
 	Lvisibility true
 	Font 1
