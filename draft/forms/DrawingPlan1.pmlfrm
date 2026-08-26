@@ -1639,16 +1639,16 @@ define method .Apply()
 			else
 				--------------------------------------------------------------------
 				-- update path (has REVI): DRWG/SHEE/VIEW/LIBY/LALB stay exactly    --
-				-- as they are -- no delete, no NEW. LineNoAnnotation still needs   --
-				-- the box limits and the view's own sheet-corner positions, so    --
-				-- they are read back here instead of recalculated the rebuild     --
-				-- way. DRAWLIST/LIMITS/CDLIMITS/VSEC and the SIZE-vs-box-changed  --
-				-- handling are not touched yet (a later step) -- this assumes the --
-				-- box has not changed since the last REVI. only LineNoAnnotation  --
-				-- is called below; the other annotation functions (Equi/Grid/     --
-				-- Flow/MatchLine) do not have reuse logic yet and would duplicate --
-				-- or error if run here, so .allintersections stays empty and grid --
-				-- crossings are simply left untouched this run                    --
+				-- as they are -- no delete, no NEW. THPOSITION/XYPOSITION/ADEGREES --
+				-- are never touched below either -- view placement is frozen.     --
+				-- DRAWLIST/LIMITS/CDLIMITS redo every run; VSEC/FPLA redo only if --
+				-- the box actually changed; SIZE is recalculated symmetric around --
+				-- the frozen sheet centre (see the blocks below). only            --
+				-- LineNoAnnotation is called below; the other annotation          --
+				-- functions (Equi/Grid/Flow/MatchLine) do not have reuse logic    --
+				-- yet and would duplicate or error if run here, so                --
+				-- .allintersections stays empty and grid crossings are simply     --
+				-- left untouched this run                                        --
 				--------------------------------------------------------------------
 				$!box
 				var !boxPos worpos
@@ -1710,6 +1710,180 @@ define method .Apply()
 				!this.wminN = !minN - 0.025
 
 				--------------------------------------------------------------------
+				-- DRAWLIST/LIMITS/CDLIMITS redo every update run -- they are      --
+				-- computed purely from the box's current world extent, so redoing --
+				-- is idempotent when the box has not moved and correct when it    --
+				-- has. the IDLIST is cleared first, same object AVEVA's own       --
+				-- 'Remove from View' uses, so a shrunk box does not leave stale   --
+				-- zones behind                                                    --
+				--------------------------------------------------------------------
+				$!name/SS/DRAWLIST/DRWG
+				!idlname = |$!name/SS/DRAWLIST/DRWG|
+				!idli = object IDLIST(!idlname.dbref())
+				!idli.clear()
+				add all zone within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+				add all REFGRD within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+				!excls = object array()
+				!excls = !this.excllist.dtext
+				handle any
+					!excls = object array()
+				endhandle
+				if (!excls.size().gt(0)) then
+					do !excl values !excls
+						!exclref = object DBREF()
+						!exclref = !excl.dbref()
+						handle any
+						endhandle
+						if (not(!exclref.badref())) then
+							!idli.remove(!exclref)
+							handle any
+							endhandle
+						endif
+					enddo
+					$!name/SS/DRAWLIST/DRWG
+				endif
+				limits E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+
+				$!name/SS/S1/V1
+				:CDLIMITS |FROM E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU|
+				handle any
+				endhandle
+
+				--------------------------------------------------------------------
+				-- VSEC/FPLA only redo when the box has actually moved or resized  --
+				-- since the last run -- a non-orthogonal view's VSEC can get       --
+				-- manually rotated square by the user, and that hand fix must     --
+				-- survive an update where the box did not change. no separate     --
+				-- record of "last box" is kept; the six existing FPLA positions   --
+				-- already are that record, so they are read back and compared to  --
+				-- the box's current faces instead                                 --
+				--------------------------------------------------------------------
+				!boxchanged = false
+				$!name/SS/S1/V1/TOUP
+				handle any
+					!boxchanged = true
+				elsehandle none
+					var !oldp position
+					!oldpobj = object position(!oldp)
+					if (abs(!oldpobj.up - !maxU) gt 1) then
+						!boxchanged = true
+					endif
+				endhandle
+				if (not(!boxchanged)) then
+					$!name/SS/S1/V1/FRUP
+					var !oldp position
+					!oldpobj = object position(!oldp)
+					if (abs(!oldpobj.up - !minU) gt 1) then
+						!boxchanged = true
+					endif
+				endif
+				if (not(!boxchanged)) then
+					$!name/SS/S1/V1/TOEP
+					var !oldp position
+					!oldpobj = object position(!oldp)
+					if (abs(!oldpobj.east - !maxE) gt 1) then
+						!boxchanged = true
+					endif
+				endif
+				if (not(!boxchanged)) then
+					$!name/SS/S1/V1/FREP
+					var !oldp position
+					!oldpobj = object position(!oldp)
+					if (abs(!oldpobj.east - !minE) gt 1) then
+						!boxchanged = true
+					endif
+				endif
+				if (not(!boxchanged)) then
+					$!name/SS/S1/V1/TONP
+					var !oldp position
+					!oldpobj = object position(!oldp)
+					if (abs(!oldpobj.north - !maxN) gt 1) then
+						!boxchanged = true
+					endif
+				endif
+				if (not(!boxchanged)) then
+					$!name/SS/S1/V1/FRNP
+					var !oldp position
+					!oldpobj = object position(!oldp)
+					if (abs(!oldpobj.north - !minN) gt 1) then
+						!boxchanged = true
+					endif
+				endif
+
+				if (!boxchanged) then
+					!thpoE = !boxPos.position().east
+					!thpoN = !boxPos.position().north
+					!thpoU = !boxPos.position().up
+					!thpoEforN = !boxPos.position().offset(!nfpla,            !nlen.real() * 0.5).east
+					!thpoEforS = !boxPos.position().offset(!nfpla.opposite(), !nlen.real() * 0.5).east
+					!thpoNforR = !boxPos.position().offset(!efpla,            !elen.real() * 0.5).north
+					!thpoNforL = !boxPos.position().offset(!efpla.opposite(), !elen.real() * 0.5).north
+
+					do !side values object array('TOUP', 'TONP', 'TOEP', 'FRUP', 'FRNP', 'FREP')
+						$!name/SS/S1/V1/$!side/VSEC
+						handle any
+						elsehandle none
+							delete
+						endhandle
+						$!name/SS/S1/V1/$!side
+						handle any
+						elsehandle none
+							delete
+						endhandle
+					enddo
+
+					$!name/SS/S1/V1/PLANES
+					new fpla $!name/SS/S1/V1/TOUP
+					position E $!thpoE N $!thpoN U $!maxU
+					norm D
+					end
+					new fpla $!name/SS/S1/V1/TONP
+					position E $!thpoEforN N $!maxN U $!thpoU
+					!tempdir = !nfpla.opposite().string().before('WRT')
+					norm $!tempdir
+					end
+					new fpla $!name/SS/S1/V1/TOEP
+					position E $!maxE N $!thpoNforR U $!thpoU
+					!tempdir = !efpla.opposite().string().before('WRT')
+					norm $!tempdir
+					end
+					new fpla $!name/SS/S1/V1/FRUP
+					position E $!thpoE N $!thpoN U $!minU
+					norm U
+					end
+					new fpla $!name/SS/S1/V1/FRNP
+					position E $!thpoEforS N $!minN U $!thpoU
+					!tempdir = !nfpla.string().before('WRT')
+					norm $!tempdir
+					end
+					new fpla $!name/SS/S1/V1/FREP
+					position E $!minE N $!thpoNforL U $!thpoU
+					!tempdir = !efpla.string().before('WRT')
+					norm $!tempdir
+					end
+
+					$!name/SS/S1/V1
+					new vsec $!name/SS/S1/V1/TOUP/VSEC
+					plrf $!name/SS/S1/V1/TOUP
+					end
+					new vsec $!name/SS/S1/V1/TONP/VSEC
+					plrf $!name/SS/S1/V1/TONP
+					end
+					new vsec $!name/SS/S1/V1/TOEP/VSEC
+					plrf $!name/SS/S1/V1/TOEP
+					end
+					new vsec $!name/SS/S1/V1/FRUP/VSEC
+					plrf $!name/SS/S1/V1/FRUP
+					end
+					new vsec $!name/SS/S1/V1/FRNP/VSEC
+					plrf $!name/SS/S1/V1/FRNP
+					end
+					new vsec $!name/SS/S1/V1/FREP/VSEC
+					plrf $!name/SS/S1/V1/FREP
+					end
+				endif
+
+				--------------------------------------------------------------------
 				-- view's own sheet-corner positions and scale, read from the      --
 				-- existing (frozen) view instead of recalculated from the box.    --
 				-- this also makes the update path use the view's real VSCA        --
@@ -1717,11 +1891,41 @@ define method .Apply()
 				--------------------------------------------------------------------
 				$!name/SS/S1/V1
 				var !shxypos shxypos
-				var !size size
 				var !rcode rcode
 				var !vsca vsca
 				!this.rcode = !rcode
 				!this.vsca = !vsca.real()
+
+				--------------------------------------------------------------------
+				-- SIZE recalculated symmetric around the existing sheet centre     --
+				-- (shxypos, which is XYPOSITION/THPOSITION projected to the sheet, --
+				-- neither touched here), reaching out to the box's current extent  --
+				-- on each side via shpos of. reproduces the existing SIZE exactly  --
+				-- when the box has not moved or grown; grows it when it has, same  --
+				-- side-that-did-not-grow-gets-padding rule as rebuild              --
+				--------------------------------------------------------------------
+				!ptEplus  = !boxPos.position().offset(!efpla,            !elen.real() * 0.5)
+				!ptEminus = !boxPos.position().offset(!efpla.opposite(), !elen.real() * 0.5)
+				!ptNplus  = !boxPos.position().offset(!nfpla,            !nlen.real() * 0.5)
+				!ptNminus = !boxPos.position().offset(!nfpla.opposite(), !nlen.real() * 0.5)
+				$!name/SS/S1/V1
+				var !ptEplussh shpos of $!ptEplus
+				var !ptEminussh shpos of $!ptEminus
+				var !ptNplussh shpos of $!ptNplus
+				var !ptNminussh shpos of $!ptNminus
+				!halfX = max(abs(!ptEplussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()), abs(!ptEminussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()))
+				!halfY = max(abs(!ptNplussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()), abs(!ptNminussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()))
+				if !rcode.eqnocase('up') then
+					!sizePart1 = !halfX * 2
+					!sizePart2 = !halfY * 2
+				else
+					!sizePart1 = !halfY * 2
+					!sizePart2 = !halfX * 2
+				endif
+				$!name/SS/S1/V1
+				SIZE $!sizePart1 $!sizePart2
+				var !size size
+
 				if !rcode.eqnocase('up') then
 					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
 					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
