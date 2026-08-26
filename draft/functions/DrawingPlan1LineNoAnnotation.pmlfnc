@@ -1426,13 +1426,15 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		enddo
 
 		--------------------------------------------------------------------
-		-- the searches/creates above (existing-point lookups, cleanup)    --
-		-- leave CE wherever they last navigated -- a DPOI, or the LAYE    --
-		-- if nothing on this side needed touching this run. OWNER/SORT    --
-		-- DIM need CE back on the LDIM itself                             --
+		-- OWNER (below, original code) means "go to the owner of CE",   --
+		-- not "confirm CE" -- it only worked because CE used to always  --
+		-- be a freshly NEW'd DPOI (a child of the LDIM) at this point.  --
+		-- now CE may already be the LDIM itself (nothing on this side   --
+		-- needed touching this run), and OWNER would then step CE UP   --
+		-- to the LAYE instead, which is what broke SORT DIM below. going --
+		-- straight to the LDIM by its own path sidesteps OWNER entirely --
 		--------------------------------------------------------------------
-		$!ldimref
-		OWNER
+		$!name/SS/S1/V1/ateLINE_$!dir
 		SORT DIM
 		-- !dimoff is the same number as DOFFSET, kept so that the GLAB block --
 		-- below can work out where the dimension line ended up               --
