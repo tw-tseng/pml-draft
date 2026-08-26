@@ -1357,10 +1357,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			$!dpoi
 			var !temppos1 pos
 			!attapos1 = object position(!temppos1)
+			if (!dbgln and !dir.eq('left')) then
+				!dbgf.writerecord('CORNER1DEDUP attapos=' & !attapos.string() & ' cand=' & !attapos1.string() & ' dist=' & !attapos.distance(!attapos1))
+			endif
 			if (!attapos.distance(!attapos1).lt(5)) then
 				!run = false
 			endif
 		enddo
+		if (!dbgln and !dir.eq('left')) then
+			!dbgf.writerecord('CORNER1 run-after-dist=' & !run & ' alongv=' & !alongv.string() & ' dimtol=' & !dimtol.string() & ' dimalong=' & !dimalong.size())
+		endif
 		-------------------------------------------------------------------
 		-- the distance test above is a 3d one and misses a point which   --
 		-- shares this corner's coordinate along the dimension but sits   --
@@ -1369,6 +1375,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-------------------------------------------------------------------
 		if (!run) then
 			!run = !!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)
+		endif
+		if (!dbgln and !dir.eq('left')) then
+			!dbgf.writerecord('CORNER1 run-after-along=' & !run)
 		endif
 		if (!run) then
 			!dimalong.append(!alongv)
@@ -1397,27 +1406,39 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			!alongv = !!DrawingPlan1.viewURsh.part(2).real()
 		endif
 		!attapos = object position(!temppos)
+		--------------------------------------------------------------------
+		-- 2026-08-26: this dedup used to compare the un-offset border     --
+		-- point against existing points that were created gridgap away   --
+		-- from it, so it could never match and a redundant DPOI got      --
+		-- created here on every single update run regardless of whether  --
+		-- anything changed. the offset (same as corner1, below) now      --
+		-- happens before the comparison so a genuinely unchanged corner  --
+		-- is recognised as already covered                               --
+		--------------------------------------------------------------------
+		!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 		!run = true
 		do !dpoi value !dpois
 			$!dpoi
 			var !temppos1 pos
 			!attapos1 = object position(!temppos1)
+			if (!dbgln and !dir.eq('left')) then
+				!dbgf.writerecord('CORNER2DEDUP attapos=' & !attapos.string() & ' cand=' & !attapos1.string() & ' dist=' & !attapos.distance(!attapos1))
+			endif
 			if (!attapos.distance(!attapos1).lt(5)) then
 				!run = false
 			endif
 		enddo
-		-------------------------------------------------------------------
-		-- same as the first corner. this one's distance test was even    --
-		-- weaker: !attapos is still un-offset when it runs, so it was    --
-		-- comparing a point on the border against points already pushed  --
-		-- gridgap away from it and could never match                     --
-		-------------------------------------------------------------------
+		if (!dbgln and !dir.eq('left')) then
+			!dbgf.writerecord('CORNER2 run-after-dist=' & !run & ' alongv=' & !alongv.string() & ' dimtol=' & !dimtol.string() & ' dimalong=' & !dimalong.size())
+		endif
 		if (!run) then
 			!run = !!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)
 		endif
+		if (!dbgln and !dir.eq('left')) then
+			!dbgf.writerecord('CORNER2 run-after-along=' & !run)
+		endif
 		if (!run) then
 			!dimalong.append(!alongv)
-			!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 			if (!dbgln and !dir.eq('left')) then
 				!dpoiseq = !dpoiseq + 1
 				!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=corner2 attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
@@ -1443,7 +1464,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- 'Undefined reference' straight through any handle any wrapped  --
 		-- around it, confirmed live)                                    --
 		--------------------------------------------------------------------
-		!seenddnas = object array()
+		--------------------------------------------------------------------
+		-- confirmed live 2026-08-26 on a fresh rebuild (no update-path    --
+		-- code involved at all): one elbow legitimately owns two DPOIs   --
+		-- with the identical DDNA -- e.g. one tube crossing the border   --
+		-- on each side of it -- so two existing DPOIs sharing a DDNA is  --
+		-- normal, not leftover corruption. an earlier version of this   --
+		-- cleanup collapsed same-DDNA entries down to one and wrongly    --
+		-- deleted the second, legitimate crossing point every run. do   --
+		-- not reintroduce that                                          --
+		--------------------------------------------------------------------
 		do !edp values !existingdpois
 			$!edp
 			handle any
@@ -1457,27 +1487,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							break
 						endif
 					enddo
-					--------------------------------------------------------------------
-					-- two existing DPOIs sharing the same real DDNA is leftover state  --
-					-- from before this cleanup correctly told '=0/0' apart from a real --
-					-- reference -- a genuine duplicate matched and got kept twice.     --
-					-- only the first one found is kept going forward; a repeat of a    --
-					-- DDNA already seen this pass is dropped even though it matches    --
-					--------------------------------------------------------------------
-					if (!stillcurrent) then
-						!isdup = false
-						do !sd values !seenddnas
-							if (!eddna.eq(!sd)) then
-								!isdup = true
-								break
-							endif
-						enddo
-						if (!isdup) then
-							!stillcurrent = false
-						else
-							!seenddnas.append(!eddna)
-						endif
-					endif
 					if (!dbgln and !dir.eq('left')) then
 						!dbgf.writerecord('CLEANUP eddna=' & !eddna & ' stillcurrent=' & !stillcurrent)
 					endif
