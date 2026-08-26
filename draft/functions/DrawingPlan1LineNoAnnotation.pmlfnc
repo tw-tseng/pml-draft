@@ -1433,18 +1433,23 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- update path cleanup: a DPOI from a previous run whose DDNA      --
 		-- element is not among this run's current members is removed. a  --
 		-- DPOI with no DDNA at all (grid crossings, corners) is left      --
-		-- alone -- .unset() catches that. matching is done with .eq()    --
-		-- against !currentmems rather than resolving the DDNA (.dbref()  --
-		-- on a genuinely deleted element's DDNA raises 'Undefined         --
-		-- reference' straight through any handle any wrapped around it,  --
-		-- confirmed live)                                                --
+		-- alone -- but .unset() alone does NOT catch that: a DPOI        --
+		-- created with no DDNA clause reads back as the literal string   --
+		-- '=0/0' (a null DBREF), not a blank/unset string (confirmed     --
+		-- live via CLEANUP debug -- this cost every corner/grid DPOI in  --
+		-- the chain, 2026-08-26). both are checked. matching is done     --
+		-- with .eq() against !currentmems rather than resolving the      --
+		-- DDNA (.dbref() on a genuinely deleted element's DDNA raises    --
+		-- 'Undefined reference' straight through any handle any wrapped  --
+		-- around it, confirmed live)                                    --
 		--------------------------------------------------------------------
+		!seenddnas = object array()
 		do !edp values !existingdpois
 			$!edp
 			handle any
 			elsehandle none
 				var !eddna ddna of ce
-				if (not(!eddna.unset())) then
+				if (not(!eddna.unset()) and not(!eddna.eq('=0/0'))) then
 					!stillcurrent = false
 					do !cm values !currentmems
 						if (!eddna.eq(!cm)) then
@@ -1452,6 +1457,27 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							break
 						endif
 					enddo
+					--------------------------------------------------------------------
+					-- two existing DPOIs sharing the same real DDNA is leftover state  --
+					-- from before this cleanup correctly told '=0/0' apart from a real --
+					-- reference -- a genuine duplicate matched and got kept twice.     --
+					-- only the first one found is kept going forward; a repeat of a    --
+					-- DDNA already seen this pass is dropped even though it matches    --
+					--------------------------------------------------------------------
+					if (!stillcurrent) then
+						!isdup = false
+						do !sd values !seenddnas
+							if (!eddna.eq(!sd)) then
+								!isdup = true
+								break
+							endif
+						enddo
+						if (!isdup) then
+							!stillcurrent = false
+						else
+							!seenddnas.append(!eddna)
+						endif
+					endif
 					if (!dbgln and !dir.eq('left')) then
 						!dbgf.writerecord('CLEANUP eddna=' & !eddna & ' stillcurrent=' & !stillcurrent)
 					endif
@@ -2178,7 +2204,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		handle any
 		elsehandle none
 			var !egddna ddna of ce
-			if (not(!egddna.unset())) then
+			if (not(!egddna.unset()) and not(!egddna.eq('=0/0'))) then
 				!stillcurrentg = false
 				do !cg values !currentgelems
 					if (!egddna.eq(!cg)) then
