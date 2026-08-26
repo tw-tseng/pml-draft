@@ -1418,8 +1418,23 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			elsehandle none
 				var !eddna ddna of ce
 				if (not(!eddna.unset())) then
-					!eddnaref = !eddna.dbref()
-					if (!eddnaref.badref()) then
+					--------------------------------------------------------------
+					-- .dbref() itself raises 'Undefined reference' instead of  --
+					-- handing back a gracefully bad DBREF when the source      --
+					-- element is really gone (E3D testing: scenario 2, the     --
+					-- source element deleted) -- that error IS the deletion    --
+					-- signal here, same as .badref() would have been          --
+					--------------------------------------------------------------
+					!isbaddpoi = false
+					handle any
+						!isbaddpoi = true
+					elsehandle none
+						!eddnaref = !eddna.dbref()
+						if (!eddnaref.badref()) then
+							!isbaddpoi = true
+						endif
+					endhandle
+					if (!isbaddpoi) then
 						delete dpoi
 					endif
 				endif
