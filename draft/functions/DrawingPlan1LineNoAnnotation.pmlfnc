@@ -1425,6 +1425,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			endhandle
 		enddo
 
+		--------------------------------------------------------------------
+		-- the searches/creates above (existing-point lookups, cleanup)    --
+		-- leave CE wherever they last navigated -- a DPOI, or the LAYE    --
+		-- if nothing on this side needed touching this run. OWNER/SORT    --
+		-- DIM need CE back on the LDIM itself                             --
+		--------------------------------------------------------------------
+		$!ldimref
 		OWNER
 		SORT DIM
 		-- !dimoff is the same number as DOFFSET, kept so that the GLAB block --
