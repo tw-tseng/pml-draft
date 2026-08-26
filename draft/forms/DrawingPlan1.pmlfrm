@@ -1721,7 +1721,7 @@ define method .Apply()
 				var !rcode rcode
 				var !vsca vsca
 				!this.rcode = !rcode
-				!this.vsca = !vsca
+				!this.vsca = !vsca.real()
 				if !rcode.eqnocase('up') then
 					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
 					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
