@@ -62,11 +62,20 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	DLColour Cyan 
 	PLStyle Solid 
 	PLColour Cyan 
-	MColour Cyan 
-	CHStyle Off 
+	MColour Cyan
+	CHStyle Off
 	CHColour Grey
   Cheitx '3.00mm'
-	
+
+	--------------------------------------------------------------------
+	-- GLABs from a previous run, and every !gelem this run actually   --
+	-- ends up drawing a label for (across all four sides) -- used to  --
+	-- reuse/move an existing GLAB instead of piling a new one on top  --
+	-- of it, and to clean up ones whose element this run never found  --
+	--------------------------------------------------------------------
+	var !existingglabs coll all glab for ce
+	!currentgelems = object array()
+
 --	var !viewdirup    viewdir up
 --	var !viewdirleft  viewdir left
 	var !viewdirdown  viewdir down
@@ -1893,7 +1902,38 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!gsh = 'x ' & string(!gatx) & ' y ' & string(!gaty)
 				var !gpos enupos of $!gsh
 				!gposobj = object position(!gpos)
-				NEW GLAB
+				--------------------------------------------------------------------
+				-- update path: this element may already carry a GLAB from a       --
+				-- previous run, found by matching DDNA back to !gelem. within 5mm, --
+				-- leave its POSITION exactly where it is; beyond that, move the    --
+				-- same element instead of creating a second one. everything else   --
+				-- (BTEXT/CHEI/etc) always reapplies either way -- E3D's compare is --
+				-- picture-based, so setting an attribute back to its own value     --
+				-- draws no cloud                                                   --
+				--------------------------------------------------------------------
+				!currentgelems.append(!gelem)
+				!foundglab = false
+				do !eg values !existingglabs
+					$!eg
+					handle any
+					elsehandle none
+						var !egddna ddna of ce
+						if (not(!egddna.unset()) and !egddna.eq(!gelem)) then
+							!foundglab = true
+							!foundglabref = ce
+							break
+						endif
+					endhandle
+				enddo
+				if (!foundglab) then
+					$!foundglabref
+					var !gexistpos position
+					if (object position(!gexistpos).distance(!gposobj).lt(5)) then
+						!gposobj = object position(!gexistpos)
+					endif
+				else
+					NEW GLAB
+				endif
 				DDNA $!gelem
 				BTEXT |$!gtext|
 				CHEI $!gchei
@@ -2118,6 +2158,33 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			!!DrawingPlan1.labbanddown = !gbandmax
 		endif
 	enddo
+
+	--------------------------------------------------------------------
+	-- update path cleanup: a GLAB from a previous run whose element is --
+	-- not among !currentgelems (collected across all four sides) is    --
+	-- removed. same reasoning as the DPOI cleanup earlier -- .eq()     --
+	-- against the current list rather than resolving the DDNA          --
+	--------------------------------------------------------------------
+	do !eg values !existingglabs
+		$!eg
+		handle any
+		elsehandle none
+			var !egddna ddna of ce
+			if (not(!egddna.unset())) then
+				!stillcurrentg = false
+				do !cg values !currentgelems
+					if (!egddna.eq(!cg)) then
+						!stillcurrentg = true
+						break
+					endif
+				enddo
+				if (not(!stillcurrentg)) then
+					delete glab
+				endif
+			endif
+		endhandle
+	enddo
+
 	if (!dbgln) then
 		!dbgf.close()
 	endif
