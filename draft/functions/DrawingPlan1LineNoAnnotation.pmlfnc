@@ -813,7 +813,17 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		
 		$!name/SS/S1/V1/ateLINE
 
-		NEW LDIM $!name/SS/S1/V1/ateLINE_$!dir
+		--------------------------------------------------------------------
+		-- update path: this side's LDIM survives from a previous run, so --
+		-- reuse it instead of erroring on a duplicate name. rebuild path --
+		-- always finds nothing here (the LAYE above was just created     --
+		-- fresh), so this always falls through to NEW LDIM there         --
+		--------------------------------------------------------------------
+		$!name/SS/S1/V1/ateLINE_$!dir
+		handle any
+			NEW LDIM $!name/SS/S1/V1/ateLINE_$!dir
+		elsehandle none
+		endhandle
 		!ldimref = ce
 		Dtangle par
 	--		Dlcntmode 'on'-----------------------------------------------------------------------------------------------------
@@ -825,6 +835,15 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		elseif (!dir.eq('down') or !dir.eq('up')) then
 			DIR $!viewdirright
 		endif
+
+		--------------------------------------------------------------------
+		-- points already on this LDIM from a previous run. matched below --
+		-- by DDNA (labelled/EQUI/tube-crossing points) or by position    --
+		-- (grid crossings and corners, which carry no DDNA) so a point   --
+		-- close enough to what this run would create is left alone       --
+		-- instead of getting a duplicate piled on top of it              --
+		--------------------------------------------------------------------
+		var !existingdpois coll all dpoi for ce
 
 		----------------------------------------------------------------------
 		-- every point put on this side's dimension, by the coordinate it   --
@@ -1111,7 +1130,35 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						endif
 					endif
 				endif
+				--------------------------------------------------------------------
+			-- update path: this member may already carry a DPOI from a       --
+			-- previous run, found by matching DDNA back to !mem. within 5mm, --
+			-- leave it exactly where it is; beyond that, move the same       --
+			-- element's POS instead of creating a second one, so UPDATE ANNO --
+			-- reads it as a change rather than an addition                   --
+			--------------------------------------------------------------------
+			!founddpoi = false
+			do !edp values !existingdpois
+				$!edp
+				handle any
+				elsehandle none
+					var !eddna ddna of ce
+					if (not(!eddna.unset()) and !eddna.eq(!mem)) then
+						!founddpoi = true
+						var !epos pos
+						!foundpos = object position(!epos)
+						break
+					endif
+				endhandle
+			enddo
+			if (!founddpoi) then
+				if (!foundpos.distance(!attapos).geq(5)) then
+					$!edp
+					POS $!attapos
+				endif
+			else
 				NEW DPOI POS $!attapos DDNA $!mem
+			endif
 				---------------------------------------------------------------------
 				-- everything the GLAB will need, one string per label: the wording, --
 				-- the element the text is resolved from, the character height, and  --
@@ -1225,10 +1272,25 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!dpoiseq = !dpoiseq + 1
 						!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=grid refgln=' & !gridname & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 					endif
-					NEW DPOI POS $!attapos
-					if (!dbgln and !dir.eq('up')) then
-						var !liveddna ddna of ce
-						!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=grid liveddna=' & !liveddna)
+					---------------------------------------------------------------
+					-- update path: no DDNA on a grid crossing, so a previous    --
+					-- run's point at (close to) this position is the match --
+					---------------------------------------------------------------
+					!foundgrid = false
+					do !edp values !existingdpois
+						$!edp
+						var !epos pos
+						if (object position(!epos).distance(!attapos).lt(5)) then
+							!foundgrid = true
+							break
+						endif
+					enddo
+					if (not(!foundgrid)) then
+						NEW DPOI POS $!attapos
+						if (!dbgln and !dir.eq('up')) then
+							var !liveddna ddna of ce
+							!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=grid liveddna=' & !liveddna)
+						endif
 					endif
 				endif
 			endif
@@ -1332,7 +1394,25 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=corner2 liveddna=' & !liveddna)
 			endif
 		endif
-		
+
+		--------------------------------------------------------------------
+		-- update path cleanup: a DPOI from a previous run whose DDNA      --
+		-- element has genuinely been deleted is removed. a DPOI with no  --
+		-- DDNA at all (grid crossings, corners) is left alone -- .unset() --
+		-- catches that before .badref() is asked, since badref() on an   --
+		-- unset reference is not a deletion signal                      --
+		--------------------------------------------------------------------
+		do !edp values !existingdpois
+			$!edp
+			handle any
+			elsehandle none
+				var !eddna ddna of ce
+				if (not(!eddna.unset()) and !eddna.badref()) then
+					delete dpoi
+				endif
+			endhandle
+		enddo
+
 		OWNER
 		SORT DIM
 		-- !dimoff is the same number as DOFFSET, kept so that the GLAB block --
