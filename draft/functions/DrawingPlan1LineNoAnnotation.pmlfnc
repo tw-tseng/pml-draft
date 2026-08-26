@@ -16,7 +16,7 @@ endhandle
 -- which calls this function has to change                               --
 --------------------------------------------------------------------------
 define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real, !boxYlen is real)
-	NEW LAYE $!name/SS/S1/V1/ateLINE_R$!!DrawingPlan1.rev
+	NEW LAYE $!name/SS/S1/V1/ateLINE
 	Purpose LINE
 	Lvisibility true
 	Font 1
@@ -191,7 +191,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
 
-		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -411,7 +411,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
 
-		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -473,7 +473,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl
 
-		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -536,7 +536,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
 
-		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1
 		var !mems coll all elbo within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -659,7 +659,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- hdir/tdir opposite to view direction  --
 		-- and hpos/tpos is within view limit    --
 		-------------------------------------------
-		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1
 		var !mems coll all bran with unset(href) or unset(tref) within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -811,9 +811,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			!i = !ii
 		enddo
 		
-		$!name/SS/S1/V1/ateLINE_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1/ateLINE
 
-		NEW LDIM $!name/SS/S1/V1/ateLINE_$!dir_R$!!DrawingPlan1.rev
+		NEW LDIM $!name/SS/S1/V1/ateLINE_$!dir
 		!ldimref = ce
 		Dtangle par
 	--		Dlcntmode 'on'-----------------------------------------------------------------------------------------------------
@@ -1237,7 +1237,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		---------------------------------
 		-- create dimension for limits --
 		---------------------------------
-		$!name/SS/S1/V1/ateLINE_$!dir_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1/ateLINE_$!dir
 		var !dpois coll all dpoi for ce
 		
 		if (!dir.eq('right')) then
@@ -1351,7 +1351,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- rotate text 90 degree when distance is less than 7mm --
 		----------------------------------------------------------
 		
-		$!name/SS/S1/V1/ateLINE_$!dir_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1/ateLINE_$!dir
 		!mcount = mcount
 		if (!mcount.gt(1)) then
 			do !x from 1 to !mcount - 1
@@ -1401,7 +1401,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			------------------------------------------------------------------
 			-- where the dimension line ended up                             --
 			------------------------------------------------------------------
-			$!name/SS/S1/V1/ateLINE_$!dir_R$!!DrawingPlan1.rev
+			$!name/SS/S1/V1/ateLINE_$!dir
 			!gfirst = 1
 			$!gfirst
 			var !gfpos pos
@@ -1595,7 +1595,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			------------------------------------------------------------------
 			-- and draw them                                                 --
 			------------------------------------------------------------------
-			$!name/SS/S1/V1/ateLINE_R$!!DrawingPlan1.rev
+			$!name/SS/S1/V1/ateLINE
 			!gprev = 0
 			!gprevplace = 0
 			!gfirstlab = true

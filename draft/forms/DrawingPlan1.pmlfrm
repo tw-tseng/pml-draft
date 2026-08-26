@@ -191,7 +191,6 @@ layout form !!DrawingPlan1 dialog dock
 	member .canvassize is string
 	member .equiparray is array   $( array for equipments are dimensioned $)
 	member .userevar is string    $( for path of text file  $)
-	member .rev is string         $( for revision  $)
 	member .supttmp is string     $( for support callout template  $)
 	member .rcode is string       $( view rcode, 'up' or 'left'  $)
 	member .labbandup is real       $( how far the annotation reaches past  $)
@@ -474,28 +473,13 @@ define method .Apply()
 	do !equistr values !this.files.dtext
 		if !equistr.substring(1,1).eqnocase('=') then
 			var !boxs coll all box for $!equistr
-			var !texts coll all text for $!equistr
 		else
 			var !boxs coll all box for /$!equistr
-			var !texts coll all text for /$!equistr
 		endif
-		!this.rev = ''
 		!title1 = ''
 		!title2 = ''
 		!title3 = ''
-		do !text values !texts
-			var !stext stext of $!text
-			if !stext.matchwild('rev:*') then
-				!this.rev = !stext.after('rev:')
-			elseif !stext.matchwild('title1:*') then
-				!title1 = !stext.after('title1:')
-			elseif !stext.matchwild('title2:*') then
-				!title2 = !stext.after('title2:')
-			elseif !stext.matchwild('title3:*') then
-				!title3 = !stext.after('title3:')
-			endif
-		enddo
-		
+
 		!name = '/' & !equistr
 		!box = !boxs[1]
 		!this.intersections = object array()
@@ -505,7 +489,7 @@ define method .Apply()
 			!!alert.error('cannot create DRWG under this level')
 		elsehandle none
 			delete drwg
-			$!name/SS_R$!this.rev
+			$!name/SS
 			handle any
 				!del = 'none'
 			elsehandle none
@@ -532,12 +516,12 @@ define method .Apply()
 				endif
 			endhandle
 			if (!del neq 'NO') then
-				new drwg $!name/SS_R$!this.rev
+				new drwg $!name/SS
 				size 841 594
-				new liby $!name/SS/LIBY_R$!this.rev
-				new pllb $!name/SS/S1/V1/PLANES_R$!this.rev
-				new dllb $!name/SS/DRAWLIST_R$!this.rev
-				new idli $!name/SS/DRAWLIST/DRWG_R$!this.rev
+				new liby $!name/SS/LIBY
+				new pllb $!name/SS/S1/V1/PLANES
+				new dllb $!name/SS/DRAWLIST
+				new idli $!name/SS/DRAWLIST/DRWG
 				
 				--------------------------
 				-- calculate box limits --
@@ -553,7 +537,7 @@ define method .Apply()
 				!boxXdir = !ori.orientation().xdir()
 				!boxYdir = !ori.orientation().ydir()
 				
-				$!name/SS/DRAWLIST/DRWG_R$!this.rev
+				$!name/SS/DRAWLIST/DRWG
 				-------------------------------------
 				-- if box is slope, not orthogonal --
 				-- extend limits for drawing list  --
@@ -588,7 +572,7 @@ define method .Apply()
 					!excls = object array()
 				endhandle
 				if (!excls.size().gt(0)) then
-					!idlname = |$!name/SS/DRAWLIST/DRWG_R$!this.rev|
+					!idlname = |$!name/SS/DRAWLIST/DRWG|
 					!idli = object IDLIST(!idlname.dbref())
 					do !excl values !excls
 						!exclref = object DBREF()
@@ -604,7 +588,7 @@ define method .Apply()
 					----------------------------------------------------------
 					-- back to the drawing list, LIMITS below is set on it   --
 					----------------------------------------------------------
-					$!name/SS/DRAWLIST/DRWG_R$!this.rev
+					$!name/SS/DRAWLIST/DRWG
 				endif
 				------------------------------------------------------------------------
 				-- keep the world bounding box of the box element. it is the same as   --
@@ -695,32 +679,32 @@ define method .Apply()
         
 --        $p $!thpoEforN $!thpoEforS $!thpoNforR $!thpoNforL
 				
-				$!name/SS/S1/V1/PLANES_R$!this.rev
+				$!name/SS/S1/V1/PLANES
 				
-				new fpla $!name/SS/S1/V1/TOUP_R$!this.rev
+				new fpla $!name/SS/S1/V1/TOUP
 				position E $!thpoE N $!thpoN U $!maxU
 				norm D
 				end
-				new fpla $!name/SS/S1/V1/TONP_R$!this.rev
+				new fpla $!name/SS/S1/V1/TONP
 				position E $!thpoEforN N $!maxN U $!thpoU
 				!tempdir = !nfpla.opposite().string().before('WRT')
 				norm $!tempdir
 				end
-				new fpla $!name/SS/S1/V1/TOEP_R$!this.rev
+				new fpla $!name/SS/S1/V1/TOEP
 				position E $!maxE N $!thpoNforR U $!thpoU
 				!tempdir = !efpla.opposite().string().before('WRT')
 				norm $!tempdir
 				end
-				new fpla $!name/SS/S1/V1/FRUP_R$!this.rev
+				new fpla $!name/SS/S1/V1/FRUP
 				position E $!thpoE N $!thpoN U $!minU
 				norm U
 				end
-				new fpla $!name/SS/S1/V1/FRNP_R$!this.rev
+				new fpla $!name/SS/S1/V1/FRNP
 				position E $!thpoEforS N $!minN U $!thpoU
 				!tempdir = !nfpla.string().before('WRT')
 				norm $!tempdir
 				end
-				new fpla $!name/SS/S1/V1/FREP_R$!this.rev
+				new fpla $!name/SS/S1/V1/FREP
 				position E $!minE N $!thpoNforL U $!thpoU
 				!tempdir = !efpla.string().before('WRT')
 				norm $!tempdir
@@ -729,9 +713,9 @@ define method .Apply()
 				------------------------------------------
 				-- create instrument template reference --
 				------------------------------------------
-				$!name/SS/LIBY_R$!this.rev
-				new lalb $!name/SS/LALB_R$!this.rev
-				new sytm $!name/SS/LALB/NAME_CIRC_R$!this.rev
+				$!name/SS/LIBY
+				new lalb $!name/SS/LALB
+				new sytm $!name/SS/LALB/NAME_CIRC
 				XYPS X 0mm Y 0mm
 				JUST Centre
 				ALIGN Hbody
@@ -771,25 +755,25 @@ define method .Apply()
 				BTEX |$!this.insttext2.val|
 				TXCOLO 5
 				
-				new shee $!name/SS/S1_R$!this.rev
-				IDLN $!name/SS/DRAWLIST/DRWG_R$!this.rev
+				new shee $!name/SS/S1
+				IDLN $!name/SS/DRAWLIST/DRWG
 				if (!this.frametext.val.neq('')) then
 					bsrf $!this.frametext.val
 				endif
 				if (!this.keyovertext.val.neq('')) then
-					NEW OLAY $!name/SS/S1/KEYPLAN_R$!this.rev
+					NEW OLAY $!name/SS/S1/KEYPLAN
 					XYSCALE 1 1
 					OSRF $!this.keyovertext.val
 					OPOSITION $!this.keytext1.val
 				endif
-				new view $!name/SS/S1/V1_R$!this.rev
+				new view $!name/SS/S1/V1
 				lframe false
 				thposition E $!thpoE N $!thpoN U $!thpoU
 				Direction D
 				Onposition 0mm 0mm
 				Arctolerance 15
 				Vtype Global HLine
-				Idlname $!name/SS/DRAWLIST/DRWG_R$!this.rev
+				Idlname $!name/SS/DRAWLIST/DRWG
 				
 				!temp.delete()
 				handle any
@@ -996,29 +980,29 @@ define method .Apply()
 	--			:CDLIMITS |E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU|
 				vsca $!this.vsca
 				
-				new vsec $!name/SS/S1/V1/TOUP/VSEC_R$!this.rev
-				plrf $!name/SS/S1/V1/TOUP_R$!this.rev
+				new vsec $!name/SS/S1/V1/TOUP/VSEC
+				plrf $!name/SS/S1/V1/TOUP
 				end
-				new vsec $!name/SS/S1/V1/TONP/VSEC_R$!this.rev
-				plrf $!name/SS/S1/V1/TONP_R$!this.rev
+				new vsec $!name/SS/S1/V1/TONP/VSEC
+				plrf $!name/SS/S1/V1/TONP
 				end
-				new vsec $!name/SS/S1/V1/TOEP/VSEC_R$!this.rev
-				plrf $!name/SS/S1/V1/TOEP_R$!this.rev
+				new vsec $!name/SS/S1/V1/TOEP/VSEC
+				plrf $!name/SS/S1/V1/TOEP
 				end
-				new vsec $!name/SS/S1/V1/FRUP/VSEC_R$!this.rev
-				plrf $!name/SS/S1/V1/FRUP_R$!this.rev
+				new vsec $!name/SS/S1/V1/FRUP/VSEC
+				plrf $!name/SS/S1/V1/FRUP
 				end
-				new vsec $!name/SS/S1/V1/FRNP/VSEC_R$!this.rev
-				plrf $!name/SS/S1/V1/FRNP_R$!this.rev
+				new vsec $!name/SS/S1/V1/FRNP/VSEC
+				plrf $!name/SS/S1/V1/FRNP
 				end
-				new vsec $!name/SS/S1/V1/FREP/VSEC_R$!this.rev
-				plrf $!name/SS/S1/V1/FREP_R$!this.rev
+				new vsec $!name/SS/S1/V1/FREP/VSEC
+				plrf $!name/SS/S1/V1/FREP
 				end
 				
 				----------------------------------------------
 				-- calculate view four corners coordination --
 				----------------------------------------------
-				$!name/SS/S1/V1_R$!this.rev
+				$!name/SS/S1/V1
 				var !shxypos shxypos
 				var !size size
 				
@@ -1026,7 +1010,7 @@ define method .Apply()
 				-- portrait to landscape --
 				---------------------------
 				if !this.portrait.val and !size.part(1).real().value().lt(!size.part(2).real().value()) then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 					RCODE LEFT
 					--------------------------------
 					-- label may rotate 90 degree --
@@ -1058,7 +1042,7 @@ define method .Apply()
 				!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
 				!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
 				
-				$!name/SS/S1/V1_R$!this.rev
+				$!name/SS/S1/V1
 				update design
 				1
 				last
@@ -1067,21 +1051,21 @@ define method .Apply()
 				---------------------
 				!!DrawingPlan1GridAnnotation(!name)      
 				
-				$!name/SS/S1/V1_R$!this.rev
+				$!name/SS/S1/V1
 				1
 				last
 				
 				-------------------------
 				-- line no. annotation --
 				-------------------------
-				$!name/SS/S1/V1_R$!this.rev
+				$!name/SS/S1/V1
 				1
 				last
 				!!DrawingPlan1LineNoAnnotation(!name, !boxXlen.real(), !boxYlen.real())
 				--------------------------
 				-- equipment annotation --
 				--------------------------
-				$!name/SS/S1/V1_R$!this.rev
+				$!name/SS/S1/V1
 				1
 				last
 				!!DrawingPlan1EquiAnnotation(!name, !minE.string(), !minN.string(), !minU.string(), !maxE.string(), !maxN.string(), !maxU.string())   
@@ -1089,10 +1073,10 @@ define method .Apply()
 				-------------------------------------------
 				-- highlight the drawing area in keyplan --
 				-------------------------------------------
-				$!name/SS/S1/V1_R$!this.rev
+				$!name/SS/S1/V1
 				new note
 				if (!this.keytext1.val neq '' and !this.keytext2.val neq '' and !this.keytext3.val neq '' and !this.keytext4.val neq '' and !this.keytext5.val neq '') then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 
 					----------------------------------------------------------------------
 					-- E/N -> sheet X/Y transform for the keyplan itself, same shape as   --
@@ -1187,11 +1171,6 @@ define method .Apply()
 					!posy = !this.dwgnopos.val.split(',').getindexed(2)
 					new texp btext |$!equistr| origin x $!posx y $!posy cheitx |$!this.dwgnohei.val| alig base just left txcolour yellow font 1
 				endif
-				if not(!this.rev.eqnocase('')) and not(!this.revpos.val.eqnocase('')) and not(!this.revhei.val.eqnocase('')) then
-					!posx = !this.revpos.val.split(',').getindexed(1)
-					!posy = !this.revpos.val.split(',').getindexed(2)
-					new texp btext |$!this.rev| origin x $!posx y $!posy cheitx |$!this.revhei.val| alig base just left txcolour yellow font 1
-				endif
 				if not(!title1.eqnocase('')) and not(!this.title1pos.val.eqnocase('')) and not(!this.title1hei.val.eqnocase('')) then
 					!posx = !this.title1pos.val.split(',').getindexed(1)
 					!posy = !this.title1pos.val.split(',').getindexed(2)
@@ -1218,7 +1197,7 @@ define method .Apply()
 				-- NOTE 1, the same note the border text above is written into        --
 				-----------------------------------------------------------------------
 				if (!this.northpostext.val.neq('')) then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 					!ntrans = !this.ViewSheetTransform()
 					!ndx = !ntrans[7]
 					!ndy = !ntrans[8]
@@ -1292,7 +1271,7 @@ define method .Apply()
 						if (!nsca le 0) then
 							!nsca = 1
 						endif
-						$!name/SS/S1_R$!this.rev
+						$!name/SS/S1
 						note 1
 						new symb
 						tmrf $!nsytm
@@ -1334,7 +1313,7 @@ define method .Apply()
 				-- reducer, rt annotation --
 				----------------------------
 				if (!this.redutog.val) then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 					1
 					last
 					!this.ReduAnnotation(!name)
@@ -1344,7 +1323,7 @@ define method .Apply()
 				-- nozzle annotation --
 				-----------------------
 				if (!this.nozztog.val) then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 					1
 					last
 					!this.NozzleAnnotation(!name)
@@ -1354,7 +1333,7 @@ define method .Apply()
 				-- valve annotation --
 				-----------------------
 				if (!this.valvtog.val) then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 					1
 					last
 					!this.ValveAnnotation(!name)
@@ -1364,7 +1343,7 @@ define method .Apply()
 				-- instrument annotation --
 				---------------------------
 				if (!this.insttog.val) then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 					1
 					last
 					!this.InstAnnotation(!name)
@@ -1374,7 +1353,7 @@ define method .Apply()
 				-- support annotation --
 				------------------------
 				if (!this.supttog.val) then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 					1
 					last
 					!this.SuptAnnotation(!name)
@@ -1558,7 +1537,7 @@ define method .Apply()
 				!adx = abs(!dx)
 				!ady = abs(!dy)
 				if (!adx.gt(0.05) or !ady.gt(0.05)) then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 					!vxy = ''
 					var !vxy xyposition
 					handle any
@@ -1643,7 +1622,7 @@ define method .Apply()
 				---------------------------
 				-- flow arrow annotation --
 				---------------------------
-				$!name/SS/S1/V1_R$!this.rev
+				$!name/SS/S1/V1
 				1
 				last
 				!!DrawingPlan1FlowAnnotation(!name)
@@ -1652,7 +1631,7 @@ define method .Apply()
 				-- open sheet --
 				----------------
 				if (!!DrawingPlan1.openshee.val) then
-					$!name/SS/S1/V1_R$!this.rev
+					$!name/SS/S1/V1
 					!!cmsys.executecommand('AVEVA.Draw.OpenSheetByCE')
 				endif
 			endif
@@ -1661,7 +1640,7 @@ define method .Apply()
 endmethod
 
 define method .NozzleAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateNOZZ_R$!this.rev
+	NEW LAYE $!name/SS/S1/V1/ateNOZZ
 	Purpose NOZZ
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -2309,7 +2288,7 @@ define method .northarrowpick()
 endmethod
 
 define method .ValveAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateVALV_R$!this.rev
+	NEW LAYE $!name/SS/S1/V1/ateVALV
 	Purpose VALV
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -2409,7 +2388,7 @@ define method .ValveAnnotation(!name is string)
 endmethod
 
 define method .ReduAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateREDU_R$!this.rev
+	NEW LAYE $!name/SS/S1/V1/ateREDU
 	Purpose REDU
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -2523,7 +2502,7 @@ define method .ReduAnnotation(!name is string)
 endmethod
 
 define method .InstAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateINST_R$!this.rev
+	NEW LAYE $!name/SS/S1/V1/ateINST
 	Purpose INST
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -2595,7 +2574,7 @@ define method .InstAnnotation(!name is string)
 		endif
 		NEW SLAB
 		DDNA $!inst
-		tmrf $!name/SS/LALB/NAME_CIRC_R$!this.rev
+		tmrf $!name/SS/LALB/NAME_CIRC
 		Font 1
 		Blnk true
 		Bmargin 0mm
@@ -3740,7 +3719,7 @@ $)
 endmethod
 
 define method .SuptAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateSUPT_R$!this.rev
+	NEW LAYE $!name/SS/S1/V1/ateSUPT
 	Purpose SUPT
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -3797,12 +3776,12 @@ define method .SuptAnnotation(!name is string)
 	Function unset
   
   if not(!this.supttog1.val) then
-    $!name/SS/LALB_R$!this.rev
+    $!name/SS/LALB
     handle any
-      $!name/SS/LIBY_R$!this.rev
-      new lalb $!name/SS/LALB_R$!this.rev
+      $!name/SS/LIBY
+      new lalb $!name/SS/LALB
     endhandle
-    new sytm $!name/SS/LALB/NAME_SUPT_R$!this.rev
+    new sytm $!name/SS/LALB/NAME_SUPT
     XYPS X 0mm Y 0mm
     JUST Centre
     ALIGN Hbody
@@ -3832,14 +3811,14 @@ define method .SuptAnnotation(!name is string)
     ALIGN Hbody
     BTEX |#STEX|
     TXCOLO 5
-    !this.supttmp = |$!name/SS/LALB/NAME_SUPT_R$!this.rev|
+    !this.supttmp = |$!name/SS/LALB/NAME_SUPT|
   endif
 	
 	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
 	!ff.open('append')
 	var !insts coll all atta with isnamed within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
 	do !inst values !insts
-    $!name/SS/S1/V1/ateSUPT_R$!this.rev
+    $!name/SS/S1/V1/ateSUPT
 		------------------------------------------------------------------
 		-- see the note in .NozzleAnnotation() -- the volume above is    --
 		-- the world box containing the drawing box, the sheet position  --
@@ -3901,15 +3880,15 @@ endmethod
 -- create support template reference --
 ---------------------------------------
 define method .SuptAnnotation(!name is string, !stext is string)
-	$!name/SS/LIBY_R$!this.rev
-	$!name/SS/LALB_R$!this.rev
+	$!name/SS/LIBY
+	$!name/SS/LALB
 	handle any
-		new lalb $!name/SS/LALB_R$!this.rev
+		new lalb $!name/SS/LALB
 	endhandle
 	!slen = !stext.length()
-	$!name/SS/LALB/NAME_SUPT$!slen_R$!this.rev
+	$!name/SS/LALB/NAME_SUPT$!slen
 	handle any
-		new sytm $!name/SS/LALB/NAME_SUPT$!slen_R$!this.rev
+		new sytm $!name/SS/LALB/NAME_SUPT$!slen
 		XYPS X 100mm Y 100mm
 		JUST Centre
 		ALIGN Hbody
@@ -3964,5 +3943,5 @@ define method .SuptAnnotation(!name is string, !stext is string)
 		BTEX |#STEX|
 		TXCOLO 5
 	endhandle
-	!this.supttmp = |$!name/SS/LALB/NAME_SUPT$!slen_R$!this.rev|
+	!this.supttmp = |$!name/SS/LALB/NAME_SUPT$!slen|
 endmethod

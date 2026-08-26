@@ -4,7 +4,7 @@
 -- Date     : 2025/08/15            --
 --------------------------------------
 define function !!DrawingPlan1FlowAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateFLOW_R$!!DrawingPlan1.rev
+	NEW LAYE $!name/SS/S1/V1/ateFLOW
 	Purpose FLOW
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 

@@ -11,7 +11,7 @@ endhandle
 $)
 
 define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !minN is string, !minU is string, !maxE is string, !maxN is string, !maxU is string)
-	NEW LAYE $!name/SS/S1/V1/ateEQUI_R$!!DrawingPlan1.rev
+	NEW LAYE $!name/SS/S1/V1/ateEQUI
 	Purpose EQUI
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -96,7 +96,7 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 		!VIEWDIRL = !viewdirlarray[1]
 		!VIEWDIRR = !viewdirrarray[1]
 			
-		$!name/SS/S1/V1/ateEQUI_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1/ateEQUI
 			
 		$(
 
@@ -176,9 +176,9 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 		var !DPOS1 |E $!CPOS[1] N $!CPOS[2] U $!WLIM[3]|
 
 		$* Create stra's
-		$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1/ateEQUI/VNOT
 		handle ANY
-			NEW VNOT $!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+			NEW VNOT $!name/SS/S1/V1/ateEQUI/VNOT
 			Pkdistance 0.5
 			Adegrees 0
 			Ppdirection -1
@@ -273,7 +273,7 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 						-- width/ length > 3 --
 						-----------------------
 						if (!strahori) then
-							$!name/SS/S1/V1/ateEQUI_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI
 							NEW GLAB
 							DDNA $!EQUI
 							Btext |#EQUI(C2:)|
@@ -284,13 +284,13 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 							var !extent extent btext
 							!temppos = !EPOS.part(2).real() + (abs(!extent.part(2).real() - !extent.part(6).real()) / !!DrawingPlan1.vsca)
 							!EPOS = !EPOS.part(1) & ' ' & !temppos & ' ' & !EPOS.part(3) & ' ' & !EPOS.part(4) & ' ' & !EPOS.part(5) & ' ' & !EPOS.part(6)
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!WPOS TPT $!EPOS
 							Tcode Endpoint
 						endif
 					else
 						if (!strahori) then
-							$!name/SS/S1/V1/ateEQUI_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI
 							NEW GLAB
 							DDNA $!EQUI
 							Btext |#EQUI(C2:)|
@@ -301,12 +301,12 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 							var !extent extent btext
 							!temppos = !EPOS.part(2).real() + (abs(!extent.part(2).real() - !extent.part(6).real()) / !!DrawingPlan1.vsca)
 							!EPOS = !EPOS.part(1) & ' ' & !temppos & ' ' & !EPOS.part(3) & ' ' & !EPOS.part(4) & ' ' & !EPOS.part(5) & ' ' & !EPOS.part(6)
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!WPOS TPT $!EPOS
 							Tcode Endpoint
 						endif
 						if (!stravert) then
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!SPOS TPT $!NPOS
 							Tcode Endpoint
 						endif
@@ -320,18 +320,18 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 						-- length / width > 3 --
 						------------------------
 						if (!stravert) then
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!SPOS TPT $!NPOS
 							Tcode Endpoint
 						endif
 					else
 						if (!strahori) then
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!WPOS TPT $!EPOS
 							Tcode Endpoint
 						endif
 						if (!stravert) then
-							$!name/SS/S1/V1/ateEQUI_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI
 							NEW GLAB
 							DDNA $!EQUI
 							Btext |#EQUI(C2:)|
@@ -343,7 +343,7 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 							var !extent extent btext
 							!temppos = !NPOS.part(4).real() + (abs(!extent.part(4).real() - !extent.part(8).real()) / !!DrawingPlan1.vsca)
 							!NPOS = !NPOS.part(1) & ' ' & !NPOS.part(2) & ' ' & !NPOS.part(3) & ' ' & !temppos & ' ' & !NPOS.part(5) & ' ' & !NPOS.part(6)
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!SPOS TPT $!NPOS
 							Tcode Endpoint
 						endif
@@ -362,18 +362,18 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 						-- width/ length > 3 --
 						-----------------------
 						if (!strahori) then
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!WPOS TPT $!EPOS
 							Tcode Endpoint
 						endif
 					else
 						if (!strahori) then
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!WPOS TPT $!EPOS
 							Tcode Endpoint
 						endif
 						if (!stravert) then
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!SPOS TPT $!NPOS
 							Tcode Endpoint
 						endif
@@ -387,18 +387,18 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 						-- length / width > 3 --
 						------------------------
 						if (!stravert) then
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!SPOS TPT $!NPOS
 							Tcode Endpoint
 						endif
 					else
 						if (!strahori) then
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!WPOS TPT $!EPOS
 							Tcode Endpoint
 						endif
 						if (!stravert) then
-							$!name/SS/S1/V1/ateEQUI/VNOT_R$!!DrawingPlan1.rev
+							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!SPOS TPT $!NPOS
 							Tcode Endpoint
 						endif

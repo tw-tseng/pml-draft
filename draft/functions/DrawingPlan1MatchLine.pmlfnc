@@ -10,7 +10,7 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	!format.dp = 0
 	do !jj from 1 to 4
 		!dir = !dirlist.part(!jj)
-		$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+		$!name/SS/S1/V1
 		!!DrawingPlan1MatchLine1(!dir, !projid, !equistr, !format)
 	enddo
 	note 1

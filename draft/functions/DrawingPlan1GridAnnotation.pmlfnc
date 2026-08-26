@@ -15,7 +15,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	-- kill/show), so a member breaks every run made in between          --
 	----------------------------------------------------------------------
 	!!DrawingPlan1GridBubbles = object array()
-	NEW LAYE $!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
+	NEW LAYE $!name/SS/S1/V1/ateGRID
 	Purpose GRIDA
 	Lvisibility true
 	Font 1
@@ -60,7 +60,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	----------------------------------------------
 	-- calculate view four corners coordination --
 	----------------------------------------------
-	$!name/SS/S1/V1_R$!!DrawingPlan1.rev
+	$!name/SS/S1/V1
 --	var !shxypos shxypos
 --	var !size size
 	
@@ -73,7 +73,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	!gridels = object array()
   
 	!temps = object array()
-	var !addes coll all adde for $!name/SS/DRAWLIST/DRWG_R$!!DrawingPlan1.rev
+	var !addes coll all adde for $!name/SS/DRAWLIST/DRWG
 	do !adde values !addes
 	  var !type type of idna of $!adde
 		if (!type.eq('REFGRD')) then
@@ -85,7 +85,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
  		endif
 	enddo
 	
-	$!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
+	$!name/SS/S1/V1/ateGRID
 	do !gridel values !gridels
 	  var !gridpls coll all gridpl for $!gridel
 		var !refglns coll all refgln for $!gridpls[1]
@@ -107,7 +107,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 			
 --			$p $!p1dirsh
 
-			$!name/SS/S1/V1/ateGRID_R$!!DrawingPlan1.rev
+			$!name/SS/S1/V1/ateGRID
 			-------------------------------------------------------------------------
 			-- .intersections holds the intersections of THIS refgln only, because --
 			-- the checks below pick them up by getindexed(1) and getindexed(2).   --
