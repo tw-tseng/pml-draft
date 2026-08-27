@@ -1540,7 +1540,13 @@ define method .Apply()
 				!ady = abs(!dy)
 				!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
 				!dbgf4.open('overwrite')
+				!dbgf4.writerecord('RECENTER entry ok')
+				handle any
+				endhandle
 				!dbgf4.writerecord('RECENTER dx=' & !dx.string() & ' dy=' & !dy.string() & ' adx=' & !adx.string() & ' ady=' & !ady.string())
+				handle any
+					!dbgf4.writerecord('RECENTER dx/dy string() errored')
+				endhandle
 				if (!adx.gt(0.05) or !ady.gt(0.05)) then
 					$!name/SS/S1/V1
 					!vxy = ''
