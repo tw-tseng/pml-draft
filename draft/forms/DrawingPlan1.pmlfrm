@@ -1075,6 +1075,7 @@ define method .Apply()
 				!dbgf5 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check5.txt')
 				!dbgf5.open('overwrite')
 				!dbgf5.writerecord('CHECKPOINT A after EquiAnnotation')
+				!dbgf5.close()
 
 				-------------------------------------------
 				-- highlight the drawing area in keyplan --
@@ -1484,7 +1485,10 @@ define method .Apply()
 					!ff.close()
 				endif
 
+				!dbgf5 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check5.txt')
+				!dbgf5.open('append')
 				!dbgf5.writerecord('CHECKPOINT B before recenter block')
+				!dbgf5.close()
 
 				------------------------------------------------------------------
 				-- move the view so that its annotation lands inside the canvas  --
@@ -1547,11 +1551,18 @@ define method .Apply()
 				!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
 				!dbgf4.open('overwrite')
 				!dbgf4.writerecord('RECENTER entry ok')
+				!dbgf4.close()
 				handle any
 				endhandle
+				!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+				!dbgf4.open('append')
 				!dbgf4.writerecord('RECENTER dx=' & !dx.string() & ' dy=' & !dy.string() & ' adx=' & !adx.string() & ' ady=' & !ady.string())
+				!dbgf4.close()
 				handle any
+					!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+					!dbgf4.open('append')
 					!dbgf4.writerecord('RECENTER dx/dy string() errored')
+					!dbgf4.close()
 				endhandle
 				if (!adx.gt(0.05) or !ady.gt(0.05)) then
 					$!name/SS/S1/V1
@@ -1560,20 +1571,29 @@ define method .Apply()
 					handle any
 						!vxy = ''
 					endhandle
+					!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+					!dbgf4.open('append')
 					!dbgf4.writerecord('RECENTER before vxy=' & !vxy)
+					!dbgf4.close()
 					if (!vxy.neq('')) then
 						!nvx = !vxy.part(2).replace('mm', '').real() + !dx
 						!nvy = !vxy.part(4).replace('mm', '').real() + !dy
 						!nxy = 'X ' & !nvx.string('D3') & 'mm Y ' & !nvy.string('D3') & 'mm'
 						xyposition $!nxy
 						handle any
+							!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+							!dbgf4.open('append')
 							!dbgf4.writerecord('RECENTER xyposition command errored')
+							!dbgf4.close()
 						endhandle
 						var !vxyafter xyposition
 						handle any
 							!vxyafter = 'READ-ERROR'
 						endhandle
+						!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+						!dbgf4.open('append')
 						!dbgf4.writerecord('RECENTER nxy=' & !nxy & ' vxyafter=' & !vxyafter)
+						!dbgf4.close()
 						------------------------------------------------------------
 						-- the cached sheet corners describe where the view WAS.   --
 						-- everything read from them after this point would be out --
