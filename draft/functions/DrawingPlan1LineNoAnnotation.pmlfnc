@@ -1809,6 +1809,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			$!name/SS/S1/V1/ateLINE
 			!gprev = 0
 			!gprevplace = 0
+			!gprevwidth = 0
 			!gfirstlab = true
 			do !i from 1 to !glabrec.size()
 				!gparts = !glabrec[!i].split('~')
@@ -1935,9 +1936,23 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- as needed, from one label to the next, cannot collide     --
 				-------------------------------------------------------------
 				if (not(!gisexisting)) then
+				----------------------------------------------------------------
+				-- !glabmin alone is a flat constant, not aware of how far the --
+				-- PREVIOUS label's own text actually reaches -- fine when     --
+				-- items are naturally spread out, but an existing label that  --
+				-- is wider than !glabmin left no real room for a new one      --
+				-- squeezed in right after it, overlapping it outright         --
+				-- (2026-08-27, reported live: a new BOP line landed almost    --
+				-- exactly on its unrelated, must-not-move neighbour). so the  --
+				-- true minimum is whichever is bigger                        --
+				----------------------------------------------------------------
+				!gminclr = !glabmin
+				if (!gprevwidth.gt(!gminclr)) then
+					!gminclr = !gprevwidth
+				endif
 				!gplace = !galong
 				if (not(!gfirstlab)) then
-					!gmin = !gprevplace + !glabmin
+					!gmin = !gprevplace + !gminclr
 					if (!gplace lt !gmin) then
 						!gplace = !gmin
 					endif
@@ -1967,7 +1982,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!glowbound = 0
 				!ghaslow = false
 				if (not(!gfirstlab)) then
-					!glowbound = !gprevplace + !glabmin
+					!glowbound = !gprevplace + !gminclr
 					!ghaslow = true
 				endif
 				-- the side the attach point is on, from the first band it hits --
@@ -2223,6 +2238,12 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-------------------------------------------------------------
 				!gcpofy = !glabtxtgap * -1
 				!greach = !gwide + !glabover
+				---------------------------------------------------------------
+				-- carried into the next item's turn through the loop, so its --
+				-- own minimum spacing can ask for this item's real width,    --
+				-- not just the flat !glabmin (see !gminclr above)            --
+				---------------------------------------------------------------
+				!gprevwidth = !greach
 				-- how far this one reaches, measured from the border of the view --
 				!gtot = !gdimdist + !gclr + !greach
 				if (!gtot.gt(!gbandmax)) then
