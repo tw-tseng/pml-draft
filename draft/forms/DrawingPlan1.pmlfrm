@@ -1538,6 +1538,9 @@ define method .Apply()
 				endif
 				!adx = abs(!dx)
 				!ady = abs(!dy)
+				!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+				!dbgf4.open('overwrite')
+				!dbgf4.writerecord('RECENTER dx=' & !dx.string() & ' dy=' & !dy.string() & ' adx=' & !adx.string() & ' ady=' & !ady.string())
 				if (!adx.gt(0.05) or !ady.gt(0.05)) then
 					$!name/SS/S1/V1
 					!vxy = ''
@@ -1545,13 +1548,20 @@ define method .Apply()
 					handle any
 						!vxy = ''
 					endhandle
+					!dbgf4.writerecord('RECENTER before vxy=' & !vxy)
 					if (!vxy.neq('')) then
 						!nvx = !vxy.part(2).replace('mm', '').real() + !dx
 						!nvy = !vxy.part(4).replace('mm', '').real() + !dy
 						!nxy = 'X ' & !nvx.string('D3') & 'mm Y ' & !nvy.string('D3') & 'mm'
 						xyposition $!nxy
 						handle any
+							!dbgf4.writerecord('RECENTER xyposition command errored')
 						endhandle
+						var !vxyafter xyposition
+						handle any
+							!vxyafter = 'READ-ERROR'
+						endhandle
+						!dbgf4.writerecord('RECENTER nxy=' & !nxy & ' vxyafter=' & !vxyafter)
 						------------------------------------------------------------
 						-- the cached sheet corners describe where the view WAS.   --
 						-- everything read from them after this point would be out --
