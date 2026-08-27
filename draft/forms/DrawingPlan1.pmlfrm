@@ -1638,10 +1638,18 @@ define method .Apply()
 							if (!gcurxypo.neq('')) then
 								!gxx = !gcurxypo.part(1).replace('mm', '').real()
 								!gyy = !gcurxypo.part(2).replace('mm', '').real()
+								----------------------------------------------------------
+								-- subtract, not add: the view's own reference corner   --
+								-- (viewULsh etc, which XYPO is measured against) moves  --
+								-- BY dx/dy, so to land the label on the same spot it     --
+								-- was aimed at, XYPO has to move the OPPOSITE way (found --
+								-- live -- +dy overshot to roughly double the gap instead --
+								-- of closing it, -dy matched update's own number exactly)--
+								----------------------------------------------------------
 								if (!gdir.eq('right') or !gdir.eq('left')) then
-									!gyy = !gyy + !dy
+									!gyy = !gyy - !dy
 								else
-									!gxx = !gxx + !dx
+									!gxx = !gxx - !dx
 								endif
 								!gnewxypo = !gxx.string('D3') & ' ' & !gyy.string('D3')
 								XYPO $!gnewxypo
