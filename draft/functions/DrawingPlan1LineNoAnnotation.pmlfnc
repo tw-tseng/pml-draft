@@ -1838,7 +1838,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- number it already had -- nothing needs skipping further down      --
 				----------------------------------------------------------------------
 				!gisexisting = false
-				!gexistingref = 0
 				do !eg values !existingglabs
 					$!eg
 					handle any
