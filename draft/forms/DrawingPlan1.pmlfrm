@@ -2053,7 +2053,21 @@ define method .Apply()
 				-------------------------
 				-- line no. annotation --
 				-------------------------
+				------------------------------------------------------------------
+				-- update path never refreshed the view's own knowledge of the   --
+				-- model before reading it back -- the rebuild path always does  --
+				-- (UPDATE DESIGN, right above the same GridAnnotation/          --
+				-- LineNoAnnotation/EquiAnnotation calls further up), but this   --
+				-- branch went straight from SIZE into LineNoAnnotation with no  --
+				-- update at all. reported live as label member resolution      --
+				-- (MTBE) coming back a different, newly-made-up reference on   --
+				-- every single update even with nothing else changing between  --
+				-- runs -- consistent with the view working off whatever it     --
+				-- last resolved at rebuild time instead of the model as it     --
+				-- actually stands now (2026-08-27)                             --
+				------------------------------------------------------------------
 				$!name/SS/S1/V1
+				UPDATE ALL
 				1
 				last
 				!!DrawingPlan1LineNoAnnotation(!name, !boxXlen.real(), !boxYlen.real())
