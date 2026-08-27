@@ -1371,7 +1371,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			var !temppos enupos of $!!DrawingPlan1.viewULsh
 			!alongv = !!DrawingPlan1.viewULsh.part(2).real()
 		endif
-		
+		if (!dbgln and !dir.eq('left')) then
+			!dbgf.writerecord('CORNER1RAW viewULsh=' & !!DrawingPlan1.viewULsh & ' viewURsh=' & !!DrawingPlan1.viewURsh & ' viewLLsh=' & !!DrawingPlan1.viewLLsh & ' viewLRsh=' & !!DrawingPlan1.viewLRsh)
+		endif
+
 		!attapos = object position(!temppos)
 		!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 		!run = true
