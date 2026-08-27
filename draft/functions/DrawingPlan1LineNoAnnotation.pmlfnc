@@ -1810,6 +1810,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			!gprev = 0
 			!gprevplace = 0
 			!gprevwidth = 0
+			!gprevisexisting = false
 			!gfirstlab = true
 			do !i from 1 to !glabrec.size()
 				!gparts = !glabrec[!i].split('~')
@@ -1956,14 +1957,24 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- a few mm), flinging a label the length of the whole band   --
 				-- (2026-08-27, reported live straight after the first fix)   --
 				----------------------------------------------------------------
+				-- only when the PREVIOUS label is itself frozen (isexisting)  --
+				-- -- a rebuild's own tight, everything-shifts-together        --
+				-- packing already keeps ordinary up/down neighbours clear of  --
+				-- each other with just !glabmin (confirmed live: applying     --
+				-- !gwide unconditionally spread every up/down label across    --
+				-- the whole sheet instead of just the one crowded pair,       --
+				-- 2026-08-27). it is specifically a FROZEN neighbour, unable  --
+				-- to make room for what comes after it, that needs the new   --
+				-- one to detour around its real width instead              --
+				----------------------------------------------------------------
 				!gminclr = !glabmin
-				if (!dir.eq('up') or !dir.eq('down')) then
+				if ((!dir.eq('up') or !dir.eq('down')) and !gprevisexisting) then
 					if (!gprevwidth.gt(!gminclr)) then
 						!gminclr = !gprevwidth
 					endif
 				endif
 				if (!dbgln) then
-					!dbgf.writerecord('GMINCLR ' & !dir & ' i=' & !i.string() & ' glabmin=' & !glabmin.string() & ' gprevwidth=' & !gprevwidth.string() & ' gminclr=' & !gminclr.string() & ' gprevplace=' & !gprevplace.string())
+					!dbgf.writerecord('GMINCLR ' & !dir & ' i=' & !i.string() & ' glabmin=' & !glabmin.string() & ' gprevwidth=' & !gprevwidth.string() & ' gprevisexisting=' & !gprevisexisting & ' gminclr=' & !gminclr.string() & ' gprevplace=' & !gprevplace.string())
 				endif
 				!gplace = !galong
 				if (not(!gfirstlab)) then
@@ -2049,6 +2060,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- with bpoftx X 0mm Y 0mm (2026-08-24, reported live)           --
 				!gstepabs = abs(!gstep)
 				!gprevplace = !gplace
+				!gprevisexisting = !gisexisting
 				-------------------------------------------------------------
 				-- the end of this point's projection line, in sheet        --
 				-- coordination, is what the leader is aimed at             --
