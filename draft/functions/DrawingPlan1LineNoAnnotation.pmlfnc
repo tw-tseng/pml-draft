@@ -1172,19 +1172,25 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				handle any
 				elsehandle none
 					var !eddna ddna of ce
+					var !ecandpos pos
+					if (!dbgln and !dir.eq('left')) then
+						!dbgf.writerecord('MATCHCAND mem=' & !mem & ' eddna=' & !eddna & ' eq=' & !eddna.eq(!mem) & ' pos=' & !ecandpos)
+					endif
 					if (not(!eddna.unset()) and !eddna.eq(!mem)) then
 						!founddpoi = true
 						!founddpoiref = ce
-						var !epos pos
-						!foundpos = object position(!epos)
+						!foundpos = object position(!ecandpos)
 						break
 					endif
 				endhandle
 			enddo
 			if (!dbgln and !dir.eq('left')) then
-				!dbgf.writerecord('MATCH mem=' & !mem & ' founddpoi=' & !founddpoi)
+				!dbgf.writerecord('MATCH mem=' & !mem & ' founddpoi=' & !founddpoi & ' attapos=' & !attapos.string())
 			endif
 			if (!founddpoi) then
+				if (!dbgln and !dir.eq('left')) then
+					!dbgf.writerecord('MATCH foundpos=' & !foundpos.string() & ' dist=' & !foundpos.distance(!attapos))
+				endif
 				if (!foundpos.distance(!attapos).geq(5)) then
 					$!founddpoiref
 					POS $!attapos
