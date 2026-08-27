@@ -104,6 +104,19 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!dbgf.open('overwrite')
 	endif
 
+	----------------------------------------------------------------------------
+	-- every GLAB this call creates, with which direction group it belongs to --
+	-- (right/left along-Y, up/down along-X), so that after LineNoAnnotation  --
+	-- returns, DrawingPlan1.pmlfrm's canvas-fit view recenter can nudge each  --
+	-- one's XYPO by the same dx/dy it just moved the view by. the view's box --
+	-- (VSEC/FPLA) and DPOI both re-project live off world coordinates and     --
+	-- follow the view automatically; GLAB's XYPO is a baked leader offset    --
+	-- that does not, which is what left GLAB rows 2.5mm off after rebuild's  --
+	-- own recenter fired (found live, 2026-08-27)                           --
+	----------------------------------------------------------------------------
+	!!DrawingPlan1.newglabrefs = object array()
+	!!DrawingPlan1.newglabdirs = object array()
+
 	---------------------------------------------------------------------------
 	-- the sides of the view are only parallel to E and N when the drawing   --
 	-- box is orthogonal to the world. when it is not, .Apply() turns the    --
@@ -2013,6 +2026,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endif
 				else
 					NEW GLAB
+					!!DrawingPlan1.newglabrefs.append(ce)
+					!!DrawingPlan1.newglabdirs.append(!dir)
 				endif
 				DDNA $!gelem
 				BTEXT |$!gtext|

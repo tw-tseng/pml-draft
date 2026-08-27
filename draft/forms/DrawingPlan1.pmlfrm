@@ -1609,6 +1609,47 @@ define method .Apply()
 						!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
 						!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
 						------------------------------------------------------------
+						-- GLAB's XYPO is a baked leader offset, not a re-projected --
+						-- world position, so unlike the box (VSEC/FPLA) and DPOI  --
+						-- it does not follow the view when it moves. nudge every  --
+						-- GLAB LineNoAnnotation just created by the same move --
+						-- right/left rows measure along sheet Y, up/down along X  --
+						------------------------------------------------------------
+						!glabn = 0
+						!glabn = !!DrawingPlan1.newglabrefs.size()
+						handle any
+							!glabn = 0
+						endhandle
+						!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+						!dbgf4.open('append')
+						!dbgf4.writerecord('GLABFIX count=' & !glabn.string())
+						!dbgf4.close()
+						do !gi from 1 to !glabn
+							$!!DrawingPlan1.newglabrefs[!gi]
+							handle any
+								skip
+							endhandle
+							!gdir = !!DrawingPlan1.newglabdirs[!gi]
+							!gcurxypo = ''
+							var !gcurxypo xypo
+							handle any
+								!gcurxypo = ''
+							endhandle
+							if (!gcurxypo.neq('')) then
+								!gxx = !gcurxypo.part(1).replace('mm', '').real()
+								!gyy = !gcurxypo.part(2).replace('mm', '').real()
+								if (!gdir.eq('right') or !gdir.eq('left')) then
+									!gyy = !gyy + !dy
+								else
+									!gxx = !gxx + !dx
+								endif
+								!gnewxypo = !gxx.string('D3') & ' ' & !gyy.string('D3')
+								XYPO $!gnewxypo
+								handle any
+								endhandle
+							endif
+						enddo
+						------------------------------------------------------------
 						-- the match line box is the one thing on the drawing that --
 						-- is drawn straight onto the sheet -- new stra fpt <sheet --
 						-- position> -- rather than into the view, so unlike the   --
