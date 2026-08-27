@@ -2378,6 +2378,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						break
 					endif
 				enddo
+				if (!dbgln) then
+					var !egxypo xypo
+					handle any
+						!egxypo = 'ERR'
+					endhandle
+					!dbgf.writerecord('CLEANUPGLAB eddna=' & !egddna & ' xypo=' & !egxypo & ' stillcurrent=' & !stillcurrentg)
+				endif
 				if (not(!stillcurrentg)) then
 					delete glab
 				endif
