@@ -1817,6 +1817,94 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!gchei = !gparts.getindexed(3)
 				!galong = !gparts.getindexed(4).real()
 				!gup = !gparts.getindexed(5).real()
+				----------------------------------------------------------------------
+				-- update path: an existing GLAB must never move, or every update    --
+				-- would draw a revision cloud over labels nothing actually changed  --
+				-- about (2026-08-27, confirmed live -- required for revision        --
+				-- compare to mean anything). found by DDNA plus a re-derived        --
+				-- along-position (the candidate's own unmoved model POSITION run   --
+				-- back through the current view), which stays put regardless of    --
+				-- packing pushes, so it is a safe key even when several elements   --
+				-- share one DDNA                                                    --
+				--                                                                    --
+				-- its already-placed !gplace is recovered algebraically from its    --
+				-- stored XYPO rather than re-run through the push/grid-band logic   --
+				-- below: for right/left GTXX carries no !gstep term at all (GOUTX=0 --
+				-- on that axis) and GTXY = !gstep + !glabtxtgap; for up/down it is  --
+				-- the other way round, GTXX = !gstep - !glabtxtgap. solving either  --
+				-- for !gstep and adding it back to !galong reproduces !gplace       --
+				-- exactly, so the rest of this function (which recomputes GXYPO     --
+				-- from !gplace the same way for every item) writes back the same    --
+				-- number it already had -- nothing needs skipping further down      --
+				----------------------------------------------------------------------
+				!gisexisting = false
+				!gexistingref = 0
+				do !eg values !existingglabs
+					$!eg
+					handle any
+					elsehandle none
+						var !egddna ddna of ce
+						if (not(!egddna.unset()) and !egddna.eq(!gelem)) then
+							----------------------------------------------------------
+							-- AT is not a gettable attribute (missing from a live   --
+							-- Q ATT dump of a GLAB, 2026-08-27), so the candidate's --
+							-- own along-position is recovered the same way !gposobj --
+							-- below is: its (unmoved, model-space) POSITION run     --
+							-- back through the current view via shpos of           --
+							----------------------------------------------------------
+							!egalong = 0
+							!egmatched = false
+							var !egpos position
+							handle any
+							elsehandle none
+								!egposobj = object position(!egpos)
+								var !egsh shpos of $!egposobj
+								handle any
+								elsehandle none
+									if (!dir.eq('right') or !dir.eq('left')) then
+										!egalong = !egsh.part(4).replace('mm', '').real()
+									else
+										!egalong = !egsh.part(2).replace('mm', '').real()
+									endif
+									!egmatched = true
+								endhandle
+							endhandle
+							if (!dbgln) then
+								!dbgf.writerecord('GLABEXISTCAND ' & !dir & ' i=' & !i.string() & ' galong=' & !galong.string() & ' egalong=' & !egalong.string() & ' egmatched=' & !egmatched)
+							endif
+							if (!egmatched and abs(!egalong - !galong).lt(1)) then
+								!gisexisting = true
+								!gexistingref = ce
+							endif
+						endif
+					endhandle
+				enddo
+				if (!gisexisting) then
+					$!gexistingref
+					!gexxypo = ''
+					var !gexxypo xypo
+					handle any
+						!gisexisting = false
+					endhandle
+				endif
+				if (!gisexisting) then
+					!gexx = !gexxypo.part(1).replace('mm', '').real()
+					!gexy = !gexxypo.part(2).replace('mm', '').real()
+					if (!!DrawingPlan1.rcode.eqnocase('left')) then
+						!gextmp = !gexx
+						!gexx = !gexy * -1
+						!gexy = !gextmp
+					endif
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!gstep = !gexy - !glabtxtgap
+					else
+						!gstep = !gexx + !glabtxtgap
+					endif
+					!gplace = !galong + !gstep
+				endif
+				if (!dbgln) then
+					!dbgf.writerecord('GLABEXIST ' & !dir & ' i=' & !i.string() & ' elem=' & !gelem & ' isexisting=' & !gisexisting)
+				endif
 				-------------------------------------------------------------
 				-- pack the labels along the dimension: each one goes where  --
 				-- it belongs unless that is less than !glabmin from the one --
@@ -1834,6 +1922,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- it just lands on whatever comes next. pushing only as far --
 				-- as needed, from one label to the next, cannot collide     --
 				-------------------------------------------------------------
+				if (not(!gisexisting)) then
 				!gplace = !galong
 				if (not(!gfirstlab)) then
 					!gmin = !gprevplace + !glabmin
@@ -1908,6 +1997,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					enddo
 					break if (not(!gmoved))
 				enddo
+				endif
 				!gstep = !gplace - !galong
 				-- how far it moved, either way. a label which had to step BACK  --
 				-- to stay on its own side of a grid line has a negative !gstep, --
