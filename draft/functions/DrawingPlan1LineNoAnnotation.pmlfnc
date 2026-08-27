@@ -1584,6 +1584,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				NEXT
 				var !x2pos pos
 				var !x2shpos shpos of $!x2pos
+				if (!dbgln) then
+					!dbgf.writerecord('LDIMORDER ' & !dir & ' x=' & !x.string() & ' mcount=' & !mcount.string() & ' x1sh=' & !x1shpos & ' x2sh=' & !x2shpos)
+				endif
 				if (!dir.eq('right') or !dir.eq('left')) then
 					if (abs(!x1shpos.part(4).replace('mm','').real() - !x2shpos.part(4).replace('mm','').real()) le 7) then
 						Dtangle Horizontal
