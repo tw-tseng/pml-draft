@@ -1950,6 +1950,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (!gprevwidth.gt(!gminclr)) then
 					!gminclr = !gprevwidth
 				endif
+				if (!dbgln) then
+					!dbgf.writerecord('GMINCLR ' & !dir & ' i=' & !i.string() & ' glabmin=' & !glabmin.string() & ' gprevwidth=' & !gprevwidth.string() & ' gminclr=' & !gminclr.string() & ' gprevplace=' & !gprevplace.string())
+				endif
 				!gplace = !galong
 				if (not(!gfirstlab)) then
 					!gmin = !gprevplace + !gminclr
