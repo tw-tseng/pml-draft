@@ -1070,8 +1070,12 @@ define method .Apply()
 				$!name/SS/S1/V1
 				1
 				last
-				!!DrawingPlan1EquiAnnotation(!name, !minE.string(), !minN.string(), !minU.string(), !maxE.string(), !maxN.string(), !maxU.string())   
-				
+				!!DrawingPlan1EquiAnnotation(!name, !minE.string(), !minN.string(), !minU.string(), !maxE.string(), !maxN.string(), !maxU.string())
+
+				!dbgf5 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check5.txt')
+				!dbgf5.open('overwrite')
+				!dbgf5.writerecord('CHECKPOINT A after EquiAnnotation')
+
 				-------------------------------------------
 				-- highlight the drawing area in keyplan --
 				-------------------------------------------
@@ -1479,7 +1483,9 @@ define method .Apply()
 					enddo
 					!ff.close()
 				endif
-				
+
+				!dbgf5.writerecord('CHECKPOINT B before recenter block')
+
 				------------------------------------------------------------------
 				-- move the view so that its annotation lands inside the canvas  --
 				--                                                               --
