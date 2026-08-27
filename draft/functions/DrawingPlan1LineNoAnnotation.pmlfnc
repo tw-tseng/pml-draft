@@ -1903,6 +1903,56 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						endif
 					endhandle
 				enddo
+				----------------------------------------------------------------------
+				-- fallback: nothing shared this item's own ddna at all. E3D can       --
+				-- resolve a boundary attach point to a different neighbouring member  --
+				-- of the same bent tube across runs even though the point on the      --
+				-- sheet has not actually moved -- right i=1 stayed pinned to          --
+				-- =67128186/19424819 every run while its real previous label lived    --
+				-- on =67177338/9369496, a different member 2.5mm away on the same     --
+				-- along-axis. with no ddna match at all it never froze, so it kept    --
+				-- being recomputed a little differently each run while the old        --
+				-- object it used to be sat unclaimed and got cleaned up as an orphan  --
+				-- (2026-08-27, reported live as a small but persistent drift between  --
+				-- rebuild and update). so a second pass drops the ddna requirement    --
+				-- and matches on along-position alone, same tolerance and             --
+				-- closest-wins rule as above                                          --
+				----------------------------------------------------------------------
+				if (not(!gisexisting)) then
+					!gbestalongdiff = -1
+					do !eg values !existingglabs
+						$!eg
+						handle any
+						elsehandle none
+							!egalong = 0
+							!egmatched = false
+							var !egpos position
+							handle any
+							elsehandle none
+								!egposobj = object position(!egpos)
+								var !egsh shpos of $!egposobj
+								handle any
+								elsehandle none
+									if (!dir.eq('right') or !dir.eq('left')) then
+										!egalong = !egsh.part(4).replace('mm', '').real()
+									else
+										!egalong = !egsh.part(2).replace('mm', '').real()
+									endif
+									!egmatched = true
+								endhandle
+							endhandle
+							!egalongdiff = abs(!egalong - !galong)
+							if (!egmatched and !egalongdiff.lt(1) and (!gbestalongdiff.lt(0) or !egalongdiff.lt(!gbestalongdiff))) then
+								!gisexisting = true
+								!gexistingref = ce
+								!gbestalongdiff = !egalongdiff
+							endif
+						endhandle
+					enddo
+					if (!dbgln) then
+						!dbgf.writerecord('GLABPOSFALLBACK ' & !dir & ' i=' & !i.string() & ' isexisting=' & !gisexisting & ' bestalongdiff=' & !gbestalongdiff.string())
+					endif
+				endif
 				if (!gisexisting) then
 					$!gexistingref
 					!gexxypo = ''
