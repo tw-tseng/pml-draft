@@ -1165,8 +1165,20 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			-- leave it exactly where it is; beyond that, move the same       --
 			-- element's POS instead of creating a second one, so UPDATE ANNO --
 			-- reads it as a change rather than an addition                   --
+			--                                                                 --
+			-- one owning element can legitimately have more than one DPOI    --
+			-- sharing its DDNA (e.g. two separate tube crossings of the      --
+			-- same elbow), confirmed live 2026-08-26. taking the first DDNA  --
+			-- match and stopping used to grab whichever one came first in    --
+			-- collection order regardless of where it actually was, and drag --
+			-- it across the drawing onto this record's position -- leaving  --
+			-- the OTHER matching point's original spot empty, which then    --
+			-- had corner1 build a spurious extra DPOI to fill. every        --
+			-- candidate sharing the DDNA is checked now and the nearest one  --
+			-- to this record's own position is the one reused                --
 			--------------------------------------------------------------------
 			!founddpoi = false
+			!bestdist = -1
 			do !edp values !existingdpois
 				$!edp
 				handle any
@@ -1177,10 +1189,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!dbgf.writerecord('MATCHCAND mem=' & !mem & ' eddna=' & !eddna & ' eq=' & !eddna.eq(!mem) & ' pos=' & !ecandpos)
 					endif
 					if (not(!eddna.unset()) and !eddna.eq(!mem)) then
-						!founddpoi = true
-						!founddpoiref = ce
-						!foundpos = object position(!ecandpos)
-						break
+						!candposobj = object position(!ecandpos)
+						!canddist = !candposobj.distance(!attapos)
+						if (not(!founddpoi) or !canddist.lt(!bestdist)) then
+							!founddpoi = true
+							!founddpoiref = ce
+							!foundpos = !candposobj
+							!bestdist = !canddist
+						endif
 					endif
 				endhandle
 			enddo
@@ -1960,25 +1976,37 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- draws no cloud                                                   --
 				--------------------------------------------------------------------
 				!currentgelems.append(!gelem)
+				--------------------------------------------------------------------
+				-- same reasoning as the DPOI match above: an element could in     --
+				-- principle carry more than one GLAB sharing its DDNA, so every   --
+				-- candidate is checked and the nearest one to this label's own    --
+				-- target position is reused, instead of stopping at the first    --
+				-- DDNA match found                                                --
+				--------------------------------------------------------------------
 				!foundglab = false
+				!bestglabdist = -1
 				do !eg values !existingglabs
 					$!eg
 					handle any
 					elsehandle none
 						var !egddna ddna of ce
 						if (not(!egddna.unset()) and !egddna.eq(!gelem)) then
-							!foundglab = true
-							!foundglabref = ce
-							break
+							var !egpos position
+							!egposobj = object position(!egpos)
+							!egdist = !egposobj.distance(!gposobj)
+							if (not(!foundglab) or !egdist.lt(!bestglabdist)) then
+								!foundglab = true
+								!foundglabref = ce
+								!bestglabdist = !egdist
+								!foundglabpos = !egposobj
+							endif
 						endif
 					endhandle
 				enddo
 				if (!foundglab) then
 					$!foundglabref
-					var !gexistpos position
-					!gexistposobj = object position(!gexistpos)
-					if (!gexistposobj.distance(!gposobj).lt(5)) then
-						!gposobj = !gexistposobj
+					if (!foundglabpos.distance(!gposobj).lt(5)) then
+						!gposobj = !foundglabpos
 					endif
 				else
 					NEW GLAB
