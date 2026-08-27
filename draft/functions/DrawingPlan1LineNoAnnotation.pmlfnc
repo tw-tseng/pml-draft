@@ -1099,9 +1099,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!attapos = object position(!mempos)
 				endif
 				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
-				if (!dbgln and !dir.eq('left')) then
+				if (!dbgln) then
 					!dpoiseq = !dpoiseq + 1
-					!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=labelled pipe=' & !dbgpipe & ' mem=' & !mem & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
+					!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' dir=' & !dir & ' section=labelled pipe=' & !dbgpipe & ' mem=' & !mem & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 				endif
 				---------------------------------------------------------------------
 				-- 2026-08-21: the pipe number and the elevation used to be the     --
@@ -1265,12 +1265,12 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endhandle
 				enddo
 			endif
-			if (!dbgln and !dir.eq('left')) then
-				!dbgf.writerecord('MATCH mem=' & !mem & ' founddpoi=' & !founddpoi & ' attapos=' & !attapos.string())
+			if (!dbgln) then
+				!dbgf.writerecord('MATCH ' & !dir & ' mem=' & !mem & ' founddpoi=' & !founddpoi & ' attapos=' & !attapos.string())
 			endif
 			if (!founddpoi) then
-				if (!dbgln and !dir.eq('left')) then
-					!dbgf.writerecord('MATCH foundpos=' & !foundpos.string() & ' dist=' & !foundpos.distance(!attapos))
+				if (!dbgln) then
+					!dbgf.writerecord('MATCH ' & !dir & ' foundpos=' & !foundpos.string() & ' dist=' & !foundpos.distance(!attapos))
 				endif
 				!claimeddpois.append(!founddpoiref)
 				$!founddpoiref
