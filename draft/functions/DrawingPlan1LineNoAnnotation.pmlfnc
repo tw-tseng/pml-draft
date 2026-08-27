@@ -1938,17 +1938,29 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (not(!gisexisting)) then
 				----------------------------------------------------------------
 				-- !glabmin alone is a flat constant, not aware of how far the --
-				-- PREVIOUS label's own text actually reaches -- fine when     --
-				-- items are naturally spread out, but an existing label that  --
-				-- is wider than !glabmin left no real room for a new one      --
-				-- squeezed in right after it, overlapping it outright         --
-				-- (2026-08-27, reported live: a new BOP line landed almost    --
-				-- exactly on its unrelated, must-not-move neighbour). so the  --
-				-- true minimum is whichever is bigger                        --
+				-- PREVIOUS label's own text actually reaches along the       --
+				-- dimension line -- fine when items are naturally spread     --
+				-- out, but an existing label that reaches further than       --
+				-- !glabmin left no real room for a new one squeezed in right --
+				-- after it, overlapping it outright (2026-08-27, reported    --
+				-- live: a new BOP line landed almost exactly on its          --
+				-- unrelated, must-not-move neighbour)                       --
+				--                                                            --
+				-- only up/down actually reach further ALONG the dimension    --
+				-- line by !gprevwidth: their text is turned 90 degree        --
+				-- (GADEG), so its WIDTH runs along the line. right/left text --
+				-- is not turned -- its width runs across the line instead,   --
+				-- and what actually reaches along the line is its HEIGHT, a  --
+				-- few mm, already what !glabmin was sized for. using width   --
+				-- there overshot by an order of magnitude (28.7mm instead of --
+				-- a few mm), flinging a label the length of the whole band   --
+				-- (2026-08-27, reported live straight after the first fix)   --
 				----------------------------------------------------------------
 				!gminclr = !glabmin
-				if (!gprevwidth.gt(!gminclr)) then
-					!gminclr = !gprevwidth
+				if (!dir.eq('up') or !dir.eq('down')) then
+					if (!gprevwidth.gt(!gminclr)) then
+						!gminclr = !gprevwidth
+					endif
 				endif
 				if (!dbgln) then
 					!dbgf.writerecord('GMINCLR ' & !dir & ' i=' & !i.string() & ' glabmin=' & !glabmin.string() & ' gprevwidth=' & !gprevwidth.string() & ' gminclr=' & !gminclr.string() & ' gprevplace=' & !gprevplace.string())
