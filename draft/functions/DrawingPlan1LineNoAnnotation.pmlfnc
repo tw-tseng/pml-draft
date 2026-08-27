@@ -2256,9 +2256,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				---------------------------------------------------------------
 				-- carried into the next item's turn through the loop, so its --
 				-- own minimum spacing can ask for this item's real width,    --
-				-- not just the flat !glabmin (see !gminclr above)            --
+				-- not just the flat !glabmin (see !gminclr above). !gwide,   --
+				-- not !greach -- !glabover is extra reach on top of the text --
+				-- itself (for grid-band clearance etc), and pushing the     --
+				-- next label out that far too overshot (2026-08-27, reported --
+				-- live: "just clear the text, not the whole width")          --
 				---------------------------------------------------------------
-				!gprevwidth = !greach
+				!gprevwidth = !gwide
 				-- how far this one reaches, measured from the border of the view --
 				!gtot = !gdimdist + !gclr + !greach
 				if (!gtot.gt(!gbandmax)) then
