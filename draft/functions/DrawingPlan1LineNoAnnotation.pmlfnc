@@ -75,6 +75,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	--------------------------------------------------------------------
 	var !existingglabs coll all glab for ce
 	!currentgelems = object array()
+	--------------------------------------------------------------------
+	-- the actual GLAB objects (not ddna strings) kept or reused this   --
+	-- run -- cleanup below must ask "was THIS object claimed", not     --
+	-- "does some element with this ddna appear anywhere this run":     --
+	-- one ddna can legitimately carry more than one GLAB (see above),  --
+	-- so a stale duplicate on a side nothing draws any more survived   --
+	-- cleanup just because its own ddna also got used by an unrelated  --
+	-- label on another side this run (2026-08-27, reported live: an   --
+	-- orphaned right-side GLAB sat on top of its freshly placed        --
+	-- replacement, both stillcurrent=TRUE in check.txt)                --
+	--------------------------------------------------------------------
+	!claimedglabs = object array()
 
 --	var !viewdirup    viewdir up
 --	var !viewdirleft  viewdir left
@@ -1809,8 +1821,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			$!name/SS/S1/V1/ateLINE
 			!gprev = 0
 			!gprevplace = 0
-			!gprevwidth = 0
-			!gprevisexisting = false
 			!gfirstlab = true
 			do !i from 1 to !glabrec.size()
 				!gparts = !glabrec[!i].split('~')
@@ -1902,6 +1912,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endhandle
 				endif
 				if (!gisexisting) then
+					!claimedglabs.append(!gexistingref)
 					!gexx = !gexxypo.part(1).replace('mm', '').real()
 					!gexy = !gexxypo.part(2).replace('mm', '').real()
 					if (!!DrawingPlan1.rcode.eqnocase('left')) then
@@ -1938,44 +1949,22 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-------------------------------------------------------------
 				if (not(!gisexisting)) then
 				----------------------------------------------------------------
-				-- !glabmin alone is a flat constant, not aware of how far the --
-				-- PREVIOUS label's own text actually reaches along the       --
-				-- dimension line -- fine when items are naturally spread     --
-				-- out, but an existing label that reaches further than       --
-				-- !glabmin left no real room for a new one squeezed in right --
-				-- after it, overlapping it outright (2026-08-27, reported    --
-				-- live: a new BOP line landed almost exactly on its          --
-				-- unrelated, must-not-move neighbour)                       --
-				--                                                            --
-				-- only up/down actually reach further ALONG the dimension    --
-				-- line by !gprevwidth: their text is turned 90 degree        --
-				-- (GADEG), so its WIDTH runs along the line. right/left text --
-				-- is not turned -- its width runs across the line instead,   --
-				-- and what actually reaches along the line is its HEIGHT, a  --
-				-- few mm, already what !glabmin was sized for. using width   --
-				-- there overshot by an order of magnitude (28.7mm instead of --
-				-- a few mm), flinging a label the length of the whole band   --
-				-- (2026-08-27, reported live straight after the first fix)   --
-				----------------------------------------------------------------
-				-- only when the PREVIOUS label is itself frozen (isexisting)  --
-				-- -- a rebuild's own tight, everything-shifts-together        --
-				-- packing already keeps ordinary up/down neighbours clear of  --
-				-- each other with just !glabmin (confirmed live: applying     --
-				-- !gwide unconditionally spread every up/down label across    --
-				-- the whole sheet instead of just the one crowded pair,       --
-				-- 2026-08-27). it is specifically a FROZEN neighbour, unable  --
-				-- to make room for what comes after it, that needs the new   --
-				-- one to detour around its real width instead              --
+				-- tried making this width-aware for up/down (their text is   --
+				-- turned 90 degree, so it looked like width ran along the    --
+				-- line instead of across it): using the frozen neighbour's   --
+				-- real text width as the minimum gap overshot every time it  --
+				-- was tried, first by an order of magnitude (28.7mm) when    --
+				-- applied to right/left too, then still far too much (62.8mm --
+				-- for a 28-character pipe name) once narrowed to up/down     --
+				-- alone. check.txt's own long-settled up/down pairs (i=1..7, --
+				-- none of them new) sit exactly !glabmin=4mm apart with no   --
+				-- overlap ever reported, which is the real evidence: rotated --
+				-- or not, a flat !glabmin has always been enough on this     --
+				-- axis, so the extra width term was solving the wrong        --
+				-- problem (2026-08-27, reverted after three rounds of        --
+				-- overshoot reports on the same i=7/i=8 pair)                --
 				----------------------------------------------------------------
 				!gminclr = !glabmin
-				if ((!dir.eq('up') or !dir.eq('down')) and !gprevisexisting) then
-					if (!gprevwidth.gt(!gminclr)) then
-						!gminclr = !gprevwidth
-					endif
-				endif
-				if (!dbgln) then
-					!dbgf.writerecord('GMINCLR ' & !dir & ' i=' & !i.string() & ' glabmin=' & !glabmin.string() & ' gprevwidth=' & !gprevwidth.string() & ' gprevisexisting=' & !gprevisexisting & ' gminclr=' & !gminclr.string() & ' gprevplace=' & !gprevplace.string())
-				endif
 				!gplace = !galong
 				if (not(!gfirstlab)) then
 					!gmin = !gprevplace + !gminclr
@@ -2060,7 +2049,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- with bpoftx X 0mm Y 0mm (2026-08-24, reported live)           --
 				!gstepabs = abs(!gstep)
 				!gprevplace = !gplace
-				!gprevisexisting = !gisexisting
 				-------------------------------------------------------------
 				-- the end of this point's projection line, in sheet        --
 				-- coordination, is what the leader is aimed at             --
@@ -2165,6 +2153,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				enddo
 				if (!foundglab) then
 					$!foundglabref
+					!claimedglabs.append(!foundglabref)
 					if (!foundglabpos.distance(!gposobj).lt(5)) then
 						!gposobj = !foundglabpos
 					endif
@@ -2265,16 +2254,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-------------------------------------------------------------
 				!gcpofy = !glabtxtgap * -1
 				!greach = !gwide + !glabover
-				---------------------------------------------------------------
-				-- carried into the next item's turn through the loop, so its --
-				-- own minimum spacing can ask for this item's real width,    --
-				-- not just the flat !glabmin (see !gminclr above). !gwide,   --
-				-- not !greach -- !glabover is extra reach on top of the text --
-				-- itself (for grid-band clearance etc), and pushing the     --
-				-- next label out that far too overshot (2026-08-27, reported --
-				-- live: "just clear the text, not the whole width")          --
-				---------------------------------------------------------------
-				!gprevwidth = !gwide
 				-- how far this one reaches, measured from the border of the view --
 				!gtot = !gdimdist + !gclr + !greach
 				if (!gtot.gt(!gbandmax)) then
@@ -2417,10 +2396,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	enddo
 
 	--------------------------------------------------------------------
-	-- update path cleanup: a GLAB from a previous run whose element is --
-	-- not among !currentgelems (collected across all four sides) is    --
-	-- removed. same reasoning as the DPOI cleanup earlier -- .eq()     --
-	-- against the current list rather than resolving the DDNA          --
+	-- update path cleanup: a GLAB from a previous run not claimed by   --
+	-- !claimedglabs (the actual objects reused/kept, above) this run   --
+	-- is removed                                                       --
+	--                                                                   --
+	-- checking by ddna-in-currentgelems instead of by object used to   --
+	-- let a stale duplicate survive: two different GLAB objects can    --
+	-- legitimately share one ddna (different sides, or the same side   --
+	-- twice), so a leftover on a side nothing draws any more still     --
+	-- read "stillcurrent" whenever that same ddna happened to be used  --
+	-- by an unrelated label on another side this run -- both came back --
+	-- stillcurrent=TRUE in check.txt while sitting on top of each      --
+	-- other on the sheet (2026-08-27, reported live)                   --
 	--------------------------------------------------------------------
 	do !eg values !existingglabs
 		$!eg
@@ -2428,9 +2415,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		elsehandle none
 			var !egddna ddna of ce
 			if (not(!egddna.unset()) and not(!egddna.eq('=0/0'))) then
+				!egref = ce
 				!stillcurrentg = false
-				do !cg values !currentgelems
-					if (!egddna.eq(!cg)) then
+				do !cg values !claimedglabs
+					if (!egref.eq(!cg)) then
 						!stillcurrentg = true
 						break
 					endif
