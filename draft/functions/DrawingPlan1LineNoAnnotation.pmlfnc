@@ -1837,7 +1837,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- from !gplace the same way for every item) writes back the same    --
 				-- number it already had -- nothing needs skipping further down      --
 				----------------------------------------------------------------------
+				----------------------------------------------------------------------
+				-- !existingglabs spans all four sides (collected once, above the   --
+				-- per-direction loop), and the same DDNA can legitimately carry a  --
+				-- GLAB on more than one side, or more than once on the same side   --
+				-- (an elbow crossing twice) -- the DPOI dedup earlier hit the same --
+				-- shape of bug taking the first DDNA match instead of the closest, --
+				-- which dragged the wrong point across the drawing. so every      --
+				-- candidate is checked and the nearest by along-position wins,     --
+				-- never the first                                                 --
+				----------------------------------------------------------------------
 				!gisexisting = false
+				!gbestalongdiff = -1
 				do !eg values !existingglabs
 					$!eg
 					handle any
@@ -1872,9 +1883,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 								!dbgf.writerecord('GLABEXISTCAND ' & !dir & ' i=' & !i.string() & ' galong=' & !galong.string() & ' egalong=' & !egalong.string() & ' egmatched=' & !egmatched)
 							endif
 							!egalongdiff = abs(!egalong - !galong)
-							if (!egmatched and !egalongdiff.lt(1)) then
+							if (!egmatched and !egalongdiff.lt(1) and (!gbestalongdiff.lt(0) or !egalongdiff.lt(!gbestalongdiff))) then
 								!gisexisting = true
 								!gexistingref = ce
+								!gbestalongdiff = !egalongdiff
 							endif
 						endif
 					endhandle
