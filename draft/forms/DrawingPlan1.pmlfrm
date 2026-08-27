@@ -1616,7 +1616,7 @@ define method .Apply()
 						-- right/left rows measure along sheet Y, up/down along X  --
 						------------------------------------------------------------
 						!glabn = 0
-						!glabn = !!DrawingPlan1.newglabrefs.size()
+						!glabn = !!DrawingPlan1newglabrefs.size()
 						handle any
 							!glabn = 0
 						endhandle
@@ -1625,11 +1625,11 @@ define method .Apply()
 						!dbgf4.writerecord('GLABFIX count=' & !glabn.string())
 						!dbgf4.close()
 						do !gi from 1 to !glabn
-							$!!DrawingPlan1.newglabrefs[!gi]
+							$!!DrawingPlan1newglabrefs[!gi]
 							handle any
 								skip
 							endhandle
-							!gdir = !!DrawingPlan1.newglabdirs[!gi]
+							!gdir = !!DrawingPlan1newglabdirs[!gi]
 							!gcurxypo = ''
 							var !gcurxypo xypo
 							handle any

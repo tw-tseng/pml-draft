@@ -114,8 +114,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	-- that does not, which is what left GLAB rows 2.5mm off after rebuild's  --
 	-- own recenter fired (found live, 2026-08-27)                           --
 	----------------------------------------------------------------------------
-	!!DrawingPlan1.newglabrefs = object array()
-	!!DrawingPlan1.newglabdirs = object array()
+	!!DrawingPlan1newglabrefs = object array()
+	!!DrawingPlan1newglabdirs = object array()
 
 	---------------------------------------------------------------------------
 	-- the sides of the view are only parallel to E and N when the drawing   --
@@ -2026,8 +2026,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endif
 				else
 					NEW GLAB
-					!!DrawingPlan1.newglabrefs.append(ce)
-					!!DrawingPlan1.newglabdirs.append(!dir)
+					!!DrawingPlan1newglabrefs.append(ce)
+					!!DrawingPlan1newglabdirs.append(!dir)
 				endif
 				DDNA $!gelem
 				BTEXT |$!gtext|
