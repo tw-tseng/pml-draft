@@ -887,6 +887,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- instead of getting a duplicate piled on top of it              --
 		--------------------------------------------------------------------
 		var !existingdpois coll all dpoi for ce
+		--------------------------------------------------------------------
+		-- the actual DPOI objects reused this run, same reasoning as       --
+		-- !claimedglabs above -- cleanup below asks "was THIS object       --
+		-- claimed", not "does some member with this ddna appear anywhere   --
+		-- this run", since one ddna can legitimately carry more than one   --
+		-- DPOI (two tube crossings of the same elbow)                      --
+		--------------------------------------------------------------------
+		!claimeddpois = object array()
 
 		----------------------------------------------------------------------
 		-- every point put on this side's dimension, by the coordinate it   --
@@ -975,20 +983,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!glabgrid = 2
 		!glabrec = object array()
 
-		--------------------------------------------------------------------
-		-- every !mem this run actually found on this side, so the        --
-		-- cleanup pass further down can tell "still here" from "gone"    --
-		-- by comparing DDNA against this list with .eq() -- .dbref() on  --
-		-- a genuinely broken DDNA does not hand back a bad reference to  --
-		-- check, it raises 'Undefined reference' straight through any    --
-		-- handle any wrapped around it (confirmed live, E3D scenario 2)  --
-		--------------------------------------------------------------------
-		!currentmems = object array()
-
 		do !i from 1 to !result.size()
 			!resultl = !result[!i]
 			!mem = !resultl.split('~').getindexed(3).split('!').getindexed(4)
-			!currentmems.append(!mem)
 			var !type type of $!mem
 			--------------------------------------------------------------------
 			-- the position was worked out when the member was found and is    --
@@ -1225,6 +1222,49 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endif
 				endhandle
 			enddo
+			----------------------------------------------------------------------
+			-- fallback: nothing shared this member's own ddna. same instability --
+			-- as the GLAB side (see GLABPOSFALLBACK above) -- the nearest-      --
+			-- labelled-member resolution (MTBE) can come back a different       --
+			-- reference between rebuild and the very next update even with     --
+			-- nothing else changed, so a ddna-only match loses the point        --
+			-- outright: it gets deleted below as an orphan (nothing claims it)  --
+			-- and a brand new DPOI appears wherever this run's resolution       --
+			-- landed, which can be a real distance away, not just a few mm      --
+			-- (confirmed live via a manual before/after DPOI dump, 2026-08-27:  --
+			-- =67177338/9369496 at W221903/N4842246 existed after a fresh      --
+			-- rebuild, vanished after update with nothing at that position     --
+			-- taking its place). so a second pass drops the ddna requirement   --
+			-- and matches on real position alone, same 5mm the reuse check     --
+			-- below already treats as "the same point"                        --
+			----------------------------------------------------------------------
+			if (not(!founddpoi)) then
+				!bestdist = -1
+				do !edp values !existingdpois
+					$!edp
+					handle any
+					elsehandle none
+						-------------------------------------------------------------
+						-- skip a grid-crossing/corner point (ddna '=0/0' or unset)  --
+						-- here -- this fallback is only for a labelled point whose  --
+						-- own ddna drifted, not a licence to steal a nearby grid    --
+						-- point and relabel it                                     --
+						-------------------------------------------------------------
+						var !ecanddna ddna of ce
+						if (not(!ecanddna.unset()) and not(!ecanddna.eq('=0/0'))) then
+							var !ecandpos pos
+							!candposobj = object position(!ecandpos)
+							!canddist = !candposobj.distance(!attapos)
+							if (!canddist.lt(5) and (not(!founddpoi) or !canddist.lt(!bestdist))) then
+								!founddpoi = true
+								!founddpoiref = ce
+								!foundpos = !candposobj
+								!bestdist = !canddist
+							endif
+						endif
+					endhandle
+				enddo
+			endif
 			if (!dbgln and !dir.eq('left')) then
 				!dbgf.writerecord('MATCH mem=' & !mem & ' founddpoi=' & !founddpoi & ' attapos=' & !attapos.string())
 			endif
@@ -1232,8 +1272,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (!dbgln and !dir.eq('left')) then
 					!dbgf.writerecord('MATCH foundpos=' & !foundpos.string() & ' dist=' & !foundpos.distance(!attapos))
 				endif
+				!claimeddpois.append(!founddpoiref)
+				$!founddpoiref
+				DDNA $!mem
 				if (!foundpos.distance(!attapos).geq(5)) then
-					$!founddpoiref
 					POS $!attapos
 				endif
 			else
@@ -1501,18 +1543,24 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		endif
 
 		--------------------------------------------------------------------
-		-- update path cleanup: a DPOI from a previous run whose DDNA      --
-		-- element is not among this run's current members is removed. a  --
-		-- DPOI with no DDNA at all (grid crossings, corners) is left      --
-		-- alone -- but .unset() alone does NOT catch that: a DPOI        --
-		-- created with no DDNA clause reads back as the literal string   --
-		-- '=0/0' (a null DBREF), not a blank/unset string (confirmed     --
-		-- live via CLEANUP debug -- this cost every corner/grid DPOI in  --
-		-- the chain, 2026-08-26). both are checked. matching is done     --
-		-- with .eq() against !currentmems rather than resolving the      --
-		-- DDNA (.dbref() on a genuinely deleted element's DDNA raises    --
-		-- 'Undefined reference' straight through any handle any wrapped  --
-		-- around it, confirmed live)                                    --
+		-- update path cleanup: a DPOI from a previous run not claimed by  --
+		-- !claimeddpois (the actual objects reused above) this run is    --
+		-- removed. a DPOI with no DDNA at all (grid crossings, corners)  --
+		-- is left alone -- but .unset() alone does NOT catch that: a     --
+		-- DPOI created with no DDNA clause reads back as the literal     --
+		-- string '=0/0' (a null DBREF), not a blank/unset string         --
+		-- (confirmed live via CLEANUP debug -- this cost every           --
+		-- corner/grid DPOI in the chain, 2026-08-26). both are checked   --
+		--                                                                --
+		-- checking by ddna-in-currentmems instead of by object used to   --
+		-- let a genuinely gone point read as "still current" whenever    --
+		-- its old ddna happened to also be the ddna some OTHER, unrelated --
+		-- point resolved to this run -- confirmed live via a manual      --
+		-- before/after DPOI dump, 2026-08-27: =67177338/9369496 existed  --
+		-- after rebuild and was gone after update with nothing at that   --
+		-- position taking its place, while the same ddna string          --
+		-- legitimately belonged to a different, unrelated point          --
+		-- elsewhere on the same LDIM                                     --
 		--------------------------------------------------------------------
 		--------------------------------------------------------------------
 		-- confirmed live 2026-08-26 on a fresh rebuild (no update-path    --
@@ -1530,15 +1578,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			elsehandle none
 				var !eddna ddna of ce
 				if (not(!eddna.unset()) and not(!eddna.eq('=0/0'))) then
+					!edpref = ce
 					!stillcurrent = false
-					do !cm values !currentmems
-						if (!eddna.eq(!cm)) then
+					do !cd values !claimeddpois
+						if (!edpref.eq(!cd)) then
 							!stillcurrent = true
 							break
 						endif
 					enddo
-					if (!dbgln and !dir.eq('left')) then
-						!dbgf.writerecord('CLEANUP eddna=' & !eddna & ' stillcurrent=' & !stillcurrent)
+					if (!dbgln) then
+						!dbgf.writerecord('CLEANUP ' & !dir & ' eddna=' & !eddna & ' stillcurrent=' & !stillcurrent)
 					endif
 					if (not(!stillcurrent)) then
 						delete dpoi
