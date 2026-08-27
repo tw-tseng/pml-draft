@@ -1872,7 +1872,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							if (!dbgln) then
 								!dbgf.writerecord('GLABEXISTCAND ' & !dir & ' i=' & !i.string() & ' galong=' & !galong.string() & ' egalong=' & !egalong.string() & ' egmatched=' & !egmatched)
 							endif
-							if (!egmatched and abs(!egalong - !galong).lt(1)) then
+							!egalongdiff = abs(!egalong - !galong)
+							if (!egmatched and !egalongdiff.lt(1)) then
 								!gisexisting = true
 								!gexistingref = ce
 							endif
