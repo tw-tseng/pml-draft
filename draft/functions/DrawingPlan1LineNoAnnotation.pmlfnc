@@ -2182,7 +2182,12 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!gexb = ''
 				endhandle
 				if (!dbgln) then
-					!dbgf.writerecord('GLABTEXT ' & !dir & ' i=' & !i.string() & ' xypo=' & !gxypo & ' exbtext=' & !gexb)
+					!gfinalsh = 'ERR'
+					var !gfinalsh shpos of ce
+					handle any
+						!gfinalsh = 'ERR'
+					endhandle
+					!dbgf.writerecord('GLABTEXT ' & !dir & ' i=' & !i.string() & ' xypo=' & !gxypo & ' exbtext=' & !gexb & ' elem=' & !gelem & ' finalsh=' & !gfinalsh)
 				endif
 				-------------------------------------------------------------
 				-- how wide the wording really is, added up a character at   --
