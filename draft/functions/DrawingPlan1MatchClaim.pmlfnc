@@ -1,0 +1,268 @@
+-------------------------------------------------------------------
+-- Function : match line per-element diff helpers                 --
+-- Date     : 2026-08-28                                          --
+--                                                                --
+-- the match line's straights and texts carry no DDNA and no      --
+-- stable name, so an update cannot find last run's copy of one   --
+-- by identity the way the GLABs are found. what they do have is  --
+-- geometry that is entirely derived from the view border and the --
+-- neighbouring boxes -- so the match is done on that geometry:   --
+-- an existing element standing exactly where this run wants one  --
+-- IS that one, and is left untouched                             --
+--                                                                --
+-- collected once per run into three parallel globals, filled by  --
+-- .Collect() below and consumed by .Claim(). globals rather than --
+-- form members for the usual reason: these files are re-read on  --
+-- every call, the form only on kill/show                         --
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+-- the two numbers out of whatever shape 'fpt' / 'tpt' / 'origin' --
+-- answer in -- 'X 100mm Y 200mm' and 'x 100 y 200' both reduce   --
+-- to the same 'x~y'. anything that will not parse comes back     --
+-- empty, which .Claim() treats as "cannot be compared", so the   --
+-- element simply does not match and is redrawn rather than the   --
+-- run falling over                                               --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchXY(!raw is string) is string
+	!xs = ''
+	!ys = ''
+	!toks = !raw.split()
+	handle any
+		!toks = object array()
+	endhandle
+	do !t values !toks
+		!tt = !t.replace('mm', '')
+		!ok = true
+		!r = 0
+		!r = !tt.real()
+		handle any
+			!ok = false
+		endhandle
+		if (!ok) then
+			if (!xs.eq('')) then
+				!xs = !r.string()
+			elseif (!ys.eq('')) then
+				!ys = !r.string()
+			endif
+		endif
+	enddo
+	return !xs & '~' & !ys
+endfunction
+
+-------------------------------------------------------------------
+-- everything on this view's NOTE that this run is entitled to    --
+-- move or remove. the straights are picked out by the user's own --
+-- filter (2026-08-28): nlstyle 8029 is DChainedThick and         --
+-- nlcolour 16 is Magenta, which nothing else in the NOTE uses.   --
+-- the texts share their colour with the border's drawing number  --
+-- and titles, so those are told apart by their wording instead   --
+-- -- only the match line writes 'MATCH LINE ...' or 'SEE ...'    --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchCollect()
+	!!DrawingPlan1MatchCandRefs = object array()
+	!!DrawingPlan1MatchCandSigs = object array()
+	!!DrawingPlan1MatchClaims = object array()
+
+	note 1
+	handle any
+		return
+	endhandle
+	!noteref = ce
+
+	var !mlstras coll all stra with nlstyle eq 8029 and nlcolour eq 16 for ce
+	handle any
+		!mlstras = object array()
+	endhandle
+	do !s values !mlstras
+		$!s
+		handle any
+			skip
+		endhandle
+		!sref = ce
+		!f = ''
+		var !f fpt
+		handle any
+			!f = ''
+		endhandle
+		!t = ''
+		var !t tpt
+		handle any
+			!t = ''
+		endhandle
+		!fxy = !!DrawingPlan1MatchXY(!f)
+		!txy = !!DrawingPlan1MatchXY(!t)
+		!!DrawingPlan1MatchCandRefs.append(!sref)
+		!!DrawingPlan1MatchCandSigs.append('S~' & !fxy & '~' & !txy)
+		!!DrawingPlan1MatchClaims.append(false)
+	enddo
+
+	$!noteref
+	var !mltexps coll all texp for ce
+	handle any
+		!mltexps = object array()
+	endhandle
+	do !x values !mltexps
+		$!x
+		handle any
+			skip
+		endhandle
+		!xref = ce
+		!bt = ''
+		var !bt btext
+		handle any
+			!bt = ''
+		endhandle
+		------------------------------------------------------------
+		-- only the match line's own wording. the drawing number   --
+		-- and the three title lines sit on this same NOTE in the  --
+		-- same colour and must not be touched                     --
+		------------------------------------------------------------
+		!ismine = false
+		!btlen = 0
+		!btlen = !bt.length()
+		handle any
+			!btlen = 0
+		endhandle
+		if (!btlen.geq(10)) then
+			!head10 = !bt.substring(1, 10)
+			if (!head10.eqnocase('MATCH LINE')) then
+				!ismine = true
+			endif
+		endif
+		if (not(!ismine) and !btlen.geq(4)) then
+			!head4 = !bt.substring(1, 4)
+			if (!head4.eqnocase('SEE ')) then
+				!ismine = true
+			endif
+		endif
+		if (!ismine) then
+			!o = ''
+			var !o origin
+			handle any
+				!o = ''
+			endhandle
+			!oxy = !!DrawingPlan1MatchXY(!o)
+			!!DrawingPlan1MatchCandRefs.append(!xref)
+			!!DrawingPlan1MatchCandSigs.append('T~' & !oxy & '~' & !bt)
+			!!DrawingPlan1MatchClaims.append(false)
+		endif
+	enddo
+	$!noteref
+endfunction
+
+-------------------------------------------------------------------
+-- is there already an element standing exactly here? if so it is --
+-- claimed (so the cleanup will not remove it) and TRUE comes     --
+-- back, meaning the caller must NOT draw a second one            --
+--                                                                --
+-- !sig is 'S~x1~y1~x2~y2' for a straight or 'T~x~y~text' for a   --
+-- text. 0.05mm is well under anything visible and well over the  --
+-- last-digit noise of a sheet coordinate written and read back   --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchClaim(!sig is string) is boolean
+	!r = !!DrawingPlan1MatchClaimRef(!sig)
+	if (!r.eq('')) then
+		return false
+	endif
+	return true
+endfunction
+
+-------------------------------------------------------------------
+-- the same thing, but answering WHICH element was claimed. the    --
+-- four border straights are handed to .Apply() afterwards by ref  --
+-- (it puts them back on the corners once it knows how far the     --
+-- annotation reaches), so for those it is not enough to know that --
+-- one was found                                                   --
+--                                                                --
+-- '' means nothing is standing there and the caller should draw   --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchClaimRef(!sig is string) is string
+	!answer = ''
+	!n = 0
+	!n = !!DrawingPlan1MatchCandSigs.size()
+	handle any
+		!n = 0
+	endhandle
+	!parts = !sig.split('~')
+	!kind = !parts.getindexed(1)
+	if (!kind.eq('T')) then
+		!nf = 3
+	else
+		!nf = 5
+	endif
+	do !i from 1 to !n
+		if (not(!!DrawingPlan1MatchClaims[!i])) then
+			!cand = !!DrawingPlan1MatchCandSigs[!i]
+			!cp = !cand.split('~')
+			if (!cp.getindexed(1).eq(!kind)) then
+				!same = true
+				if (!kind.eq('T')) then
+					if (not(!cp.getindexed(4).eq(!parts.getindexed(4)))) then
+						!same = false
+					endif
+				endif
+				if (!same) then
+					do !k from 2 to !nf
+						!a = !cp.getindexed(!k)
+						!b = !parts.getindexed(!k)
+						if (!a.eq('') or !b.eq('')) then
+							-- one of them would not parse: cannot be called a match --
+							if (not(!a.eq(!b))) then
+								!same = false
+							endif
+						else
+							!d = abs(!a.real() - !b.real())
+							if (!d.gt(0.05)) then
+								!same = false
+							endif
+						endif
+					enddo
+				endif
+				if (!same) then
+					!!DrawingPlan1MatchClaims[!i] = true
+					!answer = !!DrawingPlan1MatchCandRefs[!i]
+					break
+				endif
+			endif
+		endif
+	enddo
+	return !answer
+endfunction
+
+-------------------------------------------------------------------
+-- anything collected at the start and not claimed by any of the  --
+-- four sides is last run's, standing somewhere this run does not --
+-- want one, and goes. run once, after all four sides             --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchCleanup()
+	!n = 0
+	!n = !!DrawingPlan1MatchCandRefs.size()
+	handle any
+		!n = 0
+	endhandle
+	do !i from 1 to !n
+		if (not(!!DrawingPlan1MatchClaims[!i])) then
+			----------------------------------------------------------
+			-- copied into a plain variable before the navigation:   --
+			-- '$' expansion of an indexed GLOBAL array element is   --
+			-- not something to rely on -- the view recenter's own   --
+			-- GLAB fixup loop is written that way and turned out to --
+			-- do nothing at all (2026-08-28)                        --
+			----------------------------------------------------------
+			!cref = !!DrawingPlan1MatchCandRefs[!i]
+			$!cref
+			handle any
+				skip
+			endhandle
+			!sig = !!DrawingPlan1MatchCandSigs[!i]
+			if (!sig.substring(1, 1).eq('T')) then
+				delete texp
+			else
+				delete stra
+			endif
+			handle any
+			endhandle
+		endif
+	enddo
+endfunction

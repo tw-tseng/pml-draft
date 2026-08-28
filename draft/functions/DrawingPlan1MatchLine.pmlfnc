@@ -8,11 +8,24 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	!dirlist = 'right left down up'
 	!format = object format()
 	!format.dp = 0
+	--------------------------------------------------------------------
+	-- everything this run may move or remove, read before anything is --
+	-- drawn. the four sides below claim what they find already in the --
+	-- right place and draw only what is missing; whatever is left     --
+	-- unclaimed at the end was last run's and is removed. without     --
+	-- this the whole match line was simply redrawn, which is fine on  --
+	-- the rebuild path but on an update would clear and re-add every  --
+	-- straight and every text on a drawing where nothing had actually --
+	-- moved (2026-08-28)                                              --
+	--------------------------------------------------------------------
+	$!name/SS/S1/V1
+	!!DrawingPlan1MatchCollect()
 	do !jj from 1 to 4
 		!dir = !dirlist.part(!jj)
 		$!name/SS/S1/V1
 		!!DrawingPlan1MatchLine1(!dir, !projid, !equistr, !format)
 	enddo
+	$!name/SS/S1/V1
 	note 1
 	-------------------------------------------------------------------
 	-- the box round the view. these four are given sheet positions,  --
@@ -27,17 +40,41 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	-- every call and the form only on kill/show, so a member would   --
 	-- break every run made between editing the two                   --
 	-------------------------------------------------------------------
+	--------------------------------------------------------------------
+	-- .Apply() still needs all four of these, claimed or freshly      --
+	-- drawn, and still in the order top, bottom, right, left -- so    --
+	-- the claim has to hand back which element it matched, not just   --
+	-- that it matched one. .ClaimRef() answers '' when there is       --
+	-- nothing there and the ref of the one it claimed when there is   --
+	--------------------------------------------------------------------
 	!!DrawingPlan1MatchStras = object array()
-	new stra fpt $!!DrawingPlan1.viewULsh tpt $!!DrawingPlan1.viewURsh NLStyle DChainedThick  NLColour Magenta 
-	var !msref ref
-	!!DrawingPlan1MatchStras.append(!msref)
-	new stra fpt $!!DrawingPlan1.viewLLsh tpt $!!DrawingPlan1.viewLRsh NLStyle DChainedThick  NLColour Magenta 
-	var !msref ref
-	!!DrawingPlan1MatchStras.append(!msref)
-	new stra fpt $!!DrawingPlan1.viewLRsh tpt $!!DrawingPlan1.viewURsh NLStyle DChainedThick  NLColour Magenta 
-	var !msref ref
-	!!DrawingPlan1MatchStras.append(!msref)
-	new stra fpt $!!DrawingPlan1.viewLLsh tpt $!!DrawingPlan1.viewULsh NLStyle DChainedThick  NLColour Magenta
-	var !msref ref
-	!!DrawingPlan1MatchStras.append(!msref)
+	!bfrom = object array()
+	!bto = object array()
+	!bfrom[1] = !!DrawingPlan1.viewULsh
+	!bto[1]   = !!DrawingPlan1.viewURsh
+	!bfrom[2] = !!DrawingPlan1.viewLLsh
+	!bto[2]   = !!DrawingPlan1.viewLRsh
+	!bfrom[3] = !!DrawingPlan1.viewLRsh
+	!bto[3]   = !!DrawingPlan1.viewURsh
+	!bfrom[4] = !!DrawingPlan1.viewLLsh
+	!bto[4]   = !!DrawingPlan1.viewULsh
+	do !bi from 1 to 4
+		!bf = !bfrom[!bi]
+		!bt = !bto[!bi]
+		!bfxy = !!DrawingPlan1MatchXY(!bf)
+		!btxy = !!DrawingPlan1MatchXY(!bt)
+		!bsig = 'S~' & !bfxy & '~' & !btxy
+		!bref = !!DrawingPlan1MatchClaimRef(!bsig)
+		if (!bref.eq('')) then
+			new stra fpt $!bf tpt $!bt NLStyle DChainedThick  NLColour Magenta
+			var !msref ref
+			!!DrawingPlan1MatchStras.append(!msref)
+		else
+			!!DrawingPlan1MatchStras.append(!bref)
+		endif
+	enddo
+	--------------------------------------------------------------------
+	-- and whatever none of the four sides wanted this run             --
+	--------------------------------------------------------------------
+	!!DrawingPlan1MatchCleanup()
 endfunction

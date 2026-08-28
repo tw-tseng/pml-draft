@@ -2088,6 +2088,18 @@ define method .Apply()
 				1
 				last
 				!!DrawingPlan1LineNoAnnotation(!name, !boxXlen.real(), !boxYlen.real())
+				------------------------------------------------------------------
+				-- match line, now that it knows how to reuse what is already    --
+				-- on the sheet (DrawingPlan1MatchClaim.pmlfnc). it is drawn     --
+				-- entirely off the view border, so a box change moves every     --
+				-- part of it -- leaving it out was why the match line stayed on --
+				-- the OLD border after the first box-grew test (2026-08-28)     --
+				--                                                               --
+				-- Grid/Equi/Flow still have no reuse logic and are still left   --
+				-- out; they are the next three steps                            --
+				------------------------------------------------------------------
+				$!name/SS/S1/V1
+				!!DrawingPlan1MatchLine(!name, !equistr)
 			endif
 		endhandle
 	enddo

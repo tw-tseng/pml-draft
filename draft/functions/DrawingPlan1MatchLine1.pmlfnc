@@ -249,11 +249,20 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 						!posx = !!DrawingPlan1.viewULsh.part(2).real() - 1
 					endif
 					!posy = !sortedtypes[!i].split('!').getindexed(4).real() + (!sortedtypes[!i + 1].split('!').getindexed(4).real() - !sortedtypes[!i].split('!').getindexed(4).real()) * 0.5
+					------------------------------------------------------------
+					-- the ALIG lines below act on whatever was just created,  --
+					-- so they have to sit inside the same guard: skipping the --
+					-- NEW but still running the ALIG would re-align whichever --
+					-- element CE happened to be left on                       --
+					------------------------------------------------------------
+					!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
+					if (not(!!DrawingPlan1MatchClaim(!mlsig))) then
 						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center txcolour yellow font 1
-					if !dir.eq('right') then
-						alig tbody
-					else
-						alig bbody
+						if !dir.eq('right') then
+							alig tbody
+						else
+							alig bbody
+						endif
 					endif
 				elseif (!dir.eq('up') or !dir.eq('down')) and not(!tempt.eqnocase('')) then
 					!posx = !sortedtypes[!i].split('!').getindexed(3).real() + (!sortedtypes[!i + 1].split('!').getindexed(3).real() - !sortedtypes[!i].split('!').getindexed(3).real()) * 0.5
@@ -262,11 +271,14 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					else
 					!posy = !!DrawingPlan1.viewLRsh.part(4).real() - 1
 					endif
-					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| just center txcolour yellow font 1
-					if !dir.eq('up') then
-						alig bbody
-					else
-						alig tbody
+					!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
+					if (not(!!DrawingPlan1MatchClaim(!mlsig))) then
+						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| just center txcolour yellow font 1
+						if !dir.eq('up') then
+							alig bbody
+						else
+							alig tbody
+						endif
 					endif
 				endif
 			endif
@@ -299,26 +311,50 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				endif
 			endif
 			if not(!exist) then
+				------------------------------------------------------------
+				-- these ticks are 10mm long and run out of the border at  --
+				-- a fixed angle, so where the far end lands is known here --
+				-- without reading it back -- which is what lets the tick  --
+				-- be compared against an existing one on the same footing --
+				-- as the four border straights (2026-08-28)               --
+				------------------------------------------------------------
 				if !dir.eq('right') or !dir.eq('left') then
 					!exists.append(!sortedtypes[!i].split('!').getindexed(4))
 					!newy = !sortedtypes[!i].split('!').getindexed(4)
 					if !dir.eq('right') then
 						!newx = !!DrawingPlan1.viewURsh.part(2)
-						new stra fpt x $!newx y $!newy length 10 adegrees 0 NLStyle DChainedThick  NLColour Magenta
+						!tkadeg = 0
 					else
 						!newx = !!DrawingPlan1.viewULsh.part(2)
-						new stra fpt x $!newx y $!newy length 10 adegrees 180 NLStyle DChainedThick  NLColour Magenta
+						!tkadeg = 180
 					endif
 				else
 					!exists.append(!sortedtypes[!i].split('!').getindexed(3))
 					!newx = !sortedtypes[!i].split('!').getindexed(3)
 					if !dir.eq('up') then
 						!newy = !!DrawingPlan1.viewURsh.part(4)
-						new stra fpt x $!newx y $!newy length 10 adegrees 90 NLStyle DChainedThick  NLColour Magenta						
+						!tkadeg = 90
 					else
 						!newy = !!DrawingPlan1.viewLRsh.part(4)
-						new stra fpt x $!newx y $!newy length 10 adegrees -90 NLStyle DChainedThick  NLColour Magenta	
+						!tkadeg = -90
 					endif
+				endif
+				!tkx = !newx.real()
+				!tky = !newy.real()
+				!tkx2 = !tkx
+				!tky2 = !tky
+				if (!tkadeg.eq(0)) then
+					!tkx2 = !tkx + 10
+				elseif (!tkadeg.eq(180)) then
+					!tkx2 = !tkx - 10
+				elseif (!tkadeg.eq(90)) then
+					!tky2 = !tky + 10
+				else
+					!tky2 = !tky - 10
+				endif
+				!tksig = 'S~' & !tkx.string() & '~' & !tky.string() & '~' & !tkx2.string() & '~' & !tky2.string()
+				if (not(!!DrawingPlan1MatchClaim(!tksig))) then
+					new stra fpt x $!newx y $!newy length 10 adegrees $!tkadeg NLStyle DChainedThick  NLColour Magenta
 				endif
 			endif
 --			$p $!sortedtypes[$!i]
@@ -384,22 +420,35 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 			endif
 		endif
 		if not(!tempt.eqnocase('')) then
+			------------------------------------------------------------
+			-- the position is worked out first, on its own, so that   --
+			-- the "is one already standing here" question can be      --
+			-- asked once for all four sides instead of four times     --
+			------------------------------------------------------------
 			if !dir.eq('right') then
 				!posx = !!DrawingPlan1.viewURsh.part(2).real() + 1
 				!posy = !!DrawingPlan1.viewLRsh.part(4).real() + (!!DrawingPlan1.viewURsh.part(4).real() - !!DrawingPlan1.viewLRsh.part(4).real()) * 0.5
-				new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center alig tbody txcolour yellow font 1
 			elseif !dir.eq('left') then
 				!posx = !!DrawingPlan1.viewULsh.part(2).real() - 1
 				!posy = !!DrawingPlan1.viewLRsh.part(4).real() + (!!DrawingPlan1.viewURsh.part(4).real() - !!DrawingPlan1.viewLRsh.part(4).real()) * 0.5
-				new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center alig bbody txcolour yellow font 1
 			elseif !dir.eq('up') then
 				!posx = !!DrawingPlan1.viewULsh.part(2).real() + (!!DrawingPlan1.viewURsh.part(2).real() - !!DrawingPlan1.viewULsh.part(2).real()) * 0.5
 				!posy = !!DrawingPlan1.viewURsh.part(4).real() + 1
-				new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center alig bbody txcolour yellow font 1
 			elseif !dir.eq('down') then
 				!posx = !!DrawingPlan1.viewULsh.part(2).real() + (!!DrawingPlan1.viewURsh.part(2).real() - !!DrawingPlan1.viewULsh.part(2).real()) * 0.5
 				!posy = !!DrawingPlan1.viewLRsh.part(4).real() - 1
-				new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center alig tbody txcolour yellow font 1
+			endif
+			!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
+			if (not(!!DrawingPlan1MatchClaim(!mlsig))) then
+				if !dir.eq('right') then
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center alig tbody txcolour yellow font 1
+				elseif !dir.eq('left') then
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center alig bbody txcolour yellow font 1
+				elseif !dir.eq('up') then
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center alig bbody txcolour yellow font 1
+				elseif !dir.eq('down') then
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center alig tbody txcolour yellow font 1
+				endif
 			endif
 		endif
 	endif
