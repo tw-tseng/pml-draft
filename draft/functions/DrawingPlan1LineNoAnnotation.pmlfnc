@@ -1537,6 +1537,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		handle any
 			!tkn = 0
 		endhandle
+		!tickdupes = object array()
 		do !tki from 1 to !tkn
 			!tkp = !!DrawingPlan1MatchTickPos[!tki].split('~')
 			if (!tkp.getindexed(1).eq(!dir)) then
@@ -1551,38 +1552,46 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				var !temppos enupos of $!intsh
 				!attapos = object position(!temppos)
 				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
-				!foundtick = false
+				------------------------------------------------------------
+				-- a point still standing exactly where this run would    --
+				-- put one                                                 --
+				------------------------------------------------------------
+				!tickauto = ''
 				do !edp values !existingdpois
 					$!edp
 					var !epos pos
 					!eposobj = object position(!epos)
 					if (!eposobj.distance(!attapos).lt(5)) then
-						!foundtick = true
 						!claimeddpois.append(ce)
+						if (!tickauto.eq('')) then
+							!tickauto = ce
+						endif
 					endif
 				enddo
 				------------------------------------------------------------
-				-- nothing standing exactly here -- but the point may have --
-				-- been dragged by hand after the last run. dragging it     --
-				-- sideways is the whole reason the blue points can be      --
-				-- moved at all: it only shortens or lengthens the          --
-				-- projection line and leaves the measurement alone. the    --
-				-- 5mm above is 5mm of the MODEL, a fifth of a millimetre   --
-				-- on the sheet at 1:50, so any such nudge lost the point   --
-				-- and this run drew a second one beside it -- reported     --
-				-- live as an extra 0 dimension (2026-08-28)                --
-				--                                                          --
-				-- so ask again, this time on the coordinate ALONG the      --
-				-- dimension only, which a sideways drag does not change.   --
-				-- second pass rather than a looser first one: everything   --
-				-- that matched before still matches exactly as it did      --
+				-- and one that was dragged aside by hand. dragging it     --
+				-- sideways is the whole reason the blue points can be     --
+				-- moved at all: it only shortens or lengthens the         --
+				-- projection line and leaves the measurement alone. the   --
+				-- 5mm above is 5mm of the MODEL, a fifth of a millimetre  --
+				-- on the sheet at 1:50, so any such nudge lost the point  --
+				-- and this run drew a second one beside it -- reported    --
+				-- live as an extra 0 dimension (2026-08-28)               --
+				--                                                         --
+				-- so ask again, this time on the coordinate ALONG the     --
+				-- dimension only, which a sideways drag does not change,  --
+				-- and skipping whatever the first pass already matched.   --
+				-- a second pass rather than a looser first one: whatever  --
+				-- matched before still matches exactly as it did          --
 				------------------------------------------------------------
-				if (not(!foundtick)) then
-					!bestd = 1
-					!bestref = ''
-					do !edp values !existingdpois
-						$!edp
-						var !epos pos
+				!tickmoved = ''
+				!bestd = 1
+				do !edp values !existingdpois
+					$!edp
+					var !epos pos
+					!eposobj = object position(!epos)
+					!d3 = !eposobj.distance(!attapos)
+					if (!d3.geq(5)) then
 						var !eposh shpos of $!epos
 						if (!dir.eq('right') or !dir.eq('left')) then
 							!ealong = !eposh.split().getindexed(4).replace('mm','').real()
@@ -1592,17 +1601,20 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!ed = abs(!ealong - !alongv)
 						if (!ed.lt(!bestd)) then
 							!bestd = !ed
-							!bestref = ce
-						endif
-					enddo
-					if (!bestref.neq('')) then
-						$!bestref
-						!claimeddpois.append(ce)
-						!foundtick = true
-						if (!dbgln) then
-							!dbgf.writerecord('TICKALONG ' & !dir & ' alongv=' & !alongv.string() & ' reused=' & !bestref & ' off=' & !bestd.string())
+							!tickmoved = ce
 						endif
 					endif
+				enddo
+				if (!tickmoved.neq('')) then
+					$!tickmoved
+					!claimeddpois.append(ce)
+					if (!dbgln) then
+						!dbgf.writerecord('TICKALONG ' & !dir & ' alongv=' & !alongv.string() & ' reused=' & !tickmoved & ' off=' & !bestd.string() & ' auto=' & !tickauto)
+					endif
+				endif
+				!foundtick = false
+				if (!tickauto.neq('') or !tickmoved.neq('')) then
+					!foundtick = true
 				endif
 				if (!!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)) then
 					!dimalong.append(!alongv)
@@ -1610,6 +1622,25 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						$!name/SS/S1/V1/ateLINE_$!dir
 						NEW DPOI POS $!attapos
 						!claimeddpois.append(ce)
+					elseif (!tickmoved.neq('') and !tickauto.neq('')) then
+						------------------------------------------------------
+						-- both a point somebody moved by hand AND one still --
+						-- sitting where this run would place it, on the     --
+						-- same coordinate. the pair measures nothing and    --
+						-- shows up as a stray 0 on the drawing. the         --
+						-- automatic one is the leftover -- it was drawn     --
+						-- beside the moved one back when a moved point      --
+						-- could not be recognised -- so it goes and the one --
+						-- somebody placed on purpose stays                  --
+						--                                                    --
+						-- recorded, not deleted here: the corner blocks     --
+						-- below walk !existingdpois with no handler and a   --
+						-- dead reference would stop the run                 --
+						------------------------------------------------------
+						!tickdupes.append(!tickauto)
+						if (!dbgln) then
+							!dbgf.writerecord('TICKDUPE ' & !dir & ' alongv=' & !alongv.string() & ' dropping=' & !tickauto & ' keeping=' & !tickmoved)
+						endif
 					endif
 				endif
 			endif
@@ -1785,6 +1816,21 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- deleted the second, legitimate crossing point every run. do   --
 		-- not reintroduce that                                          --
 		--------------------------------------------------------------------
+		--------------------------------------------------------------------
+		-- the leftover automatic points found beside a hand-placed one   --
+		-- (see the match line tick block above). done here, where the    --
+		-- walks over !existingdpois that cannot survive a dead reference --
+		-- are already behind us                                          --
+		--------------------------------------------------------------------
+		do !td values !tickdupes
+			$!td
+			handle any
+				skip
+			endhandle
+			delete dpoi
+			handle any
+			endhandle
+		enddo
 		do !edp values !existingdpois
 			$!edp
 			handle any
