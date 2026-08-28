@@ -1556,15 +1556,23 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- a point still standing exactly where this run would    --
 				-- put one                                                 --
 				------------------------------------------------------------
-				!tickauto = ''
+				--------------------------------------------------------
+				-- CE answers a DBREF, and a variable's type is fixed  --
+				-- by its FIRST assignment -- so !tickauto must not be --
+				-- cleared to '' between ticks (STRING=DBREF, reported --
+				-- live 2026-08-28). a plain boolean says whether it   --
+				-- holds anything this time round instead              --
+				--------------------------------------------------------
+				!hasauto = false
 				do !edp values !existingdpois
 					$!edp
 					var !epos pos
 					!eposobj = object position(!epos)
 					if (!eposobj.distance(!attapos).lt(5)) then
 						!claimeddpois.append(ce)
-						if (!tickauto.eq('')) then
+						if (not(!hasauto)) then
 							!tickauto = ce
+							!hasauto = true
 						endif
 					endif
 				enddo
@@ -1584,7 +1592,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- a second pass rather than a looser first one: whatever  --
 				-- matched before still matches exactly as it did          --
 				------------------------------------------------------------
-				!tickmoved = ''
+				!hasmoved = false
 				!bestd = 1
 				do !edp values !existingdpois
 					$!edp
@@ -1602,18 +1610,19 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						if (!ed.lt(!bestd)) then
 							!bestd = !ed
 							!tickmoved = ce
+							!hasmoved = true
 						endif
 					endif
 				enddo
-				if (!tickmoved.neq('')) then
+				if (!hasmoved) then
 					$!tickmoved
 					!claimeddpois.append(ce)
 					if (!dbgln) then
-						!dbgf.writerecord('TICKALONG ' & !dir & ' alongv=' & !alongv.string() & ' reused=' & !tickmoved & ' off=' & !bestd.string() & ' auto=' & !tickauto)
+						!dbgf.writerecord('TICKALONG ' & !dir & ' alongv=' & !alongv.string() & ' off=' & !bestd.string() & ' hasauto=' & !hasauto.string())
 					endif
 				endif
 				!foundtick = false
-				if (!tickauto.neq('') or !tickmoved.neq('')) then
+				if (!hasauto or !hasmoved) then
 					!foundtick = true
 				endif
 				if (!!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)) then
@@ -1622,7 +1631,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						$!name/SS/S1/V1/ateLINE_$!dir
 						NEW DPOI POS $!attapos
 						!claimeddpois.append(ce)
-					elseif (!tickmoved.neq('') and !tickauto.neq('')) then
+					elseif (!hasmoved and !hasauto) then
 						------------------------------------------------------
 						-- both a point somebody moved by hand AND one still --
 						-- sitting where this run would place it, on the     --
@@ -1639,7 +1648,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						------------------------------------------------------
 						!tickdupes.append(!tickauto)
 						if (!dbgln) then
-							!dbgf.writerecord('TICKDUPE ' & !dir & ' alongv=' & !alongv.string() & ' dropping=' & !tickauto & ' keeping=' & !tickmoved)
+							-- the two refs are DBREFs, not strings, so they are --
+							-- deliberately not concatenated in here             --
+							!dbgf.writerecord('TICKDUPE ' & !dir & ' alongv=' & !alongv.string() & ' movedby=' & !bestd.string())
 						endif
 					endif
 				endif
