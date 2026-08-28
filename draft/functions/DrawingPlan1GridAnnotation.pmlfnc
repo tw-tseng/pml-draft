@@ -15,7 +15,17 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	-- kill/show), so a member breaks every run made in between          --
 	----------------------------------------------------------------------
 	!!DrawingPlan1GridBubbles = object array()
-	NEW LAYE $!name/SS/S1/V1/ateGRID
+	--------------------------------------------------------------------
+	-- update path: this LAYE survives from a previous run, so reuse it --
+	-- instead of erroring on a duplicate name. the attribute lines     --
+	-- below always reapply, harmless whether it is new or old -- same  --
+	-- as DrawingPlan1LineNoAnnotation does with ateLINE (2026-08-28)   --
+	--------------------------------------------------------------------
+	$!name/SS/S1/V1/ateGRID
+	handle any
+		NEW LAYE $!name/SS/S1/V1/ateGRID
+	elsehandle none
+	endhandle
 	Purpose GRIDA
 	Lvisibility true
 	Font 1
@@ -57,6 +67,58 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	CHColour Grey
   Cheitx '4.00mm'
 	
+	--------------------------------------------------------------------
+	-- every bubble already on this layer, read before anything is      --
+	-- drawn. each one is named by the grid line it belongs to (DDNA),  --
+	-- which end of it (NPPT) and which side of the view it came out on --
+	-- (AGSIDE); DrawingPlan1GridClaim matches on those three and hands --
+	-- back the one to reuse, so a bubble keeps its identity across an  --
+	-- update even when the box has grown and moved it. whatever no     --
+	-- grid line wants this run is deleted at the bottom                --
+	--------------------------------------------------------------------
+	!!DrawingPlan1GridSlabRefs = object array()
+	!!DrawingPlan1GridSlabDdna = object array()
+	!!DrawingPlan1GridSlabSide = object array()
+	!!DrawingPlan1GridSlabNppt = object array()
+	!!DrawingPlan1GridSlabClaims = object array()
+	$!name/SS/S1/V1/ateGRID
+	var !exslabs coll all slab for ce
+	handle any
+		!exslabs = object array()
+	endhandle
+	do !exsl values !exslabs
+		$!exsl
+		handle any
+			skip
+		endhandle
+		var !exref ref
+		!exddna = ''
+		var !exddna ddna
+		handle any
+			!exddna = ''
+		endhandle
+		!exside = ''
+		var !exside agside
+		handle any
+			!exside = ''
+		endhandle
+		!exnstr = ''
+		var !exnstr nppt
+		handle any
+			!exnstr = ''
+		endhandle
+		!exnppt = 0
+		!exnppt = !exnstr.real()
+		handle any
+			!exnppt = 0
+		endhandle
+		!!DrawingPlan1GridSlabRefs.append(!exref)
+		!!DrawingPlan1GridSlabDdna.append(!exddna)
+		!!DrawingPlan1GridSlabSide.append(!exside)
+		!!DrawingPlan1GridSlabNppt.append(!exnppt)
+		!!DrawingPlan1GridSlabClaims.append(false)
+	enddo
+
 	----------------------------------------------
 	-- calculate view four corners coordination --
 	----------------------------------------------
@@ -247,5 +309,27 @@ $(
 			enddo
 $)			
 		enddo
+	enddo
+	--------------------------------------------------------------------
+	-- bubbles from a previous run that no grid line asked for this     --
+	-- time -- a grid line that no longer reaches the view after the    --
+	-- box changed, say. run once, after every side has had its turn    --
+	--------------------------------------------------------------------
+	!gsn = 0
+	!gsn = !!DrawingPlan1GridSlabRefs.size()
+	handle any
+		!gsn = 0
+	endhandle
+	do !gsi from 1 to !gsn
+		if (not(!!DrawingPlan1GridSlabClaims[!gsi])) then
+			!gsref = !!DrawingPlan1GridSlabRefs[!gsi]
+			$!gsref
+			handle any
+				skip
+			endhandle
+			delete slab
+			handle any
+			endhandle
+		endif
 	enddo
 endfunction

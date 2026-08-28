@@ -1,0 +1,43 @@
+-------------------------------------------------------------------
+-- Function : reuse an existing grid bubble instead of a new one   --
+-- Date     : 2026-08-28                                           --
+--                                                                 --
+-- unlike the match line, a grid bubble has a real identity: the    --
+-- SLAB carries DDNA of the reference grid line it belongs to,      --
+-- which end of it (NPPT) and which side of the view it came out    --
+-- on (AGSIDE). those three together name one bubble, and they are  --
+-- what this matches on -- no geometry involved, so a bubble is     --
+-- still recognised after the box has grown and moved it            --
+--                                                                  --
+-- the candidates are collected by DrawingPlan1GridAnnotation into  --
+-- five parallel globals before it draws anything, and whatever is  --
+-- left unclaimed at the end is last run's and is deleted there.    --
+-- globals rather than form members because the caller is the FORM  --
+-- (.CreateGridSymbol / .CreateGridSymbolwithIntersection) while    --
+-- the collecting is done by a .pmlfnc, and the two files are read  --
+-- at different times                                              --
+--                                                                  --
+-- answers the ref of the bubble to reuse, or '' when there is      --
+-- none and the caller should make one                              --
+-------------------------------------------------------------------
+define function !!DrawingPlan1GridClaim(!ddna is string, !side is string, !nppt is real) is string
+	!answer = ''
+	!n = 0
+	!n = !!DrawingPlan1GridSlabRefs.size()
+	handle any
+		!n = 0
+	endhandle
+	do !i from 1 to !n
+		if (not(!!DrawingPlan1GridSlabClaims[!i])) then
+			!cd = !!DrawingPlan1GridSlabDdna[!i]
+			!cs = !!DrawingPlan1GridSlabSide[!i]
+			!cn = !!DrawingPlan1GridSlabNppt[!i]
+			if (!cd.eq(!ddna) and !cs.eqnocase(!side) and !cn.eq(!nppt)) then
+				!!DrawingPlan1GridSlabClaims[!i] = true
+				!answer = !!DrawingPlan1GridSlabRefs[!i]
+				break
+			endif
+		endif
+	enddo
+	return !answer
+endfunction

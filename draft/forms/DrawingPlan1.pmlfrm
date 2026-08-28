@@ -2123,10 +2123,23 @@ define method .Apply()
 				$!name/SS/S1/V1
 				UPDATE ALL
 				------------------------------------------------------------------
+				-- grid bubbles, now that they know how to reuse what is already --
+				-- on the layer (DrawingPlan1GridClaim.pmlfnc). they hang off the --
+				-- view border, so a box change moves every one of them, and      --
+				-- leaving them out was why they stayed on the OLD border         --
+				--                                                                --
+				-- it also refills .allintersections, which is what lets the line --
+				-- number annotation dimension the grid crossings on this path at --
+				-- all -- until now that array was left empty on an update and    --
+				-- the crossings were simply never revisited (2026-08-28)         --
+				------------------------------------------------------------------
+				!!DrawingPlan1GridAnnotation(!name)
+				------------------------------------------------------------------
 				-- the match line's tick positions, for the same reason as on    --
 				-- the rebuild path above: they are dimensioned, so they have to --
 				-- be known while the dimension chain is being built             --
 				------------------------------------------------------------------
+				$!name/SS/S1/V1
 				!!DrawingPlan1MatchTicks(!name, !equistr)
 				$!name/SS/S1/V1
 				1
@@ -3178,10 +3191,27 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 		!yap   = !tempxy * -1
 	endif
 
-	NEW SLAB
-	DDNA $!refgln
-	NPPT $!nppt
-	TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+	------------------------------------------------------------------
+	-- the bubble for this grid line, this end, this side may already --
+	-- be on the layer from a previous run. reuse it rather than      --
+	-- piling a second one on top: DDNA / NPPT / AGSIDE name it, and  --
+	-- they do not change when the box does, so it is still found     --
+	-- after a resize has moved it (2026-08-28)                       --
+	--                                                                 --
+	-- XYPO / APOF are rewritten either way. they are offsets from the --
+	-- grid line's own end, so a box change genuinely does move them,  --
+	-- and on an unchanged box the same numbers go back in, which      --
+	-- changes nothing                                                 --
+	------------------------------------------------------------------
+	!gsref = !!DrawingPlan1GridClaim(!refgln, !agside, !nppt)
+	if (!gsref.eq('')) then
+		NEW SLAB
+		DDNA $!refgln
+		NPPT $!nppt
+		TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+	else
+		$!gsref
+	endif
 	XYPO $!x $!y
 	APOF $!xap $!yap
 	Agside |$!agside|
@@ -3254,10 +3284,27 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 		!yap   = !tempxy * -1
 	endif
 
-	NEW SLAB
-	DDNA $!refgln
-	NPPT $!nppt
-	TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+	------------------------------------------------------------------
+	-- the bubble for this grid line, this end, this side may already --
+	-- be on the layer from a previous run. reuse it rather than      --
+	-- piling a second one on top: DDNA / NPPT / AGSIDE name it, and  --
+	-- they do not change when the box does, so it is still found     --
+	-- after a resize has moved it (2026-08-28)                       --
+	--                                                                 --
+	-- XYPO / APOF are rewritten either way. they are offsets from the --
+	-- grid line's own end, so a box change genuinely does move them,  --
+	-- and on an unchanged box the same numbers go back in, which      --
+	-- changes nothing                                                 --
+	------------------------------------------------------------------
+	!gsref = !!DrawingPlan1GridClaim(!refgln, !agside, !nppt)
+	if (!gsref.eq('')) then
+		NEW SLAB
+		DDNA $!refgln
+		NPPT $!nppt
+		TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+	else
+		$!gsref
+	endif
 	XYPO $!x $!y
 	APOF $!xap $!yap
 	Agside |$!agside|
