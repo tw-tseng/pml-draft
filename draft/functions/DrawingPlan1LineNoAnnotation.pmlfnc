@@ -26,6 +26,17 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		NEW LAYE $!name/SS/S1/V1/ateLINE
 	elsehandle none
 	endhandle
+	--------------------------------------------------------------------
+	-- which of the two callers this is. a rebuild always arrives at a  --
+	-- freshly made LAYE with no dimension on it yet; an update finds   --
+	-- the four sides from the previous run still there. only used to   --
+	-- send the diagnostic to its own file per mode, so that a rebuild  --
+	-- and the update straight after it can be compared without the     --
+	-- second overwriting the first (2026-08-28)                        --
+	--------------------------------------------------------------------
+	var !exldims coll all ldim for ce
+	!isupdaterun = !exldims.size().gt(0)
+	$!name/SS/S1/V1/ateLINE
 	Purpose LINE
 	Lvisibility true
 	Font 1
@@ -112,7 +123,11 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	--------------------------------------------------------------------------
 	!dbgln = true
 	if (!dbgln) then
-		!dbgf = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check.txt')
+		if (!isupdaterun) then
+			!dbgf = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_update.txt')
+		else
+			!dbgf = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_rebuild.txt')
+		endif
 		!dbgf.open('overwrite')
 	endif
 
