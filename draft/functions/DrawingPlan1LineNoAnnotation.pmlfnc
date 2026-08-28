@@ -1517,6 +1517,61 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			endif
 		enddo
 
+		----------------------------------------------------------------
+		-- create dimension for the match line ticks                   --
+		--                                                             --
+		-- the short lines marking where a neighbouring box meets this --
+		-- border are dimensioned as well as drawn (user rule,         --
+		-- 2026-08-28). where they go is decided by                    --
+		-- DrawingPlan1MatchTicks, which runs just before this         --
+		-- function -- the match line itself draws from the same list  --
+		-- later on, so a tick and its dimension can not drift apart   --
+		--                                                             --
+		-- the points are treated exactly like a grid crossing above:  --
+		-- no DDNA to match on, so a previous run's point close enough --
+		-- to this one is the match, and it has to be CLAIMED or the   --
+		-- cleanup at the end will delete it                           --
+		----------------------------------------------------------------
+		!tkn = 0
+		!tkn = !!DrawingPlan1MatchTickPos.size()
+		handle any
+			!tkn = 0
+		endhandle
+		do !tki from 1 to !tkn
+			!tkp = !!DrawingPlan1MatchTickPos[!tki].split('~')
+			if (!tkp.getindexed(1).eq(!dir)) then
+				!ptx = !tkp.getindexed(2).real()
+				!pty = !tkp.getindexed(3).real()
+				if (!dir.eq('right') or !dir.eq('left')) then
+					!alongv = !pty
+				else
+					!alongv = !ptx
+				endif
+				!intsh = 'x ' & string(!ptx) & ' y ' & string(!pty)
+				var !temppos enupos of $!intsh
+				!attapos = object position(!temppos)
+				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
+				!foundtick = false
+				do !edp values !existingdpois
+					$!edp
+					var !epos pos
+					!eposobj = object position(!epos)
+					if (!eposobj.distance(!attapos).lt(5)) then
+						!foundtick = true
+						!claimeddpois.append(ce)
+					endif
+				enddo
+				if (!!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)) then
+					!dimalong.append(!alongv)
+					if (not(!foundtick)) then
+						$!name/SS/S1/V1/ateLINE_$!dir
+						NEW DPOI POS $!attapos
+						!claimeddpois.append(ce)
+					endif
+				endif
+			endif
+		enddo
+
 		---------------------------------
 		-- create dimension for limits --
 		---------------------------------

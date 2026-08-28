@@ -1,0 +1,136 @@
+-------------------------------------------------------------------
+-- Function : the neighbouring boxes along one side of the view   --
+-- Date     : 2026-08-28                                          --
+--                                                                --
+-- collects every box next to this view on side !dir, reduces it  --
+-- to the points where its edges meet this view's border, and     --
+-- hands them back sorted -- one entry per point:                 --
+--   order!box!sheetX!sheetY!equipment name!ppoint!spacing        --
+-- (AteSort.Method1 prepends the order and appends the spacing to --
+-- what was put in, see AteSort.cs)                               --
+--                                                                --
+-- lifted out of DrawingPlan1MatchLine1 unchanged, because the    --
+-- same list is now needed twice: once to draw the match line and --
+-- once, earlier, to work out where its ticks go so that they can --
+-- be dimensioned. two copies of this would eventually disagree,  --
+-- and a tick standing apart from its own dimension is exactly    --
+-- the kind of thing nobody notices until the drawing is issued   --
+--                                                                --
+-- CE must be the view. it is left there                          --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchSorted(!dir is string, !projid is string, !equistr is string) is array
+	var !tempdiru viewdir up
+	var !tempdird viewdir down
+	var !tempdirl viewdir left
+	var !tempdirr viewdir right
+	if !dir.eq('right') then
+		var !tempp1 enupos of $!!DrawingPlan1.viewURsh
+		var !tempp4 enupos of $!!DrawingPlan1.viewLRsh
+	elseif !dir.eq('left') then
+		var !tempp1 enupos of $!!DrawingPlan1.viewULsh
+		var !tempp4 enupos of $!!DrawingPlan1.viewLLsh
+	elseif !dir.eq('up') then
+		var !tempp1 enupos of $!!DrawingPlan1.viewULsh
+		var !tempp4 enupos of $!!DrawingPlan1.viewURsh
+	elseif !dir.eq('down') then
+		var !tempp1 enupos of $!!DrawingPlan1.viewLLsh
+		var !tempp4 enupos of $!!DrawingPlan1.viewLRsh
+	endif
+	!tempp2 = object position(!tempp1)
+	!tempp2.up = !!DrawingPlan1.minU + 50
+	if !dir.eq('right') then
+		!tempp3 = !tempp2.offset(!tempdirr.direction(), 50).offset(!tempdird.direction(), 50)
+	elseif !dir.eq('left') then	
+		!tempp3 = !tempp2.offset(!tempdirl.direction(), 50).offset(!tempdird.direction(), 50)
+	elseif !dir.eq('up') then	
+		!tempp3 = !tempp2.offset(!tempdirr.direction(), 50).offset(!tempdiru.direction(), 50)
+	elseif !dir.eq('down') then
+		!tempp3 = !tempp2.offset(!tempdirr.direction(), 50).offset(!tempdird.direction(), 50)
+	endif
+	!tempp5 = object position(!tempp4)
+	if !dir.eq('right') then
+		!tempp6 = !tempp5.offset(!tempdirr.direction(), 50).offset(!tempdiru.direction(), 50)
+	elseif !dir.eq('left') then	
+		!tempp6 = !tempp5.offset(!tempdirl.direction(), 50).offset(!tempdiru.direction(), 50)
+	elseif !dir.eq('up') then	
+		!tempp6 = !tempp5.offset(!tempdirl.direction(), 50).offset(!tempdiru.direction(), 50)
+	elseif !dir.eq('down') then
+		!tempp6 = !tempp5.offset(!tempdirl.direction(), 50).offset(!tempdird.direction(), 50)
+	endif			
+	!tempp6.up = !!DrawingPlan1.maxU - 50
+	var !boxes coll all box within $!tempp3 to $!tempp6 for /$!projid_DrawingPlanBox exclude /$!equistr
+	handle any
+		---------------------------
+		-- for unnamed equipment --
+		---------------------------
+		var !boxes coll all box within $!tempp3 to $!tempp6 for /$!projid_DrawingPlanBox exclude $!equistr
+	endhandle						
+	!chks = object array()
+	do !box values !boxes
+		-------------------------------------------------------
+		-- get ppoints which direction equal viewdir up/down --
+		-------------------------------------------------------
+		var !isnamed isnamed of equi of $!box
+		if !isnamed.boolean() then
+			var !tempe namn of equi of $!box
+		else
+			!tempe = ''
+		endif
+		do !j from 1 to 6
+			var !boxp$!j (p$!j dir of $!box wrt worl)
+			!boxpd$!j = object direction(!boxp$!j)
+			!chkpt = false
+			if (!dir.eq('right') or !dir.eq('left')) and (!tempdiru.direction().eq(!boxpd$!j) or !tempdird.direction().eq(!boxpd$!j)) then
+				!chkpt = true
+			elseif (!dir.eq('up') or !dir.eq('down')) and (!tempdirl.direction().eq(!boxpd$!j) or !tempdirr.direction().eq(!boxpd$!j)) then
+				!chkpt = true
+			endif
+			if !chkpt then
+				var !chk (p$!j pos of $!box wrt worl)
+				var !chksh shpos of $!chk
+				if !dir.eq('right') or !dir.eq('left') then
+					if !chksh.part(4).replace('mm', '').real().geq(!!DrawingPlan1.viewURsh.part(4).real() - 5 ) then
+						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !!DrawingPlan1.viewURsh.part(4) & '!' & !tempe & '!' & !j)
+					elseif !chksh.part(4).replace('mm', '').real().leq(!!DrawingPlan1.viewLRsh.part(4).real() + 5 ) then
+						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !!DrawingPlan1.viewLRsh.part(4) & '!' & !tempe & '!' & !j)
+					else
+						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+					endif
+				elseif !dir.eq('up') or !dir.eq('down') then
+					if !chksh.part(2).replace('mm', '').real().geq(!!DrawingPlan1.viewURsh.part(2).real() - 5 ) then
+						!chks.append(!box & '!' & !!DrawingPlan1.viewURsh.part(2) & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+					elseif !chksh.part(2).replace('mm', '').real().leq(!!DrawingPlan1.viewULsh.part(2).real() + 5 ) then
+						!chks.append(!box & '!' & !!DrawingPlan1.viewULsh.part(2) & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+					else
+						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+					endif
+				endif
+			endif
+		enddo
+	enddo
+	------------------------------------------------------------------
+	-- how many points were found at all, kept separately from the   --
+	-- sorted list: AteSort works in pairs and drops an odd one, so  --
+	-- "found nothing" and "found something that would not sort" are --
+	-- not the same answer, and the caller draws a different match   --
+	-- line for each                                                 --
+	------------------------------------------------------------------
+	!!DrawingPlan1MatchChkCount = !chks.size()
+	if !chks.size().gt(0) then
+		using namespace 'Aveva.Core.Samples'
+		!obj = object AteSort()
+		---------------------------------------------------------------
+		-- AteSort argument2 indicates                               --
+		--   true  = sort by field1 + field2 (ref of box + x coord.) --
+		--   false = sort by field1 + field3 (ref of box + y coord.) --
+		---------------------------------------------------------------
+		if !dir.eq('right') or !dir.eq('left') then
+			!sorted = !obj.method1(!chks, false)
+		elseif !dir.eq('up') or !dir.eq('down') then
+			!sorted = !obj.method1(!chks, true)
+		endif
+		return !sorted
+	endif
+	!empty = object array()
+	return !empty
+endfunction

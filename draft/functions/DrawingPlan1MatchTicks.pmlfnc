@@ -1,0 +1,101 @@
+-------------------------------------------------------------------
+-- Function : where the match line's short ticks belong           --
+-- Date     : 2026-08-28                                          --
+--                                                                --
+-- a tick marks the point on this view's border where a           --
+-- neighbouring box's edge meets it. those points are dimensioned --
+-- as well as drawn (user rule, 2026-08-28) -- but the dimension  --
+-- is built by DrawingPlan1LineNoAnnotation and the tick is drawn --
+-- by DrawingPlan1MatchLine1, two functions which run at very     --
+-- different moments: the line number annotation runs before the  --
+-- view's NOTE even exists, and the match line can only be drawn  --
+-- once it does                                                   --
+--                                                                --
+-- so neither of them works the positions out for itself. this    --
+-- does, once, before the line number annotation, and both read   --
+-- the answer out of !!DrawingPlan1MatchTickPos                   --
+--                                                                --
+-- one entry per tick: 'dir~x~y~adegrees', x and y being SHEET    --
+-- coordinates -- so it has to be run again whenever the view     --
+-- moves. the recenter at the end of a rebuild does exactly that, --
+-- and calls this again before redrawing the match line           --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchTicks(!name is string, !equistr is string)
+	!!DrawingPlan1MatchTickPos = object array()
+	var !projid proj id
+	!dirlist = 'right left down up'
+	do !jj from 1 to 4
+		!dir = !dirlist.part(!jj)
+		$!name/SS/S1/V1
+		!sortedtypes = !!DrawingPlan1MatchSorted(!dir, !projid, !equistr)
+		!exists = object array()
+		do !i from 1 to !sortedtypes.size()
+		------------------------------------------------------------------
+		-- to draw a match line if position is not on the border corner --
+		------------------------------------------------------------------
+		!exist = false
+		-----------------------------------------
+		-- check if the match line is existing --
+		-----------------------------------------
+		if !dir.eq('right') or !dir.eq('left') then
+			if not( abs(!sortedtypes[!i].split('!').getindexed(4).real() - !!DrawingPlan1.viewURsh.part(4).real()) leq 5 or abs(!sortedtypes[!i].split('!').getindexed(4).real() - !!DrawingPlan1.viewLRsh.part(4).real()) leq 5) then
+				do !j from 1 to !exists.size()
+					if abs(!exists[!j].real() - !sortedtypes[!i].split('!').getindexed(4).real()) leq 5 then
+						!exist = true
+					endif
+				enddo
+			else
+				!exist = true
+			endif
+		else
+			if not( abs(!sortedtypes[!i].split('!').getindexed(3).real() - !!DrawingPlan1.viewULsh.part(2).real()) leq 5 or abs(!sortedtypes[!i].split('!').getindexed(3).real() - !!DrawingPlan1.viewURsh.part(2).real()) leq 5) then
+				do !j from 1 to !exists.size()
+					if abs(!exists[!j].real() - !sortedtypes[!i].split('!').getindexed(3).real()) leq 5 then
+						!exist = true
+					endif
+				enddo
+			else
+				!exist = true
+			endif
+		endif
+		if not(!exist) then
+			------------------------------------------------------------
+			-- these ticks are 10mm long and run out of the border at  --
+			-- a fixed angle, so where the far end lands is known here --
+			-- without reading it back -- which is what lets the tick  --
+			-- be compared against an existing one on the same footing --
+			-- as the four border straights (2026-08-28)               --
+			------------------------------------------------------------
+			if !dir.eq('right') or !dir.eq('left') then
+				!exists.append(!sortedtypes[!i].split('!').getindexed(4))
+				!newy = !sortedtypes[!i].split('!').getindexed(4)
+				if !dir.eq('right') then
+					!newx = !!DrawingPlan1.viewURsh.part(2)
+					!tkadeg = 0
+				else
+					!newx = !!DrawingPlan1.viewULsh.part(2)
+					!tkadeg = 180
+				endif
+			else
+				!exists.append(!sortedtypes[!i].split('!').getindexed(3))
+				!newx = !sortedtypes[!i].split('!').getindexed(3)
+				if !dir.eq('up') then
+					!newy = !!DrawingPlan1.viewURsh.part(4)
+					!tkadeg = 90
+				else
+					!newy = !!DrawingPlan1.viewLRsh.part(4)
+					!tkadeg = -90
+				endif
+			endif
+			---------------------------------------------------------
+			-- recorded rather than drawn: MatchLine1 draws these,  --
+			-- LineNoAnnotation dimensions them, and both work off  --
+			-- this one list                                        --
+			---------------------------------------------------------
+			!tkx = !newx.real()
+			!tky = !newy.real()
+			!!DrawingPlan1MatchTickPos.append(!dir & '~' & !tkx.string() & '~' & !tky.string() & '~' & !tkadeg.string())
+		endif
+		enddo
+	enddo
+endfunction

@@ -1057,6 +1057,17 @@ define method .Apply()
 				1
 				last
 				
+				------------------------------------------------------------------
+				-- where the match line's ticks go. worked out here, before the  --
+				-- line number annotation, because those points are dimensioned  --
+				-- as well as drawn and the dimension has to be built while the  --
+				-- chain is being built -- adding points afterwards would land   --
+				-- outside the spacing test which decides whether a dimension    --
+				-- text has to be turned 90 degrees. the match line itself is    --
+				-- drawn much later, off this same list (2026-08-28)             --
+				------------------------------------------------------------------
+				$!name/SS/S1/V1
+				!!DrawingPlan1MatchTicks(!name, !equistr)
 				-------------------------
 				-- line no. annotation --
 				-------------------------
@@ -1726,6 +1737,13 @@ define method .Apply()
 						-- (the four lines just snapped above) and redraws only    --
 						-- what the move actually invalidated                      --
 						------------------------------------------------------------
+						-- the tick positions are sheet coordinates, so the move --
+						-- invalidated them too and they are worked out again    --
+						-- here. the dimension points themselves are world       --
+						-- positions and travelled with the view, so the two     --
+						-- still land on each other                              --
+						$!name/SS/S1/V1
+						!!DrawingPlan1MatchTicks(!name, !equistr)
 						$!name/SS/S1/V1
 						!!DrawingPlan1MatchLine(!name, !equistr)
 					endif
@@ -2104,6 +2122,13 @@ define method .Apply()
 				------------------------------------------------------------------
 				$!name/SS/S1/V1
 				UPDATE ALL
+				------------------------------------------------------------------
+				-- the match line's tick positions, for the same reason as on    --
+				-- the rebuild path above: they are dimensioned, so they have to --
+				-- be known while the dimension chain is being built             --
+				------------------------------------------------------------------
+				!!DrawingPlan1MatchTicks(!name, !equistr)
+				$!name/SS/S1/V1
 				1
 				last
 				!!DrawingPlan1LineNoAnnotation(!name, !boxXlen.real(), !boxYlen.real())
