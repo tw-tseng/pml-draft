@@ -1422,12 +1422,47 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				else
 					!alongv = !ptx
 				endif
+				!intsh = 'x ' & string(!ptx) & ' y ' & string(!pty)
+				var !temppos enupos of $!intsh
+				!attapos = object position(!temppos)
+				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
+				---------------------------------------------------------------
+				-- update path: no DDNA on a grid crossing, so a previous    --
+				-- run's point at (close to) this position is the match --
+				---------------------------------------------------------------
+				--------------------------------------------------------------
+				-- and it has to be CLAIMED, not just recognised: a grid    --
+				-- crossing is created with no DDNA clause, but E3D does    --
+				-- not leave it blank -- it hands the point back a real     --
+				-- DDNA belonging to some other point (see the note in the  --
+				-- labelled branch above, confirmed live 2026-08-13). the   --
+				-- cleanup pass therefore does look at these points, and    --
+				-- an unclaimed one is deleted: 11 points went that way in  --
+				-- one update, taking their dimension segments with them    --
+				-- (2026-08-28, rebuild wrote 40 points and the update      --
+				-- straight after it wrote 36 off an identical collection)  --
+				--                                                          --
+				-- claimed BEFORE the DimAlongIsNew gate below, and without --
+				-- stopping at the first hit. inside the gate a newly added --
+				-- pipe which takes over this crossing's along-coordinate    --
+				-- skips the whole block, leaving last run's point at this  --
+				-- crossing unclaimed and therefore deleted -- the new pipe --
+				-- silently costing an existing dimension. stopping at the  --
+				-- first hit had the same effect whenever two points sit    --
+				-- within the 5mm: only one of them got claimed             --
+				--------------------------------------------------------------
+				!foundgrid = false
+				do !edp values !existingdpois
+					$!edp
+					var !epos pos
+					!eposobj = object position(!epos)
+					if (!eposobj.distance(!attapos).lt(5)) then
+						!foundgrid = true
+						!claimeddpois.append(ce)
+					endif
+				enddo
 				if (!!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)) then
 					!dimalong.append(!alongv)
-					!intsh = 'x ' & string(!ptx) & ' y ' & string(!pty)
-					var !temppos enupos of $!intsh
-					!attapos = object position(!temppos)
-					!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 					if (!dbgln and !dir.eq('left')) then
 						--------------------------------------------------------------------
 						-- 2026-08-13: .allintersections now carries the refgln's own NAME  --
@@ -1443,33 +1478,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!dpoiseq = !dpoiseq + 1
 						!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=grid refgln=' & !gridname & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 					endif
-					---------------------------------------------------------------
-					-- update path: no DDNA on a grid crossing, so a previous    --
-					-- run's point at (close to) this position is the match --
-					---------------------------------------------------------------
-					--------------------------------------------------------------
-					-- and it has to be CLAIMED, not just recognised: a grid    --
-					-- crossing is created with no DDNA clause, but E3D does    --
-					-- not leave it blank -- it hands the point back a real     --
-					-- DDNA belonging to some other point (see the note in the  --
-					-- labelled branch above, confirmed live 2026-08-13). the   --
-					-- cleanup pass therefore does look at these points, and    --
-					-- an unclaimed one is deleted: 11 points went that way in  --
-					-- one update, taking their dimension segments with them    --
-					-- (2026-08-28, rebuild wrote 40 points and the update      --
-					-- straight after it wrote 36 off an identical collection)  --
-					--------------------------------------------------------------
-					!foundgrid = false
-					do !edp values !existingdpois
-						$!edp
-						var !epos pos
-						!eposobj = object position(!epos)
-						if (!eposobj.distance(!attapos).lt(5)) then
-							!foundgrid = true
-							!claimeddpois.append(ce)
-							break
-						endif
-					enddo
 					if (not(!foundgrid)) then
 						NEW DPOI POS $!attapos
 						!claimeddpois.append(ce)
