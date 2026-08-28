@@ -1921,7 +1921,19 @@ define method .Apply()
 					!thpoNforR = !boxPos.position().offset(!efpla,            !elen.real() * 0.5).north
 					!thpoNforL = !boxPos.position().offset(!efpla.opposite(), !elen.real() * 0.5).north
 
-					do !side values object array('TOUP', 'TONP', 'TOEP', 'FRUP', 'FRNP', 'FREP')
+					------------------------------------------------------------------
+					-- the six sides, listed the way DrawingPlan1LineNoAnnotation   --
+					-- lists its own four (!dirlist / .part()). an array constructor --
+					-- written straight into the loop -- do !side values object      --
+					-- array('TOUP', ...) -- is not something PML will parse: it     --
+					-- answers 'Invalid array expression' the moment box-changed is  --
+					-- true and this branch is first reached (2026-08-28, reported   --
+					-- live on the first box-grew test). same shape as the           --
+					-- constructor-chaining restriction already known here           --
+					------------------------------------------------------------------
+					!sidelist = 'TOUP TONP TOEP FRUP FRNP FREP'
+					do !ss from 1 to 6
+						!side = !sidelist.part(!ss)
 						$!name/SS/S1/V1/$!side/VSEC
 						handle any
 						elsehandle none
