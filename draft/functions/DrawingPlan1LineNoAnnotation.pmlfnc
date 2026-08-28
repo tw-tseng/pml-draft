@@ -1561,6 +1561,49 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!claimeddpois.append(ce)
 					endif
 				enddo
+				------------------------------------------------------------
+				-- nothing standing exactly here -- but the point may have --
+				-- been dragged by hand after the last run. dragging it     --
+				-- sideways is the whole reason the blue points can be      --
+				-- moved at all: it only shortens or lengthens the          --
+				-- projection line and leaves the measurement alone. the    --
+				-- 5mm above is 5mm of the MODEL, a fifth of a millimetre   --
+				-- on the sheet at 1:50, so any such nudge lost the point   --
+				-- and this run drew a second one beside it -- reported     --
+				-- live as an extra 0 dimension (2026-08-28)                --
+				--                                                          --
+				-- so ask again, this time on the coordinate ALONG the      --
+				-- dimension only, which a sideways drag does not change.   --
+				-- second pass rather than a looser first one: everything   --
+				-- that matched before still matches exactly as it did      --
+				------------------------------------------------------------
+				if (not(!foundtick)) then
+					!bestd = 1
+					!bestref = ''
+					do !edp values !existingdpois
+						$!edp
+						var !epos pos
+						var !eposh shpos of $!epos
+						if (!dir.eq('right') or !dir.eq('left')) then
+							!ealong = !eposh.split().getindexed(4).replace('mm','').real()
+						else
+							!ealong = !eposh.split().getindexed(2).replace('mm','').real()
+						endif
+						!ed = abs(!ealong - !alongv)
+						if (!ed.lt(!bestd)) then
+							!bestd = !ed
+							!bestref = ce
+						endif
+					enddo
+					if (!bestref.neq('')) then
+						$!bestref
+						!claimeddpois.append(ce)
+						!foundtick = true
+						if (!dbgln) then
+							!dbgf.writerecord('TICKALONG ' & !dir & ' alongv=' & !alongv.string() & ' reused=' & !bestref & ' off=' & !bestd.string())
+						endif
+					endif
+				endif
 				if (!!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)) then
 					!dimalong.append(!alongv)
 					if (not(!foundtick)) then
