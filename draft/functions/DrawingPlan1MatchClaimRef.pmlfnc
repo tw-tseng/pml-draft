@@ -22,18 +22,63 @@
 -------------------------------------------------------------------
 
 -------------------------------------------------------------------
--- is there already an element standing exactly here? if so it is --
--- claimed (so the cleanup will not remove it) and TRUE comes     --
--- back, meaning the caller must NOT draw a second one            --
+-- the same thing, but answering WHICH element was claimed. the    --
+-- four border straights are handed to .Apply() afterwards by ref  --
+-- (it puts them back on the corners once it knows how far the     --
+-- annotation reaches), so for those it is not enough to know that --
+-- one was found                                                   --
 --                                                                --
--- !sig is 'S~x1~y1~x2~y2' for a straight or 'T~x~y~text' for a   --
--- text. 0.05mm is well under anything visible and well over the  --
--- last-digit noise of a sheet coordinate written and read back   --
+-- '' means nothing is standing there and the caller should draw   --
 -------------------------------------------------------------------
-define function !!DrawingPlan1MatchClaim(!sig is string) is boolean
-	!r = !!DrawingPlan1MatchClaimRef(!sig)
-	if (!r.eq('')) then
-		return false
+define function !!DrawingPlan1MatchClaimRef(!sig is string) is string
+	!answer = ''
+	!n = 0
+	!n = !!DrawingPlan1MatchCandSigs.size()
+	handle any
+		!n = 0
+	endhandle
+	!parts = !sig.split('~')
+	!kind = !parts.getindexed(1)
+	if (!kind.eq('T')) then
+		!nf = 3
+	else
+		!nf = 5
 	endif
-	return true
+	do !i from 1 to !n
+		if (not(!!DrawingPlan1MatchClaims[!i])) then
+			!cand = !!DrawingPlan1MatchCandSigs[!i]
+			!cp = !cand.split('~')
+			if (!cp.getindexed(1).eq(!kind)) then
+				!same = true
+				if (!kind.eq('T')) then
+					if (not(!cp.getindexed(4).eq(!parts.getindexed(4)))) then
+						!same = false
+					endif
+				endif
+				if (!same) then
+					do !k from 2 to !nf
+						!a = !cp.getindexed(!k)
+						!b = !parts.getindexed(!k)
+						if (!a.eq('') or !b.eq('')) then
+							-- one of them would not parse: cannot be called a match --
+							if (not(!a.eq(!b))) then
+								!same = false
+							endif
+						else
+							!d = abs(!a.real() - !b.real())
+							if (!d.gt(0.05)) then
+								!same = false
+							endif
+						endif
+					enddo
+				endif
+				if (!same) then
+					!!DrawingPlan1MatchClaims[!i] = true
+					!answer = !!DrawingPlan1MatchCandRefs[!i]
+					break
+				endif
+			endif
+		endif
+	enddo
+	return !answer
 endfunction

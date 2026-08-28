@@ -1,0 +1,123 @@
+-------------------------------------------------------------------
+-- match line per-element diff, one of five files                 --
+-- Date     : 2026-08-28                                          --
+--                                                                --
+-- the match line's straights and texts carry no DDNA and no      --
+-- stable name, so an update cannot find last run's copy of one   --
+-- by identity the way the GLABs are found. what they do have is  --
+-- geometry that is entirely derived from the view border and the --
+-- neighbouring boxes -- so the match is done on that geometry:   --
+-- an existing element standing exactly where this run wants one  --
+-- IS that one, and is left untouched                             --
+--                                                                --
+-- the run's state lives in three parallel globals, filled by     --
+-- .MatchCollect() and consumed by .MatchClaimRef():              --
+--   !!DrawingPlan1MatchCandRefs / ...CandSigs / ...Claims        --
+-- globals rather than form members for the usual reason: these   --
+-- files are re-read on every call, the form only on kill/show    --
+--                                                                --
+-- PML finds a function by file name, so each of the five lives   --
+-- in its own file: MatchXY / MatchCollect / MatchClaim /         --
+-- MatchClaimRef / MatchCleanup                                   --
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+-- everything on this view's NOTE that this run is entitled to    --
+-- move or remove. the straights are picked out by the user's own --
+-- filter (2026-08-28): nlstyle 8029 is DChainedThick and         --
+-- nlcolour 16 is Magenta, which nothing else in the NOTE uses.   --
+-- the texts share their colour with the border's drawing number  --
+-- and titles, so those are told apart by their wording instead   --
+-- -- only the match line writes 'MATCH LINE ...' or 'SEE ...'    --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchCollect()
+	!!DrawingPlan1MatchCandRefs = object array()
+	!!DrawingPlan1MatchCandSigs = object array()
+	!!DrawingPlan1MatchClaims = object array()
+
+	note 1
+	handle any
+		return
+	endhandle
+	!noteref = ce
+
+	var !mlstras coll all stra with nlstyle eq 8029 and nlcolour eq 16 for ce
+	handle any
+		!mlstras = object array()
+	endhandle
+	do !s values !mlstras
+		$!s
+		handle any
+			skip
+		endhandle
+		!sref = ce
+		!f = ''
+		var !f fpt
+		handle any
+			!f = ''
+		endhandle
+		!t = ''
+		var !t tpt
+		handle any
+			!t = ''
+		endhandle
+		!fxy = !!DrawingPlan1MatchXY(!f)
+		!txy = !!DrawingPlan1MatchXY(!t)
+		!!DrawingPlan1MatchCandRefs.append(!sref)
+		!!DrawingPlan1MatchCandSigs.append('S~' & !fxy & '~' & !txy)
+		!!DrawingPlan1MatchClaims.append(false)
+	enddo
+
+	$!noteref
+	var !mltexps coll all texp for ce
+	handle any
+		!mltexps = object array()
+	endhandle
+	do !x values !mltexps
+		$!x
+		handle any
+			skip
+		endhandle
+		!xref = ce
+		!bt = ''
+		var !bt btext
+		handle any
+			!bt = ''
+		endhandle
+		------------------------------------------------------------
+		-- only the match line's own wording. the drawing number   --
+		-- and the three title lines sit on this same NOTE in the  --
+		-- same colour and must not be touched                     --
+		------------------------------------------------------------
+		!ismine = false
+		!btlen = 0
+		!btlen = !bt.length()
+		handle any
+			!btlen = 0
+		endhandle
+		if (!btlen.geq(10)) then
+			!head10 = !bt.substring(1, 10)
+			if (!head10.eqnocase('MATCH LINE')) then
+				!ismine = true
+			endif
+		endif
+		if (not(!ismine) and !btlen.geq(4)) then
+			!head4 = !bt.substring(1, 4)
+			if (!head4.eqnocase('SEE ')) then
+				!ismine = true
+			endif
+		endif
+		if (!ismine) then
+			!o = ''
+			var !o origin
+			handle any
+				!o = ''
+			endhandle
+			!oxy = !!DrawingPlan1MatchXY(!o)
+			!!DrawingPlan1MatchCandRefs.append(!xref)
+			!!DrawingPlan1MatchCandSigs.append('T~' & !oxy & '~' & !bt)
+			!!DrawingPlan1MatchClaims.append(false)
+		endif
+	enddo
+	$!noteref
+endfunction

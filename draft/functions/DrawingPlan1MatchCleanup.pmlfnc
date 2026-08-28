@@ -22,18 +22,38 @@
 -------------------------------------------------------------------
 
 -------------------------------------------------------------------
--- is there already an element standing exactly here? if so it is --
--- claimed (so the cleanup will not remove it) and TRUE comes     --
--- back, meaning the caller must NOT draw a second one            --
---                                                                --
--- !sig is 'S~x1~y1~x2~y2' for a straight or 'T~x~y~text' for a   --
--- text. 0.05mm is well under anything visible and well over the  --
--- last-digit noise of a sheet coordinate written and read back   --
+-- anything collected at the start and not claimed by any of the  --
+-- four sides is last run's, standing somewhere this run does not --
+-- want one, and goes. run once, after all four sides             --
 -------------------------------------------------------------------
-define function !!DrawingPlan1MatchClaim(!sig is string) is boolean
-	!r = !!DrawingPlan1MatchClaimRef(!sig)
-	if (!r.eq('')) then
-		return false
-	endif
-	return true
+define function !!DrawingPlan1MatchCleanup()
+	!n = 0
+	!n = !!DrawingPlan1MatchCandRefs.size()
+	handle any
+		!n = 0
+	endhandle
+	do !i from 1 to !n
+		if (not(!!DrawingPlan1MatchClaims[!i])) then
+			----------------------------------------------------------
+			-- copied into a plain variable before the navigation:   --
+			-- '$' expansion of an indexed GLOBAL array element is   --
+			-- not something to rely on -- the view recenter's own   --
+			-- GLAB fixup loop is written that way and turned out to --
+			-- do nothing at all (2026-08-28)                        --
+			----------------------------------------------------------
+			!cref = !!DrawingPlan1MatchCandRefs[!i]
+			$!cref
+			handle any
+				skip
+			endhandle
+			!sig = !!DrawingPlan1MatchCandSigs[!i]
+			if (!sig.substring(1, 1).eq('T')) then
+				delete texp
+			else
+				delete stra
+			endif
+			handle any
+			endhandle
+		endif
+	enddo
 endfunction
