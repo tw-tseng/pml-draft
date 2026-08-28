@@ -1709,6 +1709,25 @@ define method .Apply()
 							handle any
 							endhandle
 						enddo
+						------------------------------------------------------------
+						-- those four are the only part of the match line that     --
+						-- belongs on a corner. its ticks and its texts belong     --
+						-- wherever the neighbouring box's edge came out on the    --
+						-- sheet, and that was worked out through 'shpos of'       --
+						-- BEFORE this move -- so every rebuild left them behind   --
+						-- by dx/dy while the update path, which never moves the   --
+						-- view, put them in the right place. seen live as a       --
+						-- red/green pair of ticks 2.5mm apart on the revision     --
+						-- compare (2026-08-28)                                    --
+						--                                                          --
+						-- rather than shifting each one, the whole match line is  --
+						-- simply asked for again now that the view has settled:   --
+						-- it reuses whatever already stands where it wants one    --
+						-- (the four lines just snapped above) and redraws only    --
+						-- what the move actually invalidated                      --
+						------------------------------------------------------------
+						$!name/SS/S1/V1
+						!!DrawingPlan1MatchLine(!name, !equistr)
 					endif
 				endif
 

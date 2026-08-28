@@ -71,6 +71,19 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 	var !DIR1  (DIR of VIEW )
 	var !equis coll all equi with (not(matchwild(name, |*_DrawingPlan|))) within E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU
 	do !equi values !equis
+		--------------------------------------------------------------
+		-- only named equipment is labelled. this function labels    --
+		-- exactly the equipment LineNoAnnotation did NOT dimension  --
+		-- (the equiparray test below), and LineNoAnnotation now     --
+		-- leaves the unnamed ones out -- so without this test they  --
+		-- would land here and pick up a GLAB instead, which is the  --
+		-- opposite of what was asked (user rule, 2026-08-28)        --
+		--------------------------------------------------------------
+		!equinamed = 'FALSE'
+		var !equinamed isnamed of $!equi
+		handle any
+			!equinamed = 'FALSE'
+		endhandle
 	  var !namn namn of $!equi
 		!tmpdirarray = !Dir1.Split(' ')
 		!DIR = !tmpdirarray[1]
@@ -260,7 +273,7 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 					!stravert = false
 				endif
 			endif
-			if (unset(!!DrawingPlan1.equiparray.findfirst(!namn))) then
+			if (!equinamed.boolean() and unset(!!DrawingPlan1.equiparray.findfirst(!namn))) then
 				------------------------------------
 				-- equipments are not dimensioned --
 				------------------------------------

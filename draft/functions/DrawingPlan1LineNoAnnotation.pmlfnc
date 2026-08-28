@@ -647,6 +647,24 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		var !mems coll all equi with (not(matchwild(name, |*_DrawingPlan|))) within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
+			--------------------------------------------------------------
+			-- only named equipment is dimensioned. an unnamed one has   --
+			-- nothing to put in a label, and its NAME is an auto        --
+			-- reference which is not the same thing twice, so it could  --
+			-- never be matched back on an update either (user rule,     --
+			-- 2026-08-28). EquiAnnotation skips the same ones, which it --
+			-- has to do for itself: it labels exactly what is NOT in    --
+			-- equiparray, so dropping one here would otherwise hand it  --
+			-- a GLAB instead of a dimension                             --
+			--------------------------------------------------------------
+			!equinamed = 'FALSE'
+			var !equinamed isnamed of $!mem
+			handle any
+				!equinamed = 'FALSE'
+			endhandle
+			if (not(!equinamed.boolean())) then
+				skip
+			endif
 			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !check IDLN for $!mem
 			handle any
