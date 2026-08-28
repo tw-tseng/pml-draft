@@ -1931,18 +1931,23 @@ define method .Apply()
 					-- live on the first box-grew test). same shape as the           --
 					-- constructor-chaining restriction already known here           --
 					------------------------------------------------------------------
+					-- the element type is part of the command: a bare 'delete' is  --
+					-- answered with 'CP: Incomplete command line' (2026-08-28).    --
+					-- the two lines above create these as 'new vsec .../VSEC' and  --
+					-- 'new fpla .../<side>', and the rest of this form deletes by  --
+					-- type the same way ('delete drwg')                            --
 					!sidelist = 'TOUP TONP TOEP FRUP FRNP FREP'
 					do !ss from 1 to 6
 						!side = !sidelist.part(!ss)
 						$!name/SS/S1/V1/$!side/VSEC
 						handle any
 						elsehandle none
-							delete
+							delete vsec
 						endhandle
 						$!name/SS/S1/V1/$!side
 						handle any
 						elsehandle none
-							delete
+							delete fpla
 						endhandle
 					enddo
 
