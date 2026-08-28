@@ -63,6 +63,24 @@ define function !!DrawingPlan1DumpNote(!name is string)
 	!satts[6] = 'namn'
 	!satts[7] = 'type'
 
+	-------------------------------------------------------------
+	-- the user's own filter for the match line straights       --
+	-- (2026-08-28): nlstyle 8029 = DChainedThick, nlcolour 16  --
+	-- = Magenta. checked here against the unfiltered count     --
+	-- above so we know it picks out exactly those and nothing  --
+	-- else in the NOTE                                         --
+	-------------------------------------------------------------
+	note 1
+	!mln = 0
+	var !mlstras coll all stra with nlstyle eq 8029 and nlcolour eq 16 for ce
+	handle any
+		!mlstras = object array()
+		!f.writerecord('FILTER coll all stra with nlstyle eq 8029 and nlcolour eq 16 -> FAILED')
+	elsehandle none
+		!mln = !mlstras.size()
+		!f.writerecord('FILTER nlstyle 8029 + nlcolour 16 -> ' & !mln.string() & ' stra')
+	endhandle
+
 	note 1
 	var !stras coll all stra for ce
 	handle any
