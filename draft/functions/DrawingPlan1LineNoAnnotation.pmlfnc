@@ -36,6 +36,20 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	--------------------------------------------------------------------
 	var !exldims coll all ldim for ce
 	!isupdaterun = !exldims.size().gt(0)
+	--------------------------------------------------------------------
+	-- did the box change this run. when it did, the border moves and   --
+	-- every point derived from the border has to move with it -- which --
+	-- reads exactly like somebody having dragged that point aside, so  --
+	-- the "was this dragged by hand" fallbacks below are switched off. --
+	-- left on, they reused the old points where they stood and the     --
+	-- chain kept its old border: ten points on the left side where     --
+	-- seven belonged (2026-08-28)                                      --
+	--------------------------------------------------------------------
+	!boxchg = true
+	!boxchg = !!DrawingPlan1BoxChanged
+	handle any
+		!boxchg = true
+	endhandle
 	$!name/SS/S1/V1/ateLINE
 	Purpose LINE
 	Lvisibility true
@@ -1601,6 +1615,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!hasmoved = false
 				!bestd = 1
 				do !edp values !existingdpois
+					if (!boxchg) then
+						break
+					endif
 					$!edp
 					var !epos pos
 					!eposobj = object position(!epos)
@@ -1724,6 +1741,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!hasc1moved = false
 		!bestd = 1
 		do !dpoi value !dpois
+			if (!boxchg) then
+				break
+			endif
 			$!dpoi
 			var !temppos1 pos
 			!attapos1 = object position(!temppos1)
@@ -1848,6 +1868,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!hasc2moved = false
 		!bestd = 1
 		do !dpoi value !dpois
+			if (!boxchg) then
+				break
+			endif
 			$!dpoi
 			var !temppos1 pos
 			!attapos1 = object position(!temppos1)
@@ -1978,15 +2001,15 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			handle any
 			elsehandle none
 				var !eddna ddna of ce
+				!edpref = ce
+				!stillcurrent = false
+				do !cd values !claimeddpois
+					if (!edpref.eq(!cd)) then
+						!stillcurrent = true
+						break
+					endif
+				enddo
 				if (not(!eddna.unset()) and not(!eddna.eq('=0/0'))) then
-					!edpref = ce
-					!stillcurrent = false
-					do !cd values !claimeddpois
-						if (!edpref.eq(!cd)) then
-							!stillcurrent = true
-							break
-						endif
-					enddo
 					if (not(!stillcurrent)) then
 						do !cm values !currentmems
 							if (!eddna.eq(!cm)) then
@@ -1998,9 +2021,30 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					if (!dbgln) then
 						!dbgf.writerecord('CLEANUP ' & !dir & ' eddna=' & !eddna & ' stillcurrent=' & !stillcurrent)
 					endif
-					if (not(!stillcurrent)) then
-						delete dpoi
+				else
+					--------------------------------------------------------------
+					-- a point carrying no DDNA of its own: a grid crossing, a   --
+					-- match line tick, or one of the two corners. this used to  --
+					-- be skipped outright and never deleted, because the update --
+					-- path did not re-derive grid crossings and so could never  --
+					-- claim them -- asking for a claim wiped every one of them  --
+					-- (2026-08-26)                                              --
+					--                                                            --
+					-- that is no longer true: GridAnnotation runs on the update  --
+					-- path as well now, so all three kinds are worked out again  --
+					-- on both paths and each one that still belongs is claimed   --
+					-- by the block that owns it. one that was not claimed is     --
+					-- last run's, left standing on the border the view USED to   --
+					-- have -- a box that grew put ten points on the left chain   --
+					-- where seven belonged, the three extra being the two old    --
+					-- corners and an old tick (2026-08-28)                       --
+					--------------------------------------------------------------
+					if (!dbgln) then
+						!dbgf.writerecord('CLEANUPAUTO ' & !dir & ' eddna=' & !eddna & ' claimed=' & !stillcurrent)
 					endif
+				endif
+				if (not(!stillcurrent)) then
+					delete dpoi
 				endif
 			endhandle
 		enddo

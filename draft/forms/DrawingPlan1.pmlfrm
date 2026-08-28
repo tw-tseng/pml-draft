@@ -484,6 +484,12 @@ define method .Apply()
 		!box = !boxs[1]
 		!this.intersections = object array()
 		!this.allintersections = object array()
+		--------------------------------------------------------------------
+		-- default for the rebuild path, where there is no previous box to  --
+		-- compare against and nothing on the sheet to reuse anyway. the    --
+		-- update branch replaces it with what it actually found            --
+		--------------------------------------------------------------------
+		!!DrawingPlan1BoxChanged = true
 		!hasrevi = false
 		new drwg
 		handle any
@@ -1948,6 +1954,18 @@ define method .Apply()
 					endif
 				endif
 				!dbgf3.writerecord('STEP6 boxchanged=' & !boxchanged)
+				--------------------------------------------------------------------
+				-- the annotation functions need to know this too. when the box    --
+				-- has changed the border moves, and every point derived from the  --
+				-- border moves with it -- which looks exactly like somebody       --
+				-- having dragged that point aside, and the "was this dragged by   --
+				-- hand" fallbacks would happily reuse it where it stands and      --
+				-- leave it on the OLD border (2026-08-28)                         --
+				--                                                                  --
+				-- a global, not a member: the .pmlfnc files are re-read on every  --
+				-- call and this form only on kill/show                            --
+				--------------------------------------------------------------------
+				!!DrawingPlan1BoxChanged = !boxchanged
 
 				if (!boxchanged) then
 					!thpoE = !boxPos.position().east
