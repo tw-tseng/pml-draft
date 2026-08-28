@@ -1538,6 +1538,12 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			!tkn = 0
 		endhandle
 		!tickdupes = object array()
+		--------------------------------------------------------------
+		-- every point this run recognised as having been dragged     --
+		-- aside by hand. read again at DOFFSET below, to stop such a --
+		-- point dragging the whole dimension line along with it      --
+		--------------------------------------------------------------
+		!movedrefs = object array()
 		do !tki from 1 to !tkn
 			!tkp = !!DrawingPlan1MatchTickPos[!tki].split('~')
 			if (!tkp.getindexed(1).eq(!dir)) then
@@ -1617,6 +1623,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (!hasmoved) then
 					$!tickmoved
 					!claimeddpois.append(ce)
+					!movedrefs.append(ce)
 					if (!dbgln) then
 						!dbgf.writerecord('TICKALONG ' & !dir & ' alongv=' & !alongv.string() & ' off=' & !bestd.string() & ' hasauto=' & !hasauto.string())
 					endif
@@ -1749,6 +1756,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		if (!hasc1moved) then
 			$!c1moved
 			!claimeddpois.append(ce)
+			!movedrefs.append(ce)
 			!run = false
 			if (!dbgln) then
 				!dbgf.writerecord('CORNER1ALONG ' & !dir & ' alongv=' & !alongv.string() & ' off=' & !bestd.string() & ' hasauto=' & !hasc1auto.string())
@@ -1872,6 +1880,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		if (!hasc2moved) then
 			$!c2moved
 			!claimeddpois.append(ce)
+			!movedrefs.append(ce)
 			!run = false
 			if (!dbgln) then
 				!dbgf.writerecord('CORNER2ALONG ' & !dir & ' alongv=' & !alongv.string() & ' off=' & !bestd.string() & ' hasauto=' & !hasc2auto.string())
@@ -2007,17 +2016,113 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		--------------------------------------------------------------------
 		$!name/SS/S1/V1/ateLINE_$!dir
 		SORT DIM
+		--------------------------------------------------------------------
+		-- the dimension LINE sits DOFFSET away from the FIRST point of the --
+		-- chain (the GLAB block below works on exactly that, and has done  --
+		-- since it was written). after SORT DIM the first point is the one --
+		-- at the far end of the dimension, which is the corner point       --
+		--                                                                   --
+		-- so somebody dragging that corner point aside does not just move  --
+		-- the point: the next run re-lays the whole dimension line out     --
+		-- from it, and the line, its text and its labels all travel with   --
+		-- it. measured live at 6.39mm -- exactly what the point had been   --
+		-- dragged -- turning one hand adjustment into a whole dimension     --
+		-- that reads as changed on the revision compare (2026-08-28)       --
+		--                                                                   --
+		-- the drag is meant to move that one point and nothing else, so    --
+		-- DOFFSET gives back whatever the point took: the line lands       --
+		-- exactly where an undragged chain would have put it, and only     --
+		-- the point's own projection line is longer                        --
+		--                                                                   --
+		-- only for a point THIS run recognised as hand-moved. a first      --
+		-- point sitting at its own depth for an honest reason (a labelled  --
+		-- point holding the corner coordinate, say) is left to place the   --
+		-- line the way it always has                                       --
+		--------------------------------------------------------------------
+		!dimshift = 0
+		!mvn = 0
+		!mvn = !movedrefs.size()
+		handle any
+			!mvn = 0
+		endhandle
+		if (!mvn.gt(0)) then
+			!gfirst = 1
+			$!gfirst
+			handle any
+			elsehandle none
+				!m1ref = ce
+				!m1moved = false
+				do !mvi from 1 to !mvn
+					!mvr = !movedrefs[!mvi]
+					if (!m1ref.eq(!mvr)) then
+						!m1moved = true
+						break
+					endif
+				enddo
+				if (!m1moved) then
+					----------------------------------------------------------
+					-- the depth every automatically placed point sits at.   --
+					-- gridgap is already in sheet millimetres, and the      --
+					-- offset runs OUTWARD -- confirmed against the run's    --
+					-- own numbers: left border x 312.684395, its points at  --
+					-- 309.684395, gridgap 3. ticks and both corners all sit --
+					-- there, so one number covers every automatic point     --
+					----------------------------------------------------------
+					!ggap = !!DrawingPlan1.gridgap.val
+					if (!dir.eq('right')) then
+						!stddepth = !!DrawingPlan1.viewURsh.part(2).real() + !ggap
+					elseif (!dir.eq('left')) then
+						!stddepth = !!DrawingPlan1.viewULsh.part(2).real() - !ggap
+					elseif (!dir.eq('down')) then
+						!stddepth = !!DrawingPlan1.viewLLsh.part(4).real() - !ggap
+					else
+						!stddepth = !!DrawingPlan1.viewULsh.part(4).real() + !ggap
+					endif
+					var !m1pos pos
+					var !m1posh shpos of $!m1pos
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!m1depth = !m1posh.split().getindexed(2).replace('mm','').real()
+					else
+						!m1depth = !m1posh.split().getindexed(4).replace('mm','').real()
+					endif
+					if (!dir.eq('right') or !dir.eq('up')) then
+						!dimshift = !m1depth - !stddepth
+					else
+						!dimshift = !stddepth - !m1depth
+					endif
+					-- dragged inwards, or not really dragged at all: nothing to give back --
+					if (!dimshift.lt(0)) then
+						!dimshift = 0
+					endif
+					-- and never so far that the line would cross its own points --
+					if (!dimshift.gt(15)) then
+						!dimshift = 15
+					endif
+					if (!dbgln) then
+						!dbgf.writerecord('DIMSHIFT ' & !dir & ' std=' & !stddepth.string() & ' m1=' & !m1depth.string() & ' shift=' & !dimshift.string())
+					endif
+				endif
+			endhandle
+		endif
+		$!name/SS/S1/V1/ateLINE_$!dir
 		-- !dimoff is the same number as DOFFSET, kept so that the GLAB block --
 		-- below can work out where the dimension line ended up               --
 		if (!dir.eq('right') or !dir.eq('up')) then
-			DOFFSET 15 $( (10 - $!!DrawingPlan1.griddist.val) $)
-			!dimoff = 15
+			!doffv = 15 - !dimshift
+			DOFFSET $!doffv $( (10 - $!!DrawingPlan1.griddist.val) $)
+			!dimoff = !doffv
 		elseif (!dir.eq('left') or !dir.eq('down')) then
-			DOFFSET -15
-			!dimoff = -15
+			!doffv = (15 - !dimshift) * -1
+			DOFFSET $!doffv
+			!dimoff = !doffv
 		endif
-		-- the dimension on its own already reaches this far past the border --
-		!gbandmax = !!DrawingPlan1.gridgap.val + abs(!dimoff)
+		--------------------------------------------------------------------
+		-- how far past the border the dimension reaches on its own. this  --
+		-- is the NOMINAL 15, not the given-back DOFFSET above: the whole  --
+		-- point of that is to land the line where a 15 off an undragged   --
+		-- point would have landed it, so the band it occupies is the same --
+		--------------------------------------------------------------------
+		!gbandmax = !!DrawingPlan1.gridgap.val + 15
 		
 		----------------------------------------------------------
 		-- rotate text 90 degree when distance is less than 7mm --
