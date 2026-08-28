@@ -1447,6 +1447,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- update path: no DDNA on a grid crossing, so a previous    --
 					-- run's point at (close to) this position is the match --
 					---------------------------------------------------------------
+					--------------------------------------------------------------
+					-- and it has to be CLAIMED, not just recognised: a grid    --
+					-- crossing is created with no DDNA clause, but E3D does    --
+					-- not leave it blank -- it hands the point back a real     --
+					-- DDNA belonging to some other point (see the note in the  --
+					-- labelled branch above, confirmed live 2026-08-13). the   --
+					-- cleanup pass therefore does look at these points, and    --
+					-- an unclaimed one is deleted: 11 points went that way in  --
+					-- one update, taking their dimension segments with them    --
+					-- (2026-08-28, rebuild wrote 40 points and the update      --
+					-- straight after it wrote 36 off an identical collection)  --
+					--------------------------------------------------------------
 					!foundgrid = false
 					do !edp values !existingdpois
 						$!edp
@@ -1454,11 +1466,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!eposobj = object position(!epos)
 						if (!eposobj.distance(!attapos).lt(5)) then
 							!foundgrid = true
+							!claimeddpois.append(ce)
 							break
 						endif
 					enddo
 					if (not(!foundgrid)) then
 						NEW DPOI POS $!attapos
+						!claimeddpois.append(ce)
 						if (!dbgln and !dir.eq('left')) then
 							var !liveddna ddna of ce
 							!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=grid liveddna=' & !liveddna)
@@ -1503,6 +1517,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			endif
 			if (!attapos.distance(!attapos1).lt(5)) then
 				!run = false
+				-- claimed, for the same reason the grid crossings are --
+				!claimeddpois.append(ce)
 			endif
 		enddo
 		if (!dbgln and !dir.eq('left')) then
@@ -1527,6 +1543,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=corner1 attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 			endif
 			NEW DPOI POS $!attapos
+			!claimeddpois.append(ce)
 			if (!dbgln and !dir.eq('left')) then
 				var !liveddna ddna of ce
 				!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=corner1 liveddna=' & !liveddna)
@@ -1567,6 +1584,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			endif
 			if (!attapos.distance(!attapos1).lt(5)) then
 				!run = false
+				-- claimed, for the same reason the grid crossings are --
+				!claimeddpois.append(ce)
 			endif
 		enddo
 		if (!dbgln and !dir.eq('left')) then
@@ -1585,6 +1604,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=corner2 attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 			endif
 			NEW DPOI POS $!attapos
+			!claimeddpois.append(ce)
 			if (!dbgln and !dir.eq('left')) then
 				var !liveddna ddna of ce
 				!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=corner2 liveddna=' & !liveddna)
