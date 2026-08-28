@@ -1076,10 +1076,12 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- which TYPE found it, so a label seen on the sheet can be traced --
 				-- back to its element without guessing. remove once answered      --
 				--------------------------------------------------------------------
-				if (!dbgln and !dir.eq('left')) then
+				if (!dbgln) then
 					!dbgsrc  = !resultl.split('~').getindexed(3).split('!').getindexed(1)
 					!dbgpipe = !resultl.split('~').getindexed(3).split('!').getindexed(5)
-					!dbgf.writerecord('LABEL pipe=' & !dbgpipe & ' src=' & !dbgsrc & ' mem=' & !mem & ' type=' & !type & ' mempos=' & !mempos & ' mempossh=' & !mempossh)
+					if (!dir.eq('left')) then
+						!dbgf.writerecord('LABEL pipe=' & !dbgpipe & ' src=' & !dbgsrc & ' mem=' & !mem & ' type=' & !type & ' mempos=' & !mempos & ' mempossh=' & !mempossh)
+					endif
 				endif
 				var !temppos enupos of $!intpt
 				!attapos = object position(!temppos)
