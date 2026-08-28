@@ -1683,6 +1683,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!attapos = object position(!temppos)
 		!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 		!run = true
+		!hasc1auto = false
 		do !dpoi value !dpois
 			$!dpoi
 			var !temppos1 pos
@@ -1694,8 +1695,73 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!run = false
 				-- claimed, for the same reason the grid crossings are --
 				!claimeddpois.append(ce)
+				if (not(!hasc1auto)) then
+					!c1auto = ce
+					!hasc1auto = true
+				endif
 			endif
 		enddo
+		------------------------------------------------------------------
+		-- this corner's point may have been dragged aside by hand, the  --
+		-- same way a match line tick can be. the 3d test above then     --
+		-- misses it and a second point goes on the same coordinate,     --
+		-- which reads as a stray 0 (see the tick block for the full     --
+		-- story, 2026-08-28)                                            --
+		--                                                               --
+		-- only points nothing else this run has already accounted for   --
+		-- are considered. a labelled point that happens to share this   --
+		-- coordinate belongs to its own pipe, and mistaking it for a    --
+		-- moved corner would silently stop the corner dimension from    --
+		-- being drawn at all -- a far worse outcome than the stray 0    --
+		------------------------------------------------------------------
+		!hasc1moved = false
+		!bestd = 1
+		do !dpoi value !dpois
+			$!dpoi
+			var !temppos1 pos
+			!attapos1 = object position(!temppos1)
+			!d3 = !attapos.distance(!attapos1)
+			if (!d3.geq(5)) then
+				!cref = ce
+				!alreadyused = false
+				do !cd values !claimeddpois
+					if (!cref.eq(!cd)) then
+						!alreadyused = true
+						break
+					endif
+				enddo
+				if (not(!alreadyused)) then
+					var !cposh shpos of $!temppos1
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!ealong = !cposh.split().getindexed(4).replace('mm','').real()
+					else
+						!ealong = !cposh.split().getindexed(2).replace('mm','').real()
+					endif
+					!ed = abs(!ealong - !alongv)
+					if (!ed.lt(!bestd)) then
+						!bestd = !ed
+						!c1moved = ce
+						!hasc1moved = true
+					endif
+				endif
+			endif
+		enddo
+		if (!hasc1moved) then
+			$!c1moved
+			!claimeddpois.append(ce)
+			!run = false
+			if (!dbgln) then
+				!dbgf.writerecord('CORNER1ALONG ' & !dir & ' alongv=' & !alongv.string() & ' off=' & !bestd.string() & ' hasauto=' & !hasc1auto.string())
+			endif
+		endif
+		if (!hasc1moved and !hasc1auto) then
+			if (!!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)) then
+				!tickdupes.append(!c1auto)
+				if (!dbgln) then
+					!dbgf.writerecord('CORNER1DUPE ' & !dir & ' alongv=' & !alongv.string() & ' movedby=' & !bestd.string())
+				endif
+			endif
+		endif
 		if (!dbgln and !dir.eq('left')) then
 			!dbgf.writerecord('CORNER1 run-after-dist=' & !run & ' alongv=' & !alongv.string() & ' dimtol=' & !dimtol.string() & ' dimalong=' & !dimalong.size())
 		endif
@@ -1750,6 +1816,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		--------------------------------------------------------------------
 		!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 		!run = true
+		!hasc2auto = false
 		do !dpoi value !dpois
 			$!dpoi
 			var !temppos1 pos
@@ -1761,8 +1828,63 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!run = false
 				-- claimed, for the same reason the grid crossings are --
 				!claimeddpois.append(ce)
+				if (not(!hasc2auto)) then
+					!c2auto = ce
+					!hasc2auto = true
+				endif
 			endif
 		enddo
+		------------------------------------------------------------------
+		-- same second pass as corner1 above, same reasoning             --
+		------------------------------------------------------------------
+		!hasc2moved = false
+		!bestd = 1
+		do !dpoi value !dpois
+			$!dpoi
+			var !temppos1 pos
+			!attapos1 = object position(!temppos1)
+			!d3 = !attapos.distance(!attapos1)
+			if (!d3.geq(5)) then
+				!cref = ce
+				!alreadyused = false
+				do !cd values !claimeddpois
+					if (!cref.eq(!cd)) then
+						!alreadyused = true
+						break
+					endif
+				enddo
+				if (not(!alreadyused)) then
+					var !cposh shpos of $!temppos1
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!ealong = !cposh.split().getindexed(4).replace('mm','').real()
+					else
+						!ealong = !cposh.split().getindexed(2).replace('mm','').real()
+					endif
+					!ed = abs(!ealong - !alongv)
+					if (!ed.lt(!bestd)) then
+						!bestd = !ed
+						!c2moved = ce
+						!hasc2moved = true
+					endif
+				endif
+			endif
+		enddo
+		if (!hasc2moved) then
+			$!c2moved
+			!claimeddpois.append(ce)
+			!run = false
+			if (!dbgln) then
+				!dbgf.writerecord('CORNER2ALONG ' & !dir & ' alongv=' & !alongv.string() & ' off=' & !bestd.string() & ' hasauto=' & !hasc2auto.string())
+			endif
+		endif
+		if (!hasc2moved and !hasc2auto) then
+			if (!!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)) then
+				!tickdupes.append(!c2auto)
+				if (!dbgln) then
+					!dbgf.writerecord('CORNER2DUPE ' & !dir & ' alongv=' & !alongv.string() & ' movedby=' & !bestd.string())
+				endif
+			endif
+		endif
 		if (!dbgln and !dir.eq('left')) then
 			!dbgf.writerecord('CORNER2 run-after-dist=' & !run & ' alongv=' & !alongv.string() & ' dimtol=' & !dimtol.string() & ' dimalong=' & !dimalong.size())
 		endif
@@ -1829,9 +1951,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		--------------------------------------------------------------------
 		--------------------------------------------------------------------
 		-- the leftover automatic points found beside a hand-placed one   --
-		-- (see the match line tick block above). done here, where the    --
-		-- walks over !existingdpois that cannot survive a dead reference --
-		-- are already behind us                                          --
+		-- (the match line ticks and both corners). done here, where the  --
+		-- walks over !existingdpois and !dpois that cannot survive a    --
+		-- dead reference are already behind us                          --
 		--------------------------------------------------------------------
 		do !td values !tickdupes
 			$!td
