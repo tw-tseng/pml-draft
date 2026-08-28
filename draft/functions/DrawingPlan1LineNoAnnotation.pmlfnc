@@ -2248,6 +2248,30 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				enddo
 				endif
 				!gstep = !gplace - !galong
+				----------------------------------------------------------------
+				-- snapped to the same 3 decimals XYPO is written with. an     --
+				-- update does not recompute a frozen label's !gstep, it reads  --
+				-- it back out of the stored XYPO -- which is a 3 decimal       --
+				-- string -- so the update's !gstep always sits exactly on that --
+				-- grid while a rebuild's came straight off the subtraction and --
+				-- carries the full tail                                        --
+				--                                                              --
+				-- that tail matters because the leader's bend points are       --
+				-- written at TWO decimals (BPOF, below): a !gstep landing near --
+				-- a .xx5 boundary rounds one way from the full value and the   --
+				-- other way from the stored one, and the bend moves 0.01mm     --
+				-- between a rebuild and the update straight after it. only the --
+				-- few labels sitting on such a boundary move, which is exactly --
+				-- what was reported live (2026-08-28) -- with every logged     --
+				-- quantity, POSITION XYPO BPOFTX CPOFTX included, identical    --
+				-- between the two runs, because the log is written before BPOF --
+				-- is applied                                                   --
+				--                                                              --
+				-- snapping here makes both paths start from the same number,   --
+				-- so every later rounding lands the same way                    --
+				----------------------------------------------------------------
+				!gstepstr = !gstep.string('D3')
+				!gstep = !gstepstr.real()
 				-- how far it moved, either way. a label which had to step BACK  --
 				-- to stay on its own side of a grid line has a negative !gstep, --
 				-- and the two tests below used to ask .gt(0.01), so those got   --
