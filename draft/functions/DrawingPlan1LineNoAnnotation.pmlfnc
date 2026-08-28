@@ -2536,6 +2536,32 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					handle any
 					endhandle
 				endif
+				----------------------------------------------------------------
+				-- every label's finished geometry, for comparing a rebuild    --
+				-- against the update straight after it. the dump below only   --
+				-- covers the first four a side, and the labels reported as    --
+				-- 0.01mm out were not among them (2026-08-28). POSITION is    --
+				-- the reused one when an existing GLAB was close enough to    --
+				-- keep, so this is the only place the reuse override shows    --
+				----------------------------------------------------------------
+				if (!dbgln) then
+					!gfpos = 'ERR'
+					var !gfpos position
+					handle any
+						!gfpos = 'ERR'
+					endhandle
+					!gfbpof = 'ERR'
+					var !gfbpof bpoftx
+					handle any
+						!gfbpof = 'ERR'
+					endhandle
+					!gfcpof = 'ERR'
+					var !gfcpof cpoftx
+					handle any
+						!gfcpof = 'ERR'
+					endhandle
+					!dbgf.writerecord('GLABFINAL ' & !dir & ' i=' & !i.string() & ' elem=' & !gelem & ' pos=' & !gfpos & ' bpof=' & !gfbpof & ' cpof=' & !gfcpof)
+				endif
 				-------------------------------------------------------------
 				-- the first label of each side, as it actually came out,   --
 				-- next to what it was asked for. this is what settles      --
