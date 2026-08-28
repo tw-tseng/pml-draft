@@ -775,6 +775,24 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-----------------------------------------------------------------------
 		-- remove the distance between type 2,3,4 and type1 is less then 4mm --
 		-----------------------------------------------------------------------
+		----------------------------------------------------------------------
+		-- temporary diagnostic 2026-08-28: two points which existed on the  --
+		-- right LDIM after a rebuild were simply not collected at all by    --
+		-- the next update -- they never reached the DPOI matching, so they  --
+		-- were deleted as orphans and their dimension segment vanished.     --
+		-- this logs the three places a member can be dropped between being  --
+		-- found and becoming a dimension point: the raw sorted list, the    --
+		-- "too close to a type1 point" filter, and the clustering which    --
+		-- keeps only one representative per 4mm. remove once answered       --
+		----------------------------------------------------------------------
+		if (!dbgln) then
+			do !i from 1 to !sortedtypes.size()
+				!dbgf.writerecord('TYPESRAW ' & !dir & ' i=' & !i.string() & ' y=' & !sortedtypes[!i].split('~').getindexed(1) & ' x=' & !sortedtypes[!i].split('~').getindexed(2) & ' mem=' & !sortedtypes[!i].split('~').getindexed(3).split('!').getindexed(4))
+			enddo
+			do !i from 1 to !result.size()
+				!dbgf.writerecord('RESULTRAW ' & !dir & ' i=' & !i.string() & ' y=' & !result[!i].split('~').getindexed(1) & ' x=' & !result[!i].split('~').getindexed(2) & ' mem=' & !result[!i].split('~').getindexed(3).split('!').getindexed(4))
+			enddo
+		endif
 		!dels = object array()
 		do !i from 1 to !sortedtypes.size()
 			!del = false
@@ -782,10 +800,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (!dir.eq('right') or !dir.eq('left')) then
 					if (abs(!sortedtypes[!i].split('~').getindexed(1).real() - !result[!ii].split('~').getindexed(1).real()) le 4) then
 						!del = true
+						if (!dbgln) then
+							!dbgf.writerecord('TYPESDEL ' & !dir & ' i=' & !i.string() & ' mem=' & !sortedtypes[!i].split('~').getindexed(3).split('!').getindexed(4) & ' y=' & !sortedtypes[!i].split('~').getindexed(1) & ' clashes result i=' & !ii.string() & ' mem=' & !result[!ii].split('~').getindexed(3).split('!').getindexed(4) & ' y=' & !result[!ii].split('~').getindexed(1))
+						endif
 					endif
 				else
 					if (abs(!sortedtypes[!i].split('~').getindexed(2).real() - !result[!ii].split('~').getindexed(2).real()) le 4) then
 						!del = true
+						if (!dbgln) then
+							!dbgf.writerecord('TYPESDEL ' & !dir & ' i=' & !i.string() & ' mem=' & !sortedtypes[!i].split('~').getindexed(3).split('!').getindexed(4) & ' x=' & !sortedtypes[!i].split('~').getindexed(2) & ' clashes result i=' & !ii.string() & ' mem=' & !result[!ii].split('~').getindexed(3).split('!').getindexed(4) & ' x=' & !result[!ii].split('~').getindexed(2))
+						endif
 					endif
 				endif
 			enddo
@@ -841,6 +865,11 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				$p $!temp1
 			enddo
 	$)
+			if (!dbgln) then
+				do !tt from 1 to !temp1s.size()
+					!dbgf.writerecord('CLUSTER ' & !dir & ' at=' & !i.string() & ' member=' & !tt.string() & ' of=' & !temp1s.size().string() & ' y=' & !temp1s[!tt].split('~').getindexed(1) & ' x=' & !temp1s[!tt].split('~').getindexed(2) & ' mem=' & !temp1s[!tt].split('~').getindexed(3).split('!').getindexed(4))
+				enddo
+			endif
 			if (!dir.eq('right')) then
 				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'max', !temp1s, !viewdir))
 			elseif (!dir.eq('left')) then
@@ -850,7 +879,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			elseif (!dir.eq('up')) then
 				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'max', !temp1s, !viewdir))
 			endif
-			
+			if (!dbgln) then
+				!dbgf.writerecord('CLUSTERPICK ' & !dir & ' at=' & !i.string() & ' mem=' & !result[!result.size()].split('~').getindexed(3).split('!').getindexed(4))
+			endif
+
 			!i = !ii
 		enddo
 		
