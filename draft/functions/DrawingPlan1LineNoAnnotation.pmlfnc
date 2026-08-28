@@ -1030,9 +1030,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!glabgrid = 2
 		!glabrec = object array()
 
+		--------------------------------------------------------------------
+		-- every !mem this run found on this side. the cleanup pass at the --
+		-- end uses it as the second of its two "leave this point alone"   --
+		-- tests -- see the note down there for why the object test cannot --
+		-- carry that on its own                                          --
+		--------------------------------------------------------------------
+		!currentmems = object array()
+
 		do !i from 1 to !result.size()
 			!resultl = !result[!i]
 			!mem = !resultl.split('~').getindexed(3).split('!').getindexed(4)
+			!currentmems.append(!mem)
 			var !type type of $!mem
 			--------------------------------------------------------------------
 			-- the position was worked out when the member was found and is    --
@@ -1620,24 +1629,35 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		endif
 
 		--------------------------------------------------------------------
-		-- update path cleanup: a DPOI from a previous run not claimed by  --
-		-- !claimeddpois (the actual objects reused above) this run is    --
-		-- removed. a DPOI with no DDNA at all (grid crossings, corners)  --
-		-- is left alone -- but .unset() alone does NOT catch that: a     --
-		-- DPOI created with no DDNA clause reads back as the literal     --
-		-- string '=0/0' (a null DBREF), not a blank/unset string         --
-		-- (confirmed live via CLEANUP debug -- this cost every           --
-		-- corner/grid DPOI in the chain, 2026-08-26). both are checked   --
+		-- update path cleanup: a DPOI from a previous run is removed only --
+		-- when nothing this run accounts for it AT ALL -- neither the     --
+		-- object itself being reused, nor its DDNA still being among the  --
+		-- members this run collected. a DPOI with no DDNA (grid           --
+		-- crossings, corners) is left alone -- but .unset() alone does    --
+		-- NOT catch that: a DPOI created with no DDNA clause reads back   --
+		-- as the literal string '=0/0' (a null DBREF), not a blank/unset  --
+		-- string (confirmed live via CLEANUP debug -- this cost every     --
+		-- corner/grid DPOI in the chain, 2026-08-26). both are checked    --
 		--                                                                --
-		-- checking by ddna-in-currentmems instead of by object used to   --
-		-- let a genuinely gone point read as "still current" whenever    --
-		-- its old ddna happened to also be the ddna some OTHER, unrelated --
-		-- point resolved to this run -- confirmed live via a manual      --
-		-- before/after DPOI dump, 2026-08-27: =67177338/9369496 existed  --
-		-- after rebuild and was gone after update with nothing at that   --
-		-- position taking its place, while the same ddna string          --
-		-- legitimately belonged to a different, unrelated point          --
-		-- elsewhere on the same LDIM                                     --
+		-- the object test alone is NOT enough, and asking for it alone    --
+		-- was wrong: grid crossings are only re-derived on the rebuild    --
+		-- path. the update path deliberately leaves them alone and never  --
+		-- fills .allintersections (see the note in DrawingPlan1.pmlfrm),  --
+		-- so that loop does not run and no grid point can be claimed --   --
+		-- yet E3D does not leave a no-DDNA point blank, it back-fills a   --
+		-- real DDNA copied off another point, so cleanup sees them and    --
+		-- reaped every one: 7 points per update, three whole grid lines   --
+		-- off the up and down dimensions (2026-08-28, rebuild 56 points   --
+		-- against the next update's 49)                                   --
+		--                                                                --
+		-- so the DDNA test is kept as well, and either one saves a point. --
+		-- a point whose DDNA no longer appears anywhere -- the pipe       --
+		-- really was deleted -- is still removed, which is what this pass --
+		-- exists for. anything else is ambiguous (a back-filled grid      --
+		-- point, or the second of two legitimate crossings of one elbow)  --
+		-- and ambiguous points are KEPT: a stale duplicate is a far       --
+		-- smaller problem than a dimension that silently disappears, and  --
+		-- disappearing dimensions make a revision compare worthless       --
 		--------------------------------------------------------------------
 		--------------------------------------------------------------------
 		-- confirmed live 2026-08-26 on a fresh rebuild (no update-path    --
@@ -1663,6 +1683,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							break
 						endif
 					enddo
+					if (not(!stillcurrent)) then
+						do !cm values !currentmems
+							if (!eddna.eq(!cm)) then
+								!stillcurrent = true
+								break
+							endif
+						enddo
+					endif
 					if (!dbgln) then
 						!dbgf.writerecord('CLEANUP ' & !dir & ' eddna=' & !eddna & ' stillcurrent=' & !stillcurrent)
 					endif
