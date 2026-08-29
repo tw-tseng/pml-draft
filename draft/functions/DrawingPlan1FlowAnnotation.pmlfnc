@@ -85,10 +85,10 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	-- visible run of each tube is worked out. the same four numbers as    --
 	-- DrawingPlan1LineNoAnnotation takes                                  --
 	------------------------------------------------------------------------
-	!vwx1 = min(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
-	!vwx2 = max(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
-	!vwy1 = min(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
-	!vwy2 = max(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
+	!vwx1 = min(!!DrawingPlan1.boxLLsh.part(2).real(), !!DrawingPlan1.boxURsh.part(2).real())
+	!vwx2 = max(!!DrawingPlan1.boxLLsh.part(2).real(), !!DrawingPlan1.boxURsh.part(2).real())
+	!vwy1 = min(!!DrawingPlan1.boxLLsh.part(4).real(), !!DrawingPlan1.boxURsh.part(4).real())
+	!vwy2 = max(!!DrawingPlan1.boxLLsh.part(4).real(), !!DrawingPlan1.boxURsh.part(4).real())
 	------------------------------------------------------------------------
 	-- the branches are worked from the top of the plant downwards, and    --
 	-- where two of them sit at the same elevation the one with more of    --

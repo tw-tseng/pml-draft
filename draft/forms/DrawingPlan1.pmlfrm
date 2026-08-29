@@ -166,6 +166,26 @@ layout form !!DrawingPlan1 dialog dock
   member .viewRlinesh is line
   member .viewLlinesh is line
   
+  ------------------------------------------------------------------------
+  -- the same four corners for the BOX rather than the view. while the   --
+  -- view is placed by the rebuild path the two are the same thing, but  --
+  -- an update freezes THPOSITION/XYPOSITION and recalculates SIZE        --
+  -- symmetric about the frozen centre, so the side of the box that did  --
+  -- not grow ends up inset from the border by the padding. the border   --
+  -- is only a reservation of paper after that; the box edge is where    --
+  -- the VSEC planes actually cut, so it is what the match line marks    --
+  -- and what the view corner dimension points sit on (2026-08-29)       --
+  ------------------------------------------------------------------------
+  member .boxULsh is string
+  member .boxURsh is string
+  member .boxLLsh is string
+  member .boxLRsh is string
+  
+  member .boxUlinesh is line
+  member .boxDlinesh is line
+  member .boxRlinesh is line
+  member .boxLlinesh is line
+  
   member .maxE is real
 	member .minE is real
 	member .maxN is real
@@ -1049,6 +1069,21 @@ define method .Apply()
 				!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
 				!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
 				!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
+				--------------------------------------------------------------------
+				-- on this path the view is placed on the box, so the box edge and  --
+				-- the border are the same four corners. they are kept apart all    --
+				-- the same, because the update path freezes the placement and the  --
+				-- two stop agreeing there -- everything downstream reads the box   --
+				-- corners and so behaves identically on both paths (2026-08-29)    --
+				--------------------------------------------------------------------
+				!this.boxULsh = !this.viewULsh
+				!this.boxURsh = !this.viewURsh
+				!this.boxLLsh = !this.viewLLsh
+				!this.boxLRsh = !this.viewLRsh
+				!this.boxUlinesh = object line(!this.boxULsh.position(), !this.boxURsh.position())
+				!this.boxDlinesh = object line(!this.boxLLsh.position(), !this.boxLRsh.position())
+				!this.boxRlinesh = object line(!this.boxLRsh.position(), !this.boxURsh.position())
+				!this.boxLlinesh = object line(!this.boxLLsh.position(), !this.boxULsh.position())
 				
 				$!name/SS/S1/V1
 				update design
@@ -1621,6 +1656,18 @@ define method .Apply()
 						!this.viewURsh = 'x ' & string(!this.viewURsh.part(2).real() + !dx) & ' y ' & string(!this.viewURsh.part(4).real() + !dy)
 						!this.viewLLsh = 'x ' & string(!this.viewLLsh.part(2).real() + !dx) & ' y ' & string(!this.viewLLsh.part(4).real() + !dy)
 						!this.viewLRsh = 'x ' & string(!this.viewLRsh.part(2).real() + !dx) & ' y ' & string(!this.viewLRsh.part(4).real() + !dy)
+						------------------------------------------------------------
+						-- the box corners are sheet coordinates too, so they move  --
+						-- with the view exactly as the border corners do           --
+						------------------------------------------------------------
+						!this.boxULsh = 'x ' & string(!this.boxULsh.part(2).real() + !dx) & ' y ' & string(!this.boxULsh.part(4).real() + !dy)
+						!this.boxURsh = 'x ' & string(!this.boxURsh.part(2).real() + !dx) & ' y ' & string(!this.boxURsh.part(4).real() + !dy)
+						!this.boxLLsh = 'x ' & string(!this.boxLLsh.part(2).real() + !dx) & ' y ' & string(!this.boxLLsh.part(4).real() + !dy)
+						!this.boxLRsh = 'x ' & string(!this.boxLRsh.part(2).real() + !dx) & ' y ' & string(!this.boxLRsh.part(4).real() + !dy)
+						!this.boxUlinesh = object line(!this.boxULsh.position(), !this.boxURsh.position())
+						!this.boxDlinesh = object line(!this.boxLLsh.position(), !this.boxLRsh.position())
+						!this.boxRlinesh = object line(!this.boxLRsh.position(), !this.boxURsh.position())
+						!this.boxLlinesh = object line(!this.boxLLsh.position(), !this.boxULsh.position())
 						!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
 						!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
 						!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
@@ -1686,14 +1733,14 @@ define method .Apply()
 						------------------------------------------------------------
 						!msfrom = object array()
 						!msto = object array()
-						!msfrom[1] = !this.viewULsh
-						!msto[1] = !this.viewURsh
-						!msfrom[2] = !this.viewLLsh
-						!msto[2] = !this.viewLRsh
-						!msfrom[3] = !this.viewLRsh
-						!msto[3] = !this.viewURsh
-						!msfrom[4] = !this.viewLLsh
-						!msto[4] = !this.viewULsh
+						!msfrom[1] = !this.boxULsh
+						!msto[1] = !this.boxURsh
+						!msfrom[2] = !this.boxLLsh
+						!msto[2] = !this.boxLRsh
+						!msfrom[3] = !this.boxLRsh
+						!msto[3] = !this.boxURsh
+						!msfrom[4] = !this.boxLLsh
+						!msto[4] = !this.boxULsh
 						-- !!DrawingPlan1MatchStras is a global rather than a member of  --
 						-- this form on purpose: DrawingPlan1MatchLine.pmlfnc fills it   --
 						-- in, and a .pmlfnc is re-read on every call while this form is --
@@ -2119,6 +2166,37 @@ define method .Apply()
 				!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
 				!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
 				!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
+				--------------------------------------------------------------------
+				-- the box edge in sheet coordinates. SIZE above is symmetric about --
+				-- the frozen centre, so on the side the box did not grow the       --
+				-- border stands off from it -- and everything the match line is    --
+				-- made of belongs on the box edge, which is where the VSEC planes  --
+				-- really cut, not on that padding. the four face midpoints were    --
+				-- already projected for the SIZE calculation above; ADEGREES keeps --
+				-- a turned box square on the sheet, so min/max over the four is    --
+				-- the box outline whichever way round rcode has it (2026-08-29)    --
+				--------------------------------------------------------------------
+				!bxX1 = !ptEplussh.part(2).replace('mm', '').real()
+				!bxX2 = !ptEminussh.part(2).replace('mm', '').real()
+				!bxX3 = !ptNplussh.part(2).replace('mm', '').real()
+				!bxX4 = !ptNminussh.part(2).replace('mm', '').real()
+				!bxY1 = !ptEplussh.part(4).replace('mm', '').real()
+				!bxY2 = !ptEminussh.part(4).replace('mm', '').real()
+				!bxY3 = !ptNplussh.part(4).replace('mm', '').real()
+				!bxY4 = !ptNminussh.part(4).replace('mm', '').real()
+				!bxminX = min(min(!bxX1, !bxX2), min(!bxX3, !bxX4)) - 0.025
+				!bxmaxX = max(max(!bxX1, !bxX2), max(!bxX3, !bxX4)) + 0.025
+				!bxminY = min(min(!bxY1, !bxY2), min(!bxY3, !bxY4)) - 0.025
+				!bxmaxY = max(max(!bxY1, !bxY2), max(!bxY3, !bxY4)) + 0.025
+				!this.boxULsh = 'x ' & string(!bxminX) & ' y ' & string(!bxmaxY)
+				!this.boxURsh = 'x ' & string(!bxmaxX) & ' y ' & string(!bxmaxY)
+				!this.boxLLsh = 'x ' & string(!bxminX) & ' y ' & string(!bxminY)
+				!this.boxLRsh = 'x ' & string(!bxmaxX) & ' y ' & string(!bxminY)
+				!this.boxUlinesh = object line(!this.boxULsh.position(), !this.boxURsh.position())
+				!this.boxDlinesh = object line(!this.boxLLsh.position(), !this.boxLRsh.position())
+				!this.boxRlinesh = object line(!this.boxLRsh.position(), !this.boxURsh.position())
+				!this.boxLlinesh = object line(!this.boxLLsh.position(), !this.boxULsh.position())
+				!dbgf3.writerecord('STEP6 BOXCORNERS boxULsh=' & !this.boxULsh & ' boxURsh=' & !this.boxURsh & ' boxLLsh=' & !this.boxLLsh & ' boxLRsh=' & !this.boxLRsh)
 				!dbgf3.writerecord('STEP6 APPLY END viewULsh=' & !this.viewULsh & ' viewURsh=' & !this.viewURsh & ' viewLLsh=' & !this.viewLLsh & ' viewLRsh=' & !this.viewLRsh)
 				!dbgf3.close()
 
@@ -3149,16 +3227,16 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 	!framedir = object direction()
 	!griddir = object direction()
 	!nppt = 0
-	if (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewUlinesh')) then
+	if (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('boxUlinesh')) then
 		!framedir = object direction('N')
 		!agside = 'Top'
-	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewDlinesh')) then
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('boxDlinesh')) then
 		!framedir = object direction('S')
 		!agside = 'Bottom'
-	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewLlinesh')) then
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('boxLlinesh')) then
 		!framedir = object direction('W')
 		!agside = 'Left'
-	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewRlinesh')) then
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('boxRlinesh')) then
 		!framedir = object direction('E')
 		!agside = 'Right'
 	endif
@@ -3216,10 +3294,12 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 	-- they do not change when the box does, so it is still found     --
 	-- after a resize has moved it (2026-08-28)                       --
 	--                                                                 --
-	-- XYPO / APOF are rewritten either way. they are offsets from the --
-	-- grid line's own end, so a box change genuinely does move them,  --
-	-- and on an unchanged box the same numbers go back in, which      --
-	-- changes nothing                                                 --
+	-- an existing bubble is then left completely alone: XYPO / APOF  --
+	-- are written only on one this run creates. they are offsets      --
+	-- from the grid line's own end, so a box change would move them,  --
+	-- but a bubble already on an issued drawing must not move -- it   --
+	-- is part of the comparison baseline, same rule as the dimension  --
+	-- chain (2026-08-29)                                              --
 	------------------------------------------------------------------
 	!gsref = !!DrawingPlan1GridClaim(!refgln, !agside, !nppt)
 	if (!gsref.eq('')) then
@@ -3227,17 +3307,17 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 		DDNA $!refgln
 		NPPT $!nppt
 		TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+		XYPO $!x $!y
+		APOF $!xap $!yap
+		Agside |$!agside|
+		----------------------------------------------------------------
+		-- turn the symbol back upright when the view is rotated       --
+		----------------------------------------------------------------
+		if (!this.rcode.eqnocase('left')) then
+			Adegrees -90
+		endif
 	else
 		$!gsref
-	endif
-	XYPO $!x $!y
-	APOF $!xap $!yap
-	Agside |$!agside|
-	----------------------------------------------------------------
-	-- turn the symbol back upright when the view is rotated       --
-	----------------------------------------------------------------
-	if (!this.rcode.eqnocase('left')) then
-		Adegrees -90
 	endif
 endmethod
 
@@ -3245,13 +3325,13 @@ endmethod
 -- create a grid label based on end point of grid --
 ----------------------------------------------------
 define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is string, !thatpossh is string, !refgln is string, !nppt is real)
-	if (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewUlinesh')) then
+	if (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('boxUlinesh')) then
 		!agside = 'Top'
-	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewDlinesh')) then
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('boxDlinesh')) then
 		!agside = 'Bottom'
-	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewLlinesh')) then
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('boxLlinesh')) then
 		!agside = 'Left'
-	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('viewRlinesh')) then
+	elseif (!this.intersections.getindexed(!i).split('-').getindexed(1).eq('boxRlinesh')) then
 		!agside = 'Right'
 	endif
 
@@ -3309,10 +3389,12 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 	-- they do not change when the box does, so it is still found     --
 	-- after a resize has moved it (2026-08-28)                       --
 	--                                                                 --
-	-- XYPO / APOF are rewritten either way. they are offsets from the --
-	-- grid line's own end, so a box change genuinely does move them,  --
-	-- and on an unchanged box the same numbers go back in, which      --
-	-- changes nothing                                                 --
+	-- an existing bubble is then left completely alone: XYPO / APOF  --
+	-- are written only on one this run creates. they are offsets      --
+	-- from the grid line's own end, so a box change would move them,  --
+	-- but a bubble already on an issued drawing must not move -- it   --
+	-- is part of the comparison baseline, same rule as the dimension  --
+	-- chain (2026-08-29)                                              --
 	------------------------------------------------------------------
 	!gsref = !!DrawingPlan1GridClaim(!refgln, !agside, !nppt)
 	if (!gsref.eq('')) then
@@ -3320,17 +3402,17 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 		DDNA $!refgln
 		NPPT $!nppt
 		TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+		XYPO $!x $!y
+		APOF $!xap $!yap
+		Agside |$!agside|
+		----------------------------------------------------------------
+		-- turn the symbol back upright when the view is rotated       --
+		----------------------------------------------------------------
+		if (!this.rcode.eqnocase('left')) then
+			Adegrees -90
+		endif
 	else
 		$!gsref
-	endif
-	XYPO $!x $!y
-	APOF $!xap $!yap
-	Agside |$!agside|
-	----------------------------------------------------------------
-	-- turn the symbol back upright when the view is rotated       --
-	----------------------------------------------------------------
-	if (!this.rcode.eqnocase('left')) then
-		Adegrees -90
 	endif
 endmethod
 
@@ -3677,7 +3759,7 @@ define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) 
 		!tubeline = object line(!p1sh.position(), !p2sh.position())
 		!crosssh = ''
 		if (!dir.eq('right')) then
-			!crosssh = !this.viewRlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			!crosssh = !this.boxRlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 			handle any
 				------------------------------------------------
 				-- the tube runs along that border            --
@@ -3685,17 +3767,17 @@ define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) 
 				!ok = false
 			endhandle
 		elseif (!dir.eq('left')) then
-			!crosssh = !this.viewLlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			!crosssh = !this.boxLlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 			handle any
 				!ok = false
 			endhandle
 		elseif (!dir.eq('down')) then
-			!crosssh = !this.viewDlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			!crosssh = !this.boxDlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 			handle any
 				!ok = false
 			endhandle
 		elseif (!dir.eq('up')) then
-			!crosssh = !this.viewUlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+			!crosssh = !this.boxUlinesh.intersection(!tubeline).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 			handle any
 				!ok = false
 			endhandle

@@ -50,14 +50,14 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	!!DrawingPlan1MatchStras = object array()
 	!bfrom = object array()
 	!bto = object array()
-	!bfrom[1] = !!DrawingPlan1.viewULsh
-	!bto[1]   = !!DrawingPlan1.viewURsh
-	!bfrom[2] = !!DrawingPlan1.viewLLsh
-	!bto[2]   = !!DrawingPlan1.viewLRsh
-	!bfrom[3] = !!DrawingPlan1.viewLRsh
-	!bto[3]   = !!DrawingPlan1.viewURsh
-	!bfrom[4] = !!DrawingPlan1.viewLLsh
-	!bto[4]   = !!DrawingPlan1.viewULsh
+	!bfrom[1] = !!DrawingPlan1.boxULsh
+	!bto[1]   = !!DrawingPlan1.boxURsh
+	!bfrom[2] = !!DrawingPlan1.boxLLsh
+	!bto[2]   = !!DrawingPlan1.boxLRsh
+	!bfrom[3] = !!DrawingPlan1.boxLRsh
+	!bto[3]   = !!DrawingPlan1.boxURsh
+	!bfrom[4] = !!DrawingPlan1.boxLLsh
+	!bto[4]   = !!DrawingPlan1.boxULsh
 	do !bi from 1 to 4
 		!bf = !bfrom[!bi]
 		!bt = !bto[!bi]

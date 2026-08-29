@@ -170,10 +170,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	-- corners of the view are already turned by .Apply()                    --
 	---------------------------------------------------------------------------
 	!trans = !!DrawingPlan1.ViewSheetTransform()
-	!vwx1 = min(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
-	!vwx2 = max(!!DrawingPlan1.viewLLsh.part(2).real(), !!DrawingPlan1.viewURsh.part(2).real())
-	!vwy1 = min(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
-	!vwy2 = max(!!DrawingPlan1.viewLLsh.part(4).real(), !!DrawingPlan1.viewURsh.part(4).real())
+	!vwx1 = min(!!DrawingPlan1.boxLLsh.part(2).real(), !!DrawingPlan1.boxURsh.part(2).real())
+	!vwx2 = max(!!DrawingPlan1.boxLLsh.part(2).real(), !!DrawingPlan1.boxURsh.part(2).real())
+	!vwy1 = min(!!DrawingPlan1.boxLLsh.part(4).real(), !!DrawingPlan1.boxURsh.part(4).real())
+	!vwy2 = max(!!DrawingPlan1.boxLLsh.part(4).real(), !!DrawingPlan1.boxURsh.part(4).real())
 
 	------------------------------------------------------------------
 	-- !result is the array with th correct dimension attach points --
@@ -941,9 +941,11 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- always finds nothing here (the LAYE above was just created     --
 		-- fresh), so this always falls through to NEW LDIM there         --
 		--------------------------------------------------------------------
+		!ldimexisted = true
 		$!name/SS/S1/V1/ateLINE_$!dir
 		handle any
 			NEW LDIM $!name/SS/S1/V1/ateLINE_$!dir
+			!ldimexisted = false
 		elsehandle none
 		endhandle
 		!ldimref = ce
@@ -966,6 +968,53 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- instead of getting a duplicate piled on top of it              --
 		--------------------------------------------------------------------
 		var !existingdpois coll all dpoi for ce
+		--------------------------------------------------------------------
+		-- where this side's dimension LINE already sits, in sheet mm,     --
+		-- read while everything is still as the last run left it.         --
+		--                                                                  --
+		-- the line is DOFFSET away from the chain's FIRST point, and the   --
+		-- members are still in the order last run's SORT DIM left them in, --
+		-- so member 1 is that point: its depth plus DOFFSET is where the   --
+		-- line is. nothing is assumed about where a point 'ought' to sit   --
+		-- -- an earlier attempt took the innermost existing point as the   --
+		-- depth and picked up a labelled member's own DPOI instead, which  --
+		-- pulled all four chains 35-47mm inward (reported live 2026-08-29) --
+		--                                                                  --
+		-- consumed by the DOFFSET block far below. anything unreadable     --
+		-- leaves !hasfrozen false and the nominal 15 stays in charge       --
+		--------------------------------------------------------------------
+		!frozendepth = 0
+		!hasfrozen = false
+		if (!ldimexisted) then
+			!exdoffs = 'BAD'
+			var !exdoffs doffset
+			handle any
+				!exdoffs = 'BAD'
+			endhandle
+			if (not(!exdoffs.eq('BAD'))) then
+				!gfx = 1
+				$!gfx
+				handle any
+				elsehandle none
+					var !expos pos
+					var !exposh shpos of $!expos
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!exdepth = !exposh.split().getindexed(2).replace('mm','').real()
+					else
+						!exdepth = !exposh.split().getindexed(4).replace('mm','').real()
+					endif
+					!frozendepth = !exdepth + !exdoffs.replace('mm','').real()
+					handle any
+					elsehandle none
+						!hasfrozen = true
+					endhandle
+				endhandle
+			endif
+			$!name/SS/S1/V1/ateLINE_$!dir
+			if (!dbgln) then
+				!dbgf.writerecord('DIMBASE ' & !dir & ' doffread=' & !exdoffs & ' frozenline=' & !frozendepth.string() & ' ok=' & !hasfrozen.string())
+			endif
+		endif
 		--------------------------------------------------------------------
 		-- the actual DPOI objects reused this run, same reasoning as       --
 		-- !claimedglabs above -- cleanup below asks "was THIS object       --
@@ -1099,22 +1148,22 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			endhandle
 			!templine = object line(!mempossh.position(), !mempossh.position().offset(!shdir, 1))
 			if (!dir.eq('right')) then
-				!intpt = !!DrawingPlan1.viewRlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				!intpt = !!DrawingPlan1.boxRlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 				handle any
 					-- two lines are parellel
 				endhandle
 			elseif (!dir.eq('left')) then
-				!intpt = !!DrawingPlan1.viewLlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				!intpt = !!DrawingPlan1.boxLlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 				handle any
 					-- two lines are parellel
 				endhandle
 			elseif (!dir.eq('down')) then
-				!intpt = !!DrawingPlan1.viewDlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				!intpt = !!DrawingPlan1.boxDlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 				handle any
 					-- two lines are parellel
 				endhandle
 			elseif (!dir.eq('up')) then
-				!intpt = !!DrawingPlan1.viewUlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				!intpt = !!DrawingPlan1.boxUlinesh.intersection(!templine).string().before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 				handle any
 					-- two lines are parellel
 				endhandle
@@ -1411,13 +1460,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		------------------------------------------------
 		do !intersection value !!DrawingPlan1.allintersections
 			!checkpt = false
-			if (!intersection.split('-').getindexed(1).eqnocase('viewRlinesh') and !dir.eq('right')) then
+			if (!intersection.split('-').getindexed(1).eqnocase('boxRlinesh') and !dir.eq('right')) then
 				!checkpt = true
-			elseif (!intersection.split('-').getindexed(1).eqnocase('viewLlinesh') and !dir.eq('left')) then
+			elseif (!intersection.split('-').getindexed(1).eqnocase('boxLlinesh') and !dir.eq('left')) then
 				!checkpt = true
-			elseif (!intersection.split('-').getindexed(1).eqnocase('viewUlinesh') and !dir.eq('up')) then
+			elseif (!intersection.split('-').getindexed(1).eqnocase('boxUlinesh') and !dir.eq('up')) then
 				!checkpt = true
-			elseif (!intersection.split('-').getindexed(1).eqnocase('viewDlinesh') and !dir.eq('down')) then
+			elseif (!intersection.split('-').getindexed(1).eqnocase('boxDlinesh') and !dir.eq('down')) then
 				!checkpt = true
 			endif
 			if (!checkpt) then
@@ -1688,20 +1737,20 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		var !dpois coll all dpoi for ce
 		
 		if (!dir.eq('right')) then
-			var !temppos enupos of $!!DrawingPlan1.viewURsh
-			!alongv = !!DrawingPlan1.viewURsh.part(4).real()
+			var !temppos enupos of $!!DrawingPlan1.boxURsh
+			!alongv = !!DrawingPlan1.boxURsh.part(4).real()
 		elseif (!dir.eq('left')) then
-			var !temppos enupos of $!!DrawingPlan1.viewULsh
-			!alongv = !!DrawingPlan1.viewULsh.part(4).real()
+			var !temppos enupos of $!!DrawingPlan1.boxULsh
+			!alongv = !!DrawingPlan1.boxULsh.part(4).real()
 		elseif (!dir.eq('down')) then
-			var !temppos enupos of $!!DrawingPlan1.viewLLsh
-			!alongv = !!DrawingPlan1.viewLLsh.part(2).real()
+			var !temppos enupos of $!!DrawingPlan1.boxLLsh
+			!alongv = !!DrawingPlan1.boxLLsh.part(2).real()
 		elseif (!dir.eq('up')) then
-			var !temppos enupos of $!!DrawingPlan1.viewULsh
-			!alongv = !!DrawingPlan1.viewULsh.part(2).real()
+			var !temppos enupos of $!!DrawingPlan1.boxULsh
+			!alongv = !!DrawingPlan1.boxULsh.part(2).real()
 		endif
 		if (!dbgln and !dir.eq('left')) then
-			!dbgf.writerecord('CORNER1RAW viewULsh=' & !!DrawingPlan1.viewULsh & ' viewURsh=' & !!DrawingPlan1.viewURsh & ' viewLLsh=' & !!DrawingPlan1.viewLLsh & ' viewLRsh=' & !!DrawingPlan1.viewLRsh)
+			!dbgf.writerecord('CORNER1RAW viewULsh=' & !!DrawingPlan1.boxULsh & ' viewURsh=' & !!DrawingPlan1.boxURsh & ' viewLLsh=' & !!DrawingPlan1.boxLLsh & ' viewLRsh=' & !!DrawingPlan1.boxLRsh)
 		endif
 
 		!attapos = object position(!temppos)
@@ -1820,17 +1869,17 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		endif
 
 		if (!dir.eq('right')) then
-			var !temppos enupos of $!!DrawingPlan1.viewLRsh
-			!alongv = !!DrawingPlan1.viewLRsh.part(4).real()
+			var !temppos enupos of $!!DrawingPlan1.boxLRsh
+			!alongv = !!DrawingPlan1.boxLRsh.part(4).real()
 		elseif (!dir.eq('left')) then
-			var !temppos enupos of $!!DrawingPlan1.viewLLsh
-			!alongv = !!DrawingPlan1.viewLLsh.part(4).real()
+			var !temppos enupos of $!!DrawingPlan1.boxLLsh
+			!alongv = !!DrawingPlan1.boxLLsh.part(4).real()
 		elseif (!dir.eq('down')) then
-			var !temppos enupos of $!!DrawingPlan1.viewLRsh
-			!alongv = !!DrawingPlan1.viewLRsh.part(2).real()
+			var !temppos enupos of $!!DrawingPlan1.boxLRsh
+			!alongv = !!DrawingPlan1.boxLRsh.part(2).real()
 		elseif (!dir.eq('up')) then
-			var !temppos enupos of $!!DrawingPlan1.viewURsh
-			!alongv = !!DrawingPlan1.viewURsh.part(2).real()
+			var !temppos enupos of $!!DrawingPlan1.boxURsh
+			!alongv = !!DrawingPlan1.boxURsh.part(2).real()
 		endif
 		!attapos = object position(!temppos)
 		--------------------------------------------------------------------
@@ -2002,13 +2051,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			elsehandle none
 				var !eddna ddna of ce
 				!edpref = ce
-				!stillcurrent = false
+				!objclaimed = false
 				do !cd values !claimeddpois
 					if (!edpref.eq(!cd)) then
-						!stillcurrent = true
+						!objclaimed = true
 						break
 					endif
 				enddo
+				!stillcurrent = !objclaimed
 				if (not(!eddna.unset()) and not(!eddna.eq('=0/0'))) then
 					if (not(!stillcurrent)) then
 						do !cm values !currentmems
@@ -2017,6 +2067,43 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 								break
 							endif
 						enddo
+					endif
+					--------------------------------------------------------------
+					-- the DDNA rescue above keeps anything ambiguous, which is  --
+					-- right for a point that could still belong -- but a point  --
+					-- standing outside what the box now covers cannot, whatever --
+					-- its DDNA says. that is exactly how a stale grid crossing  --
+					-- survives: created with no DDNA of its own, E3D back-fills --
+					-- one copied off another point, and while that pipe is      --
+					-- still on the drawing the rescue saves the crossing too    --
+					-- -- so a column line the box no longer reaches left an     --
+					-- extra point splitting one span into two (reported live    --
+					-- 2026-08-29: 1539 came back as 215 + 1324)                 --
+					--                                                            --
+					-- measured ALONG the dimension only. the depth is a whole    --
+					-- gridgap outside the box by design, so testing that too    --
+					-- would condemn every point on the chain. object-claimed    --
+					-- points are never questioned: the corners sit exactly on   --
+					-- the limit and belong there                                 --
+					--------------------------------------------------------------
+					if (!stillcurrent and not(!objclaimed)) then
+						var !edppos pos
+						var !edpsh shpos of $!edppos
+						if (!dir.eq('right') or !dir.eq('left')) then
+							!edpalong = !edpsh.split().getindexed(4).replace('mm','').real()
+							!alo = !!DrawingPlan1.boxLLsh.part(4).real()
+							!ahi = !!DrawingPlan1.boxULsh.part(4).real()
+						else
+							!edpalong = !edpsh.split().getindexed(2).replace('mm','').real()
+							!alo = !!DrawingPlan1.boxLLsh.part(2).real()
+							!ahi = !!DrawingPlan1.boxLRsh.part(2).real()
+						endif
+						if (!edpalong.lt(!alo - 0.5) or !edpalong.gt(!ahi + 0.5)) then
+							!stillcurrent = false
+							if (!dbgln) then
+								!dbgf.writerecord('CLEANUPOUT ' & !dir & ' along=' & !edpalong.string() & ' span=' & !alo.string() & ' .. ' & !ahi.string())
+							endif
+						endif
 					endif
 					if (!dbgln) then
 						!dbgf.writerecord('CLEANUP ' & !dir & ' eddna=' & !eddna & ' stillcurrent=' & !stillcurrent)
@@ -2114,13 +2201,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					----------------------------------------------------------
 					!ggap = !!DrawingPlan1.gridgap.val
 					if (!dir.eq('right')) then
-						!stddepth = !!DrawingPlan1.viewURsh.part(2).real() + !ggap
+						!stddepth = !!DrawingPlan1.boxURsh.part(2).real() + !ggap
 					elseif (!dir.eq('left')) then
-						!stddepth = !!DrawingPlan1.viewULsh.part(2).real() - !ggap
+						!stddepth = !!DrawingPlan1.boxULsh.part(2).real() - !ggap
 					elseif (!dir.eq('down')) then
-						!stddepth = !!DrawingPlan1.viewLLsh.part(4).real() - !ggap
+						!stddepth = !!DrawingPlan1.boxLLsh.part(4).real() - !ggap
 					else
-						!stddepth = !!DrawingPlan1.viewULsh.part(4).real() + !ggap
+						!stddepth = !!DrawingPlan1.boxULsh.part(4).real() + !ggap
 					endif
 					var !m1pos pos
 					var !m1posh shpos of $!m1pos
@@ -2149,9 +2236,55 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			endhandle
 		endif
 		$!name/SS/S1/V1/ateLINE_$!dir
-		-- !dimoff is the same number as DOFFSET, kept so that the GLAB block --
-		-- below can work out where the dimension line ended up               --
-		if (!dir.eq('right') or !dir.eq('up')) then
+		--------------------------------------------------------------------
+		-- !dimoff is the same number as DOFFSET, kept so that the GLAB    --
+		-- block below can work out where the dimension line ended up      --
+		--                                                                  --
+		-- where a line is already there, DOFFSET stops being the nominal  --
+		-- 15 and becomes whatever it takes to put the line back exactly   --
+		-- where it already was, measured from wherever the first point    --
+		-- has ended up this run. the chain is a revision baseline: the    --
+		-- corner point legitimately travels when the box edge moves, but  --
+		-- the line must not travel with it, or the dimension, its text    --
+		-- and every label on it read as changed (2026-08-29). the         --
+		-- hand-drag compensation above is this same idea one revision     --
+		-- earlier and stays in charge on the rebuild path, where there is --
+		-- no previous line to hold on to                                  --
+		--------------------------------------------------------------------
+		!m1depthnow = 0
+		!hasm1 = false
+		if (!hasfrozen) then
+			!gfirstf = 1
+			$!gfirstf
+			handle any
+			elsehandle none
+				var !f1pos pos
+				var !f1posh shpos of $!f1pos
+				if (!dir.eq('right') or !dir.eq('left')) then
+					!m1depthnow = !f1posh.split().getindexed(2).replace('mm','').real()
+				else
+					!m1depthnow = !f1posh.split().getindexed(4).replace('mm','').real()
+				endif
+				!hasm1 = true
+			endhandle
+		endif
+		$!name/SS/S1/V1/ateLINE_$!dir
+		if (!hasfrozen and !hasm1) then
+			------------------------------------------------------------
+			-- !frozendepth is already the LINE's own depth (member 1   --
+			-- plus its DOFFSET, read before anything moved), so what   --
+			-- puts the line back is simply the gap to wherever the     --
+			-- first point has ended up this run. no nominal 15 comes   --
+			-- into it -- adding one made the line creep 15mm every     --
+			-- update (reported live 2026-08-29)                        --
+			------------------------------------------------------------
+			!doffv = !frozendepth - !m1depthnow
+			DOFFSET $!doffv
+			!dimoff = !doffv
+			if (!dbgln) then
+				!dbgf.writerecord('DIMFROZEN ' & !dir & ' frozenline=' & !frozendepth.string() & ' m1now=' & !m1depthnow.string() & ' doff=' & !doffv.string())
+			endif
+		elseif (!dir.eq('right') or !dir.eq('up')) then
 			!doffv = 15 - !dimshift
 			DOFFSET $!doffv $( (10 - $!!DrawingPlan1.griddist.val) $)
 			!dimoff = !doffv

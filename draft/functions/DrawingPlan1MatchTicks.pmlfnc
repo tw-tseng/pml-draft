@@ -38,7 +38,7 @@ define function !!DrawingPlan1MatchTicks(!name is string, !equistr is string)
 		-- check if the match line is existing --
 		-----------------------------------------
 		if !dir.eq('right') or !dir.eq('left') then
-			if not( abs(!sortedtypes[!i].split('!').getindexed(4).real() - !!DrawingPlan1.viewURsh.part(4).real()) leq 5 or abs(!sortedtypes[!i].split('!').getindexed(4).real() - !!DrawingPlan1.viewLRsh.part(4).real()) leq 5) then
+			if not( abs(!sortedtypes[!i].split('!').getindexed(4).real() - !!DrawingPlan1.boxURsh.part(4).real()) leq 5 or abs(!sortedtypes[!i].split('!').getindexed(4).real() - !!DrawingPlan1.boxLRsh.part(4).real()) leq 5) then
 				do !j from 1 to !exists.size()
 					if abs(!exists[!j].real() - !sortedtypes[!i].split('!').getindexed(4).real()) leq 5 then
 						!exist = true
@@ -48,7 +48,7 @@ define function !!DrawingPlan1MatchTicks(!name is string, !equistr is string)
 				!exist = true
 			endif
 		else
-			if not( abs(!sortedtypes[!i].split('!').getindexed(3).real() - !!DrawingPlan1.viewULsh.part(2).real()) leq 5 or abs(!sortedtypes[!i].split('!').getindexed(3).real() - !!DrawingPlan1.viewURsh.part(2).real()) leq 5) then
+			if not( abs(!sortedtypes[!i].split('!').getindexed(3).real() - !!DrawingPlan1.boxULsh.part(2).real()) leq 5 or abs(!sortedtypes[!i].split('!').getindexed(3).real() - !!DrawingPlan1.boxURsh.part(2).real()) leq 5) then
 				do !j from 1 to !exists.size()
 					if abs(!exists[!j].real() - !sortedtypes[!i].split('!').getindexed(3).real()) leq 5 then
 						!exist = true
@@ -70,20 +70,20 @@ define function !!DrawingPlan1MatchTicks(!name is string, !equistr is string)
 				!exists.append(!sortedtypes[!i].split('!').getindexed(4))
 				!newy = !sortedtypes[!i].split('!').getindexed(4)
 				if !dir.eq('right') then
-					!newx = !!DrawingPlan1.viewURsh.part(2)
+					!newx = !!DrawingPlan1.boxURsh.part(2)
 					!tkadeg = 0
 				else
-					!newx = !!DrawingPlan1.viewULsh.part(2)
+					!newx = !!DrawingPlan1.boxULsh.part(2)
 					!tkadeg = 180
 				endif
 			else
 				!exists.append(!sortedtypes[!i].split('!').getindexed(3))
 				!newx = !sortedtypes[!i].split('!').getindexed(3)
 				if !dir.eq('up') then
-					!newy = !!DrawingPlan1.viewURsh.part(4)
+					!newy = !!DrawingPlan1.boxURsh.part(4)
 					!tkadeg = 90
 				else
-					!newy = !!DrawingPlan1.viewLRsh.part(4)
+					!newy = !!DrawingPlan1.boxLRsh.part(4)
 					!tkadeg = -90
 				endif
 			endif

@@ -18,23 +18,30 @@
 --                                                                --
 -- CE must be the view. it is left there                          --
 -------------------------------------------------------------------
+-- the AteSort assembly is imported here as well as in            --
+-- DrawingPlan1MatchLine1: this runs first now, before the match  --
+-- line is ever drawn, so that file has not been reached yet      --
+-------------------------------------------------------------------
+import 'AteSort'
+handle any
+endhandle
 define function !!DrawingPlan1MatchSorted(!dir is string, !projid is string, !equistr is string) is array
 	var !tempdiru viewdir up
 	var !tempdird viewdir down
 	var !tempdirl viewdir left
 	var !tempdirr viewdir right
 	if !dir.eq('right') then
-		var !tempp1 enupos of $!!DrawingPlan1.viewURsh
-		var !tempp4 enupos of $!!DrawingPlan1.viewLRsh
+		var !tempp1 enupos of $!!DrawingPlan1.boxURsh
+		var !tempp4 enupos of $!!DrawingPlan1.boxLRsh
 	elseif !dir.eq('left') then
-		var !tempp1 enupos of $!!DrawingPlan1.viewULsh
-		var !tempp4 enupos of $!!DrawingPlan1.viewLLsh
+		var !tempp1 enupos of $!!DrawingPlan1.boxULsh
+		var !tempp4 enupos of $!!DrawingPlan1.boxLLsh
 	elseif !dir.eq('up') then
-		var !tempp1 enupos of $!!DrawingPlan1.viewULsh
-		var !tempp4 enupos of $!!DrawingPlan1.viewURsh
+		var !tempp1 enupos of $!!DrawingPlan1.boxULsh
+		var !tempp4 enupos of $!!DrawingPlan1.boxURsh
 	elseif !dir.eq('down') then
-		var !tempp1 enupos of $!!DrawingPlan1.viewLLsh
-		var !tempp4 enupos of $!!DrawingPlan1.viewLRsh
+		var !tempp1 enupos of $!!DrawingPlan1.boxLLsh
+		var !tempp4 enupos of $!!DrawingPlan1.boxLRsh
 	endif
 	!tempp2 = object position(!tempp1)
 	!tempp2.up = !!DrawingPlan1.minU + 50
@@ -89,18 +96,18 @@ define function !!DrawingPlan1MatchSorted(!dir is string, !projid is string, !eq
 				var !chk (p$!j pos of $!box wrt worl)
 				var !chksh shpos of $!chk
 				if !dir.eq('right') or !dir.eq('left') then
-					if !chksh.part(4).replace('mm', '').real().geq(!!DrawingPlan1.viewURsh.part(4).real() - 5 ) then
-						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !!DrawingPlan1.viewURsh.part(4) & '!' & !tempe & '!' & !j)
-					elseif !chksh.part(4).replace('mm', '').real().leq(!!DrawingPlan1.viewLRsh.part(4).real() + 5 ) then
-						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !!DrawingPlan1.viewLRsh.part(4) & '!' & !tempe & '!' & !j)
+					if !chksh.part(4).replace('mm', '').real().geq(!!DrawingPlan1.boxURsh.part(4).real() - 5 ) then
+						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !!DrawingPlan1.boxURsh.part(4) & '!' & !tempe & '!' & !j)
+					elseif !chksh.part(4).replace('mm', '').real().leq(!!DrawingPlan1.boxLRsh.part(4).real() + 5 ) then
+						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !!DrawingPlan1.boxLRsh.part(4) & '!' & !tempe & '!' & !j)
 					else
 						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
 					endif
 				elseif !dir.eq('up') or !dir.eq('down') then
-					if !chksh.part(2).replace('mm', '').real().geq(!!DrawingPlan1.viewURsh.part(2).real() - 5 ) then
-						!chks.append(!box & '!' & !!DrawingPlan1.viewURsh.part(2) & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
-					elseif !chksh.part(2).replace('mm', '').real().leq(!!DrawingPlan1.viewULsh.part(2).real() + 5 ) then
-						!chks.append(!box & '!' & !!DrawingPlan1.viewULsh.part(2) & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+					if !chksh.part(2).replace('mm', '').real().geq(!!DrawingPlan1.boxURsh.part(2).real() - 5 ) then
+						!chks.append(!box & '!' & !!DrawingPlan1.boxURsh.part(2) & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
+					elseif !chksh.part(2).replace('mm', '').real().leq(!!DrawingPlan1.boxULsh.part(2).real() + 5 ) then
+						!chks.append(!box & '!' & !!DrawingPlan1.boxULsh.part(2) & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
 					else
 						!chks.append(!box & '!' & !chksh.part(2).replace('mm', '') & '!' & !chksh.part(4).replace('mm', '') & '!' & !tempe & '!' & !j)
 					endif

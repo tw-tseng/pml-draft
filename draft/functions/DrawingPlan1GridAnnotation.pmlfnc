@@ -184,26 +184,26 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 			-- step 2. check intersection point is on bounded grid line             --
 			-- step 3. there are three conditions for grid lines                    --
 			--------------------------------------------------------------------------
-			if (!!DrawingPlan1.viewUlinesh.intersection(!p12linesh).east.geq(!!DrawingPlan1.viewLLsh.position().east.value()) and !!DrawingPlan1.viewUlinesh.intersection(!p12linesh).east.leq(!!DrawingPlan1.viewLRsh.position().east.value())) then
-				!!DrawingPlan1.intersections.append('viewUlinesh-' & !!DrawingPlan1.viewUlinesh.intersection(!p12linesh).string())
+			if (!!DrawingPlan1.boxUlinesh.intersection(!p12linesh).east.geq(!!DrawingPlan1.boxLLsh.position().east.value()) and !!DrawingPlan1.boxUlinesh.intersection(!p12linesh).east.leq(!!DrawingPlan1.boxLRsh.position().east.value())) then
+				!!DrawingPlan1.intersections.append('boxUlinesh-' & !!DrawingPlan1.boxUlinesh.intersection(!p12linesh).string())
 			endif
 			handle any
 			  -- for parellel condition --
 			endhandle
-			if (!!DrawingPlan1.viewDlinesh.intersection(!p12linesh).east.geq(!!DrawingPlan1.viewLLsh.position().east.value()) and !!DrawingPlan1.viewDlinesh.intersection(!p12linesh).east.leq(!!DrawingPlan1.viewLRsh.position().east.value())) then
-				!!DrawingPlan1.intersections.append('viewDlinesh-' & !!DrawingPlan1.viewDlinesh.intersection(!p12linesh).string())
+			if (!!DrawingPlan1.boxDlinesh.intersection(!p12linesh).east.geq(!!DrawingPlan1.boxLLsh.position().east.value()) and !!DrawingPlan1.boxDlinesh.intersection(!p12linesh).east.leq(!!DrawingPlan1.boxLRsh.position().east.value())) then
+				!!DrawingPlan1.intersections.append('boxDlinesh-' & !!DrawingPlan1.boxDlinesh.intersection(!p12linesh).string())
 			endif
 			handle any
 			  -- for parellel condition --
 			endhandle
-      if (!!DrawingPlan1.viewLlinesh.intersection(!p12linesh).north.geq(!!DrawingPlan1.viewLLsh.position().north.value()) and !!DrawingPlan1.viewLlinesh.intersection(!p12linesh).north.leq(!!DrawingPlan1.viewULsh.position().north.value())) then
-				!!DrawingPlan1.intersections.append('viewLlinesh-' & !!DrawingPlan1.viewLlinesh.intersection(!p12linesh).string())
+      if (!!DrawingPlan1.boxLlinesh.intersection(!p12linesh).north.geq(!!DrawingPlan1.boxLLsh.position().north.value()) and !!DrawingPlan1.boxLlinesh.intersection(!p12linesh).north.leq(!!DrawingPlan1.boxULsh.position().north.value())) then
+				!!DrawingPlan1.intersections.append('boxLlinesh-' & !!DrawingPlan1.boxLlinesh.intersection(!p12linesh).string())
       endif
 			handle any
 			  -- for parellel condition --
 			endhandle
-      if (!!DrawingPlan1.viewRlinesh.intersection(!p12linesh).north.geq(!!DrawingPlan1.viewLLsh.position().north.value()) and !!DrawingPlan1.viewRlinesh.intersection(!p12linesh).north.leq(!!DrawingPlan1.viewULsh.position().north.value())) then
-				!!DrawingPlan1.intersections.append('viewRlinesh-' & !!DrawingPlan1.viewRlinesh.intersection(!p12linesh).string())
+      if (!!DrawingPlan1.boxRlinesh.intersection(!p12linesh).north.geq(!!DrawingPlan1.boxLLsh.position().north.value()) and !!DrawingPlan1.boxRlinesh.intersection(!p12linesh).north.leq(!!DrawingPlan1.boxULsh.position().north.value())) then
+				!!DrawingPlan1.intersections.append('boxRlinesh-' & !!DrawingPlan1.boxRlinesh.intersection(!p12linesh).string())
       endif
 			handle any
 			  -- for parellel condition --
@@ -281,7 +281,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 				-------------------------------------------------
 				-- check which end point is inside view limits --
 				-------------------------------------------------
-				if (!p1possh.position().east.gt(!!DrawingPlan1.viewULsh.position().east) and !p1possh.position().east.lt(!!DrawingPlan1.viewURsh.position().east) and !p1possh.position().north.gt(!!DrawingPlan1.viewLLsh.position().north) and !p1possh.position().north.lt(!!DrawingPlan1.viewULsh.position().north)) then
+				if (!p1possh.position().east.gt(!!DrawingPlan1.boxULsh.position().east) and !p1possh.position().east.lt(!!DrawingPlan1.boxURsh.position().east) and !p1possh.position().north.gt(!!DrawingPlan1.boxLLsh.position().north) and !p1possh.position().north.lt(!!DrawingPlan1.boxULsh.position().north)) then
 					!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p1possh, !p2possh, !refgln, 1)
 				else
 					!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p2possh, !p1possh, !refgln, 2)
@@ -293,7 +293,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 			-- therefore check if both end points are inside view limits                    --
 			----------------------------------------------------------------------------------
 			if (!total.eq(0)) then
-				if (!p1possh.position().east.gt(!!DrawingPlan1.viewULsh.position().east) and !p1possh.position().east.lt(!!DrawingPlan1.viewURsh.position().east) and !p1possh.position().north.gt(!!DrawingPlan1.viewLLsh.position().north) and !p1possh.position().north.lt(!!DrawingPlan1.viewULsh.position().north)) then
+				if (!p1possh.position().east.gt(!!DrawingPlan1.boxULsh.position().east) and !p1possh.position().east.lt(!!DrawingPlan1.boxURsh.position().east) and !p1possh.position().north.gt(!!DrawingPlan1.boxLLsh.position().north) and !p1possh.position().north.lt(!!DrawingPlan1.boxULsh.position().north)) then
 					if (!p1possh.position().distance(!!DrawingPlan1.intersections.getindexed(1).split('-').getindexed(2).position()).lt(!p2possh.position().distance(!!DrawingPlan1.intersections.getindexed(1).split('-').getindexed(2).position()))) then
 						!!DrawingPlan1.CreateGridSymbol(1, !p12linesh, !p1possh, !p2possh, !refgln, 1)
 						!!DrawingPlan1.CreateGridSymbol(2, !p12linesh, !p2possh, !p1possh, !refgln, 2)

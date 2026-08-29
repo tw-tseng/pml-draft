@@ -199,9 +199,9 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				endif
 				if (!dir.eq('right') or !dir.eq('left')) and not(!tempt.eqnocase('')) then
 					if !dir.eq('right') then							
-						!posx = !!DrawingPlan1.viewURsh.part(2).real() + 1
+						!posx = !!DrawingPlan1.boxURsh.part(2).real() + 1
 					else
-						!posx = !!DrawingPlan1.viewULsh.part(2).real() - 1
+						!posx = !!DrawingPlan1.boxULsh.part(2).real() - 1
 					endif
 					!posy = !sortedtypes[!i].split('!').getindexed(4).real() + (!sortedtypes[!i + 1].split('!').getindexed(4).real() - !sortedtypes[!i].split('!').getindexed(4).real()) * 0.5
 					------------------------------------------------------------
@@ -222,9 +222,9 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				elseif (!dir.eq('up') or !dir.eq('down')) and not(!tempt.eqnocase('')) then
 					!posx = !sortedtypes[!i].split('!').getindexed(3).real() + (!sortedtypes[!i + 1].split('!').getindexed(3).real() - !sortedtypes[!i].split('!').getindexed(3).real()) * 0.5
 					if !dir.eq('up') then
-						!posy = !!DrawingPlan1.viewURsh.part(4).real() + 1
+						!posy = !!DrawingPlan1.boxURsh.part(4).real() + 1
 					else
-					!posy = !!DrawingPlan1.viewLRsh.part(4).real() - 1
+					!posy = !!DrawingPlan1.boxLRsh.part(4).real() - 1
 					endif
 					!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
 					if (not(!!DrawingPlan1MatchClaim(!mlsig))) then
@@ -306,17 +306,17 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 			-- asked once for all four sides instead of four times     --
 			------------------------------------------------------------
 			if !dir.eq('right') then
-				!posx = !!DrawingPlan1.viewURsh.part(2).real() + 1
-				!posy = !!DrawingPlan1.viewLRsh.part(4).real() + (!!DrawingPlan1.viewURsh.part(4).real() - !!DrawingPlan1.viewLRsh.part(4).real()) * 0.5
+				!posx = !!DrawingPlan1.boxURsh.part(2).real() + 1
+				!posy = !!DrawingPlan1.boxLRsh.part(4).real() + (!!DrawingPlan1.boxURsh.part(4).real() - !!DrawingPlan1.boxLRsh.part(4).real()) * 0.5
 			elseif !dir.eq('left') then
-				!posx = !!DrawingPlan1.viewULsh.part(2).real() - 1
-				!posy = !!DrawingPlan1.viewLRsh.part(4).real() + (!!DrawingPlan1.viewURsh.part(4).real() - !!DrawingPlan1.viewLRsh.part(4).real()) * 0.5
+				!posx = !!DrawingPlan1.boxULsh.part(2).real() - 1
+				!posy = !!DrawingPlan1.boxLRsh.part(4).real() + (!!DrawingPlan1.boxURsh.part(4).real() - !!DrawingPlan1.boxLRsh.part(4).real()) * 0.5
 			elseif !dir.eq('up') then
-				!posx = !!DrawingPlan1.viewULsh.part(2).real() + (!!DrawingPlan1.viewURsh.part(2).real() - !!DrawingPlan1.viewULsh.part(2).real()) * 0.5
-				!posy = !!DrawingPlan1.viewURsh.part(4).real() + 1
+				!posx = !!DrawingPlan1.boxULsh.part(2).real() + (!!DrawingPlan1.boxURsh.part(2).real() - !!DrawingPlan1.boxULsh.part(2).real()) * 0.5
+				!posy = !!DrawingPlan1.boxURsh.part(4).real() + 1
 			elseif !dir.eq('down') then
-				!posx = !!DrawingPlan1.viewULsh.part(2).real() + (!!DrawingPlan1.viewURsh.part(2).real() - !!DrawingPlan1.viewULsh.part(2).real()) * 0.5
-				!posy = !!DrawingPlan1.viewLRsh.part(4).real() - 1
+				!posx = !!DrawingPlan1.boxULsh.part(2).real() + (!!DrawingPlan1.boxURsh.part(2).real() - !!DrawingPlan1.boxULsh.part(2).real()) * 0.5
+				!posy = !!DrawingPlan1.boxLRsh.part(4).real() - 1
 			endif
 			!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
 			if (not(!!DrawingPlan1MatchClaim(!mlsig))) then
