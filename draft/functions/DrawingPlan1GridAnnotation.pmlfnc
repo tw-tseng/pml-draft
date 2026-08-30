@@ -76,11 +76,18 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	-- update even when the box has grown and moved it. whatever no     --
 	-- grid line wants this run is deleted at the bottom                --
 	--------------------------------------------------------------------
+	!dbgg0 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+	!dbgg0.open('overwrite')
+	!dbgg0.writerecord('GRIDRUN ' & !name)
+	!dbgg0.close()
+	handle any
+	endhandle
 	!!DrawingPlan1GridSlabRefs = object array()
 	!!DrawingPlan1GridSlabDdna = object array()
 	!!DrawingPlan1GridSlabSide = object array()
 	!!DrawingPlan1GridSlabNppt = object array()
 	!!DrawingPlan1GridSlabClaims = object array()
+	!!DrawingPlan1GridSlabXypo = object array()
 	$!name/SS/S1/V1/ateGRID
 	var !exslabs coll all slab for ce
 	handle any
@@ -112,11 +119,108 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 		handle any
 			!exnppt = 0
 		endhandle
+		!exxypo = ''
+		var !exxypo xypo
+		handle any
+			!exxypo = ''
+		endhandle
 		!!DrawingPlan1GridSlabRefs.append(!exref)
 		!!DrawingPlan1GridSlabDdna.append(!exddna)
 		!!DrawingPlan1GridSlabSide.append(!exside)
 		!!DrawingPlan1GridSlabNppt.append(!exnppt)
 		!!DrawingPlan1GridSlabClaims.append(false)
+		!!DrawingPlan1GridSlabXypo.append(!exxypo)
+	enddo
+	
+	--------------------------------------------------------------------
+	-- the sheet depth each side's bubbles are ALREADY sitting at.     --
+	-- a bubble on an issued drawing never moves, so a new one on a    --
+	-- side that already has some must line up with them and not with  --
+	-- the box edge -- the box edge has moved since they were placed,  --
+	-- and on the side the box grew the two are 34.9mm apart (measured --
+	-- live 2026-08-29: a new left bubble wanted XYPO -65.926 where    --
+	-- its three frozen neighbours sit at -31.008)                     --
+	--                                                                  --
+	-- a SLAB does not answer shpos, so the depth is rebuilt the way it --
+	-- was written: the refgln's own NPPT end projected to the sheet,   --
+	-- plus the bubble's XYPO. XYPO is in view coordination, so the     --
+	-- rcode swap has to be undone first -- the inverse of the one in   --
+	-- .CreateGridSymbol*. every bubble on one side shares a depth, so  --
+	-- the first readable one per side is enough                        --
+	--------------------------------------------------------------------
+	!!DrawingPlan1GridFrozenSides = object array()
+	!!DrawingPlan1GridFrozenDepths = object array()
+	$!name/SS/S1/V1/ateGRID
+	!fn = 0
+	!fn = !!DrawingPlan1GridSlabRefs.size()
+	handle any
+		!fn = 0
+	endhandle
+	do !fi from 1 to !fn
+		!fside = !!DrawingPlan1GridSlabSide[!fi]
+		!fddna = !!DrawingPlan1GridSlabDdna[!fi]
+		!fnppt = !!DrawingPlan1GridSlabNppt[!fi]
+		!fxypo = !!DrawingPlan1GridSlabXypo[!fi]
+		if (!fside.eq('') or !fddna.eq('') or !fddna.eq('=0/0') or !fxypo.eq('')) then
+			skip
+		endif
+		!fseen = false
+		do !fj from 1 to !!DrawingPlan1GridFrozenSides.size()
+			if (!!DrawingPlan1GridFrozenSides[!fj].eqnocase(!fside)) then
+				!fseen = true
+				break
+			endif
+		enddo
+		if (!fseen) then
+			skip
+		endif
+		!fend = ''
+		if (!fnppt.eq(2)) then
+			var !fend p2 pos of $!fddna wrt worl
+			handle any
+				!fend = ''
+			endhandle
+		else
+			var !fend p1 pos of $!fddna wrt worl
+			handle any
+				!fend = ''
+			endhandle
+		endif
+		if (!fend.eq('')) then
+			skip
+		endif
+		!fendp = object position(!fend)
+		!fendp.up = 0
+		!fendsh = ''
+		var !fendsh shpos of $!fendp
+		handle any
+			!fendsh = ''
+		endhandle
+		if (!fendsh.eq('')) then
+			skip
+		endif
+		!fxv = !fxypo.part(1).replace('mm','').real()
+		!fyv = !fxypo.part(2).replace('mm','').real()
+		!fxs = !fxv
+		!fys = !fyv
+		if (!!DrawingPlan1.rcode.eqnocase('left')) then
+			!fys = !fxv
+			!fxs = !fyv * -1
+		endif
+		!fdepth = 0
+		if (!fside.eqnocase('Left') or !fside.eqnocase('Right')) then
+			!fdepth = !fendsh.part(2).replace('mm','').real() + !fxs
+		else
+			!fdepth = !fendsh.part(4).replace('mm','').real() + !fys
+		endif
+		!!DrawingPlan1GridFrozenSides.append(!fside)
+		!!DrawingPlan1GridFrozenDepths.append(!fdepth)
+		!dbggf = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+		!dbggf.open('append')
+		!dbggf.writerecord('FROZEN side=' & !fside & ' end=' & !fendsh & ' xypo=' & !fxypo & ' depth=' & !fdepth.string('D3'))
+		!dbggf.close()
+		handle any
+		endhandle
 	enddo
 
 	----------------------------------------------

@@ -50,7 +50,19 @@ define function !!DrawingPlan1MatchCollect()
 		handle any
 			skip
 		endhandle
-		!sref = ce
+		------------------------------------------------------------
+		-- 'var !x ref' and not '!x = ce': ce answers a DBREF, and  --
+		-- .MatchClaimRef() hands what is stored here back through  --
+		-- a variable it has already set to '' -- a STRING. that    --
+		-- assignment only runs when something actually matches, so --
+		-- the mismatch sat here unnoticed until the match line     --
+		-- settled on the box edge and a rerun found its own ticks  --
+		-- standing exactly where it wanted them (STRING=DBREF,     --
+		-- reported live 2026-08-29). GridAnnotation already reads  --
+		-- its candidates this way, which is why grid bubbles never --
+		-- hit it                                                    --
+		------------------------------------------------------------
+		var !sref ref
 		!f = ''
 		var !f fpt
 		handle any
@@ -78,7 +90,7 @@ define function !!DrawingPlan1MatchCollect()
 		handle any
 			skip
 		endhandle
-		!xref = ce
+		var !xref ref
 		!bt = ''
 		var !bt btext
 		handle any

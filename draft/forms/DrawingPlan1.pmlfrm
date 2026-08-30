@@ -3265,6 +3265,26 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 	----------------------------------------------------------------------
 	!gbx = !x + !npptp.east
 	!gby = !y + !npptp.north
+	----------------------------------------------------------------------
+	-- a side which already has bubbles keeps its depth: those are      --
+	-- frozen, so a new one lines up with them rather than with the box --
+	-- edge they no longer sit on. the shift goes on the axis that      --
+	-- crosses the border, and on APOF too so the leader keeps its gap  --
+	----------------------------------------------------------------------
+	!frz = !!DrawingPlan1GridFrozen(!agside)
+	if (not(!frz.eq(''))) then
+		if (!agside.eqnocase('Left') or !agside.eqnocase('Right')) then
+			!fdel = !frz.real() - !gbx
+			!x = !x + !fdel
+			!xap = !xap + !fdel
+			!gbx = !gbx + !fdel
+		else
+			!fdel = !frz.real() - !gby
+			!y = !y + !fdel
+			!yap = !yap + !fdel
+			!gby = !gby + !fdel
+		endif
+	endif
 	!!DrawingPlan1GridBubbles.append(!agside & '~' & string(!gbx) & '~' & string(!gby))
 	handle any
 	endhandle
@@ -3302,6 +3322,12 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 	-- chain (2026-08-29)                                              --
 	------------------------------------------------------------------
 	!gsref = !!DrawingPlan1GridClaim(!refgln, !agside, !nppt)
+	!dbgg = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+	!dbgg.open('append')
+	!dbgg.writerecord('GRIDBUB side=' & !agside & ' nppt=' & !nppt.string() & ' new=' & !gsref.eq('').string() & ' xypo=' & !x.string('D3') & ' ' & !y.string('D3') & ' sheet=' & !gbx.string('D3') & ' ' & !gby.string('D3') & ' gln=' & !refgln)
+	!dbgg.close()
+	handle any
+	endhandle
 	if (!gsref.eq('')) then
 		NEW SLAB
 		DDNA $!refgln
@@ -3318,6 +3344,17 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 		endif
 	else
 		$!gsref
+		!exxy = ''
+		var !exxy xypo
+		handle any
+			!exxy = 'UNREADABLE'
+		endhandle
+		!dbgg2 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+		!dbgg2.open('append')
+		!dbgg2.writerecord('  KEPT side=' & !agside & ' nppt=' & !nppt.string() & ' existing xypo=' & !exxy)
+		!dbgg2.close()
+		handle any
+		endhandle
 	endif
 endmethod
 
@@ -3360,6 +3397,26 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 	----------------------------------------------------------------------
 	!gbx = !x + !thispossh.position().east
 	!gby = !y + !thispossh.position().north
+	----------------------------------------------------------------------
+	-- a side which already has bubbles keeps its depth: those are      --
+	-- frozen, so a new one lines up with them rather than with the box --
+	-- edge they no longer sit on. the shift goes on the axis that      --
+	-- crosses the border, and on APOF too so the leader keeps its gap  --
+	----------------------------------------------------------------------
+	!frz = !!DrawingPlan1GridFrozen(!agside)
+	if (not(!frz.eq(''))) then
+		if (!agside.eqnocase('Left') or !agside.eqnocase('Right')) then
+			!fdel = !frz.real() - !gbx
+			!x = !x + !fdel
+			!xap = !xap + !fdel
+			!gbx = !gbx + !fdel
+		else
+			!fdel = !frz.real() - !gby
+			!y = !y + !fdel
+			!yap = !yap + !fdel
+			!gby = !gby + !fdel
+		endif
+	endif
 	!!DrawingPlan1GridBubbles.append(!agside & '~' & string(!gbx) & '~' & string(!gby))
 	handle any
 	endhandle
@@ -3397,6 +3454,12 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 	-- chain (2026-08-29)                                              --
 	------------------------------------------------------------------
 	!gsref = !!DrawingPlan1GridClaim(!refgln, !agside, !nppt)
+	!dbgg = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+	!dbgg.open('append')
+	!dbgg.writerecord('GRIDBUB side=' & !agside & ' nppt=' & !nppt.string() & ' new=' & !gsref.eq('').string() & ' xypo=' & !x.string('D3') & ' ' & !y.string('D3') & ' sheet=' & !gbx.string('D3') & ' ' & !gby.string('D3') & ' gln=' & !refgln)
+	!dbgg.close()
+	handle any
+	endhandle
 	if (!gsref.eq('')) then
 		NEW SLAB
 		DDNA $!refgln
@@ -3413,6 +3476,17 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 		endif
 	else
 		$!gsref
+		!exxy = ''
+		var !exxy xypo
+		handle any
+			!exxy = 'UNREADABLE'
+		endhandle
+		!dbgg2 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+		!dbgg2.open('append')
+		!dbgg2.writerecord('  KEPT side=' & !agside & ' nppt=' & !nppt.string() & ' existing xypo=' & !exxy)
+		!dbgg2.close()
+		handle any
+		endhandle
 	endif
 endmethod
 
@@ -3450,10 +3524,10 @@ define method .InViewOnSheet(!shpos is string) is boolean
 		!ok = false
 	endhandle
 	if (!ok) then
-		!x1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
-		!x2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
-		!y1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
-		!y2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+		!x1 = min(!this.boxLLsh.part(2).real(), !this.boxURsh.part(2).real())
+		!x2 = max(!this.boxLLsh.part(2).real(), !this.boxURsh.part(2).real())
+		!y1 = min(!this.boxLLsh.part(4).real(), !this.boxURsh.part(4).real())
+		!y2 = max(!this.boxLLsh.part(4).real(), !this.boxURsh.part(4).real())
 		if (!x lt !x1 or !x gt !x2 or !y lt !y1 or !y gt !y2) then
 			!answer = false
 		endif
@@ -3520,16 +3594,19 @@ define method .ViewSheetTransform() is array
 endmethod
 
 ------------------------------------------------------------------------
--- the band along one side of the view, !depth mm deep measured from   --
--- the border of the view, in sheet coordination.                      --
+-- the band along one side of the BOX, !depth mm deep measured from    --
+-- the box edge, in sheet coordination -- the box edge and not the     --
+-- view border, because an update freezes the placement and pads the   --
+-- side that did not grow, and a band hung off that padding would go   --
+-- looking for members where nothing is drawn (2026-08-29)             --
 -- !dir is the side as it appears on the sheet                         --
 -- returns x1, y1, x2, y2                                              --
 ------------------------------------------------------------------------
 define method .SheetBandOfSide(!dir is string, !depth is real) is array
-	!x1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
-	!x2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
-	!y1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
-	!y2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+	!x1 = min(!this.boxLLsh.part(2).real(), !this.boxURsh.part(2).real())
+	!x2 = max(!this.boxLLsh.part(2).real(), !this.boxURsh.part(2).real())
+	!y1 = min(!this.boxLLsh.part(4).real(), !this.boxURsh.part(4).real())
+	!y2 = max(!this.boxLLsh.part(4).real(), !this.boxURsh.part(4).real())
 	if (!dir.eq('right')) then
 		!x1 = !x2 - !depth
 	elseif (!dir.eq('left')) then

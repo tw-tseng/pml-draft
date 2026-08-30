@@ -1,0 +1,39 @@
+-------------------------------------------------------------------
+-- Function : the depth one side's grid bubbles already sit at     --
+-- Date     : 2026-08-30                                           --
+--                                                                 --
+-- a grid bubble on an issued drawing does not move -- it is part   --
+-- of the revision baseline, the same rule as the dimension chain.  --
+-- so a bubble this run CREATES on a side that already has some     --
+-- has to line up with those, not with the box edge: the box edge   --
+-- has moved since they were placed, and on the side the box grew   --
+-- the two are far apart (measured live 2026-08-29: a new left      --
+-- bubble wanted XYPO -65.926 where its three frozen neighbours     --
+-- sit at -31.008, a gap of 34.9mm -- exactly the padding the       --
+-- symmetric SIZE put on the opposite side)                         --
+--                                                                 --
+-- DrawingPlan1GridAnnotation works the depths out before it draws  --
+-- anything, one sample per side, and leaves them in two parallel   --
+-- globals. globals rather than form members because the caller is  --
+-- the FORM (.CreateGridSymbol / .CreateGridSymbolwithIntersection) --
+-- while the collecting is done by a .pmlfnc, and the two files are --
+-- read at different times                                          --
+--                                                                 --
+-- answers the depth in sheet mm as a string, or '' when that side  --
+-- has no bubble yet and the caller should use the box edge         --
+-------------------------------------------------------------------
+define function !!DrawingPlan1GridFrozen(!side is string) is string
+	!answer = ''
+	!n = 0
+	!n = !!DrawingPlan1GridFrozenSides.size()
+	handle any
+		!n = 0
+	endhandle
+	do !i from 1 to !n
+		if (!!DrawingPlan1GridFrozenSides[!i].eqnocase(!side)) then
+			!answer = !!DrawingPlan1GridFrozenDepths[!i].string()
+			break
+		endif
+	enddo
+	return !answer
+endfunction
