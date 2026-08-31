@@ -321,6 +321,17 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						if (!dbgln and !dir.eq('left')) then
 							!dbgf.writerecord('TYPE1 tube=' & !tubeelem & ' owner=' & !mem & ' pipe=' & !pipe & ' crossenu=' & !crossenu)
 						endif
+						----------------------------------------------------------------
+						-- every other TYPE1 log in this block only fires for dir=left --
+						-- (left over from an unrelated 2026-08-13 investigation), so   --
+						-- there was no visibility into what TYPE1 decides for THIS     --
+						-- member on the right side at all -- targeted, all-direction   --
+						-- log for just this one member while chasing why rebuild and   --
+						-- update disagree over it with the box unchanged (2026-08-31)  --
+						----------------------------------------------------------------
+						if (!dbgln and !mem.matchwild('*660105*B3*')) then
+							!dbgf.writerecord('B3CROSS ' & !dir & ' tube=' & !tubeelem & ' owner=' & !mem & ' pipe=' & !pipe & ' crossenu=' & !crossenu)
+						endif
 						if (!crossenu.eq('NONE')) then
 							--------------------------------------------------------
 							-- the world box handed to WITHIN is bigger than the  --
@@ -410,6 +421,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						endif
 						if (!dbgln and !dir.eq('left')) then
 							!dbgf.writerecord('TYPE1 CHECK pipe=' & !pipe & ' inband=' & !inband.string() & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string() & ' band=' & !band[1].string() & ' ' & !band[2].string() & ' ' & !band[3].string() & ' ' & !band[4].string())
+						endif
+						if (!dbgln and !mem.matchwild('*660105*B3*')) then
+							!dbgf.writerecord('B3INBAND ' & !dir & ' pipe=' & !pipe & ' inband=' & !inband.string() & ' memshx=' & !memshx.string() & ' memshy=' & !memshy.string() & ' band=' & !band[1].string() & ' ' & !band[2].string() & ' ' & !band[3].string() & ' ' & !band[4].string())
 						endif
 						if (!inband) then
 							----------------------------------------------------------------
