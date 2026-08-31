@@ -703,22 +703,41 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					var !wvol wvol of $!mem
 					!memlim = !!DrawingPlan1.SheetLimitsOfVolume(!wvol, !trans)
 					!checkwvol = false
+					--------------------------------------------------------------------
+					-- snapped to 2 decimals before the geq 10 test. !vwx1/!vwx2/!vwy1/ --
+					-- !vwy2 and !memlim both come out of ViewSheetTransform()'s chain   --
+					-- of matrix ops, run fresh by rebuild and by update, and an         --
+					-- equipment sitting close enough to the border that this reach      --
+					-- lands within a rounding error of 10 is a coin flip between the    --
+					-- two: same box, nothing changed, rebuild and update disagreed over --
+					-- whether it should be dimensioned at all (2026-08-31,              --
+					-- /02.5HD01_AG_0600_T_660105/B3, reach right at 10mm). 0.01mm of    --
+					-- snapping cannot flip a genuine "clearly under 10" or "clearly     --
+					-- over 10" case, only settle one already balanced on the line       --
+					--------------------------------------------------------------------
 					if (!dir.eq('right')) then
-						if ((!vwx2 - !memlim[1]) geq 10)  then
+						!wreach = !vwx2 - !memlim[1]
+						if (!wreach.string('D2').real() geq 10)  then
 							!checkwvol = true
 						endif
 					elseif (!dir.eq('left')) then
-						if ((!memlim[3] - !vwx1) geq 10)  then
+						!wreach = !memlim[3] - !vwx1
+						if (!wreach.string('D2').real() geq 10)  then
 							!checkwvol = true
 						endif
 					elseif (!dir.eq('down')) then
-						if ((!memlim[4] - !vwy1) geq 10)  then
+						!wreach = !memlim[4] - !vwy1
+						if (!wreach.string('D2').real() geq 10)  then
 							!checkwvol = true
 						endif
 					elseif (!dir.eq('up')) then
-						if ((!vwy2 - !memlim[2]) geq 10)  then
+						!wreach = !vwy2 - !memlim[2]
+						if (!wreach.string('D2').real() geq 10)  then
 							!checkwvol = true
 						endif
+					endif
+					if (!dbgln) then
+						!dbgf.writerecord('EQUIWVOL ' & !dir & ' equi=' & !equi & ' wreach=' & !wreach.string() & ' checkwvol=' & !checkwvol.string() & ' vwx1=' & !vwx1.string() & ' vwx2=' & !vwx2.string() & ' vwy1=' & !vwy1.string() & ' vwy2=' & !vwy2.string() & ' memlim=' & !memlim[1].string() & ' ' & !memlim[2].string() & ' ' & !memlim[3].string() & ' ' & !memlim[4].string())
 					endif
 					if (!checkwvol) then
 						var !memenupos worpos of $!mem
