@@ -918,20 +918,50 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				enddo
 			endif
 			--------------------------------------------------------------------
-			-- every member of the group gets its own dimension point, full   --
-			-- stop -- no picking one representative and no folding the rest  --
-			-- into label-only entries. user rule, 2026-08-31: crowding on    --
-			-- paper is not a reason for one pipe to go without its own DPOI  --
-			--                                                                --
-			-- the 4mm grouping above is kept only to log CLUSTER below (what --
-			-- used to collide is worth knowing about); nothing is dropped or --
-			-- merged because of it any more. .CheckDimensionAttachPoint() is --
-			-- no longer called here for the same reason -- it existed to     --
-			-- choose which single member should represent a group, and      --
-			-- there is no longer a group to represent                       --
+			-- every PIPE in the group gets its own dimension point -- but a  --
+			-- single pipe can appear more than once in !temp1s (eg a type1   --
+			-- tube crossing and a type3 elbow of the same pipe within 4mm    --
+			-- of each other), and that is still just one pipe, not two, so   --
+			-- it still collapses to one point. user rule, 2026-08-31: only   --
+			-- DIFFERENT pipes crowded together must not be merged; the same  --
+			-- pipe showing up twice in one cluster is a duplicate, not two   --
+			-- pipes, and was silently deduped by the old per-pipe picking    --
+			-- logic that this session's earlier edit accidentally dropped   --
+			-- along with the cross-pipe merge it was also doing             --
 			--------------------------------------------------------------------
+			!pipeorder = object array()
+			!pipegroups = object array()
 			do !tt from 1 to !temp1s.size()
-				!result.append(!temp1s[!tt])
+				!mpipe = !temp1s[!tt].split('~').getindexed(3).split('!').getindexed(5)
+				!foundpipe = false
+				do !gi from 1 to !pipeorder.size()
+					if (!pipeorder[!gi].eq(!mpipe)) then
+						!pipegroups[!gi].append(!temp1s[!tt])
+						!foundpipe = true
+						break
+					endif
+				enddo
+				if (not(!foundpipe)) then
+					!pipeorder.append(!mpipe)
+					!newpipegroup = object array()
+					!newpipegroup.append(!temp1s[!tt])
+					!pipegroups.append(!newpipegroup)
+				endif
+			enddo
+			do !gi from 1 to !pipegroups.size()
+				if (!pipegroups[!gi].size() eq 1) then
+					!result.append(!pipegroups[!gi][1])
+				else
+					if (!dir.eq('right')) then
+						!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'max', !pipegroups[!gi], !viewdir))
+					elseif (!dir.eq('left')) then
+						!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'min', !pipegroups[!gi], !viewdir))
+					elseif (!dir.eq('down')) then
+						!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'min', !pipegroups[!gi], !viewdir))
+					elseif (!dir.eq('up')) then
+						!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'max', !pipegroups[!gi], !viewdir))
+					endif
+				endif
 			enddo
 
 			!i = !ii
