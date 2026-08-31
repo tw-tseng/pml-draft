@@ -3646,6 +3646,30 @@ define method .SheetBandOfSide(!dir is string, !depth is real) is array
 	elseif (!dir.eq('down')) then
 		!y2 = !y1 + !depth
 	endif
+	--------------------------------------------------------------------
+	-- pad the box-facing edge by a hair. an equipment sitting exactly --
+	-- on the box border is a genuine coin flip here: rebuild and      --
+	-- update each derive boxLLsh/boxURsh through their own chain of   --
+	-- floating point ops, and a difference of a fraction of a         --
+	-- millimetre is enough to put the border-line equipment's WVOL on --
+	-- one side of the strict boundary test in one run and the other   --
+	-- side in the next -- a same-box, nothing-changed update then     --
+	-- disagreed with rebuild over whether it should be dimensioned at --
+	-- all (2026-08-31, /02.5HD01_AG_0600_T_660105/B3 landed exactly   --
+	-- on the right edge, present in update's "coll all equi within"   --
+	-- and absent from rebuild's). 0.5mm is nowhere near enough to     --
+	-- pull in a genuinely different element, just enough to absorb    --
+	-- rounding noise on one that already sits on the line             --
+	--------------------------------------------------------------------
+	if (!dir.eq('right')) then
+		!x2 = !x2 + 0.5
+	elseif (!dir.eq('left')) then
+		!x1 = !x1 - 0.5
+	elseif (!dir.eq('up')) then
+		!y2 = !y2 + 0.5
+	elseif (!dir.eq('down')) then
+		!y1 = !y1 - 0.5
+	endif
 	!band = object array()
 	!band[1] = !x1
 	!band[2] = !y1
