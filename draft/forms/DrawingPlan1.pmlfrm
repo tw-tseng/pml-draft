@@ -1543,264 +1543,12 @@ define method .Apply()
 				!dbgf5.close()
 
 				------------------------------------------------------------------
-				-- move the view so that its annotation lands inside the canvas  --
-				--                                                               --
-				-- everything the annotation makes hangs off the view -- the      --
-				-- layers are members of it -- and is placed in model or view     --
-				-- coordination, so moving the view now carries all of it along   --
-				-- and nothing has to be drawn a second time. the border texts,   --
-				-- the keyplan and the north arrow sit on the sheet rather than   --
-				-- on the view and stay where they are                            --
-				--                                                               --
-				-- the view used to be centred on the canvas, which is wrong as   --
-				-- soon as one side carries longer labels than the other. what is --
-				-- centred here is the view together with its annotation          --
-				--                                                               --
-				-- a drawing which is too big for its canvas even after this is   --
-				-- left as it is and not reported: at a fixed scale there is      --
-				-- nothing to be done about it here, and the user goes through    --
-				-- every drawing anyway                                           --
+				-- move the view so that its annotation lands inside the canvas, --
+				-- and put back everything that does not travel with the view    --
+				-- automatically. shared with the update path -- see            --
+				-- .RecenterView() for why it has to be                          --
 				------------------------------------------------------------------
-				!cvx1 = 107
-				!cvx2 = 607
-				!cvy1 = 115
-				!cvy2 = 515
-				if (not(!!DrawingPlan1.canvassize.unset())) then
-					!cvx1 = min(!!DrawingPlan1.canvassize.part(2).real(), !!DrawingPlan1.canvassize.part(6).real())
-					!cvx2 = max(!!DrawingPlan1.canvassize.part(2).real(), !!DrawingPlan1.canvassize.part(6).real())
-					!cvy1 = min(!!DrawingPlan1.canvassize.part(4).real(), !!DrawingPlan1.canvassize.part(8).real())
-					!cvy2 = max(!!DrawingPlan1.canvassize.part(4).real(), !!DrawingPlan1.canvassize.part(8).real())
-				endif
-				-- the view, grown by what its annotation reaches on each side --
-				!ocx1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real()) - !this.labbandleft
-				!ocx2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real()) + !this.labbandright
-				!ocy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real()) - !this.labbanddown
-				!ocy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real()) + !this.labbandup
-				-- how far it sticks out of each edge, and the move which fixes it --
-				!ovl = !cvx1 - !ocx1
-				!ovr = !ocx2 - !cvx2
-				!dx = 0
-				if (!ovl.gt(0) and !ovr.gt(0)) then
-					-- wider than the canvas: share what is left over between the two sides --
-					!dx = (!ovl - !ovr) * 0.5
-				elseif (!ovl.gt(0)) then
-					!dx = !ovl
-				elseif (!ovr.gt(0)) then
-					!dx = !ovr * -1
-				endif
-				!ovd = !cvy1 - !ocy1
-				!ovu = !ocy2 - !cvy2
-				!dy = 0
-				if (!ovd.gt(0) and !ovu.gt(0)) then
-					!dy = (!ovd - !ovu) * 0.5
-				elseif (!ovd.gt(0)) then
-					!dy = !ovd
-				elseif (!ovu.gt(0)) then
-					!dy = !ovu * -1
-				endif
-				!adx = abs(!dx)
-				!ady = abs(!dy)
-				!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
-				!dbgf4.open('overwrite')
-				!dbgf4.writerecord('RECENTER entry ok')
-				!dbgf4.close()
-				handle any
-				endhandle
-				!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
-				!dbgf4.open('append')
-				!dbgf4.writerecord('RECENTER dx=' & !dx.string() & ' dy=' & !dy.string() & ' adx=' & !adx.string() & ' ady=' & !ady.string())
-				!dbgf4.close()
-				handle any
-					!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
-					!dbgf4.open('append')
-					!dbgf4.writerecord('RECENTER dx/dy string() errored')
-					!dbgf4.close()
-				endhandle
-				if (!adx.gt(0.05) or !ady.gt(0.05)) then
-					$!name/SS/S1/V1
-					!vxy = ''
-					var !vxy xyposition
-					handle any
-						!vxy = ''
-					endhandle
-					!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
-					!dbgf4.open('append')
-					!dbgf4.writerecord('RECENTER before vxy=' & !vxy)
-					!dbgf4.close()
-					if (!vxy.neq('')) then
-						!nvx = !vxy.part(2).replace('mm', '').real() + !dx
-						!nvy = !vxy.part(4).replace('mm', '').real() + !dy
-						!nxy = 'X ' & !nvx.string('D3') & 'mm Y ' & !nvy.string('D3') & 'mm'
-						xyposition $!nxy
-						handle any
-							!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
-							!dbgf4.open('append')
-							!dbgf4.writerecord('RECENTER xyposition command errored')
-							!dbgf4.close()
-						endhandle
-						var !vxyafter xyposition
-						handle any
-							!vxyafter = 'READ-ERROR'
-						endhandle
-						!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
-						!dbgf4.open('append')
-						!dbgf4.writerecord('RECENTER nxy=' & !nxy & ' vxyafter=' & !vxyafter)
-						!dbgf4.close()
-						------------------------------------------------------------
-						-- the cached sheet corners describe where the view WAS.   --
-						-- everything read from them after this point would be out --
-						-- by the move, so bring them, and the four lines built    --
-						-- from them, along with it                                --
-						------------------------------------------------------------
-						!this.viewULsh = 'x ' & string(!this.viewULsh.part(2).real() + !dx) & ' y ' & string(!this.viewULsh.part(4).real() + !dy)
-						!this.viewURsh = 'x ' & string(!this.viewURsh.part(2).real() + !dx) & ' y ' & string(!this.viewURsh.part(4).real() + !dy)
-						!this.viewLLsh = 'x ' & string(!this.viewLLsh.part(2).real() + !dx) & ' y ' & string(!this.viewLLsh.part(4).real() + !dy)
-						!this.viewLRsh = 'x ' & string(!this.viewLRsh.part(2).real() + !dx) & ' y ' & string(!this.viewLRsh.part(4).real() + !dy)
-						------------------------------------------------------------
-						-- the box corners are sheet coordinates too, so they move  --
-						-- with the view exactly as the border corners do           --
-						------------------------------------------------------------
-						!this.boxULsh = 'x ' & string(!this.boxULsh.part(2).real() + !dx) & ' y ' & string(!this.boxULsh.part(4).real() + !dy)
-						!this.boxURsh = 'x ' & string(!this.boxURsh.part(2).real() + !dx) & ' y ' & string(!this.boxURsh.part(4).real() + !dy)
-						!this.boxLLsh = 'x ' & string(!this.boxLLsh.part(2).real() + !dx) & ' y ' & string(!this.boxLLsh.part(4).real() + !dy)
-						!this.boxLRsh = 'x ' & string(!this.boxLRsh.part(2).real() + !dx) & ' y ' & string(!this.boxLRsh.part(4).real() + !dy)
-						!this.boxUlinesh = object line(!this.boxULsh.position(), !this.boxURsh.position())
-						!this.boxDlinesh = object line(!this.boxLLsh.position(), !this.boxLRsh.position())
-						!this.boxRlinesh = object line(!this.boxLRsh.position(), !this.boxURsh.position())
-						!this.boxLlinesh = object line(!this.boxLLsh.position(), !this.boxULsh.position())
-						!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
-						!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
-						!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
-						!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
-						------------------------------------------------------------
-						-- GLAB's XYPO is a baked leader offset, not a re-projected --
-						-- world position, so unlike the box (VSEC/FPLA) and DPOI  --
-						-- it does not follow the view when it moves. nudge every  --
-						-- GLAB LineNoAnnotation just created by the same move --
-						-- right/left rows measure along sheet Y, up/down along X  --
-						------------------------------------------------------------
-						!glabn = 0
-						!glabn = !!DrawingPlan1newglabrefs.size()
-						handle any
-							!glabn = 0
-						endhandle
-						!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
-						!dbgf4.open('append')
-						!dbgf4.writerecord('GLABFIX count=' & !glabn.string())
-						!dbgf4.close()
-						do !gi from 1 to !glabn
-							$!!DrawingPlan1newglabrefs[!gi]
-							handle any
-								skip
-							endhandle
-							!gdir = !!DrawingPlan1newglabdirs[!gi]
-							!gcurxypo = ''
-							var !gcurxypo xypo
-							handle any
-								!gcurxypo = ''
-							endhandle
-							if (!gcurxypo.neq('')) then
-								!gxx = !gcurxypo.part(1).replace('mm', '').real()
-								!gyy = !gcurxypo.part(2).replace('mm', '').real()
-								----------------------------------------------------------
-								-- subtract, not add: the view's own reference corner   --
-								-- (viewULsh etc, which XYPO is measured against) moves  --
-								-- BY dx/dy, so to land the label on the same spot it     --
-								-- was aimed at, XYPO has to move the OPPOSITE way (found --
-								-- live -- +dy overshot to roughly double the gap instead --
-								-- of closing it, -dy matched update's own number exactly)--
-								----------------------------------------------------------
-								if (!gdir.eq('right') or !gdir.eq('left')) then
-									!gyy = !gyy - !dy
-								else
-									!gxx = !gxx - !dx
-								endif
-								!gnewxypo = !gxx.string('D3') & ' ' & !gyy.string('D3')
-								XYPO $!gnewxypo
-								handle any
-								endhandle
-							endif
-						enddo
-						------------------------------------------------------------
-						-- the match line box is the one thing on the drawing that --
-						-- is drawn straight onto the sheet -- new stra fpt <sheet --
-						-- position> -- rather than into the view, so unlike the   --
-						-- dimensions and the labels it does not travel with the   --
-						-- view and was left behind at the old position            --
-						-- (2026-08-24, reported live). its four lines are put     --
-						-- back on the corners here, in the order MatchLine drew   --
-						-- them: top, bottom, right, left                          --
-						------------------------------------------------------------
-						!msfrom = object array()
-						!msto = object array()
-						!msfrom[1] = !this.boxULsh
-						!msto[1] = !this.boxURsh
-						!msfrom[2] = !this.boxLLsh
-						!msto[2] = !this.boxLRsh
-						!msfrom[3] = !this.boxLRsh
-						!msto[3] = !this.boxURsh
-						!msfrom[4] = !this.boxLLsh
-						!msto[4] = !this.boxULsh
-						-- !!DrawingPlan1MatchStras is a global rather than a member of  --
-						-- this form on purpose: DrawingPlan1MatchLine.pmlfnc fills it   --
-						-- in, and a .pmlfnc is re-read on every call while this form is --
-						-- only re-read on kill/show. as a member, editing the two files --
-						-- together broke every run until the form was reloaded          --
-						-- ('Object does not have a member MATCHSTRAS', 2026-08-24)      --
-						-- a global which has never been set at all does not answer     --
-						-- .unset() either, it raises, so the count is read behind a     --
-						-- handler rather than tested                                    --
-						!msn = 0
-						!msn = !!DrawingPlan1MatchStras.size()
-						handle any
-							!msn = 0
-						endhandle
-						if (!msn.gt(4)) then
-							!msn = 4
-						endif
-						do !msi from 1 to !msn
-							!msref = !!DrawingPlan1MatchStras[!msi]
-							!msf = !msfrom[!msi]
-							!mst = !msto[!msi]
-							$!msref
-							handle any
-								skip
-							endhandle
-							FPT $!msf
-							handle any
-							endhandle
-							TPT $!mst
-							handle any
-							endhandle
-						enddo
-						------------------------------------------------------------
-						-- those four are the only part of the match line that     --
-						-- belongs on a corner. its ticks and its texts belong     --
-						-- wherever the neighbouring box's edge came out on the    --
-						-- sheet, and that was worked out through 'shpos of'       --
-						-- BEFORE this move -- so every rebuild left them behind   --
-						-- by dx/dy while the update path, which never moves the   --
-						-- view, put them in the right place. seen live as a       --
-						-- red/green pair of ticks 2.5mm apart on the revision     --
-						-- compare (2026-08-28)                                    --
-						--                                                          --
-						-- rather than shifting each one, the whole match line is  --
-						-- simply asked for again now that the view has settled:   --
-						-- it reuses whatever already stands where it wants one    --
-						-- (the four lines just snapped above) and redraws only    --
-						-- what the move actually invalidated                      --
-						------------------------------------------------------------
-						-- the tick positions are sheet coordinates, so the move --
-						-- invalidated them too and they are worked out again    --
-						-- here. the dimension points themselves are world       --
-						-- positions and travelled with the view, so the two     --
-						-- still land on each other                              --
-						$!name/SS/S1/V1
-						!!DrawingPlan1MatchTicks(!name, !equistr)
-						$!name/SS/S1/V1
-						!!DrawingPlan1MatchLine(!name, !equistr)
-					endif
-				endif
+				!this.RecenterView(!name, !equistr)
 
 				---------------------------
 				-- flow arrow annotation --
@@ -2253,9 +2001,291 @@ define method .Apply()
 				------------------------------------------------------------------
 				$!name/SS/S1/V1
 				!!DrawingPlan1MatchLine(!name, !equistr)
+				------------------------------------------------------------------
+				-- update never used to touch the view's own placement at all,   --
+				-- unlike rebuild -- which is exactly why a box resize left      --
+				-- rebuild's and update's own XYPO/THRO apart by however much    --
+				-- content changed, even though every individual element's own   --
+				-- real-world position agreed (2026-08-31 user rule: an existing --
+				-- LDIM must sit in the same place with no exceptions, and both  --
+				-- paths' GLAB must be able to land in the same place too). the  --
+				-- fit-to-canvas calculation only depends on the CURRENT view    --
+				-- size and the CURRENT labband reach, both just recomputed      --
+				-- above by this same update, so running it here converges the   --
+				-- view to exactly the same sheet placement a fresh rebuild of   --
+				-- this same box would land on -- and when nothing relevant      --
+				-- changed, ovl/ovr/ovd/ovu all come back <=0 and it is a no-op, --
+				-- so unrelated updates still do not move anything               --
+				------------------------------------------------------------------
+				!this.RecenterView(!name, !equistr)
 			endif
 		endhandle
 	enddo
+endmethod
+
+------------------------------------------------------------------------
+-- fit the view (and everything hanging off it) to the printable canvas --
+-- and put back the handful of things that do not travel with a view    --
+-- move automatically. shared by both the rebuild and the update branch --
+-- of .Apply() -- update did not call this at all until 2026-08-31, and --
+-- that asymmetry (not any per-label freeze logic) was the actual cause --
+-- of rebuild's and update's GLAB/LDIM sheet positions disagreeing after --
+-- a box resize: every element's real-world anchor already agreed, only --
+-- the view's own placement on the sheet did not                        --
+--                                                                       --
+-- idempotent by construction: it asks "does the CURRENT view, with the --
+-- CURRENT annotation reach, already fit the CURRENT canvas" and moves   --
+-- it only by however much it does not. run it twice in a row and the   --
+-- second call finds nothing left to fix                                --
+------------------------------------------------------------------------
+define method .RecenterView(!name is string, !equistr is string)
+	!cvx1 = 107
+	!cvx2 = 607
+	!cvy1 = 115
+	!cvy2 = 515
+	if (not(!!DrawingPlan1.canvassize.unset())) then
+		!cvx1 = min(!!DrawingPlan1.canvassize.part(2).real(), !!DrawingPlan1.canvassize.part(6).real())
+		!cvx2 = max(!!DrawingPlan1.canvassize.part(2).real(), !!DrawingPlan1.canvassize.part(6).real())
+		!cvy1 = min(!!DrawingPlan1.canvassize.part(4).real(), !!DrawingPlan1.canvassize.part(8).real())
+		!cvy2 = max(!!DrawingPlan1.canvassize.part(4).real(), !!DrawingPlan1.canvassize.part(8).real())
+	endif
+	-- the view, grown by what its annotation reaches on each side --
+	!ocx1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real()) - !this.labbandleft
+	!ocx2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real()) + !this.labbandright
+	!ocy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real()) - !this.labbanddown
+	!ocy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real()) + !this.labbandup
+	-- how far it sticks out of each edge, and the move which fixes it --
+	!ovl = !cvx1 - !ocx1
+	!ovr = !ocx2 - !cvx2
+	!dx = 0
+	if (!ovl.gt(0) and !ovr.gt(0)) then
+		-- wider than the canvas: share what is left over between the two sides --
+		!dx = (!ovl - !ovr) * 0.5
+	elseif (!ovl.gt(0)) then
+		!dx = !ovl
+	elseif (!ovr.gt(0)) then
+		!dx = !ovr * -1
+	endif
+	!ovd = !cvy1 - !ocy1
+	!ovu = !ocy2 - !cvy2
+	!dy = 0
+	if (!ovd.gt(0) and !ovu.gt(0)) then
+		!dy = (!ovd - !ovu) * 0.5
+	elseif (!ovd.gt(0)) then
+		!dy = !ovd
+	elseif (!ovu.gt(0)) then
+		!dy = !ovu * -1
+	endif
+	!adx = abs(!dx)
+	!ady = abs(!dy)
+	!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+	!dbgf4.open('overwrite')
+	!dbgf4.writerecord('RECENTER entry ok')
+	!dbgf4.writerecord('RECENTER canvassize unset=' & !!DrawingPlan1.canvassize.unset().string() & ' raw=' & !!DrawingPlan1.canvassize)
+	!dbgf4.writerecord('RECENTER cvx1=' & !cvx1.string('D2') & ' cvx2=' & !cvx2.string('D2') & ' cvy1=' & !cvy1.string('D2') & ' cvy2=' & !cvy2.string('D2'))
+	!dbgf4.writerecord('RECENTER viewLLsh=' & !this.viewLLsh & ' viewURsh=' & !this.viewURsh)
+	!dbgf4.writerecord('RECENTER labbandleft=' & !this.labbandleft.string('D2') & ' labbandright=' & !this.labbandright.string('D2') & ' labbandup=' & !this.labbandup.string('D2') & ' labbanddown=' & !this.labbanddown.string('D2'))
+	!dbgf4.writerecord('RECENTER ocx1=' & !ocx1.string('D2') & ' ocx2=' & !ocx2.string('D2') & ' ocy1=' & !ocy1.string('D2') & ' ocy2=' & !ocy2.string('D2'))
+	!dbgf4.writerecord('RECENTER ovl=' & !ovl.string('D2') & ' ovr=' & !ovr.string('D2') & ' ovd=' & !ovd.string('D2') & ' ovu=' & !ovu.string('D2'))
+	!dbgf4.close()
+	handle any
+	endhandle
+	!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+	!dbgf4.open('append')
+	!dbgf4.writerecord('RECENTER dx=' & !dx.string() & ' dy=' & !dy.string() & ' adx=' & !adx.string() & ' ady=' & !ady.string())
+	!dbgf4.close()
+	handle any
+		!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+		!dbgf4.open('append')
+		!dbgf4.writerecord('RECENTER dx/dy string() errored')
+		!dbgf4.close()
+	endhandle
+	if (!adx.gt(0.05) or !ady.gt(0.05)) then
+		$!name/SS/S1/V1
+		!vxy = ''
+		var !vxy xyposition
+		handle any
+			!vxy = ''
+		endhandle
+		!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+		!dbgf4.open('append')
+		!dbgf4.writerecord('RECENTER before vxy=' & !vxy)
+		!dbgf4.close()
+		if (!vxy.neq('')) then
+			!nvx = !vxy.part(2).replace('mm', '').real() + !dx
+			!nvy = !vxy.part(4).replace('mm', '').real() + !dy
+			!nxy = 'X ' & !nvx.string('D3') & 'mm Y ' & !nvy.string('D3') & 'mm'
+			xyposition $!nxy
+			handle any
+				!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+				!dbgf4.open('append')
+				!dbgf4.writerecord('RECENTER xyposition command errored')
+				!dbgf4.close()
+			endhandle
+			var !vxyafter xyposition
+			handle any
+				!vxyafter = 'READ-ERROR'
+			endhandle
+			!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+			!dbgf4.open('append')
+			!dbgf4.writerecord('RECENTER nxy=' & !nxy & ' vxyafter=' & !vxyafter)
+			!dbgf4.close()
+			------------------------------------------------------------
+			-- the cached sheet corners describe where the view WAS.   --
+			-- everything read from them after this point would be out --
+			-- by the move, so bring them, and the four lines built    --
+			-- from them, along with it                                --
+			------------------------------------------------------------
+			!this.viewULsh = 'x ' & string(!this.viewULsh.part(2).real() + !dx) & ' y ' & string(!this.viewULsh.part(4).real() + !dy)
+			!this.viewURsh = 'x ' & string(!this.viewURsh.part(2).real() + !dx) & ' y ' & string(!this.viewURsh.part(4).real() + !dy)
+			!this.viewLLsh = 'x ' & string(!this.viewLLsh.part(2).real() + !dx) & ' y ' & string(!this.viewLLsh.part(4).real() + !dy)
+			!this.viewLRsh = 'x ' & string(!this.viewLRsh.part(2).real() + !dx) & ' y ' & string(!this.viewLRsh.part(4).real() + !dy)
+			------------------------------------------------------------
+			-- the box corners are sheet coordinates too, so they move  --
+			-- with the view exactly as the border corners do           --
+			------------------------------------------------------------
+			!this.boxULsh = 'x ' & string(!this.boxULsh.part(2).real() + !dx) & ' y ' & string(!this.boxULsh.part(4).real() + !dy)
+			!this.boxURsh = 'x ' & string(!this.boxURsh.part(2).real() + !dx) & ' y ' & string(!this.boxURsh.part(4).real() + !dy)
+			!this.boxLLsh = 'x ' & string(!this.boxLLsh.part(2).real() + !dx) & ' y ' & string(!this.boxLLsh.part(4).real() + !dy)
+			!this.boxLRsh = 'x ' & string(!this.boxLRsh.part(2).real() + !dx) & ' y ' & string(!this.boxLRsh.part(4).real() + !dy)
+			!this.boxUlinesh = object line(!this.boxULsh.position(), !this.boxURsh.position())
+			!this.boxDlinesh = object line(!this.boxLLsh.position(), !this.boxLRsh.position())
+			!this.boxRlinesh = object line(!this.boxLRsh.position(), !this.boxURsh.position())
+			!this.boxLlinesh = object line(!this.boxLLsh.position(), !this.boxULsh.position())
+			!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
+			!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
+			!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
+			!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
+			------------------------------------------------------------
+			-- GLAB's XYPO is a baked leader offset, not a re-projected --
+			-- world position, so unlike the box (VSEC/FPLA) and DPOI  --
+			-- it does not follow the view when it moves. nudge every  --
+			-- GLAB LineNoAnnotation just touched (new or reused) by   --
+			-- the same move -- right/left rows measure along sheet Y, --
+			-- up/down along X                                        --
+			------------------------------------------------------------
+			!glabn = 0
+			!glabn = !!DrawingPlan1RunGlabRefs.size()
+			handle any
+				!glabn = 0
+			endhandle
+			!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
+			!dbgf4.open('append')
+			!dbgf4.writerecord('GLABFIX count=' & !glabn.string())
+			!dbgf4.close()
+			do !gi from 1 to !glabn
+				$!!DrawingPlan1RunGlabRefs[!gi]
+				handle any
+					skip
+				endhandle
+				!gdir = !!DrawingPlan1RunGlabDirs[!gi]
+				!gcurxypo = ''
+				var !gcurxypo xypo
+				handle any
+					!gcurxypo = ''
+				endhandle
+				if (!gcurxypo.neq('')) then
+					!gxx = !gcurxypo.part(1).replace('mm', '').real()
+					!gyy = !gcurxypo.part(2).replace('mm', '').real()
+					----------------------------------------------------------
+					-- subtract, not add: the view's own reference corner   --
+					-- (viewULsh etc, which XYPO is measured against) moves  --
+					-- BY dx/dy, so to land the label on the same spot it     --
+					-- was aimed at, XYPO has to move the OPPOSITE way (found --
+					-- live -- +dy overshot to roughly double the gap instead --
+					-- of closing it, -dy matched update's own number exactly)--
+					----------------------------------------------------------
+					if (!gdir.eq('right') or !gdir.eq('left')) then
+						!gyy = !gyy - !dy
+					else
+						!gxx = !gxx - !dx
+					endif
+					!gnewxypo = !gxx.string('D3') & ' ' & !gyy.string('D3')
+					XYPO $!gnewxypo
+					handle any
+					endhandle
+				endif
+			enddo
+			------------------------------------------------------------
+			-- the match line box is the one thing on the drawing that --
+			-- is drawn straight onto the sheet -- new stra fpt <sheet --
+			-- position> -- rather than into the view, so unlike the   --
+			-- dimensions and the labels it does not travel with the   --
+			-- view and was left behind at the old position            --
+			-- (2026-08-24, reported live). its four lines are put     --
+			-- back on the corners here, in the order MatchLine drew   --
+			-- them: top, bottom, right, left                          --
+			------------------------------------------------------------
+			!msfrom = object array()
+			!msto = object array()
+			!msfrom[1] = !this.boxULsh
+			!msto[1] = !this.boxURsh
+			!msfrom[2] = !this.boxLLsh
+			!msto[2] = !this.boxLRsh
+			!msfrom[3] = !this.boxLRsh
+			!msto[3] = !this.boxURsh
+			!msfrom[4] = !this.boxLLsh
+			!msto[4] = !this.boxULsh
+			-- !!DrawingPlan1MatchStras is a global rather than a member of  --
+			-- this form on purpose: DrawingPlan1MatchLine.pmlfnc fills it   --
+			-- in, and a .pmlfnc is re-read on every call while this form is --
+			-- only re-read on kill/show. as a member, editing the two files --
+			-- together broke every run until the form was reloaded          --
+			-- ('Object does not have a member MATCHSTRAS', 2026-08-24)      --
+			-- a global which has never been set at all does not answer     --
+			-- .unset() either, it raises, so the count is read behind a     --
+			-- handler rather than tested                                    --
+			!msn = 0
+			!msn = !!DrawingPlan1MatchStras.size()
+			handle any
+				!msn = 0
+			endhandle
+			if (!msn.gt(4)) then
+				!msn = 4
+			endif
+			do !msi from 1 to !msn
+				!msref = !!DrawingPlan1MatchStras[!msi]
+				!msf = !msfrom[!msi]
+				!mst = !msto[!msi]
+				$!msref
+				handle any
+					skip
+				endhandle
+				FPT $!msf
+				handle any
+				endhandle
+				TPT $!mst
+				handle any
+				endhandle
+			enddo
+			------------------------------------------------------------
+			-- those four are the only part of the match line that     --
+			-- belongs on a corner. its ticks and its texts belong     --
+			-- wherever the neighbouring box's edge came out on the    --
+			-- sheet, and that was worked out through 'shpos of'       --
+			-- BEFORE this move -- so every rebuild left them behind   --
+			-- by dx/dy while the update path, which never moves the   --
+			-- view, put them in the right place. seen live as a       --
+			-- red/green pair of ticks 2.5mm apart on the revision     --
+			-- compare (2026-08-28)                                    --
+			--                                                          --
+			-- rather than shifting each one, the whole match line is  --
+			-- simply asked for again now that the view has settled:   --
+			-- it reuses whatever already stands where it wants one    --
+			-- (the four lines just snapped above) and redraws only    --
+			-- what the move actually invalidated                      --
+			------------------------------------------------------------
+			-- the tick positions are sheet coordinates, so the move --
+			-- invalidated them too and they are worked out again    --
+			-- here. the dimension points themselves are world       --
+			-- positions and travelled with the view, so the two     --
+			-- still land on each other                              --
+			$!name/SS/S1/V1
+			!!DrawingPlan1MatchTicks(!name, !equistr)
+			$!name/SS/S1/V1
+			!!DrawingPlan1MatchLine(!name, !equistr)
+		endif
+	endif
 endmethod
 
 define method .NozzleAnnotation(!name is string)

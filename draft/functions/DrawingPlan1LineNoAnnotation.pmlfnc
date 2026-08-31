@@ -146,17 +146,26 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	endif
 
 	----------------------------------------------------------------------------
-	-- every GLAB this call creates, with which direction group it belongs to --
-	-- (right/left along-Y, up/down along-X), so that after LineNoAnnotation  --
-	-- returns, DrawingPlan1.pmlfrm's canvas-fit view recenter can nudge each  --
-	-- one's XYPO by the same dx/dy it just moved the view by. the view's box --
-	-- (VSEC/FPLA) and DPOI both re-project live off world coordinates and     --
-	-- follow the view automatically; GLAB's XYPO is a baked leader offset    --
-	-- that does not, which is what left GLAB rows 2.5mm off after rebuild's  --
-	-- own recenter fired (found live, 2026-08-27)                           --
+	-- every GLAB this call touches -- new or reused -- with which direction  --
+	-- group it belongs to (right/left along-Y, up/down along-X), so that    --
+	-- after LineNoAnnotation returns, DrawingPlan1.pmlfrm's canvas-fit view  --
+	-- recenter can nudge each one's XYPO by the same dx/dy it just moved     --
+	-- the view by. the view's box (VSEC/FPLA) and DPOI both re-project live  --
+	-- off world coordinates and follow the view automatically; GLAB's XYPO  --
+	-- is a baked leader offset that does not, which is what left GLAB rows  --
+	-- 2.5mm off after rebuild's own recenter fired (found live, 2026-08-27) --
+	--                                                                        --
+	-- originally only the newly-created ones were collected here, since     --
+	-- update never ran the recenter block at all. now that update can also  --
+	-- recentre (2026-08-31: rebuild's and update's own view placement must  --
+	-- land on the same XYPO/THRO for the same final box -- an existing LDIM --
+	-- must sit in the same place with no exceptions, user rule), a REUSED   --
+	-- glab needs the same nudge just as much -- its own POSITION/XYPO were  --
+	-- computed off the view's position BEFORE this run's recentre moves it, --
+	-- same as a brand new one                                               --
 	----------------------------------------------------------------------------
-	!!DrawingPlan1newglabrefs = object array()
-	!!DrawingPlan1newglabdirs = object array()
+	!!DrawingPlan1RunGlabRefs = object array()
+	!!DrawingPlan1RunGlabDirs = object array()
 
 	---------------------------------------------------------------------------
 	-- the sides of the view are only parallel to E and N when the drawing   --
@@ -3214,9 +3223,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endif
 				else
 					NEW GLAB
-					!!DrawingPlan1newglabrefs.append(ce)
-					!!DrawingPlan1newglabdirs.append(!dir)
 				endif
+				--------------------------------------------------------------------
+				-- collected either way -- see the comment on the two globals up   --
+				-- top: a reused glab needs the post-recentre nudge exactly like a --
+				-- new one does                                                    --
+				--------------------------------------------------------------------
+				!!DrawingPlan1RunGlabRefs.append(ce)
+				!!DrawingPlan1RunGlabDirs.append(!dir)
 				DDNA $!gelem
 				BTEXT |$!gtext|
 				CHEI $!gchei
