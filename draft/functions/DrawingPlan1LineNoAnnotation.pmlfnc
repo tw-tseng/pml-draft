@@ -929,6 +929,62 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			if (!dbgln) then
 				!dbgf.writerecord('CLUSTERPICK ' & !dir & ' at=' & !i.string() & ' mem=' & !result[!result.size()].split('~').getindexed(3).split('!').getindexed(4))
 			endif
+			--------------------------------------------------------------------
+			-- one dimension POINT per cluster is right: members within 4mm of --
+			-- each other along the line cannot carry readable dimensions of   --
+			-- their own. one LABEL per cluster is not: the labels have their  --
+			-- own anti-collision stepping and can sit side by side, so tying  --
+			-- them to the pick silently drops a pipe off the drawing          --
+			--                                                                 --
+			-- reported live 2026-08-30: 150-A-19 drifted 3.333mm on paper     --
+			-- towards 100-A-18, their gap fell from 7.185 to 3.851 and they   --
+			-- merged. the pick (nearest the border) was 100-A-18, so          --
+			-- 150-A-19 lost its label entirely -- 0.149mm from never          --
+			-- happening at all                                                --
+			--                                                                 --
+			-- so every OTHER pipe in the cluster is carried through as a      --
+			-- label-only entry. by pipe and not by member, because a cluster  --
+			-- is usually several members of one pipe (2690/2684/2696 are all  --
+			-- 11111) and that would write the same text three times           --
+			--                                                                 --
+			-- this changes the REBUILD path too, deliberately: a rebuild and  --
+			-- the update after it have to agree, or the whole revision        --
+			-- comparison stops meaning anything                               --
+			--------------------------------------------------------------------
+			!pickmem = !result[!result.size()].split('~').getindexed(3).split('!').getindexed(4)
+			!pickpipe = ''
+			var !pickpipe namn of pipe of $!pickmem
+			handle any
+				!pickpipe = ''
+			endhandle
+			!seenpipes = object array()
+			!seenpipes.append(!pickpipe)
+			do !tt from 1 to !temp1s.size()
+				!extmem = !temp1s[!tt].split('~').getindexed(3).split('!').getindexed(4)
+				!extpipe = ''
+				var !extpipe namn of pipe of $!extmem
+				handle any
+					!extpipe = ''
+				endhandle
+				if (!extpipe.eq('')) then
+					skip
+				endif
+				!extseen = false
+				do !ss values !seenpipes
+					if (!ss.eq(!extpipe)) then
+						!extseen = true
+						break
+					endif
+				enddo
+				if (!extseen) then
+					skip
+				endif
+				!seenpipes.append(!extpipe)
+				!result.append(!temp1s[!tt] & '~LABELONLY')
+				if (!dbgln) then
+					!dbgf.writerecord('CLUSTEREXTRA ' & !dir & ' at=' & !i.string() & ' pipe=' & !extpipe & ' mem=' & !extmem & ' pickpipe=' & !pickpipe)
+				endif
+			enddo
 
 			!i = !ii
 		enddo
@@ -1122,7 +1178,24 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		do !i from 1 to !result.size()
 			!resultl = !result[!i]
 			!mem = !resultl.split('~').getindexed(3).split('!').getindexed(4)
-			!currentmems.append(!mem)
+			--------------------------------------------------------------------
+			-- a label-only entry: another pipe sharing this cluster, carried  --
+			-- through for its label alone. everything below still runs -- the --
+			-- text, the height and the along-position are worked out the same --
+			-- way -- but it takes no dimension point, so it must not claim    --
+			-- one, create one, or say it is a current member (that last would --
+			-- have the DDNA rescue keep the point it used to own back when it --
+			-- was still far enough from its neighbour to have one)            --
+			--------------------------------------------------------------------
+			!labelonly = false
+			if (!resultl.split('~').size().geq(4)) then
+				if (!resultl.split('~').getindexed(4).eq('LABELONLY')) then
+					!labelonly = true
+				endif
+			endif
+			if (not(!labelonly)) then
+				!currentmems.append(!mem)
+			endif
 			var !type type of $!mem
 			--------------------------------------------------------------------
 			-- the position was worked out when the member was found and is    --
@@ -1202,10 +1275,12 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- along the dimension so that a grid crossing or a view corner    --
 				-- landing on the same spot is not added on top of it              --
 				--------------------------------------------------------------------
-				if (!dir.eq('right') or !dir.eq('left')) then
-					!dimalong.append(!pty)
-				else
-					!dimalong.append(!ptx)
+				if (not(!labelonly)) then
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!dimalong.append(!pty)
+					else
+						!dimalong.append(!ptx)
+					endif
 				endif
 				--------------------------------------------------------------------
 				-- temporary diagnostic 2026-08-12: prints one line per label that --
@@ -1240,7 +1315,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )
 				if (!dbgln) then
 					!dpoiseq = !dpoiseq + 1
-					!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' dir=' & !dir & ' section=labelled pipe=' & !dbgpipe & ' mem=' & !mem & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
+					!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' dir=' & !dir & ' section=labelled labelonly=' & !labelonly.string() & ' pipe=' & !dbgpipe & ' mem=' & !mem & ' attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 				endif
 				---------------------------------------------------------------------
 				-- 2026-08-21: the pipe number and the elevation used to be the     --
@@ -1407,18 +1482,22 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			if (!dbgln) then
 				!dbgf.writerecord('MATCH ' & !dir & ' mem=' & !mem & ' founddpoi=' & !founddpoi & ' attapos=' & !attapos.string())
 			endif
-			if (!founddpoi) then
-				if (!dbgln) then
-					!dbgf.writerecord('MATCH ' & !dir & ' foundpos=' & !foundpos.string() & ' dist=' & !foundpos.distance(!attapos))
+			-- a label-only entry takes no dimension point, so it claims none --
+			-- and creates none. see the note at the top of the loop         --
+			if (not(!labelonly)) then
+				if (!founddpoi) then
+					if (!dbgln) then
+						!dbgf.writerecord('MATCH ' & !dir & ' foundpos=' & !foundpos.string() & ' dist=' & !foundpos.distance(!attapos))
+					endif
+					!claimeddpois.append(!founddpoiref)
+					$!founddpoiref
+					DDNA $!mem
+					if (!foundpos.distance(!attapos).geq(5)) then
+						POS $!attapos
+					endif
+				else
+					NEW DPOI POS $!attapos DDNA $!mem
 				endif
-				!claimeddpois.append(!founddpoiref)
-				$!founddpoiref
-				DDNA $!mem
-				if (!foundpos.distance(!attapos).geq(5)) then
-					POS $!attapos
-				endif
-			else
-				NEW DPOI POS $!attapos DDNA $!mem
 			endif
 				---------------------------------------------------------------------
 				-- everything the GLAB will need, one string per label: the wording, --
@@ -2045,12 +2124,38 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			handle any
 			endhandle
 		enddo
+		--------------------------------------------------------------------
+		-- the DDNA every point this run claimed is carrying. read here,   --
+		-- in a pass of its own, because the walk below is navigating one  --
+		-- existing point at a time and must not go wandering off to a     --
+		-- second element in the middle of reading the first               --
+		--------------------------------------------------------------------
+		!claimedddnas = object array()
+		do !cd values !claimeddpois
+			$!cd
+			handle any
+				skip
+			endhandle
+			var !cdddna ddna of ce
+			if (not(!cdddna.unset()) and not(!cdddna.eq('=0/0'))) then
+				!claimedddnas.append(!cdddna)
+			endif
+		enddo
 		do !edp values !existingdpois
 			$!edp
 			handle any
 			elsehandle none
 				var !eddna ddna of ce
 				!edpref = ce
+				!edbgsh = ''
+				var !edbgpos pos
+				handle any
+					!edbgpos = ''
+				endhandle
+				var !edbgsh shpos of $!edbgpos
+				handle any
+					!edbgsh = 'UNREADABLE'
+				endhandle
 				!objclaimed = false
 				do !cd values !claimeddpois
 					if (!edpref.eq(!cd)) then
@@ -2105,8 +2210,40 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							endif
 						endif
 					endif
+					--------------------------------------------------------------
+					-- second backstop, and the one CLEANUPOUT cannot be: a      --
+					-- leftover standing INSIDE the box. the DDNA it carries     --
+					-- names a member still on the drawing, so the rescue keeps  --
+					-- it -- but that member has already been given its point    --
+					-- this run, and a member gets one point per chain, so this  --
+					-- is a second copy left behind by an earlier run            --
+					--                                                            --
+					-- measured live 2026-08-30, same box, rebuild against       --
+					-- update: down came back with 9 points where the rebuild    --
+					-- makes 8, the extra carrying 1761 while 1761's real point  --
+					-- sat 40mm further along; right came back with 10 for 8,    --
+					-- its two extras doubling an along coordinate exactly and   --
+					-- so measuring 0                                            --
+					--                                                            --
+					-- narrow on purpose: it can never take a member's last      --
+					-- point, because it only fires once a point carrying that   --
+					-- same DDNA has been claimed and is therefore surviving.    --
+					-- the elbow that legitimately owns two crossings is safe    --
+					-- too -- this run works out both and claims both            --
+					--------------------------------------------------------------
+					if (!stillcurrent and not(!objclaimed)) then
+						do !cdd values !claimedddnas
+							if (!eddna.eq(!cdd)) then
+								!stillcurrent = false
+								if (!dbgln) then
+									!dbgf.writerecord('CLEANUPDUP ' & !dir & ' eddna=' & !eddna & ' at=' & !edbgsh)
+								endif
+								break
+							endif
+						enddo
+					endif
 					if (!dbgln) then
-						!dbgf.writerecord('CLEANUP ' & !dir & ' eddna=' & !eddna & ' stillcurrent=' & !stillcurrent)
+						!dbgf.writerecord('CLEANUP ' & !dir & ' eddna=' & !eddna & ' at=' & !edbgsh & ' objclaimed=' & !objclaimed.string() & ' stillcurrent=' & !stillcurrent)
 					endif
 				else
 					--------------------------------------------------------------
@@ -2127,7 +2264,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- corners and an old tick (2026-08-28)                       --
 					--------------------------------------------------------------
 					if (!dbgln) then
-						!dbgf.writerecord('CLEANUPAUTO ' & !dir & ' eddna=' & !eddna & ' claimed=' & !stillcurrent)
+						!dbgf.writerecord('CLEANUPAUTO ' & !dir & ' eddna=' & !eddna & ' at=' & !edbgsh & ' claimed=' & !stillcurrent)
 					endif
 				endif
 				if (not(!stillcurrent)) then
@@ -2312,11 +2449,21 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				$!x
 				var !x1pos pos
 				var !x1shpos shpos of $!x1pos
+				!x1txt = ''
+				var !x1txt pltxt
+				handle any
+					!x1txt = 'NONE'
+				endhandle
 				NEXT
 				var !x2pos pos
 				var !x2shpos shpos of $!x2pos
+				!x2txt = ''
+				var !x2txt pltxt
+				handle any
+					!x2txt = 'NONE'
+				endhandle
 				if (!dbgln) then
-					!dbgf.writerecord('LDIMORDER ' & !dir & ' x=' & !x.string() & ' mcount=' & !mcount.string() & ' x1sh=' & !x1shpos & ' x2sh=' & !x2shpos)
+					!dbgf.writerecord('LDIMORDER ' & !dir & ' x=' & !x.string() & ' mcount=' & !mcount.string() & ' x1sh=' & !x1shpos & ' x2sh=' & !x2shpos & ' x1txt=[' & !x1txt & '] x2txt=[' & !x2txt & ']')
 				endif
 				if (!dir.eq('right') or !dir.eq('left')) then
 					if (abs(!x1shpos.part(4).replace('mm','').real() - !x2shpos.part(4).replace('mm','').real()) le 7) then
@@ -2561,7 +2708,24 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!gtext = !gparts.getindexed(1)
 				!gelem = !gparts.getindexed(2)
 				!gchei = !gparts.getindexed(3)
-				!galong = !gparts.getindexed(4).real()
+				--------------------------------------------------------------------
+				-- snapped to 0.001mm, the same grid XYPO and BPOF are written on.  --
+				-- POSITION is built from this, so all three then land on one grid  --
+				-- and a label that works out to the same place twice comes out     --
+				-- byte for byte the same place                                     --
+				--                                                                  --
+				-- without it the sum does not close: an element that has moved     --
+				-- carries POSITION the exact distance (1.666667mm on paper for a   --
+				-- 50mm move at 1:30) while XYPO and BPOF can only answer 1.667,    --
+				-- and the leader ends up a few thousandths out. reported live      --
+				-- 2026-08-30 as two parallel leader runs about 0.01mm apart, and   --
+				-- it is the same residue the BPOF note below already describes --   --
+				-- not only near a .xx5 boundary, as was thought then, but on any   --
+				-- move that is not a round number of sheet mm                      --
+				--                                                                  --
+				-- costs the attach point up to 0.0005mm against its own element    --
+				--------------------------------------------------------------------
+				!galong = !gparts.getindexed(4).real().string('D3').real()
 				!gup = !gparts.getindexed(5).real()
 				----------------------------------------------------------------------
 				-- update path: an existing GLAB must never move, or every update    --
@@ -2609,6 +2773,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							-- back through the current view via shpos of           --
 							----------------------------------------------------------
 							!egalong = 0
+							!egdepth = 0
 							!egmatched = false
 							var !egpos position
 							handle any
@@ -2619,20 +2784,67 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 								elsehandle none
 									if (!dir.eq('right') or !dir.eq('left')) then
 										!egalong = !egsh.part(4).replace('mm', '').real()
+										!egdepth = !egsh.part(2).replace('mm', '').real()
 									else
 										!egalong = !egsh.part(2).replace('mm', '').real()
+										!egdepth = !egsh.part(4).replace('mm', '').real()
 									endif
 									!egmatched = true
 								endhandle
 							endhandle
 							if (!dbgln) then
-								!dbgf.writerecord('GLABEXISTCAND ' & !dir & ' i=' & !i.string() & ' galong=' & !galong.string() & ' egalong=' & !egalong.string() & ' egmatched=' & !egmatched)
+								!dbgf.writerecord('GLABEXISTCAND ' & !dir & ' i=' & !i.string() & ' galong=' & !galong.string() & ' egalong=' & !egalong.string() & ' egdepth=' & !egdepth.string() & ' dimline=' & !dimline.string() & ' egmatched=' & !egmatched)
 							endif
 							!egalongdiff = abs(!egalong - !galong)
-							if (!egmatched and !egalongdiff.lt(1) and (!gbestalongdiff.lt(0) or !egalongdiff.lt(!gbestalongdiff))) then
+							----------------------------------------------------------
+							-- the DDNA above has already proved this is the same    --
+							-- element's label, so there is no along-distance cap    --
+							-- here: the element is allowed to have MOVED. a 1mm cap --
+							-- used to stand here and it rejected exactly the case   --
+							-- this whole revision path exists for -- a pipe shifted --
+							-- 100mm in the model is 3.3mm on paper, so its own      --
+							-- label was declared missing, a second one was built    --
+							-- beside it, and cleanup kept the first because its     --
+							-- DDNA was still current: two labels on one pipe        --
+							-- (reported live 2026-08-30, three pipes moved, three   --
+							-- doubled labels -- 1727 and 1761 down, 2697 up)        --
+							--                                                        --
+							-- what the cap was really doing was keeping this side   --
+							-- from stealing the same element's label off another    --
+							-- side, since !existingglabs spans all four. the DEPTH  --
+							-- axis does that properly and does not care how far    --
+							-- along anything moved: every label of a side sits on   --
+							-- that side's row, outside the box, and the rows are    --
+							-- tens of mm apart on paper. 5mm of slack because the   --
+							-- row itself can shift a little between runs (0.84mm    --
+							-- measured on the run this was found in)                --
+							--                                                        --
+							-- and never a label some earlier element already took.  --
+							-- the cap used to separate two labels sharing a DDNA on --
+							-- one side (an elbow crossing twice); with it gone,     --
+							-- nearest-wins alone would hand both of them the same   --
+							-- object                                                --
+							----------------------------------------------------------
+							!egsameside = false
+							if (!egmatched) then
+								!egdepthdiff = abs(!egdepth - !dimline)
+								if (!egdepthdiff.lt(5)) then
+									!egsameside = true
+								endif
+							endif
+							!egref = ce
+							!egclaimed = false
+							do !cg values !claimedglabs
+								if (!egref.eq(!cg)) then
+									!egclaimed = true
+									break
+								endif
+							enddo
+							if (!egsameside and not(!egclaimed) and (!gbestalongdiff.lt(0) or !egalongdiff.lt(!gbestalongdiff))) then
 								!gisexisting = true
 								!gexistingref = ce
 								!gbestalongdiff = !egalongdiff
+								!gexistalong = !egalong
 							endif
 						endif
 					endhandle
@@ -2680,6 +2892,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 								!gisexisting = true
 								!gexistingref = ce
 								!gbestalongdiff = !egalongdiff
+								!gexistalong = !egalong
 							endif
 						endhandle
 					enddo
@@ -2711,8 +2924,66 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endif
 					!gplace = !galong + !gstep
 				endif
+				--------------------------------------------------------------------
+				-- an existing label keeps the placement it was given -- that is    --
+				-- the whole point, an update must not shuffle labels nothing has   --
+				-- happened to -- but only while that placement still WORKS. the    --
+				-- rule was written when nothing in the model could move, so it     --
+				-- froze the anti-collision packing along with everything else; a   --
+				-- pipe that has since slid towards its neighbour then keeps a      --
+				-- step of zero it can no longer afford and the two labels are      --
+				-- written on top of each other (reported live 2026-08-30: down     --
+				-- i=6 landed 2.055mm after i=5 with glabmin 4, and 100-A-15 sat    --
+				-- across 100-A-18, which had not moved at all)                     --
+				--                                                                  --
+				-- so the freeze is conditional from here on: keep the inherited    --
+				-- place while it clears the label before it, otherwise fall        --
+				-- through to the packing below and earn a new one. only the        --
+				-- PLACEMENT is given up -- the GLAB object itself is still reused  --
+				-- (that is decided further down by !foundglab, not here), so this  --
+				-- moves a label rather than replacing it                           --
+				--                                                                  --
+				-- one-sided on purpose: a label whose neighbour has moved AWAY     --
+				-- keeps its old step even though it no longer needs one. tidier    --
+				-- to undo it, but that would move a label for cosmetic reasons     --
+				-- and draw a revision cloud over something nobody changed          --
+				--------------------------------------------------------------------
+				--------------------------------------------------------------------
+				-- where the packing below starts from.                            --
+				--                                                                  --
+				-- for a new label that is simply where its element is. for one     --
+				-- that already exists it is where that label actually SITS, which  --
+				-- is its own along plus the step read back out of its XYPO -- not  --
+				-- this element's new along, and not the step carried across onto   --
+				-- it                                                               --
+				--                                                                  --
+				-- the packing is then run over that seed either way, so an         --
+				-- existing label stays exactly where it is while that place still  --
+				-- works, and is pushed only when it does not: crowded by the       --
+				-- label before it, or sitting on a grid band. that is the 8/27     --
+				-- rule (an existing GLAB does not move, or every update draws      --
+				-- revision clouds over labels nothing happened to) with the one    --
+				-- exception it always needed                                       --
+				--                                                                  --
+				-- two earlier shapes of this were both wrong. freezing outright    --
+				-- skipped the packing, so a pipe that slid towards its neighbour   --
+				-- kept a step of zero it could no longer afford and the two texts  --
+				-- were written on top of each other. recomputing from the new      --
+				-- along whenever the element moved fixed that but threw the        --
+				-- placement away every time, so a label with room around it        --
+				-- chased its pipe for no reason -- the down row moved while the    --
+				-- up row, being crowded, did not, and the two rows stopped         --
+				-- looking like they followed the same rule (2026-08-30)            --
+				--                                                                  --
+				-- idempotent: with nothing changed the seed IS the current place   --
+				-- and the packing leaves it alone                                  --
+				--------------------------------------------------------------------
+				!gseed = !galong
+				if (!gisexisting) then
+					!gseed = !gexistalong + !gstep
+				endif
 				if (!dbgln) then
-					!dbgf.writerecord('GLABEXIST ' & !dir & ' i=' & !i.string() & ' elem=' & !gelem & ' isexisting=' & !gisexisting)
+					!dbgf.writerecord('GLABSEED ' & !dir & ' i=' & !i.string() & ' elem=' & !gelem & ' isexisting=' & !gisexisting & ' seed=' & !gseed.string('D3') & ' along=' & !galong.string('D3') & ' movedby=' & !gbestalongdiff.string('D3'))
 				endif
 				-------------------------------------------------------------
 				-- pack the labels along the dimension: each one goes where  --
@@ -2731,7 +3002,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- it just lands on whatever comes next. pushing only as far --
 				-- as needed, from one label to the next, cannot collide     --
 				-------------------------------------------------------------
-				if (not(!gisexisting)) then
 				----------------------------------------------------------------
 				-- tried making this width-aware for up/down (their text is   --
 				-- turned 90 degree, so it looked like width ran along the    --
@@ -2749,7 +3019,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- overshoot reports on the same i=7/i=8 pair)                --
 				----------------------------------------------------------------
 				!gminclr = !glabmin
-				!gplace = !galong
+				!gplace = !gseed
 				if (not(!gfirstlab)) then
 					!gmin = !gprevplace + !gminclr
 					if (!gplace lt !gmin) then
@@ -2823,7 +3093,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					enddo
 					break if (not(!gmoved))
 				enddo
-				endif
 				!gstep = !gplace - !galong
 				----------------------------------------------------------------
 				-- snapped to the same 3 decimals XYPO is written with. an     --
@@ -3129,11 +3398,35 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- the dimension line to the far end of the text in one   --
 					-- long diagonal (2026-08-21, reported live)              --
 					----------------------------------------------------------
-					!gbpof = !gb1x.string('D2') & ' ' & !gb1y.string('D2') & ' ' & !gb2x.string('D2') & ' ' & !gb2y.string('D2')
+					-- D3, not D2: the bend has to sit on the same 0.001mm grid as   --
+					-- POSITION and XYPO or the three do not add up (see the note    --
+					-- on !galong above)                                             --
+					!gbpof = !gb1x.string('D3') & ' ' & !gb1y.string('D3') & ' ' & !gb2x.string('D3') & ' ' & !gb2y.string('D3')
 					BPOF $!gbpof
 					handle any
 					endhandle
 					LSHAPE Bent
+					handle any
+					endhandle
+				else
+					----------------------------------------------------------
+					-- and straight when it is not stepped. this has to be    --
+					-- written, not just left alone: a reused label carries   --
+					-- whatever leader the run that made it gave it, and a    --
+					-- label whose step has dropped back to zero would keep   --
+					-- the old bend while its text moves to the unstepped     --
+					-- place, leaving the leader pointing somewhere the text  --
+					-- no longer is (reported live 2026-08-30: 100-A-15 on    --
+					-- both the up and down rows, step 1.947 and 2.094 before --
+					-- the pipe moved, 0.000 after, BPOF still X 0 Y -2 X 2   --
+					-- Y -6 from the earlier run)                             --
+					--                                                        --
+					-- X 0mm Y 0mm is what an unstepped label reads back as   --
+					----------------------------------------------------------
+					BPOF 0 0
+					handle any
+					endhandle
+					LSHAPE Straight
 					handle any
 					endhandle
 				endif
