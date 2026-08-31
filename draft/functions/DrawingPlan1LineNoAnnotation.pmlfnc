@@ -469,16 +469,34 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!newresult = object array()
 		do !i from 1 to !sortedtypes.size()
 			!del = true
+			!ipipe = !sortedtypes[!i].split('~').getindexed(3).split('!').getindexed(5)
 			do !ii from 1 to !newresult.size()
-				if (!dir.eq('right') or !dir.eq('left')) then
-					if (abs(!sortedtypes[!i].split('~').getindexed(1).real() - !newresult[!ii].split('~').getindexed(1).real()) le 1) then
-						!del = false
+				--------------------------------------------------------------------
+				-- same pipe check added 2026-08-31. this 1mm proximity test used  --
+				-- to fire on position alone, so two DIFFERENT pipes that happen   --
+				-- to cross the border within 1mm of each other got treated as the --
+				-- same crossing counted twice, and only whichever sorted first    --
+				-- survived. with the box unchanged, rebuild kept one pipe's       --
+				-- crossing (0150CB04_CSL_0080_P_660507) and update kept the       --
+				-- other's (02.5HD01_AG_0600_T_660105) at the same slot -- their   --
+				-- sheet y differed by only 0.34mm in one run, well inside this    --
+				-- 1mm net, and which of the two sorted first flipped between runs --
+				-- (2026-08-31). the same-pipe requirement is exactly the rule     --
+				-- from the 4mm cluster dedup below: a pipe can be counted once,   --
+				-- but never merged into a different pipe's point                 --
+				--------------------------------------------------------------------
+				!iipipe = !newresult[!ii].split('~').getindexed(3).split('!').getindexed(5)
+				if (!ipipe.eq(!iipipe)) then
+					if (!dir.eq('right') or !dir.eq('left')) then
+						if (abs(!sortedtypes[!i].split('~').getindexed(1).real() - !newresult[!ii].split('~').getindexed(1).real()) le 1) then
+							!del = false
+						endif
+					else
+						if (abs(!sortedtypes[!i].split('~').getindexed(2).real() - !newresult[!ii].split('~').getindexed(2).real()) le 1) then
+							!del = false
+						endif
 					endif
-				else
-					if (abs(!sortedtypes[!i].split('~').getindexed(2).real() - !newresult[!ii].split('~').getindexed(2).real()) le 1) then
-						!del = false
-					endif
-				endif		
+				endif
 			enddo
 			if (!del) then
 				!newresult.append(!sortedtypes[!i])
