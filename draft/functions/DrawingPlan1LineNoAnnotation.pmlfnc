@@ -917,73 +917,21 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!dbgf.writerecord('CLUSTER ' & !dir & ' at=' & !i.string() & ' member=' & !tt.string() & ' of=' & !temp1s.size().string() & ' y=' & !temp1s[!tt].split('~').getindexed(1) & ' x=' & !temp1s[!tt].split('~').getindexed(2) & ' mem=' & !temp1s[!tt].split('~').getindexed(3).split('!').getindexed(4))
 				enddo
 			endif
-			if (!dir.eq('right')) then
-				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'max', !temp1s, !viewdir))
-			elseif (!dir.eq('left')) then
-				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'min', !temp1s, !viewdir))
-			elseif (!dir.eq('down')) then
-				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'min', !temp1s, !viewdir))
-			elseif (!dir.eq('up')) then
-				!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'max', !temp1s, !viewdir))
-			endif
-			if (!dbgln) then
-				!dbgf.writerecord('CLUSTERPICK ' & !dir & ' at=' & !i.string() & ' mem=' & !result[!result.size()].split('~').getindexed(3).split('!').getindexed(4))
-			endif
 			--------------------------------------------------------------------
-			-- one dimension POINT per cluster is right: members within 4mm of --
-			-- each other along the line cannot carry readable dimensions of   --
-			-- their own. one LABEL per cluster is not: the labels have their  --
-			-- own anti-collision stepping and can sit side by side, so tying  --
-			-- them to the pick silently drops a pipe off the drawing          --
-			--                                                                 --
-			-- reported live 2026-08-30: 150-A-19 drifted 3.333mm on paper     --
-			-- towards 100-A-18, their gap fell from 7.185 to 3.851 and they   --
-			-- merged. the pick (nearest the border) was 100-A-18, so          --
-			-- 150-A-19 lost its label entirely -- 0.149mm from never          --
-			-- happening at all                                                --
-			--                                                                 --
-			-- so every OTHER pipe in the cluster is carried through as a      --
-			-- label-only entry. by pipe and not by member, because a cluster  --
-			-- is usually several members of one pipe (2690/2684/2696 are all  --
-			-- 11111) and that would write the same text three times           --
-			--                                                                 --
-			-- this changes the REBUILD path too, deliberately: a rebuild and  --
-			-- the update after it have to agree, or the whole revision        --
-			-- comparison stops meaning anything                               --
+			-- every member of the group gets its own dimension point, full   --
+			-- stop -- no picking one representative and no folding the rest  --
+			-- into label-only entries. user rule, 2026-08-31: crowding on    --
+			-- paper is not a reason for one pipe to go without its own DPOI  --
+			--                                                                --
+			-- the 4mm grouping above is kept only to log CLUSTER below (what --
+			-- used to collide is worth knowing about); nothing is dropped or --
+			-- merged because of it any more. .CheckDimensionAttachPoint() is --
+			-- no longer called here for the same reason -- it existed to     --
+			-- choose which single member should represent a group, and      --
+			-- there is no longer a group to represent                       --
 			--------------------------------------------------------------------
-			!pickmem = !result[!result.size()].split('~').getindexed(3).split('!').getindexed(4)
-			!pickpipe = ''
-			var !pickpipe namn of pipe of $!pickmem
-			handle any
-				!pickpipe = ''
-			endhandle
-			!seenpipes = object array()
-			!seenpipes.append(!pickpipe)
 			do !tt from 1 to !temp1s.size()
-				!extmem = !temp1s[!tt].split('~').getindexed(3).split('!').getindexed(4)
-				!extpipe = ''
-				var !extpipe namn of pipe of $!extmem
-				handle any
-					!extpipe = ''
-				endhandle
-				if (!extpipe.eq('')) then
-					skip
-				endif
-				!extseen = false
-				do !ss values !seenpipes
-					if (!ss.eq(!extpipe)) then
-						!extseen = true
-						break
-					endif
-				enddo
-				if (!extseen) then
-					skip
-				endif
-				!seenpipes.append(!extpipe)
-				!result.append(!temp1s[!tt] & '~LABELONLY')
-				if (!dbgln) then
-					!dbgf.writerecord('CLUSTEREXTRA ' & !dir & ' at=' & !i.string() & ' pipe=' & !extpipe & ' mem=' & !extmem & ' pickpipe=' & !pickpipe)
-				endif
+				!result.append(!temp1s[!tt])
 			enddo
 
 			!i = !ii
