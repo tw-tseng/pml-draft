@@ -1924,7 +1924,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			var !temppos enupos of $!!DrawingPlan1.boxULsh
 			!alongv = !!DrawingPlan1.boxULsh.part(2).real()
 		endif
-		if (!dbgln and !dir.eq('left')) then
+		if (!dbgln) then
 			!dbgf.writerecord('CORNER1RAW viewULsh=' & !!DrawingPlan1.boxULsh & ' viewURsh=' & !!DrawingPlan1.boxURsh & ' viewLLsh=' & !!DrawingPlan1.boxLLsh & ' viewLRsh=' & !!DrawingPlan1.boxLRsh)
 		endif
 
@@ -1936,7 +1936,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			$!dpoi
 			var !temppos1 pos
 			!attapos1 = object position(!temppos1)
-			if (!dbgln and !dir.eq('left')) then
+			if (!dbgln) then
 				!dbgf.writerecord('CORNER1DEDUP attapos=' & !attapos.string() & ' cand=' & !attapos1.string() & ' dist=' & !attapos.distance(!attapos1))
 			endif
 			if (!attapos.distance(!attapos1).lt(5)) then
@@ -2014,7 +2014,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				endif
 			endif
 		endif
-		if (!dbgln and !dir.eq('left')) then
+		if (!dbgln) then
 			!dbgf.writerecord('CORNER1 run-after-dist=' & !run & ' alongv=' & !alongv.string() & ' dimtol=' & !dimtol.string() & ' dimalong=' & !dimalong.size())
 		endif
 		-------------------------------------------------------------------
@@ -2026,18 +2026,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		if (!run) then
 			!run = !!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)
 		endif
-		if (!dbgln and !dir.eq('left')) then
+		if (!dbgln) then
 			!dbgf.writerecord('CORNER1 run-after-along=' & !run)
 		endif
 		if (!run) then
 			!dimalong.append(!alongv)
-			if (!dbgln and !dir.eq('left')) then
+			if (!dbgln) then
 				!dpoiseq = !dpoiseq + 1
 				!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=corner1 attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 			endif
 			NEW DPOI POS $!attapos
 			!claimeddpois.append(ce)
-			if (!dbgln and !dir.eq('left')) then
+			if (!dbgln) then
 				var !liveddna ddna of ce
 				!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=corner1 liveddna=' & !liveddna)
 			endif
@@ -2073,7 +2073,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			$!dpoi
 			var !temppos1 pos
 			!attapos1 = object position(!temppos1)
-			if (!dbgln and !dir.eq('left')) then
+			if (!dbgln) then
 				!dbgf.writerecord('CORNER2DEDUP attapos=' & !attapos.string() & ' cand=' & !attapos1.string() & ' dist=' & !attapos.distance(!attapos1))
 			endif
 			if (!attapos.distance(!attapos1).lt(5)) then
@@ -2141,24 +2141,24 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				endif
 			endif
 		endif
-		if (!dbgln and !dir.eq('left')) then
+		if (!dbgln) then
 			!dbgf.writerecord('CORNER2 run-after-dist=' & !run & ' alongv=' & !alongv.string() & ' dimtol=' & !dimtol.string() & ' dimalong=' & !dimalong.size())
 		endif
 		if (!run) then
 			!run = !!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)
 		endif
-		if (!dbgln and !dir.eq('left')) then
+		if (!dbgln) then
 			!dbgf.writerecord('CORNER2 run-after-along=' & !run)
 		endif
 		if (!run) then
 			!dimalong.append(!alongv)
-			if (!dbgln and !dir.eq('left')) then
+			if (!dbgln) then
 				!dpoiseq = !dpoiseq + 1
 				!dbgf.writerecord('DPOISEQ ' & !dpoiseq.string() & ' section=corner2 attapos=E ' & string(!attapos.east) & ' N ' & string(!attapos.north) & ' U ' & string(!attapos.up))
 			endif
 			NEW DPOI POS $!attapos
 			!claimeddpois.append(ce)
-			if (!dbgln and !dir.eq('left')) then
+			if (!dbgln) then
 				var !liveddna ddna of ce
 				!dbgf.writerecord('LIVEDDNA ' & !dpoiseq.string() & ' section=corner2 liveddna=' & !liveddna)
 			endif
