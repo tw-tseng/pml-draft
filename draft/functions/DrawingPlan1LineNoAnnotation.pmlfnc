@@ -1568,29 +1568,28 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!claimeddpois.append(!founddpoiref)
 					$!founddpoiref
 					DDNA $!mem
-					if (!foundpos.distance(!attapos).geq(5)) then
-						POS $!attapos
+					----------------------------------------------------------------
+					-- user rule, 2026-09-01, no exception this time: once a DPOI  --
+					-- exists and a REVI is on the drawing, its position is fixed, --
+					-- full stop -- no matter how far the box moves, even the      --
+					-- ~2m resize tested live. the old >=5mm-moves/otherwise-stays --
+					-- split (kept the dot still for a small drift, but let it     --
+					-- jump to the fresh intersection once the box changed enough) --
+					-- is gone: found means frozen, always, and the fresh          --
+					-- intersection computed above is not written to POS at all    --
+					--                                                             --
+					-- !ptx/!pty were set a few lines up from THIS run's fresh     --
+					-- intersection with the box edge, so left alone the label's   --
+					-- along-position (and its leader) would still drift on every  --
+					-- resize even though the dot itself does not move -- read the --
+					-- along value back off the frozen point instead, so the two   --
+					-- agree                                                       --
+					----------------------------------------------------------------
+					var !frozensh shpos of $!foundpos
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!pty = !frozensh.part(4).replace('mm', '').real()
 					else
-						----------------------------------------------------------------
-						-- the dot itself is frozen right here, but !ptx/!pty were set  --
-						-- a few lines up from THIS run's fresh intersection with the   --
-						-- box edge -- and once the edge has actually moved, that       --
-						-- intersection lands a hair further along any pipe that is not --
-						-- perfectly perpendicular to it, even though the frozen dot    --
-						-- does not move at all. left alone, the label's along-position --
-						-- (and its leader) would drift by that same hair on every box  --
-						-- resize while the point it is labelling visibly does not --   --
-						-- exactly the 0.03mm drift reported live (2026-09-01) on a run --
-						-- of pipes near a box edge that moved 922mm. once the point is --
-						-- confirmed frozen, the along value is read back off the       --
-						-- frozen point instead, so the two agree again                 --
-						----------------------------------------------------------------
-						var !frozensh shpos of $!foundpos
-						if (!dir.eq('right') or !dir.eq('left')) then
-							!pty = !frozensh.part(4).replace('mm', '').real()
-						else
-							!ptx = !frozensh.part(2).replace('mm', '').real()
-						endif
+						!ptx = !frozensh.part(2).replace('mm', '').real()
 					endif
 				else
 					NEW DPOI POS $!attapos DDNA $!mem
@@ -3504,9 +3503,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (!foundglab) then
 					$!foundglabref
 					!claimedglabs.append(!foundglabref)
-					if (!foundglabpos.distance(!gposobj).lt(5)) then
-						!gposobj = !foundglabpos
-					endif
+					----------------------------------------------------------------
+					-- same rule as the DPOI side, same day: found means frozen,   --
+					-- always -- no <5mm carve-out any more. this label's own      --
+					-- POSITION never moves once it exists and a REVI is on the    --
+					-- drawing, no matter how far this run's fresh target sits     --
+					-- from it                                                     --
+					----------------------------------------------------------------
+					!gposobj = !foundglabpos
 				else
 					NEW GLAB
 				endif
