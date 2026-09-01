@@ -3343,11 +3343,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- same point", same nearest-wins rule, and still refusing         --
 				-- anything !claimedglabs already has                              --
 				--------------------------------------------------------------------
+				!gelemdbg = !gelem.matchwild('*660005*')
+				if (!dbgln and !gelemdbg) then
+					!dbgf.writerecord('GLABFALLBACKSTART ' & !dir & ' gelem=' & !gelem & ' foundglab(strict)=' & !foundglab.string() & ' gposobj=' & !gposobj.string())
+				endif
 				if (not(!foundglab)) then
 					!bestglabdist = -1
 					do !eg values !existingglabs
 						$!eg
 						handle any
+							if (!dbgln and !gelemdbg) then
+								!dbgf.writerecord('GLABFALLBACKCAND ' & !dir & ' gelem=' & !gelem & ' $!eg navigation failed')
+							endif
 						elsehandle none
 							!egref = ce
 							!egclaimed = false
@@ -3357,19 +3364,46 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 									break
 								endif
 							enddo
+							!egddnadbg = 'ERR'
+							if (!dbgln and !gelemdbg) then
+								var !egddnadbg ddna
+								handle any
+									!egddnadbg = 'ERR'
+								endhandle
+							endif
 							if (not(!egclaimed)) then
+								!egposerr = false
 								var !egpos position
-								!egposobj = object position(!egpos)
-								!egdist = !egposobj.distance(!gposobj)
-								if (!egdist.lt(5) and (not(!foundglab) or !egdist.lt(!bestglabdist))) then
-									!foundglab = true
-									!foundglabref = ce
-									!bestglabdist = !egdist
-									!foundglabpos = !egposobj
+								handle any
+									!egposerr = true
+								endhandle
+								if (!egposerr) then
+									if (!dbgln and !gelemdbg) then
+										!dbgf.writerecord('GLABFALLBACKCAND ' & !dir & ' gelem=' & !gelem & ' cand ddna=' & !egddnadbg & ' POSITION READ FAILED')
+									endif
+								else
+									!egposobj = object position(!egpos)
+									!egdist = !egposobj.distance(!gposobj)
+									if (!dbgln and !gelemdbg) then
+										!dbgf.writerecord('GLABFALLBACKCAND ' & !dir & ' gelem=' & !gelem & ' cand ddna=' & !egddnadbg & ' dist=' & !egdist.string() & ' claimed=' & !egclaimed.string())
+									endif
+									if (!egdist.lt(5) and (not(!foundglab) or !egdist.lt(!bestglabdist))) then
+										!foundglab = true
+										!foundglabref = ce
+										!bestglabdist = !egdist
+										!foundglabpos = !egposobj
+									endif
+								endif
+							else
+								if (!dbgln and !gelemdbg) then
+									!dbgf.writerecord('GLABFALLBACKCAND ' & !dir & ' gelem=' & !gelem & ' cand ddna=' & !egddnadbg & ' SKIPPED already claimed')
 								endif
 							endif
 						endhandle
 					enddo
+				endif
+				if (!dbgln and !gelemdbg) then
+					!dbgf.writerecord('GLABFALLBACKEND ' & !dir & ' gelem=' & !gelem & ' foundglab=' & !foundglab.string())
 				endif
 				if (!foundglab) then
 					$!foundglabref
