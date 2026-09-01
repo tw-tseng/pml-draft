@@ -2002,22 +2002,21 @@ define method .Apply()
 				$!name/SS/S1/V1
 				!!DrawingPlan1MatchLine(!name, !equistr)
 				------------------------------------------------------------------
-				-- update never used to touch the view's own placement at all,   --
-				-- unlike rebuild -- which is exactly why a box resize left      --
-				-- rebuild's and update's own XYPO/THRO apart by however much    --
-				-- content changed, even though every individual element's own   --
-				-- real-world position agreed (2026-08-31 user rule: an existing --
-				-- LDIM must sit in the same place with no exceptions, and both  --
-				-- paths' GLAB must be able to land in the same place too). the  --
-				-- fit-to-canvas calculation only depends on the CURRENT view    --
-				-- size and the CURRENT labband reach, both just recomputed      --
-				-- above by this same update, so running it here converges the   --
-				-- view to exactly the same sheet placement a fresh rebuild of   --
-				-- this same box would land on -- and when nothing relevant      --
-				-- changed, ovl/ovr/ovd/ovu all come back <=0 and it is a no-op, --
-				-- so unrelated updates still do not move anything               --
+				-- update deliberately does NOT call .RecenterView() (2026-09-01, --
+				-- reverted same day it was added): once a REVI exists the view   --
+				-- must never move, full stop -- already tested and documented    --
+				-- (Notion revision-management design doc, section 1 point 6): a  --
+				-- view shifted 10mm on the sheet clouds the ENTIRE drawing,      --
+				-- because the comparison is a picture diff, not an element diff. --
+				-- .RecenterView() exists to move the view, so it is only safe    --
+				-- on the rebuild path, before any REVI exists. update's          --
+				-- XYPOSITION/THPOSITION stay exactly where they were (see the    --
+				-- frozen-centre SIZE block above) even though that means         --
+				-- rebuild's and update's own view placement can end up different --
+				-- for the same box -- that is the accepted 2026-08-29 trade-off  --
+				-- (padding on the side that did not grow), not a bug to          --
+				-- converge away                                                  --
 				------------------------------------------------------------------
-				!this.RecenterView(!name, !equistr)
 			endif
 		endhandle
 	enddo
