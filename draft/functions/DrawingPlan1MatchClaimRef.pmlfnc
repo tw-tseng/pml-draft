@@ -30,6 +30,25 @@
 --                                                                --
 -- '' means nothing is standing there and the caller should draw   --
 -------------------------------------------------------------------
+--------------------------------------------------------------------------
+-- user rule, 2026-09-01: once an element exists and a REVI is on the   --
+-- drawing, its position is fixed, no matter how far the box moves --   --
+-- so unlike the 0.05mm cutoff this used to apply per field (fine while --
+-- nothing but last-digit noise separated two runs, but a tick whose    --
+-- real crossing point genuinely shifted a few mm on a box resize fell  --
+-- outside it and got rebuilt -- old tick removed, new one drawn a few  --
+-- mm off, a picture-diff cloud over a point nothing actually happened  --
+-- to), matching a straight is now nearest-candidate-of-the-same-kind,  --
+-- with no distance limit at all: whichever unclaimed straight already  --
+-- standing is closest to where this run wants one IS that one          --
+--                                                                       --
+-- text keeps its exact-content requirement (line below) rather than    --
+-- joining this -- a MATCH LINE E123456 label's own wording carries the --
+-- true coordinate of a border that may really have moved, so a genuine --
+-- change there is supposed to draw as one, the same way a dimension    --
+-- figure is allowed to read a different number when what it measures   --
+-- really changed                                                       --
+--------------------------------------------------------------------------
 define function !!DrawingPlan1MatchClaimRef(!sig is string) is string
 	!answer = ''
 	!n = 0
@@ -44,6 +63,9 @@ define function !!DrawingPlan1MatchClaimRef(!sig is string) is string
 	else
 		!nf = 5
 	endif
+	!bestref = ''
+	!besti = 0
+	!bestd = -1
 	do !i from 1 to !n
 		if (not(!!DrawingPlan1MatchClaims[!i])) then
 			!cand = !!DrawingPlan1MatchCandSigs[!i]
@@ -55,6 +77,7 @@ define function !!DrawingPlan1MatchClaimRef(!sig is string) is string
 						!same = false
 					endif
 				endif
+				!totd = 0
 				if (!same) then
 					do !k from 2 to !nf
 						!a = !cp.getindexed(!k)
@@ -66,19 +89,21 @@ define function !!DrawingPlan1MatchClaimRef(!sig is string) is string
 							endif
 						else
 							!d = abs(!a.real() - !b.real())
-							if (!d.gt(0.05)) then
-								!same = false
-							endif
+							!totd = !totd + !d
 						endif
 					enddo
 				endif
-				if (!same) then
-					!!DrawingPlan1MatchClaims[!i] = true
-					!answer = !!DrawingPlan1MatchCandRefs[!i]
-					break
+				if (!same and (!bestd.lt(0) or !totd.lt(!bestd))) then
+					!bestref = !!DrawingPlan1MatchCandRefs[!i]
+					!besti = !i
+					!bestd = !totd
 				endif
 			endif
 		endif
 	enddo
+	if (!besti.gt(0)) then
+		!!DrawingPlan1MatchClaims[!besti] = true
+		!answer = !bestref
+	endif
 	return !answer
 endfunction
