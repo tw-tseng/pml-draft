@@ -1853,10 +1853,11 @@ define method .Apply()
 				endif
 
 				--------------------------------------------------------------------
-				-- view's own sheet-corner positions and scale, read from the      --
-				-- existing (frozen) view instead of recalculated from the box.    --
-				-- this also makes the update path use the view's real VSCA        --
-				-- rather than the form's Drawing Scale field, ahead of step 7      --
+				-- rcode/vsca still come off the existing view (preserve the      --
+				-- user's own orientation/scale choice rather than reverting to   --
+				-- the form's Drawing Scale field). shxypos/SIZE, on the other    --
+				-- hand, no longer come off the frozen view -- see the note on    --
+				-- THPOSITION just below                                          --
 				--------------------------------------------------------------------
 				$!name/SS/S1/V1
 				var !shxypos shxypos
@@ -1868,13 +1869,29 @@ define method .Apply()
 				!dbgf3.writerecord('STEP6 SIZE old=' & !oldsize.part(1) & ' ' & !oldsize.part(2) & ' shxypos=' & !shxypos.part(1) & ' ' & !shxypos.part(2) & ' rcode=' & !rcode & ' vsca=' & !vsca)
 
 				--------------------------------------------------------------------
-				-- SIZE recalculated symmetric around the existing sheet centre     --
-				-- (shxypos, which is XYPOSITION/THPOSITION projected to the sheet, --
-				-- neither touched here), reaching out to the box's current extent  --
-				-- on each side via shpos of. reproduces the existing SIZE exactly  --
-				-- when the box has not moved or grown; grows it when it has, same  --
-				-- side-that-did-not-grow-gets-padding rule as rebuild              --
+				-- 2026-09-01, user rule: rebuild's and update's own view          --
+				-- placement (XYPOSITION/THPOSITION) must land on the same spot    --
+				-- for the same final box, no exceptions -- the padding this       --
+				-- section used to add on the side that did not grow (2026-08-29)  --
+				-- was exactly why they did not: rebuild places the view straight  --
+				-- on the box with no padding at all, so a box grown on only one   --
+				-- side gave update a bigger, differently-centred view than a      --
+				-- fresh rebuild of that same box would, and every band/anchor     --
+				-- computed off it followed. THPOSITION is moved onto the box's    --
+				-- own current centre here, same as rebuild does when it first     --
+				-- creates the view (thpoE/thpoN/thpoU, computed above from        --
+				-- !boxPos), and SIZE is set to the box's own tight span with no   --
+				-- padding, so the two paths compute the identical view geometry   --
+				-- for the identical box. XYPOSITION itself is left alone -- it    --
+				-- only says where the view's centre currently sits on the sheet,  --
+				-- and .RecenterView() (called after LineNoAnnotation, same as on  --
+				-- rebuild) is what fits that onto the canvas, exactly as it       --
+				-- already does for rebuild's freshly created view                 --
 				--------------------------------------------------------------------
+				if (!boxchanged) then
+					$!name/SS/S1/V1
+					thposition E $!thpoE N $!thpoN U $!thpoU
+				endif
 				!ptEplus  = !boxPos.position().offset(!efpla,            !elen.real() * 0.5)
 				!ptEminus = !boxPos.position().offset(!efpla.opposite(), !elen.real() * 0.5)
 				!ptNplus  = !boxPos.position().offset(!nfpla,            !nlen.real() * 0.5)
@@ -1884,45 +1901,14 @@ define method .Apply()
 				var !ptEminussh shpos of $!ptEminus
 				var !ptNplussh shpos of $!ptNplus
 				var !ptNminussh shpos of $!ptNminus
-				!halfX = max(abs(!ptEplussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()), abs(!ptEminussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()))
-				!halfY = max(abs(!ptNplussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()), abs(!ptNminussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()))
-				!dbgf3.writerecord('STEP6 SIZE ptEplussh=' & !ptEplussh & ' ptEminussh=' & !ptEminussh & ' ptNplussh=' & !ptNplussh & ' ptNminussh=' & !ptNminussh & ' halfX=' & !halfX & ' halfY=' & !halfY)
-				if !rcode.eqnocase('up') then
-					!sizePart1 = !halfX * 2
-					!sizePart2 = !halfY * 2
-				else
-					!sizePart1 = !halfY * 2
-					!sizePart2 = !halfX * 2
-				endif
-				!dbgf3.writerecord('STEP6 SIZE new=' & !sizePart1 & ' ' & !sizePart2)
-				$!name/SS/S1/V1
-				SIZE $!sizePart1 $!sizePart2
-				var !size size
-
-				if !rcode.eqnocase('up') then
-					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
-					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
-					!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
-					!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
-				else
-					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
-					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
-					!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
-					!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
-				endif
-				!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
-				!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
-				!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
-				!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
 				--------------------------------------------------------------------
-				-- the box edge in sheet coordinates. SIZE above is symmetric about --
-				-- the frozen centre, so on the side the box did not grow the       --
-				-- border stands off from it -- and everything the match line is    --
-				-- made of belongs on the box edge, which is where the VSEC planes  --
-				-- really cut, not on that padding. the four face midpoints were    --
-				-- already projected for the SIZE calculation above; ADEGREES keeps --
-				-- a turned box square on the sheet, so min/max over the four is    --
-				-- the box outline whichever way round rcode has it (2026-08-29)    --
+				-- the box edge in sheet coordinates, tight -- no padding on any   --
+				-- side any more. everything the match line is made of belongs on  --
+				-- this edge, which is where the VSEC planes really cut. ADEGREES  --
+				-- keeps a turned box square on the sheet, so min/max over the     --
+				-- four projected face midpoints is the box outline whichever way  --
+				-- round rcode has it (2026-08-29, tight box edge kept from that   --
+				-- design; only the padded view SIZE above it is gone)             --
 				--------------------------------------------------------------------
 				!bxX1 = !ptEplussh.part(2).replace('mm', '').real()
 				!bxX2 = !ptEminussh.part(2).replace('mm', '').real()
@@ -1945,6 +1931,48 @@ define method .Apply()
 				!this.boxRlinesh = object line(!this.boxLRsh.position(), !this.boxURsh.position())
 				!this.boxLlinesh = object line(!this.boxLLsh.position(), !this.boxULsh.position())
 				!dbgf3.writerecord('STEP6 BOXCORNERS boxULsh=' & !this.boxULsh & ' boxURsh=' & !this.boxURsh & ' boxLLsh=' & !this.boxLLsh & ' boxLRsh=' & !this.boxLRsh)
+				--------------------------------------------------------------------
+				-- SIZE set from the box's own tight span computed just above, no  --
+				-- padding -- the exact width/height a fresh rebuild of this same  --
+				-- box would come out with. rcode swap matches the one rebuild     --
+				-- uses (SIZE part 1/2 is view width/height, not E/N, so a         --
+				-- landscape-turned box swaps them same as it does there)          --
+				--------------------------------------------------------------------
+				if !rcode.eqnocase('up') then
+					!sizePart1 = !bxmaxX - !bxminX
+					!sizePart2 = !bxmaxY - !bxminY
+				else
+					!sizePart1 = !bxmaxY - !bxminY
+					!sizePart2 = !bxmaxX - !bxminX
+				endif
+				!dbgf3.writerecord('STEP6 SIZE new=' & !sizePart1 & ' ' & !sizePart2)
+				$!name/SS/S1/V1
+				SIZE $!sizePart1 $!sizePart2
+				var !size size
+				--------------------------------------------------------------------
+				-- the view's own corners: THPOSITION now sits at the box's own    --
+				-- centre and SIZE is the box's own tight span, so this comes out  --
+				-- equal to boxULsh/etc above (bar rounding) -- computed the same   --
+				-- shxypos +/- half-size way rebuild's own corners are, since      --
+				-- XYPOSITION itself has not moved and still says where on the     --
+				-- sheet the view's centre currently sits. .RecenterView() is what --
+				-- moves XYPOSITION to fit this onto the canvas                    --
+				--------------------------------------------------------------------
+				if !rcode.eqnocase('up') then
+					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+					!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+					!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+				else
+					!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+					!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+					!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+					!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+				endif
+				!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
+				!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
+				!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
+				!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
 				!dbgf3.writerecord('STEP6 APPLY END viewULsh=' & !this.viewULsh & ' viewURsh=' & !this.viewURsh & ' viewLLsh=' & !this.viewLLsh & ' viewLRsh=' & !this.viewLRsh)
 				!dbgf3.close()
 
