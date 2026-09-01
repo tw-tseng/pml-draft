@@ -3020,6 +3020,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						!gstep = !gexx + !glabtxtgap
 					endif
 					!gplace = !galong + !gstep
+					--------------------------------------------------------------
+					-- kept aside, untouched, so the packing/push logic below   --
+					-- can overwrite !gstep freely without losing the value      --
+					-- this label's own stored XYPO actually decodes to -- see  --
+					-- the note where it is read back, further down             --
+					--------------------------------------------------------------
+					!gexiststep = !gstep
 				endif
 				--------------------------------------------------------------------
 				-- an existing label keeps the placement it was given -- that is    --
@@ -3190,7 +3197,34 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					enddo
 					break if (not(!gmoved))
 				enddo
-				!gstep = !gplace - !galong
+				--------------------------------------------------------------------
+				-- root cause, found live 2026-09-01: this subtraction is exactly  --
+				-- what the comment below already describes as wrong -- !galong is --
+				-- this run's fresh box-edge intersection, and it drifts by a      --
+				-- fraction of a mm on every box resize even for a label whose own --
+				-- seed (and therefore !gplace, when nothing pushed it off that    --
+				-- seed) came straight from its own frozen XYPO. subtracting a     --
+				-- drifting !galong from a frozen !gplace hands back a !gstep that --
+				-- drifts by the same fraction the OTHER way -- not 0.03mm, not    --
+				-- once: every dimension on the growing side, every single resize, --
+				-- forever, because REVI compares pictures and does not forgive    --
+				-- 0.0001mm (user rule, 2026-09-01: once a GLAB exists and a REVI  --
+				-- is on the drawing, its position is fixed, full stop, no matter  --
+				-- how the box changes, or every resize clouds the whole drawing)  --
+				--                                                                  --
+				-- so when nothing actually pushed !gplace off the seed -- no      --
+				-- crowding, no grid band -- there is nothing to recompute: !gexiststep --
+				-- (kept aside above, decoded straight from this label's own       --
+				-- stored XYPO) already IS the answer, byte for byte. the          --
+				-- subtraction only runs when !gplace really did move, which is    --
+				-- exactly when a fresh number is correct to want                  --
+				--------------------------------------------------------------------
+				!gfrozen = !gisexisting and abs(!gplace - !gseed).lt(0.0001)
+				if (!gfrozen) then
+					!gstep = !gexiststep
+				else
+					!gstep = !gplace - !galong
+				endif
 				----------------------------------------------------------------
 				-- snapped to the same 3 decimals XYPO is written with. an     --
 				-- update does not recompute a frozen label's !gstep, it reads  --
@@ -3227,11 +3261,24 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- the end of this point's projection line, in sheet        --
 				-- coordination, is what the leader is aimed at             --
 				-------------------------------------------------------------
+				--------------------------------------------------------------------
+				-- same drift, same fix: the along component of the leader's own  --
+				-- anchor point is !galong too, so a frozen label's leader tip     --
+				-- would still creep by whatever this run's fresh box-edge         --
+				-- intersection drifted by, even with !gstep itself now solid --  --
+				-- !gexistalong (the along value !gisexisting already reprojected --
+				-- off this label's own stored POSITION, further up) is the       --
+				-- frozen answer for the same reason it was the right seed        --
+				--------------------------------------------------------------------
+				!galongat = !galong
+				if (!gfrozen) then
+					!galongat = !gexistalong
+				endif
 				if (!dir.eq('right') or !dir.eq('left')) then
 					!gatx = !dimline
-					!gaty = !galong
+					!gaty = !galongat
 				else
-					!gatx = !galong
+					!gatx = !galongat
 					!gaty = !dimline
 				endif
 				!gat = 'X ' & !gatx.string('D3') & 'mm Y ' & !gaty.string('D3') & 'mm'
