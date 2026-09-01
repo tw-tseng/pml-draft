@@ -3287,6 +3287,52 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						endif
 					endhandle
 				enddo
+				--------------------------------------------------------------------
+				-- fallback: nothing shares this label's own ddna. the same MTBE/  --
+				-- crossing-point resolution instability documented above for the  --
+				-- DPOI match (and for !gisexisting's own seed search further up)  --
+				-- applies here too -- E3D can hand back a differently-worded      --
+				-- reference for the exact same member between two runs, so a     --
+				-- strict ddna-only search never recognises its own earlier GLAB   --
+				-- and piles a second one on top of it, orphaning the first        --
+				-- (confirmed live 2026-09-01: right i=3's rebuild-created glab    --
+				-- carried ddna==67160954/4663793, this run's own !gelem read back --
+				-- as the named path instead, so the loop above never matched it   --
+				-- -- NEW GLAB fired and the orphan, unclaimed, sat underneath the --
+				-- fresh one showing 0010CB04_SLH1_0700_H_660005 twice). so a      --
+				-- second pass drops the ddna requirement and matches on position  --
+				-- alone, same 5mm the reuse check below already treats as "the    --
+				-- same point", same nearest-wins rule, and still refusing         --
+				-- anything !claimedglabs already has                              --
+				--------------------------------------------------------------------
+				if (not(!foundglab)) then
+					!bestglabdist = -1
+					do !eg values !existingglabs
+						$!eg
+						handle any
+						elsehandle none
+							!egref = ce
+							!egclaimed = false
+							do !cg values !claimedglabs
+								if (!egref.eq(!cg)) then
+									!egclaimed = true
+									break
+								endif
+							enddo
+							if (not(!egclaimed)) then
+								var !egpos position
+								!egposobj = object position(!egpos)
+								!egdist = !egposobj.distance(!gposobj)
+								if (!egdist.lt(5) and (not(!foundglab) or !egdist.lt(!bestglabdist))) then
+									!foundglab = true
+									!foundglabref = ce
+									!bestglabdist = !egdist
+									!foundglabpos = !egposobj
+								endif
+							endif
+						endhandle
+					enddo
+				endif
 				if (!foundglab) then
 					$!foundglabref
 					!claimedglabs.append(!foundglabref)
