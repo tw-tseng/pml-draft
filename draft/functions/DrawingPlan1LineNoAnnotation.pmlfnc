@@ -3211,15 +3211,23 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- is on the drawing, its position is fixed, full stop, no matter  --
 				-- how the box changes, or every resize clouds the whole drawing)  --
 				--                                                                  --
-				-- so when nothing actually pushed !gplace off the seed -- no      --
-				-- crowding, no grid band -- there is nothing to recompute: !gexiststep --
-				-- (kept aside above, decoded straight from this label's own       --
-				-- stored XYPO) already IS the answer, byte for byte. the          --
-				-- subtraction only runs when !gplace really did move, which is    --
-				-- exactly when a fresh number is correct to want                  --
+				-- second root cause, found live 2026-09-01 (same day, later): the --
+				-- !gplaceseeddiff.lt(0.0001) gate below was meant to only refreeze --
+				-- when nothing pushed !gplace off the seed -- but the packing loop --
+				-- above repacks the WHOLE band together, so dropping a neighbour   --
+				-- out of the band (its pipe left the box on a resize, or it simply --
+				-- stopped being labelled) nudges !gplace for every survivor by a   --
+				-- fraction of a mm even though none of them individually moved,    --
+				-- which failed the gate and put this straight back through the     --
+				-- same fresh subtraction the block above exists to avoid. live     --
+				-- data: 660284/287/105/141 each isexisting with movedby=0.000, yet --
+				-- !gplace still drifted ~0.055mm off !gseed once 660303/660507     --
+				-- fell out of the same right-hand band on an ~1.9m box shrink --   --
+				-- so the tolerance check itself cannot be trusted; per the user's  --
+				-- rule above there is no magnitude of drift that is acceptable,    --
+				-- so there is no tolerance to check: existing means frozen         --
 				--------------------------------------------------------------------
-				!gplaceseeddiff = abs(!gplace - !gseed)
-				!gfrozen = !gisexisting and !gplaceseeddiff.lt(0.0001)
+				!gfrozen = !gisexisting
 				if (!gfrozen) then
 					!gstep = !gexiststep
 				else
