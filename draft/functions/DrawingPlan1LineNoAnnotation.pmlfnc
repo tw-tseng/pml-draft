@@ -3307,6 +3307,44 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				--------------------------------------------------------------------
 				!foundglab = false
 				!bestglabdist = -1
+				--------------------------------------------------------------------
+				-- root cause, found live 2026-09-01: !gisexisting (a few lines up) --
+				-- already worked out which existing glab is this label's own prior --
+				-- self -- DDNA match, or its own 1mm along-position fallback -- and --
+				-- claimed it (!claimedglabs.append near the seed/step code above)   --
+				-- for placement purposes. that claim and this search used to be two --
+				-- entirely separate opinions: this loop (and its own 5mm fallback   --
+				-- below) re-asks the same question with different criteria, and     --
+				-- when it lands on the SAME object !gisexisting already put in      --
+				-- !claimedglabs, it reads that as "someone else has it" and gives   --
+				-- up -- creating a brand new GLAB right on top of the one           --
+				-- !gisexisting was seeded from, which then sits there               --
+				-- stillcurrent=TRUE (genuinely claimed, so cleanup leaves it) but    --
+				-- never reused, showing its old content forever. (confirmed live:   --
+				-- 660005/right's own glab kept resolving to a TEE it once shared a  --
+				-- 4mm cluster with -- after a box resize moved the seed match but   --
+				-- not this one, the TEE sat orphaned-but-claimed next to a fresh    --
+				-- duplicate every run since, and deleting it without a rebuild      --
+				-- first proved nothing was recreating it from scratch each time)    --
+				--                                                                    --
+				-- so before asking anything else, this simply agrees with           --
+				-- !gisexisting instead of re-deciding: whatever it already claimed  --
+				-- as this label's own object IS this label's own object            --
+				--------------------------------------------------------------------
+				if (!gisexisting) then
+					$!gexistingref
+					!gefpos = 'ERR'
+					var !gefpos position
+					handle any
+						!gefpos = 'ERR'
+					endhandle
+					if (!gefpos.neq('ERR')) then
+						!foundglab = true
+						!foundglabref = !gexistingref
+						!foundglabpos = object position(!gefpos)
+						!bestglabdist = !foundglabpos.distance(!gposobj)
+					endif
+				endif
 				do !eg values !existingglabs
 					$!eg
 					handle any
