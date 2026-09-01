@@ -3219,7 +3219,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- subtraction only runs when !gplace really did move, which is    --
 				-- exactly when a fresh number is correct to want                  --
 				--------------------------------------------------------------------
-				!gfrozen = !gisexisting and abs(!gplace - !gseed).lt(0.0001)
+				!gplaceseeddiff = abs(!gplace - !gseed)
+				!gfrozen = !gisexisting and !gplaceseeddiff.lt(0.0001)
 				if (!gfrozen) then
 					!gstep = !gexiststep
 				else
