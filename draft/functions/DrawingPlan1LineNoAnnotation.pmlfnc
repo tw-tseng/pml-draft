@@ -1532,6 +1532,27 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					DDNA $!mem
 					if (!foundpos.distance(!attapos).geq(5)) then
 						POS $!attapos
+					else
+						----------------------------------------------------------------
+						-- the dot itself is frozen right here, but !ptx/!pty were set  --
+						-- a few lines up from THIS run's fresh intersection with the   --
+						-- box edge -- and once the edge has actually moved, that       --
+						-- intersection lands a hair further along any pipe that is not --
+						-- perfectly perpendicular to it, even though the frozen dot    --
+						-- does not move at all. left alone, the label's along-position --
+						-- (and its leader) would drift by that same hair on every box  --
+						-- resize while the point it is labelling visibly does not --   --
+						-- exactly the 0.03mm drift reported live (2026-09-01) on a run --
+						-- of pipes near a box edge that moved 922mm. once the point is --
+						-- confirmed frozen, the along value is read back off the       --
+						-- frozen point instead, so the two agree again                 --
+						----------------------------------------------------------------
+						var !frozensh shpos of $!foundpos
+						if (!dir.eq('right') or !dir.eq('left')) then
+							!pty = !frozensh.part(4).replace('mm', '').real()
+						else
+							!ptx = !frozensh.part(2).replace('mm', '').real()
+						endif
 					endif
 				else
 					NEW DPOI POS $!attapos DDNA $!mem
