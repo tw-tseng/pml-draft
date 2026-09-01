@@ -3343,7 +3343,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- same point", same nearest-wins rule, and still refusing         --
 				-- anything !claimedglabs already has                              --
 				--------------------------------------------------------------------
-				!gelemdbg = !gelem.matchwild('*660005*')
+				!gelemdbg = !dir.eq('right')
 				if (!dbgln and !gelemdbg) then
 					!dbgf.writerecord('GLABFALLBACKSTART ' & !dir & ' gelem=' & !gelem & ' foundglab(strict)=' & !foundglab.string() & ' gposobj=' & !gposobj.string())
 				endif
@@ -3365,11 +3365,21 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 								endif
 							enddo
 							!egddnadbg = 'ERR'
-							if (!dbgln and !gelemdbg) then
-								var !egddnadbg ddna
-								handle any
-									!egddnadbg = 'ERR'
-								endhandle
+							var !egddnadbg ddna
+							handle any
+								!egddnadbg = 'ERR'
+							endhandle
+							--------------------------------------------------------------
+							-- spy 2026-09-01: unconditional, not gated by !gelemdbg --
+							-- watches specifically for the one ddna the 660005/right   --
+							-- duplicate keeps tracing back to, so whichever OTHER      --
+							-- candidate's fallback claims it first shows up here even  --
+							-- though that candidate's own !gelem has nothing to do     --
+							-- with 660005 -- fallback matches on position alone, not   --
+							-- ddna or pipe, so a nearer unrelated candidate can win it  --
+							--------------------------------------------------------------
+							if (!dbgln and !egddnadbg.eq('=67160954/4663793')) then
+								!dbgf.writerecord('GLABFALLBACKSPY ' & !dir & ' this-candidate-gelem=' & !gelem & ' claimed-already=' & !egclaimed.string())
 							endif
 							if (not(!egclaimed)) then
 								!egposerr = false
