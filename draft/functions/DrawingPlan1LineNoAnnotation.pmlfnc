@@ -145,6 +145,44 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!dbgf.open('overwrite')
 	endif
 
+	--------------------------------------------------------------------------
+	-- diagnostic 2026-09-01: a snapshot of !existingglabs the instant it   --
+	-- was collected (line 101, above), before any of the four sides has    --
+	-- touched anything. chasing a 660005/right duplicate whose second     --
+	-- ddna resolves to a component (a TEE) neither DPOISEQ nor GLABFINAL   --
+	-- ever mentions this run -- so either it was already sitting there    --
+	-- when this call started (meaning the rebuild moments earlier made    --
+	-- it, not this update), or it is not in !existingglabs at all and     --
+	-- something else creates it mid-run. this settles which. remove once  --
+	-- answered                                                             --
+	--------------------------------------------------------------------------
+	if (!dbgln) then
+		!egn0 = 0
+		!egn0 = !existingglabs.size()
+		handle any
+			!egn0 = -1
+		endhandle
+		!dbgf.writerecord('EXISTINGGLAB0 count=' & !egn0.string())
+		do !eg0 values !existingglabs
+			$!eg0
+			handle any
+				!dbgf.writerecord('EXISTINGGLAB0 entry unreadable ($!eg0 failed)')
+			elsehandle none
+				!eg0ddna = 'UNSET'
+				var !eg0ddna ddna
+				handle any
+					!eg0ddna = 'ERR'
+				endhandle
+				!eg0xypo = 'ERR'
+				var !eg0xypo xypo
+				handle any
+					!eg0xypo = 'ERR'
+				endhandle
+				!dbgf.writerecord('EXISTINGGLAB0 ddna=' & !eg0ddna & ' xypo=' & !eg0xypo)
+			endhandle
+		enddo
+	endif
+
 	----------------------------------------------------------------------------
 	-- every GLAB this call touches -- new or reused -- with which direction  --
 	-- group it belongs to (right/left along-Y, up/down along-X), so that    --
