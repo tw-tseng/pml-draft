@@ -3311,6 +3311,30 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!gaty = !dimline
 				endif
 				!gat = 'X ' & !gatx.string('D3') & 'mm Y ' & !gaty.string('D3') & 'mm'
+				--------------------------------------------------------------------
+				-- added 2026-09-02, alongside the !galongat revert above: BPOF is --
+				-- measured FROM AT (confirmed in the comment further down, from   --
+				-- the hand-built label), but the text itself sits at a FROZEN     --
+				-- POSITION plus !gstep -- and AT can now genuinely be somewhere   --
+				-- else, since it tracks the dot's real position instead of       --
+				-- freezing with the label. !gstep alone no longer measures how   --
+				-- far the leader has to reach: it only measures the packing push --
+				-- from BEFORE the dot moved. !gatdrift is how far AT has moved   --
+				-- since this label's frozen POSITION was built (0 for a label    --
+				-- that is not existing yet, since there is nothing to have       --
+				-- drifted from); !gleadstep folds that back in so the leader's   --
+				-- bend -- not the text's XYPO, which must stay exactly as it was --
+				-- reaches the text instead of stopping short of it, which is     --
+				-- what a diagonal pipe's dot sliding along a moved box edge      --
+				-- looked like (reported live, TEST-0000010001: dot moved, text   --
+				-- correctly did not, leader stayed flat and missed both)         --
+				--------------------------------------------------------------------
+				!gatdrift = 0
+				if (!gisexisting) then
+					!gatdrift = !galongat - !gexistalong
+				endif
+				!gleadstep = !gstep - !gatdrift
+				!gleadstepabs = abs(!gleadstep)
 				-------------------------------------------------------------
 				-- a label which has not been stepped keeps the old look:   --
 				-- text right up against the dimension line, sitting on its --
@@ -3318,7 +3342,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- leader stops turning, so the leader meets the text at    --
 				-- its edge instead of poking out from under it             --
 				-------------------------------------------------------------
-				if (!gstepabs.gt(0.01)) then
+				if (!gleadstepabs.gt(0.01)) then
 					!gclr = !grun + !glabdiag
 				else
 					!gclr = !gclrb
@@ -3674,7 +3698,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				Lframe false
 				handle any
 				endhandle
-				if (!gstepabs.gt(0.01)) then
+				if (!gleadstepabs.gt(0.01)) then
 					----------------------------------------------------------
 					-- a bent leader: a short run out from the dimension     --
 					-- line along the point's own line, then a diagonal      --
@@ -3686,11 +3710,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- by hand: Bpoftx X -5mm Y 0mm X -8mm Y -5mm on a label --
 					-- whose text sat at Xyposition -87mm -4mm, ie the bends --
 					-- are next to the dimension line, not next to the text  --
+					--                                                       --
+					-- gb2's along component is !gleadstep (!gstep folded    --
+					-- with how far AT has drifted off !gexistalong, added   --
+					-- 2026-09-02), not the bare packing !gstep used for     --
+					-- XYPO above -- gb2 has to land where the (frozen) text --
+					-- actually is, measured from THIS run's AT, and AT no   --
+					-- longer sits where the label's own POSITION was built --
 					----------------------------------------------------------
 					!gb1x = !goutx * !grun
 					!gb1y = !gouty * !grun
-					!gb2x = !goutx * (!grun + !glabdiag) + !gstepx * !gstep
-					!gb2y = !gouty * (!grun + !glabdiag) + !gstepy * !gstep
+					!gb2x = !goutx * (!grun + !glabdiag) + !gstepx * !gleadstep
+					!gb2y = !gouty * (!grun + !glabdiag) + !gstepy * !gleadstep
 					-- the bend points are offsets like XYPO, so they turn too --
 					if (!!DrawingPlan1.rcode.eqnocase('left')) then
 						!gtmp = !gb1x
