@@ -55,11 +55,33 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				!tky2 = !tky - 10
 			endif
 			!tksig = 'S~' & !tkx.string() & '~' & !tky.string() & '~' & !tkx2.string() & '~' & !tky2.string()
-			if (not(!!DrawingPlan1MatchClaim(!tksig))) then
-				!tkxs = !tkx.string()
-				!tkys = !tky.string()
-				!tkas = !tkadeg.string()
+			!tkxs = !tkx.string()
+			!tkys = !tky.string()
+			!tkas = !tkadeg.string()
+			!tkref = !!DrawingPlan1MatchClaimRef(!tksig)
+			if (!tkref.eq('')) then
 				new stra fpt x $!tkxs y $!tkys length 10 adegrees $!tkas NLStyle DChainedThick  NLColour Magenta
+			else
+				----------------------------------------------------------------
+				-- user rule, 2026-09-02, same as the border straights: a tick --
+				-- marks where the box border sits, not a pipe crossing, so    --
+				-- reusing it has to mean moving it onto this run's !tkx/!tky, --
+				-- not leaving it on last run's -- otherwise a genuinely       --
+				-- resized box leaves its ticks behind exactly like the border --
+				-- straights did before this same fix                          --
+				----------------------------------------------------------------
+				$!tkref
+				handle any
+				endhandle
+				FPT X $!tkxs Y $!tkys
+				handle any
+				endhandle
+				LENGTH 10
+				handle any
+				endhandle
+				ADEGREES $!tkas
+				handle any
+				endhandle
 			endif
 		endif
 	enddo
@@ -211,13 +233,29 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					-- element CE happened to be left on                       --
 					------------------------------------------------------------
 					!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
-					if (not(!!DrawingPlan1MatchClaim(!mlsig))) then
+					!mlref = !!DrawingPlan1MatchClaimRef(!mlsig)
+					if (!mlref.eq('')) then
 						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center txcolour yellow font 1
 						if !dir.eq('right') then
 							alig tbody
 						else
 							alig bbody
 						endif
+					else
+						---------------------------------------------------------
+						-- same reuse-must-move rule as the ticks/border above: --
+						-- this text's content is often box-size-independent    --
+						-- ("MATCH LINE SEE DWGNO-005", no coordinate in it),   --
+						-- so an exact-content match can keep succeeding run    --
+						-- after run while the box moves under it -- move the  --
+						-- reused text onto this run's position every time      --
+						---------------------------------------------------------
+						$!mlref
+						handle any
+						endhandle
+						ORIG X $!posx Y $!posy
+						handle any
+						endhandle
 					endif
 				elseif (!dir.eq('up') or !dir.eq('down')) and not(!tempt.eqnocase('')) then
 					!posx = !sortedtypes[!i].split('!').getindexed(3).real() + (!sortedtypes[!i + 1].split('!').getindexed(3).real() - !sortedtypes[!i].split('!').getindexed(3).real()) * 0.5
@@ -227,13 +265,22 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					!posy = !!DrawingPlan1.boxLRsh.part(4).real() - 1
 					endif
 					!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
-					if (not(!!DrawingPlan1MatchClaim(!mlsig))) then
+					!mlref = !!DrawingPlan1MatchClaimRef(!mlsig)
+					if (!mlref.eq('')) then
 						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| just center txcolour yellow font 1
 						if !dir.eq('up') then
 							alig bbody
 						else
 							alig tbody
 						endif
+					else
+						-- reuse-must-move, same reasoning as the right/left branch above --
+						$!mlref
+						handle any
+						endhandle
+						ORIG X $!posx Y $!posy
+						handle any
+						endhandle
 					endif
 				endif
 			endif
@@ -319,7 +366,8 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				!posy = !!DrawingPlan1.boxLRsh.part(4).real() - 1
 			endif
 			!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
-			if (not(!!DrawingPlan1MatchClaim(!mlsig))) then
+			!mlref = !!DrawingPlan1MatchClaimRef(!mlsig)
+			if (!mlref.eq('')) then
 				if !dir.eq('right') then
 					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center alig tbody txcolour yellow font 1
 				elseif !dir.eq('left') then
@@ -329,6 +377,14 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				elseif !dir.eq('down') then
 					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center alig tbody txcolour yellow font 1
 				endif
+			else
+				-- reuse-must-move, same reasoning as the multi-count branch above --
+				$!mlref
+				handle any
+				endhandle
+				ORIG X $!posx Y $!posy
+				handle any
+				endhandle
 			endif
 		endif
 	endif
