@@ -70,6 +70,29 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 			var !msref ref
 			!!DrawingPlan1MatchStras.append(!msref)
 		else
+			----------------------------------------------------------------
+			-- user rule, 2026-09-02: this straight marks the box's own    --
+			-- edge, not a pipe crossing -- so unlike a GLAB or a DPOI it   --
+			-- has no position of its own to freeze. reusing the ref used  --
+			-- to mean leaving FPT/TPT exactly as they were, which was     --
+			-- fine only because .RecenterView() always put them back on   --
+			-- the corner afterwards -- but that only runs on the rebuild  --
+			-- path. on an update, nothing ever moved this straight again, --
+			-- so a claimed-but-untouched one just sat on last run's box   --
+			-- edge forever while the box itself kept moving: reported     --
+			-- live as the border sitting well off a box that had shrunk   --
+			-- by nearly 2m. moving it onto this run's !bf/!bt every time, --
+			-- claimed or new, is what keeps it on the box regardless      --
+			----------------------------------------------------------------
+			$!bref
+			handle any
+			endhandle
+			FPT $!bf
+			handle any
+			endhandle
+			TPT $!bt
+			handle any
+			endhandle
 			!!DrawingPlan1MatchStras.append(!bref)
 		endif
 	enddo
