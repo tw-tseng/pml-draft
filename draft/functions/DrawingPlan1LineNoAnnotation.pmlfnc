@@ -2978,6 +2978,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						handle any
 						elsehandle none
 							!egalong = 0
+							!egdepth = 0
 							!egmatched = false
 							var !egpos position
 							handle any
@@ -2988,14 +2989,49 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 								elsehandle none
 									if (!dir.eq('right') or !dir.eq('left')) then
 										!egalong = !egsh.part(4).replace('mm', '').real()
+										!egdepth = !egsh.part(2).replace('mm', '').real()
 									else
 										!egalong = !egsh.part(2).replace('mm', '').real()
+										!egdepth = !egsh.part(4).replace('mm', '').real()
 									endif
 									!egmatched = true
 								endhandle
 							endhandle
+							--------------------------------------------------------------
+							-- root cause, found live 2026-09-02: this loop has no ddna  --
+							-- to go on at all (that is the whole point of it -- dropped --
+							-- a few lines up), so with no depth/side guard the 1mm      --
+							-- along-only test happily matches this pipe's own label on  --
+							-- a DIFFERENT side (right/left/up/down all carry a GLAB for --
+							-- the same multi-directional pipe, and !existingglabs spans --
+							-- all four) whenever the two sides' raw sheet coordinates   --
+							-- happen to land within 1mm of each other by coincidence.   --
+							-- confirmed live: 660005's 'right' label adopted a wholly   --
+							-- unrelated existing glab's POSITION (9m/2.3m away in world --
+							-- space) this way, on a clean rebuild+update with nothing   --
+							-- stale in the model -- the match itself was simply wrong.  --
+							-- same fix as the strict-ddna loop above: require the       --
+							-- candidate's DEPTH to sit within 5mm of this side's own    --
+							-- dimension line before its along-position is trusted, and  --
+							-- skip anything another element already claimed             --
+							--------------------------------------------------------------
+							!egsameside = false
+							if (!egmatched) then
+								!egdepthdiff = abs(!egdepth - !dimline)
+								if (!egdepthdiff.lt(5)) then
+									!egsameside = true
+								endif
+							endif
+							!egref = ce
+							!egclaimed = false
+							do !cg values !claimedglabs
+								if (!egref.eq(!cg)) then
+									!egclaimed = true
+									break
+								endif
+							enddo
 							!egalongdiff = abs(!egalong - !galong)
-							if (!egmatched and !egalongdiff.lt(1) and (!gbestalongdiff.lt(0) or !egalongdiff.lt(!gbestalongdiff))) then
+							if (!egsameside and not(!egclaimed) and !egalongdiff.lt(1) and (!gbestalongdiff.lt(0) or !egalongdiff.lt(!gbestalongdiff))) then
 								!gisexisting = true
 								!gexistingref = ce
 								!gbestalongdiff = !egalongdiff
