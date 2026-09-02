@@ -1615,6 +1615,19 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endif
 				else
 					NEW DPOI POS $!attapos DDNA $!mem
+					----------------------------------------------------------------
+					-- must be claimed too, same as the matched branch above --    --
+					-- CLEANUPDUP below only recognises a member as "already has   --
+					-- its point this run" via !claimeddpois/!claimedddnas. left   --
+					-- out here, a fresh point never registers, so when the real   --
+					-- crossing moves far enough that strict+fallback both miss    --
+					-- (a real box change, not noise) the OLD point for the same   --
+					-- DDNA is never recognised as superseded and survives         --
+					-- cleanup untouched -- confirmed live 2026-09-02: a 1.8m box  --
+					-- shift left 660005-010's old DPOI standing beside the new    --
+					-- one, both still on the drawing                             --
+					----------------------------------------------------------------
+					!claimeddpois.append(ce)
 				endif
 			endif
 				---------------------------------------------------------------------
