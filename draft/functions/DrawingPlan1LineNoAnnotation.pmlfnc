@@ -1532,6 +1532,8 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			----------------------------------------------------------------------
 			if (not(!founddpoi)) then
 				!bestdist = -1
+				!nearestcanddist = -1
+				!nearestcanddna = ''
 				do !edp values !existingdpois
 					$!edp
 					handle any
@@ -1547,6 +1549,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							var !ecandpos pos
 							!candposobj = object position(!ecandpos)
 							!canddist = !candposobj.distance(!attapos)
+							if (!nearestcanddist.lt(0) or !canddist.lt(!nearestcanddist)) then
+								!nearestcanddist = !canddist
+								!nearestcanddna = '' & !ecanddna
+							endif
 							if (!canddist.lt(5) and (not(!founddpoi) or !canddist.lt(!bestdist))) then
 								!founddpoi = true
 								!founddpoiref = ce
@@ -1556,6 +1562,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						endif
 					endhandle
 				enddo
+				if (!dbgln) then
+					!dbgf.writerecord('FALLBACKMISS ' & !dir & ' mem=' & !mem & ' attapos=' & !attapos.string() & ' founddpoi=' & !founddpoi.string() & ' nearestdist=' & !nearestcanddist.string() & ' nearestddna=[' & !nearestcanddna & ']')
+				endif
 			endif
 			if (!dbgln) then
 				!dbgf.writerecord('MATCH ' & !dir & ' mem=' & !mem & ' founddpoi=' & !founddpoi & ' attapos=' & !attapos.string())
