@@ -1569,27 +1569,38 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					$!founddpoiref
 					DDNA $!mem
 					----------------------------------------------------------------
-					-- user rule, 2026-09-01, no exception this time: once a DPOI  --
-					-- exists and a REVI is on the drawing, its position is fixed, --
-					-- full stop -- no matter how far the box moves, even the      --
-					-- ~2m resize tested live. the old >=5mm-moves/otherwise-stays --
-					-- split (kept the dot still for a small drift, but let it     --
-					-- jump to the fresh intersection once the box changed enough) --
-					-- is gone: found means frozen, always, and the fresh          --
-					-- intersection computed above is not written to POS at all    --
-					--                                                             --
-					-- !ptx/!pty were set a few lines up from THIS run's fresh     --
-					-- intersection with the box edge, so left alone the label's   --
-					-- along-position (and its leader) would still drift on every  --
-					-- resize even though the dot itself does not move -- read the --
-					-- along value back off the frozen point instead, so the two   --
-					-- agree                                                       --
+					-- reverted 2026-09-02: the 2026-09-01 "found means frozen,   --
+					-- always" version above was written for a member whose real  --
+					-- crossing does not move (only the fresh intersection maths  --
+					-- drifts by noise), which is true for a box edge moving      --
+					-- roughly parallel to the pipe -- but a DIAGONAL pipe's true --
+					-- crossing point genuinely slides along the boundary when    --
+					-- the box edge moves, by a real, large amount, not noise.    --
+					-- freezing POSITION unconditionally left the dot (and the    --
+					-- dimension figure measured off it) sitting somewhere the    --
+					-- pipe no longer crosses, which is wrong content, not just an --
+					-- unwanted revision cloud. user rule, 2026-09-02: DPOI goes  --
+					-- back to tracking the real crossing point -- only the GLAB  --
+					-- label's own XYPO/position (not this dot) stays frozen      --
+					-- unconditionally, per the fix above                         --
 					----------------------------------------------------------------
-					var !frozensh shpos of $!foundpos
-					if (!dir.eq('right') or !dir.eq('left')) then
-						!pty = !frozensh.part(4).replace('mm', '').real()
+					if (!foundpos.distance(!attapos).geq(5)) then
+						POS $!attapos
 					else
-						!ptx = !frozensh.part(2).replace('mm', '').real()
+						----------------------------------------------------------
+						-- within tolerance: leave the dot where it is, but read --
+						-- the along value back off it (not off this run's fresh --
+						-- !ptx/!pty) so the label's along-position and its      --
+						-- leader agree with the dot instead of drifting by      --
+						-- noise on every resize (2026-09-01 finding, still true --
+						-- for the small-drift case)                             --
+						----------------------------------------------------------
+						var !frozensh shpos of $!foundpos
+						if (!dir.eq('right') or !dir.eq('left')) then
+							!pty = !frozensh.part(4).replace('mm', '').real()
+						else
+							!ptx = !frozensh.part(2).replace('mm', '').real()
+						endif
 					endif
 				else
 					NEW DPOI POS $!attapos DDNA $!mem
@@ -3270,18 +3281,28 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- coordination, is what the leader is aimed at             --
 				-------------------------------------------------------------
 				--------------------------------------------------------------------
-				-- same drift, same fix: the along component of the leader's own  --
-				-- anchor point is !galong too, so a frozen label's leader tip     --
-				-- would still creep by whatever this run's fresh box-edge         --
-				-- intersection drifted by, even with !gstep itself now solid --  --
-				-- !gexistalong (the along value !gisexisting already reprojected --
-				-- off this label's own stored POSITION, further up) is the       --
-				-- frozen answer for the same reason it was the right seed        --
+				-- reverted 2026-09-02, same day as the DPOI POSITION revert      --
+				-- above: !galongat is the leader's DIMENSION-LINE-side end, and  --
+				-- it belongs to the DPOI, not to the label -- it has to sit on   --
+				-- the dot, wherever the dot actually is, or the leader points at --
+				-- empty space next to it instead of starting from it. freezing   --
+				-- it to !gexistalong (the GLAB's own past reprojection) was only --
+				-- ever needed to kill fresh-intersection noise for a dot that    --
+				-- has not really moved -- but !galong already carries that:      --
+				-- it is read from !glabrec, which was filled from !ptx/!pty back --
+				-- in the DPOI loop above, and that loop now only writes the      --
+				-- fresh intersection into !ptx/!pty when the dot itself crossed  --
+				-- the 5mm bar (see the DPOI POSITION revert). so !galong is the  --
+				-- frozen, noise-free value when the dot did not move and the     --
+				-- fresh one when it genuinely did -- exactly the dot's own real  --
+				-- position either way, which is what the leader is supposed to   --
+				-- aim at. a diagonal pipe's dot sliding along a moved box edge   --
+				-- (reported live, TEST-0000010001) is exactly the case this      --
+				-- undoes the freeze for: the label's XYPO stays put (!gstep is   --
+				-- still frozen above, unconditionally), only this end moves, so  --
+				-- the leader bends to reach it instead of drawing to the old spot --
 				--------------------------------------------------------------------
 				!galongat = !galong
-				if (!gfrozen) then
-					!galongat = !gexistalong
-				endif
 				if (!dir.eq('right') or !dir.eq('left')) then
 					!gatx = !dimline
 					!gaty = !galongat
