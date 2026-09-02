@@ -3771,17 +3771,30 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- whose text sat at Xyposition -87mm -4mm, ie the bends --
 					-- are next to the dimension line, not next to the text  --
 					--                                                       --
-					-- gb2's along component is !gleadstep (!gstep folded    --
-					-- with how far AT has drifted off !gexistalong, added   --
-					-- 2026-09-02), not the bare packing !gstep used for     --
-					-- XYPO above -- gb2 has to land where the (frozen) text --
-					-- actually is, measured from THIS run's AT, and AT no   --
-					-- longer sits where the label's own POSITION was built --
+					-- gb2's along component is !gstep, the same bare packing --
+					-- push XYPO above uses -- reverted 2026-09-02, same day --
+					-- as it was changed to !gleadstep: user rule confirmed  --
+					-- live -- the bend itself must stay a small, fixed,    --
+					-- "normal" kink next to the dimension line NO MATTER   --
+					-- how far AT has drifted from the frozen text; only    --
+					-- the leader's own auto-closing run into the text may  --
+					-- grow long, never the bend. using !gleadstep here     --
+					-- made the bend itself balloon to the full drift       --
+					-- distance, which looks fine for a small drift but     --
+					-- exaggerated/ugly for a large one (reported live,     --
+					-- TEST-0000010001, a 2.3m box resize). gb2's own       --
+					-- perpendicular reach (!grun+!glabdiag) already        --
+					-- equals GTXX's (!gclr, same formula above), so gb2    --
+					-- and the text sit on the exact same offset line from  --
+					-- the dimension line regardless of !gstep -- only the  --
+					-- along axis can differ, so whatever E3D draws from    --
+					-- gb2 into the text closes that gap on a single flat   --
+					-- run, never a second diagonal                        --
 					----------------------------------------------------------
 					!gb1x = !goutx * !grun
 					!gb1y = !gouty * !grun
-					!gb2x = !goutx * (!grun + !glabdiag) + !gstepx * !gleadstep
-					!gb2y = !gouty * (!grun + !glabdiag) + !gstepy * !gleadstep
+					!gb2x = !goutx * (!grun + !glabdiag) + !gstepx * !gstep
+					!gb2y = !gouty * (!grun + !glabdiag) + !gstepy * !gstep
 					-- the bend points are offsets like XYPO, so they turn too --
 					if (!!DrawingPlan1.rcode.eqnocase('left')) then
 						!gtmp = !gb1x
