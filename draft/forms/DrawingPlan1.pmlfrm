@@ -2080,7 +2080,21 @@ define method .RecenterView(!name is string, !equistr is string)
 	!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
 	!dbgf4.open('overwrite')
 	!dbgf4.writerecord('RECENTER entry ok')
-	!dbgf4.writerecord('RECENTER canvassize unset=' & !!DrawingPlan1.canvassize.unset().string() & ' raw=' & !!DrawingPlan1.canvassize)
+	----------------------------------------------------------------------
+	-- the raw value has to be coerced separately: an unset canvassize is --
+	-- a perfectly legal state (nobody has run .canvaspick() yet, and     --
+	-- every real use of it below guards for exactly that), but '&' on an --
+	-- unset argument is a hard error -- so this line, whose whole job    --
+	-- was to report that the value is unset, was itself what stopped the --
+	-- rebuild: "Argument 2 to + or & is unset", reported live 2026-09-03. --
+	-- the handle any further down does not save it either, since a       --
+	-- handle attaches to the single statement before it, not the block   --
+	----------------------------------------------------------------------
+	!cvsraw = 'UNSET'
+	!cvsraw = '' & !!DrawingPlan1.canvassize
+	handle any
+	endhandle
+	!dbgf4.writerecord('RECENTER canvassize unset=' & !!DrawingPlan1.canvassize.unset().string() & ' raw=' & !cvsraw)
 	!dbgf4.writerecord('RECENTER cvx1=' & !cvx1.string('D2') & ' cvx2=' & !cvx2.string('D2') & ' cvy1=' & !cvy1.string('D2') & ' cvy2=' & !cvy2.string('D2'))
 	!dbgf4.writerecord('RECENTER viewLLsh=' & !this.viewLLsh & ' viewURsh=' & !this.viewURsh)
 	!dbgf4.writerecord('RECENTER labbandleft=' & !this.labbandleft.string('D2') & ' labbandright=' & !this.labbandright.string('D2') & ' labbandup=' & !this.labbandup.string('D2') & ' labbanddown=' & !this.labbanddown.string('D2'))
