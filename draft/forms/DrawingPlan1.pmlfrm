@@ -1884,8 +1884,32 @@ define method .Apply()
 				var !ptEminussh shpos of $!ptEminus
 				var !ptNplussh shpos of $!ptNplus
 				var !ptNminussh shpos of $!ptNminus
-				!halfX = max(abs(!ptEplussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()), abs(!ptEminussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()))
-				!halfY = max(abs(!ptNplussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()), abs(!ptNminussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()))
+				--------------------------------------------------------------------
+				-- all four points on BOTH axes, not the E pair on X and the N pair --
+				-- on Y. that pairing only holds while the view is unturned: with   --
+				-- rcode Left the view is round 90 degrees, so the east extent      --
+				-- lands on sheet Y and the north extent on sheet X -- and reading  --
+				-- the E pair's X then measured the one coordinate those two points --
+				-- SHARE, ie not the extent at all but the gap between the box      --
+				-- centre and the view centre. that gave halfX 1.165 against a real --
+				-- 162.413 and SIZE threw it out, taking the whole update down      --
+				-- (reported live 2026-09-03 on /=23718/1652, rcode Left, 1:30)     --
+				--                                                                  --
+				-- taking the envelope of all four on each axis needs to know        --
+				-- nothing about which way the view is turned: the pair that varies  --
+				-- on an axis sets the extent there, and the pair that does not      --
+				-- cannot exceed it                                                  --
+				--------------------------------------------------------------------
+				!hx1 = abs(!ptEplussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value())
+				!hx2 = abs(!ptEminussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value())
+				!hx3 = abs(!ptNplussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value())
+				!hx4 = abs(!ptNminussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value())
+				!halfX = max(max(!hx1, !hx2), max(!hx3, !hx4))
+				!hy1 = abs(!ptEplussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value())
+				!hy2 = abs(!ptEminussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value())
+				!hy3 = abs(!ptNplussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value())
+				!hy4 = abs(!ptNminussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value())
+				!halfY = max(max(!hy1, !hy2), max(!hy3, !hy4))
 				!dbgf3.writerecord('STEP6 SIZE ptEplussh=' & !ptEplussh & ' ptEminussh=' & !ptEminussh & ' ptNplussh=' & !ptNplussh & ' ptNminussh=' & !ptNminussh & ' halfX=' & !halfX & ' halfY=' & !halfY)
 				-- the box's own extent, so a degenerate one shows up here rather --
 				-- than only as a rejected SIZE further down                      --
@@ -1918,10 +1942,27 @@ define method .Apply()
 				-- everything below reads !size back off the view rather than       --
 				-- assuming the write landed                                        --
 				--------------------------------------------------------------------
-				SIZE $!sizePart1 $!sizePart2
-				handle any
-					!dbgf3.writerecord('STEP6 SIZE REJECTED part1=' & !sizePart1.string() & ' part2=' & !sizePart2.string() & ' -- view keeps its existing size')
-				endhandle
+				--------------------------------------------------------------------
+				-- and only when the box actually changed. the note above claims   --
+				-- this reproduces the existing SIZE exactly on an unchanged box,  --
+				-- but that only holds while the view centre IS the box centre --   --
+				-- it is on a drawing the rebuild centred, and it is not on        --
+				-- /=23718/1652, whose two centres sit 1.165 x 17.951mm apart. on  --
+				-- that one the symmetric formula answers 187 x 325 against an     --
+				-- existing 155 x 357: a view that changes shape on an update      --
+				-- where nothing moved, which clouds the whole drawing and can     --
+				-- clip content off the short side. boxchanged is measured off the --
+				-- six FPLA limits right above, so FALSE really does mean the      --
+				-- extent is untouched and there is nothing to grow into           --
+				--------------------------------------------------------------------
+				if (!boxchanged) then
+					SIZE $!sizePart1 $!sizePart2
+					handle any
+						!dbgf3.writerecord('STEP6 SIZE REJECTED part1=' & !sizePart1.string() & ' part2=' & !sizePart2.string() & ' -- view keeps its existing size')
+					endhandle
+				else
+					!dbgf3.writerecord('STEP6 SIZE SKIPPED boxchanged=FALSE -- view keeps its existing size')
+				endif
 				var !size size
 
 				if !rcode.eqnocase('up') then
