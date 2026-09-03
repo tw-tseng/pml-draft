@@ -338,7 +338,38 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 						------------------------
 						-- length / width > 3 --
 						------------------------
+						----------------------------------------------------------
+						-- the name label belongs here too. of the four shape    --
+						-- cases this block chooses between, this was the only   --
+						-- one that drew the centre line and then stopped -- its --
+						-- mirror image (width/length > 3, above) has always     --
+						-- written a GLAB, so a long thin vessel lying along N   --
+						-- came out unnamed while the same vessel lying along E  --
+						-- was labelled. reported live 2026-09-03: a long        --
+						-- horizontal vessel with centre lines but no name,      --
+						-- beside two round ones that had theirs                 --
+						--                                                       --
+						-- user rule: equipment is always labelled, whatever its --
+						-- shape. same vertical form as the stravert case in the --
+						-- else branch below -- Adegrees 90, hung off !NPOS,     --
+						-- with the centre line then run out past the text.      --
+						-- the dimensioned block further down deliberately has   --
+						-- no GLAB in any of its four cases: those equipment get --
+						-- their name from the dimension instead                 --
+						----------------------------------------------------------
 						if (!stravert) then
+							$!name/SS/S1/V1/ateEQUI
+							NEW GLAB
+							DDNA $!EQUI
+							Btext |#EQUI(C2:)|
+							ALIGN BBODY
+							ABSO
+							Adegrees 90
+							var !cpos1 shpos OF $!NPOS
+							AT $!cpos1
+							var !extent extent btext
+							!temppos = !NPOS.part(4).real() + (abs(!extent.part(4).real() - !extent.part(8).real()) / !!DrawingPlan1.vsca)
+							!NPOS = !NPOS.part(1) & ' ' & !NPOS.part(2) & ' ' & !NPOS.part(3) & ' ' & !temppos & ' ' & !NPOS.part(5) & ' ' & !NPOS.part(6)
 							$!name/SS/S1/V1/ateEQUI/VNOT
 							NEW STRA FPT $!SPOS TPT $!NPOS
 							Tcode Endpoint
