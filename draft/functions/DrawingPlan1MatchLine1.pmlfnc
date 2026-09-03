@@ -256,6 +256,28 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 						ORIG X $!posx Y $!posy
 						handle any
 						endhandle
+						---------------------------------------------------------
+						-- and the angle and alignment, not just the position.  --
+						-- .ClaimRef() matches on CONTENT, so a text written by  --
+						-- an older version of this code (or by the dead         --
+						-- .MachLineCode() in the form, which writes these at    --
+						-- adegrees 0) is claimed for ever after and only ever   --
+						-- gets moved -- it kept whatever angle it was born      --
+						-- with. reported live 2026-09-03: "SEE 26001-AG-004"    --
+						-- lying flat beside its own vertical match line, while  --
+						-- the "MATCH LINE N293369" next to it, created by this  --
+						-- version, stood upright                                --
+						---------------------------------------------------------
+						ADEGREES 90
+						handle any
+						endhandle
+						if !dir.eq('right') then
+							alig tbody
+						else
+							alig bbody
+						endif
+						handle any
+						endhandle
 					endif
 				elseif (!dir.eq('up') or !dir.eq('down')) and not(!tempt.eqnocase('')) then
 					!posx = !sortedtypes[!i].split('!').getindexed(3).real() + (!sortedtypes[!i + 1].split('!').getindexed(3).real() - !sortedtypes[!i].split('!').getindexed(3).real()) * 0.5
@@ -279,6 +301,17 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 						handle any
 						endhandle
 						ORIG X $!posx Y $!posy
+						handle any
+						endhandle
+						-- and re-set the angle/alignment too, same reason as above --
+						ADEGREES 0
+						handle any
+						endhandle
+						if !dir.eq('up') then
+							alig bbody
+						else
+							alig tbody
+						endif
 						handle any
 						endhandle
 					endif
@@ -383,6 +416,31 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				handle any
 				endhandle
 				ORIG X $!posx Y $!posy
+				handle any
+				endhandle
+				-- and the angle/alignment, same reason again: a claimed text --
+				-- keeps whatever it was born with unless it is re-set here   --
+				if !dir.eq('right') then
+					ADEGREES 90
+					handle any
+					endhandle
+					alig tbody
+				elseif !dir.eq('left') then
+					ADEGREES 90
+					handle any
+					endhandle
+					alig bbody
+				elseif !dir.eq('up') then
+					ADEGREES 0
+					handle any
+					endhandle
+					alig bbody
+				elseif !dir.eq('down') then
+					ADEGREES 0
+					handle any
+					endhandle
+					alig tbody
+				endif
 				handle any
 				endhandle
 			endif
