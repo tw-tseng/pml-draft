@@ -11,7 +11,17 @@ endhandle
 $)
 
 define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !minN is string, !minU is string, !maxE is string, !maxN is string, !maxU is string)
-	NEW LAYE $!name/SS/S1/V1/ateEQUI
+	----------------------------------------------------------------------
+	-- update path: this layer survives from the run that built the      --
+	-- drawing, so navigate to it first and only create it when there is --
+	-- nothing there. the attributes below are re-applied either way --   --
+	-- writing an attribute back over its own value draws no cloud, and  --
+	-- it keeps a drawing built by an older version in step              --
+	----------------------------------------------------------------------
+	$!name/SS/S1/V1/ateEQUI
+	handle any
+		NEW LAYE $!name/SS/S1/V1/ateEQUI
+	endhandle
 	Purpose EQUI
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -69,6 +79,88 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 	
 	var !VIEW (NAME of VIEW )
 	var !DIR1  (DIR of VIEW )
+	----------------------------------------------------------------------
+	-- everything below may already be on the drawing from a previous    --
+	-- run, because this function is called on the update path now as    --
+	-- well as at rebuild -- without that, equipment added to the model   --
+	-- after the drawing was built never got labelled and equipment      --
+	-- deleted from it left its label behind for ever (user, 2026-09-03) --
+	--                                                                    --
+	-- the centre lines are simply cleared and redrawn. they carry no     --
+	-- identity of their own to match on, and they are worked out         --
+	-- straight from the equipment box every run, so an unmoved piece of  --
+	-- equipment gets its lines back on exactly the same spot -- the      --
+	-- comparison is picture-based, so identical pixels raise no cloud    --
+	-- however the elements underneath were churned                      --
+	--                                                                    --
+	-- the NAMES are not: they are matched back by DDNA and reused, so a  --
+	-- name keeps its own element across runs and anything left          --
+	-- unclaimed at the end can be recognised as equipment that has gone  --
+	-- and removed. nothing else writes into ateEQUI, so both sweeps are  --
+	-- safe (checked across the whole draft folder)                       --
+	----------------------------------------------------------------------
+	!eqclaimedglabs = object array()
+	!existingeqglabs = object array()
+	$!name/SS/S1/V1/ateEQUI
+	handle any
+	elsehandle none
+		var !existingeqglabs coll all glab for ce
+		handle any
+			!existingeqglabs = object array()
+		endhandle
+	endhandle
+	$!name/SS/S1/V1/ateEQUI/VNOT
+	handle any
+	elsehandle none
+		var !oldeqstras coll all stra for ce
+		handle any
+			!oldeqstras = object array()
+		endhandle
+		do !oes values !oldeqstras
+			$!oes
+			handle any
+				skip
+			endhandle
+			delete stra
+			handle any
+			endhandle
+		enddo
+	endhandle
+	----------------------------------------------------------------------
+	-- what each of those name labels is FOR, resolved once, here, and    --
+	-- as an equipment NAME rather than as the DDNA reference itself.     --
+	-- a reference is not the same string twice -- the same MTBE          --
+	-- instability that made the pipe labels lose track of themselves     --
+	-- between runs -- but a name is. a label whose DDNA no longer leads  --
+	-- anywhere (its equipment was deleted) resolves to nothing here,     --
+	-- matches no equipment below, and is removed by the sweep at the end --
+	--                                                                     --
+	-- read in a pass of its own: navigating off to the DDNA element in    --
+	-- the middle of walking the labels would lose the walk               --
+	----------------------------------------------------------------------
+	!existingeqnames = object array()
+	!existingeqtaken = object array()
+	do !eg values !existingeqglabs
+		!ename = ''
+		$!eg
+		handle any
+		elsehandle none
+			var !egddna ddna of ce
+			handle any
+			elsehandle none
+				$!egddna
+				handle any
+				elsehandle none
+					var !ename namn of ce
+					handle any
+						!ename = ''
+					endhandle
+				endhandle
+			endhandle
+		endhandle
+		!existingeqnames.append(!ename)
+		!existingeqtaken.append(false)
+	enddo
 	var !equis coll all equi with (not(matchwild(name, |*_DrawingPlan|))) within E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU
 	do !equi values !equis
 		--------------------------------------------------------------
@@ -279,6 +371,22 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 					!stravert = false
 				endif
 			endif
+			--------------------------------------------------------------
+			-- this equipment's own name label from a previous run, if    --
+			-- there is one. reused rather than rebuilt so the label      --
+			-- keeps its element across runs; the attributes below are    --
+			-- written again either way, which lands an unmoved piece of  --
+			-- equipment on exactly the values it already had            --
+			--------------------------------------------------------------
+			!eqglabref = ''
+			do !egi from 1 to !existingeqglabs.size()
+				if (!existingeqnames[!egi].eq(!namn) and not(!existingeqtaken[!egi])) then
+					!eqglabref = !existingeqglabs[!egi]
+					!existingeqtaken[!egi] = true
+					!eqclaimedglabs.append(!eqglabref)
+					break
+				endif
+			enddo
 			if (unset(!!DrawingPlan1.equiparray.findfirst(!namn))) then
 				------------------------------------
 				-- equipments are not dimensioned --
@@ -313,7 +421,11 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 					-- width > length --
 					--------------------
 					$!name/SS/S1/V1/ateEQUI
-					NEW GLAB
+					if (!eqglabref.eq('')) then
+						NEW GLAB
+					else
+						$!eqglabref
+					endif
 					DDNA $!EQUI
 					Btext |#EQUI(C2:)|
 					ALIGN BBODY
@@ -349,7 +461,11 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 					-- width < length --
 					--------------------
 					$!name/SS/S1/V1/ateEQUI
-					NEW GLAB
+					if (!eqglabref.eq('')) then
+						NEW GLAB
+					else
+						$!eqglabref
+					endif
 					DDNA $!EQUI
 					Btext |#EQUI(C2:)|
 					ALIGN BBODY
@@ -446,6 +562,26 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 			NEW STRA $!EQUI$!VIEW/CenL5 FPT $!DPOS TPT $!UPOS
 			Tcode Endpoint
 			!This.Reposition(!EQUI, !VIEW, !namedir, !VSCA, !WPOS, !EPOS, !SPOS, !NPOS, !WPOS1, !EPOS1, !SPOS1, !NPOS1, !DIR1)
+		endif
+	enddo
+	----------------------------------------------------------------------
+	-- and whatever no equipment wanted this run. a name label still     --
+	-- standing here unclaimed belongs to equipment that has been        --
+	-- deleted from the model, renamed, or has moved out of the box --    --
+	-- in every one of those cases it is describing something that is no  --
+	-- longer there, so it goes. the centre lines needed no equivalent:   --
+	-- they were cleared wholesale at the top and only the ones still     --
+	-- earned have been drawn again since                                --
+	----------------------------------------------------------------------
+	do !egi from 1 to !existingeqglabs.size()
+		if (not(!existingeqtaken[!egi])) then
+			$!existingeqglabs[!egi]
+			handle any
+				skip
+			endhandle
+			delete glab
+			handle any
+			endhandle
 		endif
 	enddo
 endfunction

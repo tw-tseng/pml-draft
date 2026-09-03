@@ -2056,14 +2056,31 @@ define method .Apply()
 				last
 				!!DrawingPlan1LineNoAnnotation(!name, !boxXlen.real(), !boxYlen.real())
 				------------------------------------------------------------------
+				-- equipment names and centre lines, added to this path         --
+				-- 2026-09-03. left out until now, which meant a piece of        --
+				-- equipment added to the model after the drawing was built     --
+				-- never got a label, one deleted from it left its label        --
+				-- standing for ever, and one that moved left its label behind  --
+				-- (reported live). EquiAnnotation now claims its own name      --
+				-- labels back by equipment NAME and redraws the centre lines   --
+				-- from scratch, so calling it again is idempotent              --
+				--                                                              --
+				-- after LineNoAnnotation, not before: .equiparray is cleared   --
+				-- and filled in there, and it is what tells this function      --
+				-- which equipment already carries a dimension and so needs no  --
+				-- name label of its own. same order as the rebuild path        --
+				------------------------------------------------------------------
+				$!name/SS/S1/V1
+				!!DrawingPlan1EquiAnnotation(!name, !minE.string(), !minN.string(), !minU.string(), !maxE.string(), !maxN.string(), !maxU.string())
+				------------------------------------------------------------------
 				-- match line, now that it knows how to reuse what is already    --
 				-- on the sheet (DrawingPlan1MatchClaim.pmlfnc). it is drawn     --
 				-- entirely off the view border, so a box change moves every     --
 				-- part of it -- leaving it out was why the match line stayed on --
 				-- the OLD border after the first box-grew test (2026-08-28)     --
 				--                                                               --
-				-- Grid/Equi/Flow still have no reuse logic and are still left   --
-				-- out; they are the next three steps                            --
+				-- Grid/Flow still have no reuse logic and are still left out;   --
+				-- they are the next two steps                                   --
 				------------------------------------------------------------------
 				$!name/SS/S1/V1
 				!!DrawingPlan1MatchLine(!name, !equistr)
