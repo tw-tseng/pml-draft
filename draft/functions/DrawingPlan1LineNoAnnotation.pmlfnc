@@ -3724,23 +3724,29 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- baseline, so taking it out is always -Y, whatever ADEG   --
 				-- has turned that into on the sheet                        --
 				--                                                          --
-				-- 2026-09-03: plus !gleadstep, for the same reason BPOF's  --
-				-- gb2 carries it. this Y is measured from AT, not from the --
-				-- text -- so on a drifted label, where the frozen text sits --
-				-- !gleadstep away from AT along the dimension, a bare      --
-				-- -!glabtxtgap left this end behind at AT's own level while --
-				-- the bend climbed to the text: the run between them fell  --
-				-- away and the leader came out as a tent (red/blue          --
-				-- reference picture, TEST-0000010001). rising with it keeps --
-				-- the run level and the 1mm text gap intact                --
+				-- 2026-09-03: minus !gatdrift as well, and ONLY !gatdrift. --
+				-- gb2 climbs by !gleadstep to sit under the frozen text,   --
+				-- and this end has to climb with it or the run between them --
+				-- falls away and the leader comes out as a tent (red/blue   --
+				-- reference picture, TEST-0000010001)                       --
 				--                                                          --
-				-- an undrifted label has !gleadstep 0 and so still gets     --
-				-- exactly -!glabtxtgap, unchanged -- setting this end to a  --
-				-- flat 0 instead, tried earlier the same day, moved EVERY   --
-				-- label's connection point and was reported live as the     --
-				-- whole LDIM row shifting                                   --
+				-- !gleadstep is !gstep - !gatdrift, and only the !gatdrift --
+				-- half belongs here: !gstep is ALREADY in this end's        --
+				-- position, carried by XYPO, since CPOFTX is measured from --
+				-- the text's own anchor. adding the whole !gleadstep       --
+				-- counted !gstep twice, and on the rebuild path -- where    --
+				-- !gatdrift is 0 but !gstep is a real packing push of up to --
+				-- 25mm -- that threw every crowded label's connection point --
+				-- far off along the dimension: reported live as leaders     --
+				-- firing off across the sheet on a fresh rebuild            --
+				--                                                          --
+				-- rebuild, and any update where nothing drifted, has        --
+				-- !gatdrift 0 and so still gets exactly -!glabtxtgap,       --
+				-- unchanged. setting this end to a flat 0 instead, tried    --
+				-- earlier the same day, moved EVERY label's connection      --
+				-- point and was reported live as the whole LDIM row shifting --
 				-------------------------------------------------------------
-				!gcpofy = !gleadstep - !glabtxtgap
+				!gcpofy = (!gatdrift * -1) - !glabtxtgap
 				!greach = !gwide + !glabover
 				-- how far this one reaches, measured from the border of the view --
 				!gtot = !gdimdist + !gclr + !greach
