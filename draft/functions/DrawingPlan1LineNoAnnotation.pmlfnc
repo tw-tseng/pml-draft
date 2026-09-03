@@ -3790,11 +3790,35 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- along axis can differ, so whatever E3D draws from    --
 					-- gb2 into the text closes that gap on a single flat   --
 					-- run, never a second diagonal                        --
+					--                                                       --
+					-- !gstep alone is not enough by itself: a drifted but   --
+					-- unstepped label (!gstep exactly 0, the common case    --
+					-- for a lone label with nothing crowding it) went       --
+					-- straight back to a bend of X 6mm Y 0mm -- collinear   --
+					-- with gb1's X 2mm Y 0mm, so the two points do not turn --
+					-- at all and the whole leader draws as one plain line,  --
+					-- ie no visible kink, reported live the same day as the --
+					-- !gleadstep revert above (TEST-0000010001 again, this  --
+					-- time "沒有轉折"). so !gstep only decides the kink's   --
+					-- SIZE when it is already carrying a real packing push; --
+					-- with nothing to push against but real drift present, --
+					-- a small fixed kink stands in instead, sized the same --
+					-- as the hand-built reference and pointed the way the  --
+					-- text actually is, so there is always something to    --
+					-- see regardless of how far the flat run afterwards    --
+					-- has to reach                                         --
 					----------------------------------------------------------
+					!gb2along = !gstep
+					if (!gstepabs.lt(0.01) and !gleadstepabs.gt(0.01)) then
+						!gb2along = !glabdiag
+						if (!gleadstep.lt(0)) then
+							!gb2along = !glabdiag * -1
+						endif
+					endif
 					!gb1x = !goutx * !grun
 					!gb1y = !gouty * !grun
-					!gb2x = !goutx * (!grun + !glabdiag) + !gstepx * !gstep
-					!gb2y = !gouty * (!grun + !glabdiag) + !gstepy * !gstep
+					!gb2x = !goutx * (!grun + !glabdiag) + !gstepx * !gb2along
+					!gb2y = !gouty * (!grun + !glabdiag) + !gstepy * !gb2along
 					-- the bend points are offsets like XYPO, so they turn too --
 					if (!!DrawingPlan1.rcode.eqnocase('left')) then
 						!gtmp = !gb1x
