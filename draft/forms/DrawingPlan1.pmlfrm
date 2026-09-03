@@ -1887,6 +1887,9 @@ define method .Apply()
 				!halfX = max(abs(!ptEplussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()), abs(!ptEminussh.part(2).replace('mm', '').real() - !shxypos.part(1).real().value()))
 				!halfY = max(abs(!ptNplussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()), abs(!ptNminussh.part(4).replace('mm', '').real() - !shxypos.part(2).real().value()))
 				!dbgf3.writerecord('STEP6 SIZE ptEplussh=' & !ptEplussh & ' ptEminussh=' & !ptEminussh & ' ptNplussh=' & !ptNplussh & ' ptNminussh=' & !ptNminussh & ' halfX=' & !halfX & ' halfY=' & !halfY)
+				-- the box's own extent, so a degenerate one shows up here rather --
+				-- than only as a rejected SIZE further down                      --
+				!dbgf3.writerecord('STEP6 SIZE inputs elen=' & !elen & ' nlen=' & !nlen & ' boxPos=' & !boxPos)
 				if !rcode.eqnocase('up') then
 					!sizePart1 = !halfX * 2
 					!sizePart2 = !halfY * 2
@@ -1895,8 +1898,30 @@ define method .Apply()
 					!sizePart2 = !halfX * 2
 				endif
 				!dbgf3.writerecord('STEP6 SIZE new=' & !sizePart1 & ' ' & !sizePart2)
+				--------------------------------------------------------------------
+				-- flushed here on purpose. SIZE below can reject what it is given  --
+				-- ("Illegal value(s) for attribute SIZE", reported live on an      --
+				-- update 2026-09-03), and the close() at the end of this block     --
+				-- never runs when it does -- which left check3.txt three bytes     --
+				-- long with none of the numbers that would say WHY                 --
+				--------------------------------------------------------------------
+				!dbgf3.close()
+				handle any
+				endhandle
+				!dbgf3 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check3.txt')
+				!dbgf3.open('append')
 				$!name/SS/S1/V1
+				--------------------------------------------------------------------
+				-- and a rejected SIZE must not take the whole update down with it. --
+				-- the view keeps the size it already had, which is the same thing  --
+				-- an unchanged box would have given it, and the run carries on --   --
+				-- everything below reads !size back off the view rather than       --
+				-- assuming the write landed                                        --
+				--------------------------------------------------------------------
 				SIZE $!sizePart1 $!sizePart2
+				handle any
+					!dbgf3.writerecord('STEP6 SIZE REJECTED part1=' & !sizePart1.string() & ' part2=' & !sizePart2.string() & ' -- view keeps its existing size')
+				endhandle
 				var !size size
 
 				if !rcode.eqnocase('up') then
