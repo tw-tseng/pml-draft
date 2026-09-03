@@ -1569,9 +1569,42 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			if (!dbgln) then
 				!dbgf.writerecord('MATCH ' & !dir & ' mem=' & !mem & ' founddpoi=' & !founddpoi & ' attapos=' & !attapos.string())
 			endif
+			----------------------------------------------------------------------
+			-- where the DIMENSION POINT itself ends up, along the dimension.    --
+			-- not the same thing as !ptx/!pty: those come from !intpt, the      --
+			-- crossing of this member's line with the border of the view, while --
+			-- the DPOI is placed at !attapos, which for anything but EQUI is    --
+			-- the MEMBER's own position instead (see the note by !attapos       --
+			-- above -- the projection line is meant to start at the member, so  --
+			-- it can be followed back to what it belongs to). for a member      --
+			-- running square to the border the two share an along value and     --
+			-- nothing shows, but a DIAGONAL one crosses the border a long way   --
+			-- from its own position and the two part company -- which is why    --
+			-- TEST-0000010001's leader started off the end of its own dimension --
+			-- point instead of on it (user rule, restated 2026-09-03: the GLAB  --
+			-- leader's start IS the LDIM's point)                               --
+			--                                                                    --
+			-- carried alongside !pty/!ptx rather than replacing them: those      --
+			-- still drive the packing and the label's own along-placement, and   --
+			-- an existing label's text must not move                             --
+			----------------------------------------------------------------------
+			if (!dir.eq('right') or !dir.eq('left')) then
+				!dpoialong = !pty
+			else
+				!dpoialong = !ptx
+			endif
 			-- a label-only entry takes no dimension point, so it claims none --
 			-- and creates none. see the note at the top of the loop         --
 			if (not(!labelonly)) then
+				var !attash shpos of $!attapos
+				handle any
+				elsehandle none
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!dpoialong = !attash.part(4).replace('mm', '').real()
+					else
+						!dpoialong = !attash.part(2).replace('mm', '').real()
+					endif
+				endhandle
 				if (!founddpoi) then
 					if (!dbgln) then
 						!dbgf.writerecord('MATCH ' & !dir & ' foundpos=' & !foundpos.string() & ' dist=' & !foundpos.distance(!attapos))
@@ -1609,8 +1642,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						var !frozensh shpos of $!foundpos
 						if (!dir.eq('right') or !dir.eq('left')) then
 							!pty = !frozensh.part(4).replace('mm', '').real()
+							!dpoialong = !pty
 						else
 							!ptx = !frozensh.part(2).replace('mm', '').real()
+							!dpoialong = !ptx
 						endif
 					endif
 				else
@@ -1640,9 +1675,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				---------------------------------------------------------------------
 				!labup = !attapos.up.nint().value()
 				if (!dir.eq('right') or !dir.eq('left')) then
-					!glabrec.append(!labtext & '~' & !mem & '~' & !labchei.string() & '~' & !pty.string() & '~' & !labup.string())
+					!glabrec.append(!labtext & '~' & !mem & '~' & !labchei.string() & '~' & !pty.string() & '~' & !labup.string() & '~' & !dpoialong.string())
 				else
-					!glabrec.append(!labtext & '~' & !mem & '~' & !labchei.string() & '~' & !ptx.string() & '~' & !labup.string())
+					!glabrec.append(!labtext & '~' & !mem & '~' & !labchei.string() & '~' & !ptx.string() & '~' & !labup.string() & '~' & !dpoialong.string())
 				endif
 				---------------------------------------------------------------------
 				-- 2026-08-13: reads DDNA straight back off the DPOI just created,   --
@@ -2859,6 +2894,15 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!galong = !gparts.getindexed(4).real().string('D3').real()
 				!gup = !gparts.getindexed(5).real()
 				----------------------------------------------------------------------
+				-- and where this label's own DIMENSION POINT sits along the        --
+				-- dimension, which is not the same value: !galong is the border    --
+				-- crossing, this is the dot itself (see the note where it is       --
+				-- filled). only the leader's AT end uses it -- the packing and the --
+				-- text placement stay on !galong exactly as before. same D3 snap   --
+				-- as !galong above, for the same reason                            --
+				----------------------------------------------------------------------
+				!gdpoialong = !gparts.getindexed(6).real().string('D3').real()
+				----------------------------------------------------------------------
 				-- update path: an existing GLAB must never move, or every update    --
 				-- would draw a revision cloud over labels nothing actually changed  --
 				-- about (2026-08-27, confirmed live -- required for revision        --
@@ -3157,7 +3201,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!gseed = !gexistalong + !gstep
 				endif
 				if (!dbgln) then
-					!dbgf.writerecord('GLABSEED ' & !dir & ' i=' & !i.string() & ' elem=' & !gelem & ' isexisting=' & !gisexisting & ' seed=' & !gseed.string('D3') & ' along=' & !galong.string('D3') & ' movedby=' & !gbestalongdiff.string('D3'))
+					!dbgf.writerecord('GLABSEED ' & !dir & ' i=' & !i.string() & ' elem=' & !gelem & ' isexisting=' & !gisexisting & ' seed=' & !gseed.string('D3') & ' along=' & !galong.string('D3') & ' dpoialong=' & !gdpoialong.string('D3') & ' movedby=' & !gbestalongdiff.string('D3'))
 				endif
 				-------------------------------------------------------------
 				-- pack the labels along the dimension: each one goes where  --
@@ -3362,7 +3406,17 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- still frozen above, unconditionally), only this end moves, so  --
 				-- the leader bends to reach it instead of drawing to the old spot --
 				--------------------------------------------------------------------
-				!galongat = !galong
+				------------------------------------------------------------------
+				-- corrected 2026-09-03: !galong is NOT the dot after all. it is  --
+				-- the border crossing (!intpt); the dot is placed at !attapos,   --
+				-- the member's own position, and for a diagonal member the two   --
+				-- sit a long way apart along the dimension. !gdpoialong carries  --
+				-- the dot's own along, and that is what this end has to sit on   --
+				-- so the leader starts exactly where the dimension point's       --
+				-- projection meets the dimension line (user rule: the GLAB       --
+				-- leader's start IS the LDIM's point)                            --
+				------------------------------------------------------------------
+				!galongat = !gdpoialong
 				if (!dir.eq('right') or !dir.eq('left')) then
 					!gatx = !dimline
 					!gaty = !galongat
