@@ -162,6 +162,19 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 		!existingeqtaken.append(false)
 	enddo
 	----------------------------------------------------------------------
+	-- back to the view before the loop. everything from here to the     --
+	-- end of the loop reads VIEWDIR/VSCA off wherever CE happens to be, --
+	-- and on the rebuild path CE simply stayed on the ateEQUI layer all --
+	-- the way through -- but the two blocks added above for the update  --
+	-- path both move it: resolving a name label's DDNA navigates into   --
+	-- the DESIGN database, and clearing the centre lines navigates to   --
+	-- each STRA in turn and then deletes it. neither happens on a       --
+	-- rebuild (no labels and no VNOT to find yet), which is why the     --
+	-- update path alone fell over on 'var !VIEWDIRU1 VIEWDIR U'         --
+	-- (reported live 2026-09-03)                                        --
+	----------------------------------------------------------------------
+	$!name/SS/S1/V1
+	----------------------------------------------------------------------
 	-- the drawing plan boxes themselves are NOT plant equipment and are --
 	-- never annotated. they live under /<projid>_DrawingPlanBox as EQUI --
 	-- whose NAME is the drawing number (.AllBoxes() reads them that way, --
