@@ -3461,8 +3461,21 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				else
 					!gclr = !gclrb
 				endif
-				!gtxx = !goutx * !gclr + !gstepx * !gstep + !ggapx * !glabtxtgap
-				!gtxy = !gouty * !gclr + !gstepy * !gstep + !ggapy * !glabtxtgap
+				----------------------------------------------------------------
+				-- !gleadstep, not !gstep, on the along axis -- paired with the --
+				-- POSITION change below, where POSITION now follows AT instead --
+				-- of staying frozen. !gleadstep is !gstep - !gatdrift, so the  --
+				-- text lands on POSITION + !gstep - !gatdrift + gap, and since --
+				-- POSITION is AT's own along, that is exactly                  --
+				-- gexistalong + !gstep + gap -- the same absolute spot the     --
+				-- frozen-POSITION version put it on, to the decimal. the text  --
+				-- must not move, and it does not; the drift is simply carried  --
+				-- here now instead of in POSITION, so that BOTH ends of the    --
+				-- leader are measured from the same origin. the two changes    --
+				-- only work together -- either one alone moves the text        --
+				----------------------------------------------------------------
+				!gtxx = !goutx * !gclr + !gstepx * !gleadstep + !ggapx * !glabtxtgap
+				!gtxy = !gouty * !gclr + !gstepy * !gleadstep + !ggapy * !glabtxtgap
 				-------------------------------------------------------------
 				-- everything above is worked out on the sheet, but XYPO is  --
 				-- read in the view. when rcode = left the view is turned 90 --
@@ -3671,13 +3684,31 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					$!foundglabref
 					!claimedglabs.append(!foundglabref)
 					----------------------------------------------------------------
-					-- same rule as the DPOI side, same day: found means frozen,   --
-					-- always -- no <5mm carve-out any more. this label's own      --
-					-- POSITION never moves once it exists and a REVI is on the    --
-					-- drawing, no matter how far this run's fresh target sits     --
-					-- from it                                                     --
+					-- corrected 2026-09-03. POSITION is NOT the text's place: it  --
+					-- is the AT point written in model coordinates (see the note  --
+					-- by !gposobj above -- it is built as ENUPOS of !gat), and    --
+					-- the text hangs off it by XYPO. freezing it here therefore   --
+					-- did not freeze the text -- XYPO did that -- it only left    --
+					-- POSITION a whole !gatdrift away from the AT this run        --
+					-- actually writes, so the leader's two ends were measured     --
+					-- from two different origins and could not be made to line up: --
+					-- every attempt to correct one end just moved the lean around  --
+					-- (four tries on 2026-09-03, all wrong).                       --
+					--                                                              --
+					-- the user's own hand-corrected label proved it: same          --
+					-- Bpoffset, same Cpoffset as the program writes, and a         --
+					-- POSITION exactly !gatdrift away from the program's frozen    --
+					-- one.                                                         --
+					--                                                              --
+					-- so POSITION follows AT again, and XYPO below takes the       --
+					-- drift out instead (!gleadstep in place of !gstep), which     --
+					-- lands the text on precisely the same absolute spot as        --
+					-- before: gexistalong + !gstep + !glabtxtgap. the text still   --
+					-- never moves -- that requirement is unchanged, it is just     --
+					-- carried by XYPO alone now rather than by a frozen POSITION.  --
+					-- an undrifted label has !gatdrift 0 and gets exactly what it  --
+					-- always got, so the rebuild path is untouched                 --
 					----------------------------------------------------------------
-					!gposobj = !foundglabpos
 				else
 					NEW GLAB
 				endif
