@@ -8,6 +8,16 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	!dirlist = 'right left down up'
 	!format = object format()
 	!format.dp = 0
+	----------------------------------------------------------------
+	-- diagnostic, on while the stray match line texts are being   --
+	-- chased. truncated here, appended to by MatchLine1 and by    --
+	-- MatchCleanup, opened and closed around every write so it    --
+	-- survives an abort part way through                          --
+	----------------------------------------------------------------
+	!dbgml = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_match.txt')
+	!dbgml.open('overwrite')
+	!dbgml.writerecord('MATCH START name=' & !name & ' boxUL=' & !!DrawingPlan1.boxULsh & ' boxUR=' & !!DrawingPlan1.boxURsh & ' boxLL=' & !!DrawingPlan1.boxLLsh & ' boxLR=' & !!DrawingPlan1.boxLRsh)
+	!dbgml.close()
 	--------------------------------------------------------------------
 	-- everything this run may move or remove, read before anything is --
 	-- drawn. the four sides below claim what they find already in the --

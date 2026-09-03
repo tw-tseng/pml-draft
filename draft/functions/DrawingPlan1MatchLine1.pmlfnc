@@ -17,6 +17,18 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 	-- / DrawingPlan1LineNoAnnotation, 2026-08-28)                     --
 	--------------------------------------------------------------------
 	!sortedtypes = !!DrawingPlan1MatchSorted(!dir, !projid, !equistr)
+	-- diagnostic: what this side found, before anything is drawn --
+	!dbgml = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_match.txt')
+	!dbgchk = 'UNSET'
+	!dbgchk = '' & !!DrawingPlan1MatchChkCount
+	handle any
+	endhandle
+	!dbgml.open('append')
+	!dbgml.writerecord('DIR ' & !dir & ' chkcount=' & !dbgchk & ' sorted=' & !sortedtypes.size().string())
+	do !dbi from 1 to !sortedtypes.size()
+		!dbgml.writerecord('  SORTED[' & !dbi.string() & '] ' & !sortedtypes[!dbi])
+	enddo
+	!dbgml.close()
 	note 1
 	--------------------------------------------------------------------
 	-- the short ticks marking where a neighbouring box meets this     --
@@ -234,6 +246,9 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					------------------------------------------------------------
 					!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
 					!mlref = !!DrawingPlan1MatchClaimRef(!mlsig)
+					!dbgml.open('append')
+					!dbgml.writerecord('  TEXT RL ' & !dir & ' posx=' & !posx.string() & ' posy=' & !posy.string() & ' reuse=[' & !mlref & '] btext=[' & !tempt & ']')
+					!dbgml.close()
 					if (!mlref.eq('')) then
 						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center txcolour yellow font 1
 						if !dir.eq('right') then
@@ -288,6 +303,9 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					endif
 					!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
 					!mlref = !!DrawingPlan1MatchClaimRef(!mlsig)
+					!dbgml.open('append')
+					!dbgml.writerecord('  TEXT UD ' & !dir & ' posx=' & !posx.string() & ' posy=' & !posy.string() & ' reuse=[' & !mlref & '] btext=[' & !tempt & ']')
+					!dbgml.close()
 					if (!mlref.eq('')) then
 						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| just center txcolour yellow font 1
 						if !dir.eq('up') then
@@ -400,6 +418,9 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 			endif
 			!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
 			!mlref = !!DrawingPlan1MatchClaimRef(!mlsig)
+			!dbgml.open('append')
+			!dbgml.writerecord('  TEXT ONE ' & !dir & ' posx=' & !posx.string() & ' posy=' & !posy.string() & ' reuse=[' & !mlref & '] btext=[' & !tempt & ']')
+			!dbgml.close()
 			if (!mlref.eq('')) then
 				if !dir.eq('right') then
 					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center alig tbody txcolour yellow font 1
