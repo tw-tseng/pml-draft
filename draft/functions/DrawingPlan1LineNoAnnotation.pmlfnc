@@ -3808,11 +3808,25 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- see regardless of how far the flat run afterwards    --
 					-- has to reach                                         --
 					----------------------------------------------------------
+					----------------------------------------------------------
+					-- correction, same day: a flat !glabdiag regardless of --
+					-- how small the drift actually is over-stated a real   --
+					-- 2.216mm drift into a full 4mm kink, reported live as --
+					-- looking more bent than the near-straight reference   --
+					-- picture the user wanted. proportional-with-a-cap     --
+					-- instead: small drift draws a small (near-invisible)  --
+					-- kink same as it always would have, only a drift      --
+					-- bigger than !glabdiag itself gets capped there       --
+					-- instead of ballooning further                       --
+					----------------------------------------------------------
 					!gb2along = !gstep
 					if (!gstepabs.lt(0.01) and !gleadstepabs.gt(0.01)) then
-						!gb2along = !glabdiag
-						if (!gleadstep.lt(0)) then
-							!gb2along = !glabdiag * -1
+						!gb2along = !gleadstep
+						if (!gleadstepabs.gt(!glabdiag)) then
+							!gb2along = !glabdiag
+							if (!gleadstep.lt(0)) then
+								!gb2along = !glabdiag * -1
+							endif
 						endif
 					endif
 					!gb1x = !goutx * !grun
