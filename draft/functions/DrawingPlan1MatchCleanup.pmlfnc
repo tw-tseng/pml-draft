@@ -32,14 +32,6 @@ define function !!DrawingPlan1MatchCleanup()
 	handle any
 		!n = 0
 	endhandle
-	-- diagnostic: every candidate this run saw, claimed or not --
-	!dbgml = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_match.txt')
-	!dbgml.open('append')
-	!dbgml.writerecord('CANDIDATES n=' & !n.string())
-	do !i from 1 to !n
-		!dbgml.writerecord('  CAND[' & !i.string() & '] claimed=' & !!DrawingPlan1MatchClaims[!i].string() & ' sig=' & !!DrawingPlan1MatchCandSigs[!i])
-	enddo
-	!dbgml.close()
 	do !i from 1 to !n
 		if (not(!!DrawingPlan1MatchClaims[!i])) then
 			----------------------------------------------------------

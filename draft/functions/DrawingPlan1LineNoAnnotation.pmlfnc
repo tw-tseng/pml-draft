@@ -737,7 +737,20 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bmaxN = !wlim[4]
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
-		var !mems coll all equi with (not(matchwild(name, |*_DrawingPlan|))) within $!vlfm to $!vlto
+		----------------------------------------------------------------------
+		-- the drawing plan boxes themselves are NOT plant equipment and are --
+		-- never annotated. they live under /<projid>_DrawingPlanBox as EQUI --
+		-- whose NAME is the drawing number (.AllBoxes() reads them that way, --
+		-- and the match line reads a neighbour's number as 'namn of equi of  --
+		-- box'), so a box sitting in or across this view is collected here   --
+		-- like anything else                                                 --
+		--                                                                    --
+		-- same filter as DrawingPlan1EquiAnnotation, and it has to stay the  --
+		-- same: this function dimensions what it collects and that function  --
+		-- names whatever this one did NOT, so a box excluded on one side     --
+		-- only would simply move from a dimension to a label                 --
+		----------------------------------------------------------------------
+		var !mems coll all equi with (not(matchwild(name, |*_DrawingPlan|)) and not(matchwild(name of site, |*_DrawingPlanBox|))) within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
 			--------------------------------------------------------------

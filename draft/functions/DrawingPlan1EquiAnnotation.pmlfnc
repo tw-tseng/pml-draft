@@ -161,7 +161,26 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 		!existingeqnames.append(!ename)
 		!existingeqtaken.append(false)
 	enddo
-	var !equis coll all equi with (not(matchwild(name, |*_DrawingPlan|))) within E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU
+	----------------------------------------------------------------------
+	-- the drawing plan boxes themselves are NOT plant equipment and are --
+	-- never annotated. they live under /<projid>_DrawingPlanBox as EQUI --
+	-- whose NAME is the drawing number (.AllBoxes() reads them that way, --
+	-- and the match line reads a neighbour's number as 'namn of equi of  --
+	-- box'), so a box sitting in or across this view is collected here   --
+	-- like anything else                                                 --
+	--                                                                    --
+	-- the 'name' test on its own never excluded them: it matches the     --
+	-- EQUI's own name against *_DrawingPlan, and these are named         --
+	-- /26001-AG-004, /Copy-of-26001-AG-001 and so on -- the             --
+	-- _DrawingPlanBox suffix is on the SITE, not on the equipment. it    --
+	-- went unnoticed for as long as it did because the labels it let     --
+	-- through were dropped again further down by the centre-line guards; --
+	-- once equipment was always named (242fce9) three neighbouring boxes --
+	-- got labels of their own, ~10m off the sheet, where the projected   --
+	-- position of something that far outside the view puts them          --
+	-- (reported live 2026-09-03, confirmed by Q XYPO BTEXT DDNA)         --
+	----------------------------------------------------------------------
+	var !equis coll all equi with (not(matchwild(name, |*_DrawingPlan|)) and not(matchwild(name of site, |*_DrawingPlanBox|))) within E $!minE N $!minN U $!minU TO E $!maxE N $!maxN U $!maxU
 	do !equi values !equis
 		--------------------------------------------------------------
 		-- unnamed equipment is left out of this function entirely:  --
