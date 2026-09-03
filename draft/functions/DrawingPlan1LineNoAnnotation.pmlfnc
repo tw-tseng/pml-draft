@@ -3714,17 +3714,20 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				enddo
 				!gwide = !gsum * !gchei.real()
 				-------------------------------------------------------------
-				-- the text has been nudged !glabtxtgap across its own      --
-				-- leader, so the connection point takes the same amount    --
-				-- out again and the leader is left where it was: straight, --
-				-- and in line with the projection line                     --
-				--                                                          --
-				-- Y here is across the text's own direction. the nudge is  --
-				-- always towards the letters, ie the +Y side of the        --
-				-- baseline, so taking it out is always -Y, whatever ADEG   --
-				-- has turned that into on the sheet                        --
+				-- reverted 2026-09-03: the -!glabtxtgap here was meant to --
+				-- cancel the same nudge back out so the leader stayed in  --
+				-- line with the projection line, but the two are in       --
+				-- different frames and do not actually cancel -- the      --
+				-- comment above THIS block (further up, by XYPO) already  --
+				-- says it plainly: "Y stays 0 ... a zero Y is what keeps  --
+				-- the leader straight". confirmed live: TEST-0000010001's --
+				-- leader ran dead level in the user's own reference       --
+				-- picture but visibly drooped over the width of the text  --
+				-- with Y=-1 here, on a run this !gleadstep/!gb2 work did  --
+				-- not touch at all -- CPOFTX's Y is its own, separate     --
+				-- source of lean                                         --
 				-------------------------------------------------------------
-				!gcpofy = !glabtxtgap * -1
+				!gcpofy = 0
 				!greach = !gwide + !glabover
 				-- how far this one reaches, measured from the border of the view --
 				!gtot = !gdimdist + !gclr + !greach
