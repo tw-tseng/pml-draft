@@ -2136,28 +2136,101 @@ define method .RecenterView(!name is string, !equistr is string)
 	!ocx2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real()) + !this.labbandright
 	!ocy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real()) - !this.labbanddown
 	!ocy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real()) + !this.labbandup
-	-- how far it sticks out of each edge, and the move which fixes it --
+	----------------------------------------------------------------------
+	-- and by the grid bubbles, which are not in those bands. the bands  --
+	-- are filled in by LineNoAnnotation and describe its own dimension  --
+	-- chain and labels; the bubbles are placed by GridAnnotation, 50mm  --
+	-- of the sheet outside the view border on every side. on a side     --
+	-- where the labels reach further out the bubbles change nothing --  --
+	-- but where they do not, the drawing was pushed off centre by the   --
+	-- difference: measured on the A1 which reported this, up 73.00 and  --
+	-- left 71.95 covered their bubbles while down 40.20 and right 41.60 --
+	-- did not, so the view was moved 16.4mm down onto a bottom bubble   --
+	-- 3mm from the edge of the canvas with 20mm of air left above it    --
+	-- (reported live 2026-09-04)                                        --
+	--                                                                    --
+	-- .DrawingPlan1GridBubbles carries one side~x~y record per bubble,  --
+	-- in sheet coordination, appended as each one is placed. it is      --
+	-- emptied at the top of GridAnnotation, which runs once per drawing --
+	-- and before this, so it holds this drawing and no other. !gbubrad  --
+	-- is the bubble drawing itself, which hangs off the recorded point: --
+	-- 3.8mm of it measured below the centre of the bottom one, rounded  --
+	-- up so that the allowance never falls short                        --
+	----------------------------------------------------------------------
+	!gbubn = 0
+	!gbubn = !!DrawingPlan1GridBubbles.size()
+	handle any
+		!gbubn = 0
+	endhandle
+	!gbubrad = 5
+	do !gbubi from 1 to !gbubn
+		!gbubp = object array()
+		!gbubp = !!DrawingPlan1GridBubbles[!gbubi].split('~')
+		handle any
+			skip
+		endhandle
+		if (!gbubp.size().gt(2)) then
+			--------------------------------------------------------
+			-- the mm comes off before .real(), the way every other --
+			-- reading of a coordinate in this file does it. these  --
+			-- records are written with string(), which keeps the   --
+			-- unit on, and .real() keeps it on too -- the unit     --
+			-- then travelled all the way through !ocx1 into !dx    --
+			-- and out again as XYPOSITION X 365.475mmmm, which E3D --
+			-- refused, and into the cached view corners, where the --
+			-- .NET sort in FlowAnnotation would not parse it       --
+			-- (reported live 2026-09-04)                           --
+			--------------------------------------------------------
+			!gbubx = !gbubp[2].replace('mm', '').real()
+			!gbuby = !gbubp[3].replace('mm', '').real()
+			!ocx1 = min(!ocx1, !gbubx - !gbubrad)
+			!ocx2 = max(!ocx2, !gbubx + !gbubrad)
+			!ocy1 = min(!ocy1, !gbuby - !gbubrad)
+			!ocy2 = max(!ocy2, !gbuby + !gbubrad)
+		endif
+	enddo
+	----------------------------------------------------------------------
+	-- how far it sticks out of each edge, and the move which centres it --
+	--                                                                   --
+	-- (!ovl - !ovr) * 0.5 IS the centring shift: it multiplies out to   --
+	-- the middle of the canvas minus the middle of the content, and it  --
+	-- holds whichever way the two overflows come out. so there is one   --
+	-- formula and no branches -- content which fits lands in the middle --
+	-- of the canvas, and content too big for the canvas has what will   --
+	-- not fit shared evenly between the two sides, which is what the    --
+	-- both-overflowing branch used to do on its own                     --
+	--                                                                   --
+	-- it used to move the view only when a side really overflowed, and  --
+	-- then by the least it could get away with, so content which fitted --
+	-- was left wherever .Apply() first put it. that centres the view    --
+	-- FRAME and not what is drawn: the label bands are not symmetric    --
+	-- (73mm of sheet on the left against 18mm on the right, 46.6 up     --
+	-- against 66.95 down, measured on the A1 which reported this), so   --
+	-- the drawing sat low in its canvas with room to spare above it     --
+	-- (reported live 2026-09-04)                                        --
+	--                                                                   --
+	-- only the rebuild path comes through here. the update path does    --
+	-- not call .RecenterView() at all (see the note by the call), so a  --
+	-- drawing which has been issued is never re-centred underneath its  --
+	-- own dimensions                                                    --
+	----------------------------------------------------------------------
 	!ovl = !cvx1 - !ocx1
 	!ovr = !ocx2 - !cvx2
-	!dx = 0
-	if (!ovl.gt(0) and !ovr.gt(0)) then
-		-- wider than the canvas: share what is left over between the two sides --
-		!dx = (!ovl - !ovr) * 0.5
-	elseif (!ovl.gt(0)) then
-		!dx = !ovl
-	elseif (!ovr.gt(0)) then
-		!dx = !ovr * -1
-	endif
+	!dx = (!ovl - !ovr) * 0.5
 	!ovd = !cvy1 - !ocy1
 	!ovu = !ocy2 - !cvy2
-	!dy = 0
-	if (!ovd.gt(0) and !ovu.gt(0)) then
-		!dy = (!ovd - !ovu) * 0.5
-	elseif (!ovd.gt(0)) then
-		!dy = !ovd
-	elseif (!ovu.gt(0)) then
-		!dy = !ovu * -1
-	endif
+	!dy = (!ovd - !ovu) * 0.5
+	----------------------------------------------------------------------
+	-- no unit past this point. these two are written into an XYPOSITION --
+	-- command and added into the cached view corners, and a stray mm    --
+	-- breaks both -- E3D refuses XYPOSITION X 365.475mmmm outright, and --
+	-- the .NET sort in FlowAnnotation will not parse a corner which has --
+	-- one. the guard is here, at the one place the numbers stop being   --
+	-- arithmetic and start being command text, because a unit can enter --
+	-- from any of the sources above (2026-09-04)                        --
+	----------------------------------------------------------------------
+	!dx = !dx.string('D6').replace('mm', '').real()
+	!dy = !dy.string('D6').replace('mm', '').real()
 	!adx = abs(!dx)
 	!ady = abs(!dy)
 	!dbgf4 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check4.txt')
@@ -2180,7 +2253,7 @@ define method .RecenterView(!name is string, !equistr is string)
 	!dbgf4.writerecord('RECENTER canvassize unset=' & !!DrawingPlan1.canvassize.unset().string() & ' raw=' & !cvsraw)
 	!dbgf4.writerecord('RECENTER cvx1=' & !cvx1.string('D2') & ' cvx2=' & !cvx2.string('D2') & ' cvy1=' & !cvy1.string('D2') & ' cvy2=' & !cvy2.string('D2'))
 	!dbgf4.writerecord('RECENTER viewLLsh=' & !this.viewLLsh & ' viewURsh=' & !this.viewURsh)
-	!dbgf4.writerecord('RECENTER labbandleft=' & !this.labbandleft.string('D2') & ' labbandright=' & !this.labbandright.string('D2') & ' labbandup=' & !this.labbandup.string('D2') & ' labbanddown=' & !this.labbanddown.string('D2'))
+	!dbgf4.writerecord('RECENTER labbandleft=' & !this.labbandleft.string('D2') & ' labbandright=' & !this.labbandright.string('D2') & ' labbandup=' & !this.labbandup.string('D2') & ' labbanddown=' & !this.labbanddown.string('D2') & ' gbubn=' & !gbubn.string() & ' bubbles-in=' & !ocx1.string('D2') & ' ' & !ocx2.string('D2') & ' ' & !ocy1.string('D2') & ' ' & !ocy2.string('D2'))
 	!dbgf4.writerecord('RECENTER ocx1=' & !ocx1.string('D2') & ' ocx2=' & !ocx2.string('D2') & ' ocy1=' & !ocy1.string('D2') & ' ocy2=' & !ocy2.string('D2'))
 	!dbgf4.writerecord('RECENTER ovl=' & !ovl.string('D2') & ' ovr=' & !ovr.string('D2') & ' ovd=' & !ovd.string('D2') & ' ovu=' & !ovu.string('D2'))
 	!dbgf4.close()
