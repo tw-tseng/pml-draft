@@ -738,6 +738,26 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
 		----------------------------------------------------------------------
+		-- the equipment below is collected over the whole of the box and    --
+		-- not, like everything else on this side, over the shallow band     --
+		-- along its border: every piece of equipment in the drawing is      --
+		-- dimensioned now, and which side it is dimensioned from is decided --
+		-- further down by the border it sits nearest to. so it is collected --
+		-- four times over, once per side, and thrown away on the three      --
+		-- sides which are not its own                                       --
+		--                                                                    --
+		-- the band pair above is left exactly as it was: TYPE 4 below reads --
+		-- !vlfm / !vlto after this loop and is still a band-of-this-side    --
+		-- search                                                            --
+		----------------------------------------------------------------------
+		!eqwlim = !!DrawingPlan1.WorldLimitsOfSheetRect(!vwx1, !vwy1, !vwx2, !vwy2, !trans)
+		!eqminE = !eqwlim[1]
+		!eqminN = !eqwlim[2]
+		!eqmaxE = !eqwlim[3]
+		!eqmaxN = !eqwlim[4]
+		!eqvlfm = 'E ' & $!eqminE & ' N ' & $!eqminN & ' U ' & $!tempvl
+		!eqvlto = 'E ' & $!eqmaxE & ' N ' & $!eqmaxN & ' U ' & $!tempvl1
+		----------------------------------------------------------------------
 		-- the drawing plan boxes themselves are NOT plant equipment and are --
 		-- never annotated. they live under /<projid>_DrawingPlanBox as EQUI --
 		-- whose NAME is the drawing number (.AllBoxes() reads them that way, --
@@ -750,7 +770,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- names whatever this one did NOT, so a box excluded on one side     --
 		-- only would simply move from a dimension to a label                 --
 		----------------------------------------------------------------------
-		var !mems coll all equi with (not(matchwild(name, |*_DrawingPlan|)) and not(matchwild(name of site, |*_DrawingPlanBox|))) within $!vlfm to $!vlto
+		var !mems coll all equi with (not(matchwild(name, |*_DrawingPlan|)) and not(matchwild(name of site, |*_DrawingPlanBox|))) within $!eqvlfm to $!eqvlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
 			--------------------------------------------------------------
@@ -771,82 +791,148 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			if (not(!equinamed.boolean())) then
 				skip
 			endif
-			!inband = !!DrawingPlan1.CheckInSheetBand(!mem, !band, !trans)
 			var !check IDLN for $!mem
 			handle any
 			elsehandle none
 				var !equi namn of $!mem
-				if (!check.eqnocase('INCLUDED') and !inband) then
-					---------------------------------------------------------------
-					-- check if most volume of equipment is within view boundary --
-					-- the equipment has to reach at least 10mm of the sheet in  --
-					-- from the border, measured on the sheet so that it still   --
-					-- works when the view is turned                             --
-					---------------------------------------------------------------
-					var !wvol wvol of $!mem
-					!memlim = !!DrawingPlan1.SheetLimitsOfVolume(!wvol, !trans)
-					!checkwvol = false
-					--------------------------------------------------------------------
-					-- snapped to 2 decimals before the geq 10 test. !vwx1/!vwx2/!vwy1/ --
-					-- !vwy2 and !memlim both come out of ViewSheetTransform()'s chain   --
-					-- of matrix ops, run fresh by rebuild and by update, and an         --
-					-- equipment sitting close enough to the border that this reach      --
-					-- lands within a rounding error of 10 is a coin flip between the    --
-					-- two: same box, nothing changed, rebuild and update disagreed over --
-					-- whether it should be dimensioned at all (2026-08-31,              --
-					-- /02.5HD01_AG_0600_T_660105/B3, reach right at 10mm). 0.01mm of    --
-					-- snapping cannot flip a genuine "clearly under 10" or "clearly     --
-					-- over 10" case, only settle one already balanced on the line       --
-					--------------------------------------------------------------------
-					if (!dir.eq('right')) then
-						!wreach = !vwx2 - !memlim[1]
-						if (!wreach.string('D2').real() geq 10)  then
-							!checkwvol = true
-						endif
-					elseif (!dir.eq('left')) then
-						!wreach = !memlim[3] - !vwx1
-						if (!wreach.string('D2').real() geq 10)  then
-							!checkwvol = true
-						endif
-					elseif (!dir.eq('down')) then
-						!wreach = !memlim[4] - !vwy1
-						if (!wreach.string('D2').real() geq 10)  then
-							!checkwvol = true
-						endif
-					elseif (!dir.eq('up')) then
-						!wreach = !vwy2 - !memlim[2]
-						if (!wreach.string('D2').real() geq 10)  then
-							!checkwvol = true
-						endif
-					endif
-					if (!dbgln) then
-						!dbgf.writerecord('EQUIWVOL ' & !dir & ' equi=' & !equi & ' wreach=' & !wreach.string() & ' checkwvol=' & !checkwvol.string() & ' vwx1=' & !vwx1.string() & ' vwx2=' & !vwx2.string() & ' vwy1=' & !vwy1.string() & ' vwy2=' & !vwy2.string() & ' memlim=' & !memlim[1].string() & ' ' & !memlim[2].string() & ' ' & !memlim[3].string() & ' ' & !memlim[4].string())
-					endif
-					if (!checkwvol) then
-						var !memenupos worpos of $!mem
-						var !memshpos shpos of $!memenupos
-						-------------------------------------------------------
-						-- check if pos of equipment is within view boundary --
-						-- along the side the annotation is drawn on         --
-						-------------------------------------------------------
-						!memx = !memshpos.split().getindexed(2).replace('mm','').real()
-						!memy = !memshpos.split().getindexed(4).replace('mm','').real()
-						!checkwvol = false
-						if (!dir.eq('right') or !dir.eq('left')) then
-							if (!memy lt !vwy2 and !memy gt !vwy1) then
-								!checkwvol = true
+				if (!check.eqnocase('INCLUDED')) then
+					----------------------------------------------------------------
+					-- every piece of equipment standing in the box is dimensioned  --
+					-- (user rule, 2026-09-04). what it used to take was a place in --
+					-- the shallow band of a side AND a reach of 10mm or more in    --
+					-- from that border, which left anything standing out in the    --
+					-- middle of the sheet with no dimension at all -- /D1201 among --
+					-- them, and so with nothing for its name to hang off           --
+					--                                                              --
+					-- the name comes with the dimension. EquiAnnotation names      --
+					-- exactly the equipment which is NOT in equiparray, so every   --
+					-- piece which lands here is named at the end of its own        --
+					-- dimension out at the border instead of carrying a small      --
+					-- label of its own in the middle of the drawing                --
+					----------------------------------------------------------------
+					var !memenupos worpos of $!mem
+					var !memshpos shpos of $!memenupos
+					!memx = !memshpos.split().getindexed(2).replace('mm','').real()
+					!memy = !memshpos.split().getindexed(4).replace('mm','').real()
+					----------------------------------------------------------------
+					-- the position dimensioned is the centre of the equipment, so  --
+					-- it is the centre which has to be on the sheet. equipment     --
+					-- whose centre falls outside the box is left to               --
+					-- EquiAnnotation, which still gives it a name of its own       --
+					----------------------------------------------------------------
+					if (!memx gt !vwx1 and !memx lt !vwx2 and !memy gt !vwy1 and !memy lt !vwy2) then
+						------------------------------------------------------------
+						-- both of the centre lines of a piece of equipment are    --
+						-- dimensioned, not just one of them: a centre line which  --
+						-- is drawn and left undimensioned fixes nothing, and      --
+						-- where equipment stands is what a plan is read for       --
+						-- (user rule, 2026-09-04). so how many dimensions it      --
+						-- takes is how many centre lines it has, which is worked  --
+						-- out here from the shape exactly as EquiAnnotation works --
+						-- it out for the lines themselves: a vessel more than     --
+						-- three times longer than it is wide is drawn with its    --
+						-- long centre line alone and dimensioned once, anything   --
+						-- else has both lines and is dimensioned twice. the two   --
+						-- have to agree, the same way the drawing box filter      --
+						-- above has to agree with the one in that function        --
+						------------------------------------------------------------
+						var !wvol wvol of $!mem
+						!ewid = !wvol.part(1).real() - !wvol.part(4).real()
+						!ewid = abs(!ewid)
+						!nlen = !wvol.part(2).real() - !wvol.part(5).real()
+						!nlen = abs(!nlen)
+						!wantE = true
+						!wantN = true
+						if (!ewid gt !nlen) then
+							if (!nlen gt 0) then
+								!ratio = !ewid / !nlen
+								if (!ratio gt 3) then
+									!wantN = false
+								endif
+							else
+								!wantN = false
 							endif
-						elseif (!dir.eq('down') or !dir.eq('up')) then
-							if (!memx lt !vwx2 and !memx gt !vwx1) then
-								!checkwvol = true
+						else
+							if (!ewid gt 0) then
+								!ratio = !nlen / !ewid
+								if (!ratio gt 3) then
+									!wantE = false
+								endif
+							else
+								!wantE = false
 							endif
 						endif
-						if (!checkwvol) then
+						------------------------------------------------------------
+						-- which border each of those lines is taken out to. a     --
+						-- centre line can only reach the two sides it points at,  --
+						-- and of those two it goes to the nearer one, so the      --
+						-- dimension crosses as little of the drawing as it can    --
+						--                                                         --
+						-- which pair a line points at is asked of the sheet and   --
+						-- not of the model: !trans carries ADEGREES and rcode, so --
+						-- with rcode = left it is the E-W centre line which runs  --
+						-- up the sheet, and the top or the bottom border which it --
+						-- has to reach. E and N stay square to each other on the  --
+						-- sheet whatever the view is turned by, so whichever pair --
+						-- one of them takes, the other takes the other            --
+						--                                                         --
+						-- the distances are snapped to 2 decimals before they are --
+						-- compared, for the reason the 10mm reach was snapped     --
+						-- (2026-08-31): they come out of ViewSheetTransform()'s   --
+						-- chain of matrix ops, worked out again from scratch by   --
+						-- rebuild and by update, and equipment standing near the  --
+						-- middle of a pair can have both sides agreeing to within --
+						-- a rounding error. a side which came out differently     --
+						-- between the two runs would carry the dimension across   --
+						-- to the other border and cloud a drawing where nothing   --
+						-- had moved                                               --
+						------------------------------------------------------------
+						!dright = !vwx2 - !memx
+						!dright = !dright.string('D2').real()
+						!dleft = !memx - !vwx1
+						!dleft = !dleft.string('D2').real()
+						!ddown = !memy - !vwy1
+						!ddown = !ddown.string('D2').real()
+						!dup = !vwy2 - !memy
+						!dup = !dup.string('D2').real()
+						!lrside = 'left'
+						if (!dright lt !dleft) then
+							!lrside = 'right'
+						endif
+						!udside = 'up'
+						if (!ddown lt !dup) then
+							!udside = 'down'
+						endif
+						!eaxsx = abs(!trans[5])
+						!eaxsy = abs(!trans[6])
+						!sideE = !udside
+						!sideN = !lrside
+						if (!eaxsx geq !eaxsy) then
+							!sideE = !lrside
+							!sideN = !udside
+						endif
+						!take = false
+						if (!wantE and !dir.eq(!sideE)) then
+							!take = true
+						endif
+						if (!wantN and !dir.eq(!sideN)) then
+							!take = true
+						endif
+						if (!dbgln) then
+							!dbgf.writerecord('EQUISIDE ' & !dir & ' equi=' & !equi & ' wantE=' & !wantE.string() & ' wantN=' & !wantN.string() & ' sideE=' & !sideE & ' sideN=' & !sideN & ' take=' & !take.string() & ' dright=' & !dright.string() & ' dleft=' & !dleft.string() & ' ddown=' & !ddown.string() & ' dup=' & !dup.string())
+						endif
+						if (!take) then
+							!j = !j + 1
 							!x = !memshpos.split().getindexed(2).replace('mm','').real() + 0.0000000001 * !j
 							!y = !memshpos.split().getindexed(4).replace('mm','').real() + 0.0000000001 * !j
 							!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !equi
 							!result.append(!memstr)
-							!!DrawingPlan1.equiparray.append(!equi)
+							----------------------------------------------------------
+							-- once only, however many sides it is dimensioned from  --
+							----------------------------------------------------------
+							if (unset(!!DrawingPlan1.equiparray.findfirst(!equi))) then
+								!!DrawingPlan1.equiparray.append(!equi)
+							endif
 						endif
 					endif
 				endif
@@ -1394,11 +1480,67 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- a length of tube which crosses the border carries the crossing  --
 				-- point as its position, so for those nothing moves               --
 				--                                                                 --
-				-- equipment is left on the border. its position is the middle of  --
-				-- the equipment and a projection line starting there would be     --
-				-- drawn right across it                                           --
+				-- equipment used to be left out on the border altogether, because --
+				-- a projection line which starts at the middle of a piece of      --
+				-- equipment is drawn right across it. that left the dimension     --
+				-- standing clear of the very thing it was measuring, with the gap --
+				-- between the two plain on the sheet, so equipment is treated     --
+				-- like everything else now (user rule, 2026-09-04) -- and the old --
+				-- objection is answered instead by starting its line at the EDGE  --
+				-- of the equipment rather than at its middle, which is what the   --
+				-- block below works out                                           --
+				--                                                                 --
+				-- only the DIMENSION POINT moves. !ptx / !pty are still taken     --
+				-- from the border crossing, so the packing of the labels and the  --
+				-- place the text itself lands are exactly as they were            --
 				--------------------------------------------------------------------
-				if (not(!type.eqnocase('EQUI'))) then
+				--------------------------------------------------------------------
+				-- equipment is the one which does not start on its own position:  --
+				-- that is the middle of it. its line starts 2mm of the sheet       --
+				-- outside its box on the side the dimension is on, which is where  --
+				-- its own centre line ends -- EquiAnnotation runs that line out of --
+				-- WVOL by !OFFSET, and !OFFSET is 2mm of the sheet. the gridgap    --
+				-- below then adds the 3mm the user asked to see between the end of --
+				-- that centre line and the start of this one (2026-09-04)          --
+				--                                                                  --
+				-- the box is measured in SHEET coordination, so ADEGREES and rcode --
+				-- are carried by .SheetLimitsOfVolume() and the side asked for is  --
+				-- the side as the sheet shows it; the point is then turned back    --
+				-- into a model position for POS. only the coordinate ALONG the     --
+				-- dimension moves: across it the point stays on the equipment's    --
+				-- own position, which is where its centre line runs and what the   --
+				-- dimension measures                                               --
+				--------------------------------------------------------------------
+				if (!type.eqnocase('EQUI')) then
+					var !ewvol wvol of $!mem
+					!elim = !!DrawingPlan1.SheetLimitsOfVolume(!ewvol, !trans)
+					!ecenlover = 2
+					!ex = !mempossh.part(2).replace('mm', '').real()
+					!ey = !mempossh.part(4).replace('mm', '').real()
+					if (!dir.eq('right')) then
+						!ex = !elim[3] + !ecenlover
+					elseif (!dir.eq('left')) then
+						!ex = !elim[1] - !ecenlover
+					elseif (!dir.eq('up')) then
+						!ey = !elim[4] + !ecenlover
+					elseif (!dir.eq('down')) then
+						!ey = !elim[2] - !ecenlover
+					endif
+					------------------------------------------------------------
+					-- the unit is stripped off both before it is put back on.  --
+					-- .string() answers a real which came out of the sheet     --
+					-- limits WITH its mm already on it, while one which has    --
+					-- been through .replace(mm).real() comes back bare, so     --
+					-- appending mm to each of them blindly wrote X 489.403mmmm --
+					-- and E3D would not parse the line (reported live,         --
+					-- 2026-09-04)                                              --
+					------------------------------------------------------------
+					!exs = !ex.string('D3').replace('mm', '')
+					!eys = !ey.string('D3').replace('mm', '')
+					!esh = 'X ' & !exs & 'mm Y ' & !eys & 'mm'
+					var !eenu enupos of $!esh
+					!attapos = object position(!eenu)
+				else
 					!attapos = object position(!mempos)
 				endif
 				!attapos = !attapos.offset(!viewdir.direction(), !!DrawingPlan1.gridgap.val / !!DrawingPlan1.vsca )

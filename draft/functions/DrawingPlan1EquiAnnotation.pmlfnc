@@ -403,23 +403,35 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 					!stravert = false
 				endif
 			endif
-			--------------------------------------------------------------
-			-- this equipment's own name label from a previous run, if    --
-			-- there is one. reused rather than rebuilt so the label      --
-			-- keeps its element across runs; the attributes below are    --
-			-- written again either way, which lands an unmoved piece of  --
-			-- equipment on exactly the values it already had            --
-			--------------------------------------------------------------
-			!eqglabref = ''
-			do !egi from 1 to !existingeqglabs.size()
-				if (!existingeqnames[!egi].eq(!namn) and not(!existingeqtaken[!egi])) then
-					!eqglabref = !existingeqglabs[!egi]
-					!existingeqtaken[!egi] = true
-					!eqclaimedglabs.append(!eqglabref)
-					break
-				endif
-			enddo
 			if (unset(!!DrawingPlan1.equiparray.findfirst(!namn))) then
+				----------------------------------------------------------------
+				-- the claim sits inside this branch and not above it, because  --
+				-- only this branch writes a name label at all. equipment which --
+				-- IS dimensioned takes its name from LineNoAnnotation, out at  --
+				-- the border, and must leave any label of its own from an      --
+				-- earlier run UNclaimed so that the sweep at the end takes it   --
+				-- away -- claiming one and then not writing to it would pin a  --
+				-- stale label on the drawing for ever. this matters now that   --
+				-- every piece of equipment is dimensioned (2026-09-04): most   --
+				-- of the labels this function wrote before are exactly the     --
+				-- ones which have to go                                        --
+				----------------------------------------------------------------
+				--------------------------------------------------------------
+				-- this equipment's own name label from a previous run, if    --
+				-- there is one. reused rather than rebuilt so the label      --
+				-- keeps its element across runs; the attributes below are    --
+				-- written again either way, which lands an unmoved piece of  --
+				-- equipment on exactly the values it already had            --
+				--------------------------------------------------------------
+				!eqglabref = ''
+				do !egi from 1 to !existingeqglabs.size()
+					if (!existingeqnames[!egi].eq(!namn) and not(!existingeqtaken[!egi])) then
+						!eqglabref = !existingeqglabs[!egi]
+						!existingeqtaken[!egi] = true
+						!eqclaimedglabs.append(!eqglabref)
+						break
+					endif
+				enddo
 				------------------------------------
 				-- equipments are not dimensioned --
 				------------------------------------
@@ -460,8 +472,24 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 					endif
 					DDNA $!EQUI
 					Btext |#EQUI(C2:)|
-					ALIGN BBODY
 					ABSO
+					----------------------------------------------------------------
+					-- the angle, the justification and the alignment are written  --
+					-- every run rather than left to the defaults on the layer: a  --
+					-- label reused from a previous run keeps whatever it was      --
+					-- given then, so equipment which has changed shape -- or a    --
+					-- sheet whose rcode has changed -- would otherwise keep the   --
+					-- angle of the other branch for ever. that is the trap of     --
+					-- 9825381, where reused match line text kept its old 0        --
+					--                                                             --
+					-- 0 is the view angle wanted under either rcode: this name    --
+					-- hangs off the E end, so with rcode = left it comes out at   --
+					-- 90 on the sheet, along the equipment as the sheet shows it  --
+					-- and still reading up the page                               --
+					----------------------------------------------------------------
+					Adegrees 0
+					Justification Left
+					ALIGN BBODY
 					var !cpos1 shpos OF $!EPOS
 					AT $!cpos1
 					var !extent extent btext
@@ -500,9 +528,35 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 					endif
 					DDNA $!EQUI
 					Btext |#EQUI(C2:)|
-					ALIGN BBODY
 					ABSO
-					Adegrees 90
+					----------------------------------------------------------------
+					-- a label's ADEG is read in the view and not on the sheet,    --
+					-- and rcode = left turns the view 90 degrees anticlockwise on --
+					-- the sheet, so the angle wanted on the sheet has the view's  --
+					-- own turn taken back off it -- exactly what LineNoAnnotation --
+					-- does to its side labels. this name hangs off the N end of   --
+					-- the equipment, which rcode = left lays along the x axis of  --
+					-- the sheet: the angle wanted there is 0, so the label has to --
+					-- be written at -90. written at +90 it lands at 180 on the    --
+					-- sheet and reads upside down (reported live 2026-09-04 --    --
+					-- /D1201 on a rcode left sheet, its name mirrored at the left --
+					-- end of the vessel, which is where rcode left puts N)        --
+					--                                                             --
+					-- turning the text by 180 about its anchor also reverses the  --
+					-- way it runs from that anchor and the side of its baseline   --
+					-- the letters sit on, so the justification and the alignment  --
+					-- are mirrored with it and the name still hangs off the N     --
+					-- end, clear of the equipment                                 --
+					----------------------------------------------------------------
+					if (!!DrawingPlan1.rcode.eqnocase('left')) then
+						Adegrees -90
+						Justification Right
+						ALIGN TBODY
+					else
+						Adegrees 90
+						Justification Left
+						ALIGN BBODY
+					endif
 					var !cpos1 shpos OF $!NPOS
 					AT $!cpos1
 					var !extent extent btext

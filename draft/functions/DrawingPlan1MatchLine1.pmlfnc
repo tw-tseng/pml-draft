@@ -279,6 +279,28 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 						handle any
 						endhandle
 					endif
+					----------------------------------------------------------
+					-- blanking, on the text however it got here: the letters --
+					-- blank the drawing behind them, so a line which runs    --
+					-- under this text is broken by a gap instead of being    --
+					-- drawn straight through it. the equipment dimensions'   --
+					-- projection lines are what made this show: since        --
+					-- 2026-09-04 they reach all the way in to the equipment  --
+					-- and one of them crossed the SEE / MATCH LINE text on   --
+					-- the border (user request, 2026-09-04)                  --
+					--                                                         --
+					-- CE is the text in both branches above -- the one just  --
+					-- created, or the one claimed and moved -- so this sits  --
+					-- after the endif and is written for both. a reused text --
+					-- keeps whatever it was born with unless it is re-set,   --
+					-- and one born before this change was born without it    --
+					----------------------------------------------------------
+					BLNK TRUE
+					handle any
+					endhandle
+					BMARGIN 1mm
+					handle any
+					endhandle
 				elseif (!dir.eq('up') or !dir.eq('down')) and not(!tempt.eqnocase('')) then
 					!posx = !sortedtypes[!i].split('!').getindexed(3).real() + (!sortedtypes[!i + 1].split('!').getindexed(3).real() - !sortedtypes[!i].split('!').getindexed(3).real()) * 0.5
 					if !dir.eq('up') then
@@ -315,6 +337,28 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 						handle any
 						endhandle
 					endif
+					----------------------------------------------------------
+					-- blanking, on the text however it got here: the letters --
+					-- blank the drawing behind them, so a line which runs    --
+					-- under this text is broken by a gap instead of being    --
+					-- drawn straight through it. the equipment dimensions'   --
+					-- projection lines are what made this show: since        --
+					-- 2026-09-04 they reach all the way in to the equipment  --
+					-- and one of them crossed the SEE / MATCH LINE text on   --
+					-- the border (user request, 2026-09-04)                  --
+					--                                                         --
+					-- CE is the text in both branches above -- the one just  --
+					-- created, or the one claimed and moved -- so this sits  --
+					-- after the endif and is written for both. a reused text --
+					-- keeps whatever it was born with unless it is re-set,   --
+					-- and one born before this change was born without it    --
+					----------------------------------------------------------
+					BLNK TRUE
+					handle any
+					endhandle
+					BMARGIN 1mm
+					handle any
+					endhandle
 				endif
 			endif
 --			$p $!sortedtypes[$!i]
@@ -444,6 +488,28 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				handle any
 				endhandle
 			endif
+			----------------------------------------------------------
+			-- blanking, on the text however it got here: the letters --
+			-- blank the drawing behind them, so a line which runs    --
+			-- under this text is broken by a gap instead of being    --
+			-- drawn straight through it. the equipment dimensions'   --
+			-- projection lines are what made this show: since        --
+			-- 2026-09-04 they reach all the way in to the equipment  --
+			-- and one of them crossed the SEE / MATCH LINE text on   --
+			-- the border (user request, 2026-09-04)                  --
+			--                                                         --
+			-- CE is the text in both branches above -- the one just  --
+			-- created, or the one claimed and moved -- so this sits  --
+			-- after the endif and is written for both. a reused text --
+			-- keeps whatever it was born with unless it is re-set,   --
+			-- and one born before this change was born without it    --
+			----------------------------------------------------------
+			BLNK TRUE
+			handle any
+			endhandle
+			BMARGIN 1mm
+			handle any
+			endhandle
 		endif
 	endif
 endfunction
