@@ -20,6 +20,15 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	--------------------------------------------------------------------
 	$!name/SS/S1/V1
 	!!DrawingPlan1MatchCollect()
+	--------------------------------------------------------------------
+	-- emptied here, filled by the four sides below: one record per    --
+	-- match line text, side and sheet extent, for the gap pass which  --
+	-- runs after this function has put the texts in their final       --
+	-- places. this function is called again after .RecenterView()     --
+	-- moves the view, so starting fresh each call is what keeps the   --
+	-- boxes on the positions the sheet actually ends up with          --
+	--------------------------------------------------------------------
+	!!DrawingPlan1MatchTexts = object array()
 	do !jj from 1 to 4
 		!dir = !dirlist.part(!jj)
 		$!name/SS/S1/V1

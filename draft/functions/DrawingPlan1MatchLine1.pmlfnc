@@ -280,27 +280,30 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 						endhandle
 					endif
 					----------------------------------------------------------
-					-- blanking, on the text however it got here: the letters --
-					-- blank the drawing behind them, so a line which runs    --
-					-- under this text is broken by a gap instead of being    --
-					-- drawn straight through it. the equipment dimensions'   --
-					-- projection lines are what made this show: since        --
-					-- 2026-09-04 they reach all the way in to the equipment  --
-					-- and one of them crossed the SEE / MATCH LINE text on   --
-					-- the border (user request, 2026-09-04)                  --
+					-- this text, as a box on the sheet, for the gap pass at  --
+					-- the end of the run. a dimension projection line which  --
+					-- crosses it has to be broken, and GAP wants the middle  --
+					-- of the break and how long it is -- both come out of    --
+					-- this extent (user rule, 2026-09-04)                    --
 					--                                                         --
-					-- CE is the text in both branches above -- the one just  --
-					-- created, or the one claimed and moved -- so this sits  --
-					-- after the endif and is written for both. a reused text --
-					-- keeps whatever it was born with unless it is re-set,   --
-					-- and one born before this change was born without it    --
+					-- CE is the text in both branches above, the one just    --
+					-- created or the one claimed and moved, so the extent is --
+					-- read here for both and is this run position either way --
+					--                                                         --
+					-- BLNK / BMARGIN used to be written here instead. that    --
+					-- was the wrong tool: blanking hides whatever is behind  --
+					-- the text, which is not the same thing as breaking the  --
+					-- line, and E3D has GAP for the second (user, 2026-09-04)--
 					----------------------------------------------------------
-					BLNK TRUE
+					var !mgext extent btext
 					handle any
+						!mgext = ''
 					endhandle
-					BMARGIN 1mm
-					handle any
-					endhandle
+					if (!mgext.neq('')) then
+						!!DrawingPlan1MatchTexts.append(!dir & '~' & !mgext)
+						handle any
+						endhandle
+					endif
 				elseif (!dir.eq('up') or !dir.eq('down')) and not(!tempt.eqnocase('')) then
 					!posx = !sortedtypes[!i].split('!').getindexed(3).real() + (!sortedtypes[!i + 1].split('!').getindexed(3).real() - !sortedtypes[!i].split('!').getindexed(3).real()) * 0.5
 					if !dir.eq('up') then
@@ -338,27 +341,30 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 						endhandle
 					endif
 					----------------------------------------------------------
-					-- blanking, on the text however it got here: the letters --
-					-- blank the drawing behind them, so a line which runs    --
-					-- under this text is broken by a gap instead of being    --
-					-- drawn straight through it. the equipment dimensions'   --
-					-- projection lines are what made this show: since        --
-					-- 2026-09-04 they reach all the way in to the equipment  --
-					-- and one of them crossed the SEE / MATCH LINE text on   --
-					-- the border (user request, 2026-09-04)                  --
+					-- this text, as a box on the sheet, for the gap pass at  --
+					-- the end of the run. a dimension projection line which  --
+					-- crosses it has to be broken, and GAP wants the middle  --
+					-- of the break and how long it is -- both come out of    --
+					-- this extent (user rule, 2026-09-04)                    --
 					--                                                         --
-					-- CE is the text in both branches above -- the one just  --
-					-- created, or the one claimed and moved -- so this sits  --
-					-- after the endif and is written for both. a reused text --
-					-- keeps whatever it was born with unless it is re-set,   --
-					-- and one born before this change was born without it    --
+					-- CE is the text in both branches above, the one just    --
+					-- created or the one claimed and moved, so the extent is --
+					-- read here for both and is this run position either way --
+					--                                                         --
+					-- BLNK / BMARGIN used to be written here instead. that    --
+					-- was the wrong tool: blanking hides whatever is behind  --
+					-- the text, which is not the same thing as breaking the  --
+					-- line, and E3D has GAP for the second (user, 2026-09-04)--
 					----------------------------------------------------------
-					BLNK TRUE
+					var !mgext extent btext
 					handle any
+						!mgext = ''
 					endhandle
-					BMARGIN 1mm
-					handle any
-					endhandle
+					if (!mgext.neq('')) then
+						!!DrawingPlan1MatchTexts.append(!dir & '~' & !mgext)
+						handle any
+						endhandle
+					endif
 				endif
 			endif
 --			$p $!sortedtypes[$!i]
@@ -489,27 +495,30 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				endhandle
 			endif
 			----------------------------------------------------------
-			-- blanking, on the text however it got here: the letters --
-			-- blank the drawing behind them, so a line which runs    --
-			-- under this text is broken by a gap instead of being    --
-			-- drawn straight through it. the equipment dimensions'   --
-			-- projection lines are what made this show: since        --
-			-- 2026-09-04 they reach all the way in to the equipment  --
-			-- and one of them crossed the SEE / MATCH LINE text on   --
-			-- the border (user request, 2026-09-04)                  --
+			-- this text, as a box on the sheet, for the gap pass at  --
+			-- the end of the run. a dimension projection line which  --
+			-- crosses it has to be broken, and GAP wants the middle  --
+			-- of the break and how long it is -- both come out of    --
+			-- this extent (user rule, 2026-09-04)                    --
 			--                                                         --
-			-- CE is the text in both branches above -- the one just  --
-			-- created, or the one claimed and moved -- so this sits  --
-			-- after the endif and is written for both. a reused text --
-			-- keeps whatever it was born with unless it is re-set,   --
-			-- and one born before this change was born without it    --
+			-- CE is the text in both branches above, the one just    --
+			-- created or the one claimed and moved, so the extent is --
+			-- read here for both and is this run position either way --
+			--                                                         --
+			-- BLNK / BMARGIN used to be written here instead. that    --
+			-- was the wrong tool: blanking hides whatever is behind  --
+			-- the text, which is not the same thing as breaking the  --
+			-- line, and E3D has GAP for the second (user, 2026-09-04)--
 			----------------------------------------------------------
-			BLNK TRUE
+			var !mgext extent btext
 			handle any
+				!mgext = ''
 			endhandle
-			BMARGIN 1mm
-			handle any
-			endhandle
+			if (!mgext.neq('')) then
+				!!DrawingPlan1MatchTexts.append(!dir & '~' & !mgext)
+				handle any
+				endhandle
+			endif
 		endif
 	endif
 endfunction

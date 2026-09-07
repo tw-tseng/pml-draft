@@ -1,0 +1,204 @@
+--------------------------------------------------
+-- Function : Gap dimension lines at match line  --
+--            texts                              --
+-- Auther   : tw tseng                           --
+-- Date     : 2026/09/04                         --
+--------------------------------------------------
+
+------------------------------------------------------------------------
+-- a dimension's projection line runs from its point out to the        --
+-- dimension line, and since 2026-09-04 an equipment's point sits on   --
+-- the equipment itself, so that line now crosses the whole width of   --
+-- the border -- straight through the SEE / MATCH LINE texts which sit --
+-- just outside the box edge. E3D breaks a line for this with GAP:     --
+--                                                                     --
+--   GAP AT X <x> Y <y> DISTANCE <length>                              --
+--                                                                     --
+-- with CE on the LDIM the line belongs to (user, 2026-09-04). it is   --
+-- NOT the same as blanking -- blanking hides whatever is behind the   --
+-- text, GAP takes a piece out of the line itself                      --
+--                                                                     --
+-- a second GAP at a position which already has one overwrites it      --
+-- rather than adding a second (user, confirmed in E3D 2026-09-04), so --
+-- this can be written every run without checking first and without    --
+-- stacking. Q GAPS reads them back as                                 --
+--   Gaps X 326.439mm Y 192mm length 20mm                              --
+-- which is what a later pass would need to tidy stale ones            --
+--                                                                     --
+-- runs last, after the texts are in their final places: .Apply()     --
+-- calls MatchLine once and .RecenterView() calls it again after the   --
+-- view has moved, and it is that second set of positions the gaps     --
+-- have to line up with                                                --
+------------------------------------------------------------------------
+define function !!DrawingPlan1MatchGaps(!name is string)
+	!dirlist = 'right left down up'
+	----------------------------------------------------------------------
+	-- how much wider than the text the break is, each side of it, in    --
+	-- sheet mm. a gap exactly the width of the letters reads as the     --
+	-- line touching them rather than as a deliberate break              --
+	----------------------------------------------------------------------
+	!mgmargin = 2
+	!mgtexts = object array()
+	!mgtexts = !!DrawingPlan1MatchTexts
+	handle any
+		!mgtexts = object array()
+	endhandle
+	!mgdbg = object array()
+	do !jj from 1 to 4
+		!dir = !dirlist.part(!jj)
+		------------------------------------------------------------------
+		-- the texts this side put on the sheet, as boxes. each record  --
+		-- is 'side~<extent>' and the extent is the eight-token form     --
+		-- X <x1> Y <y1> X <x2> Y <y2>, in sheet coordination           --
+		------------------------------------------------------------------
+		!bx1 = object array()
+		!by1 = object array()
+		!bx2 = object array()
+		!by2 = object array()
+		do !ti from 1 to !mgtexts.size()
+			!rec = object array()
+			!rec = !mgtexts[!ti].split('~')
+			handle any
+				skip
+			endhandle
+			if (!rec.size().lt(2)) then
+				skip
+			endif
+			if (not(!rec[1].eq(!dir))) then
+				skip
+			endif
+			--------------------------------------------------------
+			-- the extent is eight tokens, X x1 Y y1 X x2 Y y2. it --
+			-- is counted before it is taken apart, because a      --
+			-- handle only guards the one statement in front of it --
+			-- and four separate reads would leave three of them   --
+			-- bare (the same trap the check4 debug line fell into --
+			-- on 2026-09-03)                                      --
+			--------------------------------------------------------
+			!eparts = object array()
+			!eparts = !rec[2].split()
+			handle any
+				skip
+			endhandle
+			if (!eparts.size().lt(8)) then
+				skip
+			endif
+			!ax = !eparts[2].replace('mm', '').real()
+			!ay = !eparts[4].replace('mm', '').real()
+			!cx = !eparts[6].replace('mm', '').real()
+			!cy = !eparts[8].replace('mm', '').real()
+			!bx1.append(min(!ax, !cx))
+			!bx2.append(max(!ax, !cx))
+			!by1.append(min(!ay, !cy))
+			!by2.append(max(!ay, !cy))
+		enddo
+		if (!bx1.size().eq(0)) then
+			skip
+		endif
+		------------------------------------------------------------------
+		-- the dimension points of this side, read in a pass of their    --
+		-- own: navigating to each one moves CE, and CE has to be back   --
+		-- on the LDIM before a single GAP can be written                --
+		------------------------------------------------------------------
+		$!name/SS/S1/V1/ateLINE_$!dir
+		handle any
+			skip
+		endhandle
+		!dps = object array()
+		var !dps coll all dpoi for ce
+		handle any
+			!dps = object array()
+		endhandle
+		!pxs = object array()
+		!pys = object array()
+		do !dp values !dps
+			$!dp
+			handle any
+				skip
+			endhandle
+			!dsh = ''
+			var !dpos pos
+			handle any
+				skip
+			endhandle
+			var !dsh shpos of $!dpos
+			handle any
+				!dsh = ''
+			endhandle
+			if (!dsh.neq('')) then
+				!pxs.append(!dsh.part(2).replace('mm', '').real())
+				!pys.append(!dsh.part(4).replace('mm', '').real())
+			endif
+		enddo
+		------------------------------------------------------------------
+		-- and the breaks. on the right and left sides the projection    --
+		-- lines run across the sheet and the texts stand up it, so a    --
+		-- line is crossed when its own y falls inside the text's, and   --
+		-- the break is as long as the text is wide. the top and bottom  --
+		-- sides are the same thing with the axes swapped                --
+		------------------------------------------------------------------
+		do !bi from 1 to !bx1.size()
+			do !pi from 1 to !pxs.size()
+				!gx = 0
+				!gy = 0
+				!glen = 0
+				!hit = false
+				if (!dir.eq('right') or !dir.eq('left')) then
+					if (!pys[!pi].gt(!by1[!bi]) and !pys[!pi].lt(!by2[!bi])) then
+						!gx = (!bx1[!bi] + !bx2[!bi]) * 0.5
+						!gy = !pys[!pi]
+						!glen = !bx2[!bi] - !bx1[!bi] + !mgmargin + !mgmargin
+						!hit = true
+					endif
+				else
+					if (!pxs[!pi].gt(!bx1[!bi]) and !pxs[!pi].lt(!bx2[!bi])) then
+						!gx = !pxs[!pi]
+						!gy = (!by1[!bi] + !by2[!bi]) * 0.5
+						!glen = !by2[!bi] - !by1[!bi] + !mgmargin + !mgmargin
+						!hit = true
+					endif
+				endif
+				if (!hit) then
+					----------------------------------------------------------
+					-- bare numbers, and the unit stripped off first. the    --
+					-- user's own form of the command carries no unit, and   --
+					-- a value which still has its mm on it would be written --
+					-- out as 326.439mmmm -- the same trap which broke        --
+					-- XYPOSITION and the equipment attach point earlier the --
+					-- same day                                              --
+					----------------------------------------------------------
+					!gxs = !gx.string('D3').replace('mm', '')
+					!gys = !gy.string('D3').replace('mm', '')
+					!gds = !glen.string('D3').replace('mm', '')
+					$!name/SS/S1/V1/ateLINE_$!dir
+					handle any
+						skip
+					endhandle
+					GAP AT X $!gxs Y $!gys DISTANCE $!gds
+					handle any
+						!mgdbg.append('GAPFAIL ' & !dir & ' x=' & !gxs & ' y=' & !gys & ' d=' & !gds)
+					elsehandle none
+						!mgdbg.append('GAP ' & !dir & ' x=' & !gxs & ' y=' & !gys & ' d=' & !gds)
+					endhandle
+				endif
+			enddo
+		enddo
+	enddo
+	----------------------------------------------------------------------
+	-- one line per break attempted, so a run which drew none can be     --
+	-- told apart from one whose GAPs were refused. remove with the rest --
+	-- of the diagnostics (see the checklist's step 7)                   --
+	----------------------------------------------------------------------
+	!mgf = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_gap.txt')
+	!mgf.open('overwrite')
+	handle any
+		return
+	endhandle
+	!mgf.writerecord('GAPRUN texts=' & !mgtexts.size().string())
+	do !mi from 1 to !mgdbg.size()
+		!mgf.writerecord(!mgdbg[!mi])
+	enddo
+	!mgf.close()
+	handle any
+	endhandle
+endfunction

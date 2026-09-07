@@ -109,6 +109,17 @@ layout form !!DrawingPlan1 dialog dock
 			text .northpostext 'POS' tagwidth 22 at xmin.northsca ymax.northsca+0.1 width 27 is string
 			button .northposbutn 'Pick' at xmax.northpostext+0.4 ymin.northpostext width 5 call |!This.northarrowpick()|
 		exit
+		frame .flowarrow 'FlowArrow'
+			---------------------------------------------------------------------
+			-- the symbol drawn on a pipe to show which way it flows. the CE    --
+			-- button goes through .typepick(), so the field only ever takes a  --
+			-- SYTM and says so instead of accepting whatever CE happens to be  --
+			---------------------------------------------------------------------
+			text .flowtext 'Flow Arrow' tagwidth 22 width 27 is string
+			button .flowbutn 'CE' at xmax.flowtext+0.4 ymin.flowtext width 5 call |!This.typepick('SYTM', 'flowtext')|
+			paragraph .flowpara at xmax.flowbutn+0.5 ymin.flowbutn+0.1 text 'SYTM'
+			text .flowsca 'Scale' tagwidth 22 at xmin.flowtext ymax.flowtext+0.1 width 27 is real
+		exit
 		frame .gridframe 'Grid'
 			text .griddist 'Distance'    tagwidth 10 width 6 is real
 			text .gridgap  'Gap'         tagwidth 10 at xmin.griddist ymax.griddist+0.1 width 6 is real
@@ -281,7 +292,10 @@ define method .DrawingPlan1()
   !this.gridgap.val = 3
   !this.gridhei.val = 3
   !this.griddia.val = 10
+	!this.northtext.val = |/DRA/MAS/SYMBOLS/GEN/MISC/P-NARR|
 	!this.northsca.val = 1
+	!this.flowtext.val = |/DRA/MAS/SYMBOLS/GEN/WELD/WELD-ARR|
+	!this.flowsca.val = 1
 	!this.rcode = 'up'
 	!this.openshee.val = true
 	!this.delshee.val = true
@@ -1549,6 +1563,23 @@ define method .Apply()
 				-- .RecenterView() for why it has to be                          --
 				------------------------------------------------------------------
 				!this.RecenterView(!name, !equistr)
+				----------------------------------------------------------------
+				-- and the breaks where a dimension crosses a match line text. --
+				-- last, because it needs the texts where they finally ended   --
+				-- up: MatchLine is called once above and .RecenterView()      --
+				-- calls it again after moving the view, and it is that second --
+				-- set of positions the gaps have to line up with              --
+				--                                                              --
+				-- it leaves CE on an LDIM, so the view is navigated back to    --
+				-- afterwards -- reading VIEWDIR or VSCA off the wrong element  --
+				-- is what broke EquiAnnotation on the update path (c0a3e5d)    --
+				----------------------------------------------------------------
+				!!DrawingPlan1MatchGaps(!name)
+				handle any
+				endhandle
+				$!name/SS/S1/V1
+				handle any
+				endhandle
 
 				---------------------------
 				-- flow arrow annotation --
@@ -2084,6 +2115,23 @@ define method .Apply()
 				------------------------------------------------------------------
 				$!name/SS/S1/V1
 				!!DrawingPlan1MatchLine(!name, !equistr)
+				----------------------------------------------------------------
+				-- and the breaks where a dimension crosses a match line text. --
+				-- last, because it needs the texts where they finally ended   --
+				-- up: MatchLine is called once above and .RecenterView()      --
+				-- calls it again after moving the view, and it is that second --
+				-- set of positions the gaps have to line up with              --
+				--                                                              --
+				-- it leaves CE on an LDIM, so the view is navigated back to    --
+				-- afterwards -- reading VIEWDIR or VSCA off the wrong element  --
+				-- is what broke EquiAnnotation on the update path (c0a3e5d)    --
+				----------------------------------------------------------------
+				!!DrawingPlan1MatchGaps(!name)
+				handle any
+				endhandle
+				$!name/SS/S1/V1
+				handle any
+				endhandle
 				------------------------------------------------------------------
 				-- update deliberately does NOT call .RecenterView() (2026-09-01, --
 				-- reverted same day it was added): once a REVI exists the view   --
@@ -2742,6 +2790,8 @@ define method .Save()
 		!ff.writerecord('!this.northtext.val' & '=|' & !this.northtext.val & '|')
 		!ff.writerecord('!this.northsca.val' & '=' & !this.northsca.val)
 		!ff.writerecord('!this.northpostext.val' & '=|' & !this.northpostext.val & '|')
+		!ff.writerecord('!this.flowtext.val' & '=|' & !this.flowtext.val & '|')
+		!ff.writerecord('!this.flowsca.val' & '=' & !this.flowsca.val)
 		!ff.writerecord('!this.griddist.val' & '=' & !this.griddist.val)
 		!ff.writerecord('!this.gridgap.val' & '=' & !this.gridgap.val)
 		!ff.writerecord('!this.gridhei.val' & '=' & !this.gridhei.val)
