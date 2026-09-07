@@ -315,6 +315,56 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	!hardmin = 10
 	!hardmin2 = !hardmin * !hardmin
 	------------------------------------------------------------------------
+	-- which symbol the arrow is drawn from, and how big. both come off    --
+	-- the FlowArrow tab of the form, and both are read once here rather   --
+	-- than per branch: they cannot change while this runs, and a bad name --
+	-- is then reported once instead of once for every pipe in the view    --
+	--                                                                     --
+	-- the WELD-ARR below is what this function drew before the tab        --
+	-- existed, so it stays as the fallback: an empty field, a name which  --
+	-- is not there any more (a save file can outlive the symbol it        --
+	-- names), or an older copy of the form still cached in memory with no --
+	-- .flowtext member at all, all draw what they always drew instead of  --
+	-- killing the whole annotation run                                    --
+	------------------------------------------------------------------------
+	!flowsytm = '/DRA/MAS/SYMBOLS/GEN/WELD/WELD-ARR'
+	!formsytm = ''
+	!formsytm = !!DrawingPlan1.flowtext.val
+	handle any
+		!formsytm = ''
+	endhandle
+	!formsytm = !formsytm.trim()
+	if (!formsytm.neq('')) then
+		!sytmok = false
+		var !sytmtype type of $!formsytm
+		handle any
+		elsehandle none
+			!sytmok = !sytmtype.eqnocase('SYTM')
+		endhandle
+		if (!sytmok) then
+			!flowsytm = !formsytm
+		else
+			!!alert.warning('Flow Arrow ' & !formsytm & ' is not a SYTM in this project. The default arrow has been used instead.')
+		endif
+	endif
+	------------------------------------------------------------------------
+	-- Scale is how big the symbol is drawn, 1 being the size the SYTM     --
+	-- itself was drawn at. an empty or nonsense field falls back to 1     --
+	-- rather than shrinking every arrow in the view to nothing, the same  --
+	-- way the north arrow guards its own Scale                            --
+	------------------------------------------------------------------------
+	!flowsca = 1
+	!formsca = !!DrawingPlan1.flowsca.val
+	handle any
+		!formsca = 1
+	endhandle
+	if (not(!formsca.unset())) then
+		!flowsca = !formsca
+	endif
+	if (!flowsca le 0) then
+		!flowsca = 1
+	endif
+	------------------------------------------------------------------------
 	-- turn !dbg on to have every branch report where its arrow went, in   --
 	-- the command window. that is the quickest way to tell a pair which   --
 	-- really is too close from a pair which only looks it                 --
@@ -592,11 +642,11 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 					endif
 					NEW SLAB
 					DDNA $!tubi
-					tmrf /DRA/MAS/SYMBOLS/GEN/WELD/WELD-ARR
+					tmrf $!flowsytm
 					Font 1
 					Blnk false
 					Bmargin 0mm
-					Xyscale 1 1
+					Xyscale $!flowsca $!flowsca
 					Cheitx '2mm'
 					Lvisibility true
 					Txcolour Yellow
