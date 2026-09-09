@@ -65,7 +65,21 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	MColour Cyan 
 	CHStyle Off 
 	CHColour Grey
-  Cheitx '4.00mm'
+  ----------------------------------------------------------------
+  -- grid bubble character height. .gridhei has sat on the Grid   --
+  -- tab unread since it was added; this is the line it was       --
+  -- always meant to drive. its form default was 3 while this     --
+  -- printed 4, so the default moved to 4 in the same change:     --
+  -- wiring it up without that would have shrunk every existing   --
+  -- bubble and clouded whole drawings on the next update         --
+  ----------------------------------------------------------------
+  !cheigridv = 4
+  !cheigridv = !!DrawingPlan1.gridhei.val
+  handle any
+    !cheigridv = 4
+  endhandle
+  !cheigrid = !cheigridv.string('D2') & 'mm'
+  Cheitx '$!cheigrid'
 	
 	--------------------------------------------------------------------
 	-- every bubble already on this layer, read before anything is      --
@@ -338,6 +352,36 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 			-------------------------------------------------------------------------
 			var !refglnname name of $!gridel
 			var !gridplname name of $!gridpls[1]
+			------------------------------------------------------------
+			-- the number this grid line's bubble will print. the label --
+			-- template prints #gridid, which is the GRIDPL's IDPLANE   --
+			-- (user, 2026-09-07) -- NOT anything on the REFGLN, whose  --
+			-- NAME is empty for every one of them in this project (the --
+			-- 2026-08-13 hunt in README)                                --
+			--                                                           --
+			-- the plane is reached through the REFGLN's GRDREF, not      --
+			-- through its DB owner:                                     --
+			--   q idplane of grdref   ->  IDPlane 18                    --
+			-- confirmed live on =67128186/4483677 (user, 2026-09-07)    --
+			--                                                           --
+			-- the owner is a different thing entirely and answers 1 for --
+			-- every line on the drawing: this loop only ever collects   --
+			-- refglns from !gridpls[1], so they all share that one      --
+			-- owner, and one GRIDPL holds several lines at different    --
+			-- positions anyway, so its IDPLANE could never be a         --
+			-- per-line number                                           --
+			--                                                           --
+			-- handed to the two .CreateGridSymbol*() methods through a  --
+			-- global, the same way the claim list and the frozen depths --
+			-- are: the caller is the FORM while the collecting is done  --
+			-- here, and the two files are read at different times       --
+			------------------------------------------------------------
+			!gidnow = ''
+			var !gidnow idplane of grdref of $!refgln
+			handle any
+				!gidnow = ''
+			endhandle
+			!!DrawingPlan1GridIdNow = !gidnow
 			do !thisint values !!DrawingPlan1.intersections
 				!thisintpt = !thisint.split('-').getindexed(2).position()
 				!thisend = !!DrawingPlan1.NearEndOfGrid(!p12linesh, !p1possh, !p2possh, !thisintpt)

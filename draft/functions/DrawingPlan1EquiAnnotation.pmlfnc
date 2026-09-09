@@ -38,7 +38,20 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 	Plclearance 0mm
 	Doffset 25mm
 	Dmspacing 0mm
-	Cheight 4mm
+	--------------------------------------------------------------------
+	-- equipment name height. the SAME form field also feeds          --
+	-- !glabceqi in LineNoAnnotation: that path writes CHEI onto the  --
+	-- GLAB explicitly, while the two NEW GLABs below write nothing   --
+	-- and inherit this layer. two sources for one number is exactly  --
+	-- how the 4mm here and the 4 there drifted apart before          --
+	--------------------------------------------------------------------
+	!cheiequiv = 4
+	!cheiequiv = !!DrawingPlan1.equiheitx.val
+	handle any
+		!cheiequiv = 4
+	endhandle
+	!cheiequi = !cheiequiv.string('D2') & 'mm'
+	Cheight $!cheiequi
 	Lleader false
 	Lframe false
 	Lshape Straight

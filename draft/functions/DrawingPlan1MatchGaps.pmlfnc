@@ -10,20 +10,27 @@
 -- dimension line, and since 2026-09-04 an equipment's point sits on   --
 -- the equipment itself, so that line now crosses the whole width of   --
 -- the border -- straight through the SEE / MATCH LINE texts which sit --
--- just outside the box edge. E3D breaks a line for this with GAP:     --
+-- just outside the box edge. a grid bubble's leader runs the other    --
+-- way, from the bubble in towards its grid line, and crosses those    --
+-- same texts (user, 2026-09-07), so both are handled here. E3D breaks --
+-- a line for this with GAP:                                          --
 --                                                                     --
---   GAP AT X <x> Y <y> DISTANCE <length>                              --
+--   GAP AT X <x> Y <y> LENGTH <length>                                --
+--                                                                     --
+-- LENGTH, not DISTANCE -- DISTANCE is refused, and it is LENGTH that  --
+-- Q GAPS spells it back with too (user, 2026-09-07)                   --
 --                                                                     --
 -- with CE on the LDIM the line belongs to (user, 2026-09-04). it is   --
 -- NOT the same as blanking -- blanking hides whatever is behind the   --
 -- text, GAP takes a piece out of the line itself                      --
 --                                                                     --
--- a second GAP at a position which already has one overwrites it      --
--- rather than adding a second (user, confirmed in E3D 2026-09-04), so --
--- this can be written every run without checking first and without    --
--- stacking. Q GAPS reads them back as                                 --
+-- every run clears the breaks off these elements first (GAP DELETE    --
+-- ALL) and then writes the set this run wants. a text moves when the  --
+-- box edge it hangs off moves, and its old break would otherwise stay --
+-- behind as a hole in the middle of nothing. Q GAPS reads them back   --
+-- as                                                                  --
 --   Gaps X 326.439mm Y 192mm length 20mm                              --
--- which is what a later pass would need to tidy stale ones            --
+-- which is how the LENGTH spelling was found                          --
 --                                                                     --
 -- runs last, after the texts are in their final places: .Apply()     --
 -- calls MatchLine once and .RecenterView() calls it again after the   --
@@ -33,23 +40,256 @@
 define function !!DrawingPlan1MatchGaps(!name is string)
 	!dirlist = 'right left down up'
 	----------------------------------------------------------------------
-	-- how much wider than the text the break is, each side of it, in    --
-	-- sheet mm. a gap exactly the width of the letters reads as the     --
-	-- line touching them rather than as a deliberate break              --
+	-- how long every break is, in sheet mm.                             --
+	--                                                                    --
+	-- was a flat 4 (user, 2026-09-07), which was the match line text    --
+	-- height of the day plus a millimetre -- back when that height was  --
+	-- whatever the Dwg.No. field on the BorderText tab happened to say. --
+	-- now that Match Line Text Height is a field of its own the flat    --
+	-- number stopped following it and the taller text overran its own   --
+	-- breaks (reported 2026-09-08)                                      --
+	--                                                                    --
+	-- so it is measured off the text box instead. the earlier objection --
+	-- to measuring was that it 'adds ways for it to come out wrong',     --
+	-- and it did: EXTENT BTEXT was being read as two corners when it    --
+	-- gives four, so every span came out zero. that is fixed below and  --
+	-- the measurement is now the honest one -- it also follows a text   --
+	-- somebody has resized by hand, which no form field can             --
+	--                                                                    --
+	-- the line always crosses the text through its HEIGHT: the texts on --
+	-- the left and right sides stand up the sheet, so there it is the   --
+	-- box's x-span that measures the height. !mgmarg is the clearance   --
+	-- either end, and the one number left to tune                       --
 	----------------------------------------------------------------------
-	!mgmargin = 2
+	!mgmarg = 1
+	----------------------------------------------------------------------
+	-- projection line clearance, per dimension point.                   --
+	--                                                                    --
+	-- a match line tick is !mgtick long and runs OUT of the border, and  --
+	-- so does a projection line, so where a point sits at a tick's       --
+	-- position the projection line is drawn straight down the tick for   --
+	-- its whole length. those points start beyond the tick's far end     --
+	-- instead; every other point keeps the plain !mgplcl (user,          --
+	-- 2026-09-08: only the ones near a tick should move back)            --
+	--                                                                    --
+	-- written on EVERY point every run, not only the pushed ones: a      --
+	-- point that was behind a tick last run and is not any more has to   --
+	-- come back, and a DPOI keeps whatever was last written on it        --
+	----------------------------------------------------------------------
+	--                                                                    --
+	-- PLCLTX is NOT the gap you see. with it set to 0 the projection    --
+	-- line already starts 3mm off the match line, and 3 measured 6mm    --
+	-- on the sheet -- two readings, both                                --
+	--   gap on the sheet = PLCLTX + !mgbase                             --
+	-- (measured live 2026-09-08, both on a real DPOI). where that 3mm   --
+	-- comes from is not established -- most likely the points do not    --
+	-- sit exactly on the match line -- so !mgbase is a measurement,     --
+	-- not a derivation. if the gaps ever come out uniformly wrong by a  --
+	-- constant, this is the number to re-measure                        --
+	--                                                                    --
+	-- so the wanted gaps are written as wanted-minus-base:              --
+	--   ordinary point   3mm wanted -> PLCLTX 0                         --
+	--   point at a tick  3mm past the tick's far end, and the tick is   --
+	--                    !mgtick long -> 13mm wanted -> PLCLTX 10       --
+	----------------------------------------------------------------------
+	!mgtick = 10
+	!mgplclwant = 3
+	!mgbase = 3
+	!mgtktol = 1
+	!mgticks = object array()
+	!mgticks = !!DrawingPlan1MatchTicks
+	handle any
+		!mgticks = object array()
+	endhandle
 	!mgtexts = object array()
 	!mgtexts = !!DrawingPlan1MatchTexts
 	handle any
 		!mgtexts = object array()
 	endhandle
 	!mgdbg = object array()
+	----------------------------------------------------------------------
+	-- the grid bubbles, once, before the sides are walked. a bubble's    --
+	-- leader runs from the bubble in towards its grid line's end and     --
+	-- crosses the very same texts the dimension projection lines do      --
+	-- (user, 2026-09-07), so it takes the same break -- with CE on the   --
+	-- SLAB, which is the element AVEVA's Gap Manager is built around     --
+	-- and which does carry a leader (LLEA), the one thing it insists on  --
+	--                                                                    --
+	-- a SLAB does not answer shpos, so the position is rebuilt the way   --
+	-- it was written: the refgln's own NPPT end projected to the sheet   --
+	-- plus the bubble's XYPO, with the rcode swap undone. this is the    --
+	-- same reconstruction DrawingPlan1GridAnnotation does for the frozen --
+	-- depths (DrawingPlan1GridAnnotation.pmlfnc:144), only both axes     --
+	-- are wanted here rather than the one across the border             --
+	----------------------------------------------------------------------
+	!gbrefs = object array()
+	!gbsides = object array()
+	!gbxs = object array()
+	!gbys = object array()
+	!gbok = true
+	$!name/SS/S1/V1/ateGRID
+	handle any
+		!gbok = false
+	endhandle
+	!gslabs = object array()
+	if (!gbok) then
+		var !gslabs coll all slab for ce
+		handle any
+			!gslabs = object array()
+		endhandle
+	endif
+	do !gs values !gslabs
+		$!gs
+		handle any
+			skip
+		endhandle
+		!gsside = ''
+		var !gsside agside
+		handle any
+			!gsside = ''
+		endhandle
+		!gsddna = ''
+		var !gsddna ddna
+		handle any
+			!gsddna = ''
+		endhandle
+		!gsxypo = ''
+		var !gsxypo xypo
+		handle any
+			!gsxypo = ''
+		endhandle
+		!gsnstr = ''
+		var !gsnstr nppt
+		handle any
+			!gsnstr = ''
+		endhandle
+		--------------------------------------------------------------
+		-- '=0/0' is the DDNA E3D fills in by itself when none was    --
+		-- given. it names nothing, so the grid line's end cannot be  --
+		-- found from it and the bubble is left alone (the same       --
+		-- guard the frozen-depth pass uses)                          --
+		--------------------------------------------------------------
+		if (!gsside.eq('') or !gsddna.eq('') or !gsddna.eq('=0/0') or !gsxypo.eq('')) then
+			skip
+		endif
+		!gsnppt = 0
+		!gsnppt = !gsnstr.real()
+		handle any
+			!gsnppt = 0
+		endhandle
+		!gsend = ''
+		if (!gsnppt.eq(2)) then
+			var !gsend p2 pos of $!gsddna wrt worl
+			handle any
+				!gsend = ''
+			endhandle
+		else
+			var !gsend p1 pos of $!gsddna wrt worl
+			handle any
+				!gsend = ''
+			endhandle
+		endif
+		if (!gsend.eq('')) then
+			skip
+		endif
+		!gsendp = object position(!gsend)
+		!gsendp.up = 0
+		!gsendsh = ''
+		var !gsendsh shpos of $!gsendp
+		handle any
+			!gsendsh = ''
+		endhandle
+		if (!gsendsh.eq('')) then
+			skip
+		endif
+		!gsxv = !gsxypo.part(1).replace('mm', '').real()
+		!gsyv = !gsxypo.part(2).replace('mm', '').real()
+		!gsxs = !gsxv
+		!gsys = !gsyv
+		if (!!DrawingPlan1.rcode.eqnocase('left')) then
+			!gsys = !gsxv
+			!gsxs = !gsyv * -1
+		endif
+		--------------------------------------------------------------
+		-- AGSIDE always names the side of the view as it appears on  --
+		-- the sheet, whatever the rcode is, so it lines up with the  --
+		-- match line's own sides without any conversion              --
+		--------------------------------------------------------------
+		!gsdir = ''
+		if (!gsside.eqnocase('Top')) then
+			!gsdir = 'up'
+		elseif (!gsside.eqnocase('Bottom')) then
+			!gsdir = 'down'
+		elseif (!gsside.eqnocase('Left')) then
+			!gsdir = 'left'
+		elseif (!gsside.eqnocase('Right')) then
+			!gsdir = 'right'
+		endif
+		if (!gsdir.eq('')) then
+			skip
+		endif
+		!gbsx = !gsendsh.part(2).replace('mm', '').real() + !gsxs
+		!gbsy = !gsendsh.part(4).replace('mm', '').real() + !gsys
+		!gbrefs.append(!gs)
+		!gbsides.append(!gsdir)
+		!gbxs.append(!gbsx)
+		!gbys.append(!gbsy)
+	enddo
+	----------------------------------------------------------------------
+	-- every break already on these elements, cleared before a single new --
+	-- one goes in. a match line text moves when the box edge it hangs    --
+	-- off moves, and a break left behind at the old place is a hole in   --
+	-- the middle of nothing -- a rebuild followed by an update left five --
+	-- of them in a row across the projection lines (user, 2026-09-07)    --
+	--                                                                     --
+	-- GAP DELETE ALL, not the stale ones picked off one at a time:       --
+	-- everything still wanted is rewritten immediately below, so the     --
+	-- result is the same without having to read Q GAPS back or work out  --
+	-- which break was whose. the cost, and it is the user's call         --
+	-- (2026-09-07), is that a break put on one of these same elements by --
+	-- hand with the Gap Manager goes with them                           --
+	--                                                                     --
+	-- this covers every element, not only the ones getting a break this  --
+	-- run: a side whose text has moved away completely is exactly the    --
+	-- one with nothing to write and everything to clear                  --
+	--                                                                     --
+	-- the failures are counted rather than listed, because an element    --
+	-- with no gaps on it may well answer back and there can be twenty of --
+	-- those. one summary line still says if the command itself is wrong  --
+	----------------------------------------------------------------------
+	!clrn = 0
+	!clrerr = ''
+	do !cj from 1 to 4
+		!cdir = !dirlist.part(!cj)
+		$!name/SS/S1/V1/ateLINE_$!cdir
+		handle any
+			skip
+		endhandle
+		GAP DELETE ALL
+		handle any
+			!clrn = !clrn + 1
+			!clrerr = 'ateLINE_' & !cdir & ': ' & !!error.text
+		endhandle
+	enddo
+	do !ck from 1 to !gbrefs.size()
+		!cref = !gbrefs[!ck]
+		$!cref
+		handle any
+			skip
+		endhandle
+		GAP DELETE ALL
+		handle any
+			!clrn = !clrn + 1
+			!clrerr = !cref & ': ' & !!error.text
+		endhandle
+	enddo
 	do !jj from 1 to 4
 		!dir = !dirlist.part(!jj)
 		------------------------------------------------------------------
 		-- the texts this side put on the sheet, as boxes. each record  --
-		-- is 'side~<extent>' and the extent is the eight-token form     --
-		-- X <x1> Y <y1> X <x2> Y <y2>, in sheet coordination           --
+		-- is 'side~<extent>' and the extent is the four corners,        --
+		-- X x1 Y y1 X x2 Y y2 X x3 Y y3 X x4 Y y4, in sheet            --
+		-- coordination (see the note where it is taken apart)          --
 		------------------------------------------------------------------
 		!bx1 = object array()
 		!by1 = object array()
@@ -68,37 +308,70 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 				skip
 			endif
 			--------------------------------------------------------
-			-- the extent is eight tokens, X x1 Y y1 X x2 Y y2. it --
-			-- is counted before it is taken apart, because a      --
-			-- handle only guards the one statement in front of it --
-			-- and four separate reads would leave three of them   --
-			-- bare (the same trap the check4 debug line fell into --
-			-- on 2026-09-03)                                      --
+			-- EXTENT BTEXT gives the text's four CORNERS, not two --
+			--   X x1 Y y1 X x2 Y y2 X x3 Y y3 X x4 Y y4           --
+			-- sixteen tokens -- AVEVA reads [14] and [16] out of  --
+			-- the same query (aba/Tasks/abaarrange.pmlfnc:551).    --
+			-- corners 1 and 2 are ADJACENT, so taking just those  --
+			-- picks one EDGE of the box: a horizontal text came    --
+			-- back with zero height and every break was 4mm long, --
+			-- the two margins and nothing else (check_gap.txt,     --
+			-- 2026-09-07). all four corners, min/max on each axis  --
+			--                                                      --
+			-- the size is counted before the tokens are taken     --
+			-- apart, because a handle only guards the one         --
+			-- statement in front of it and separate reads would   --
+			-- leave all but the first bare (the same trap the     --
+			-- check4 debug line fell into on 2026-09-03)          --
 			--------------------------------------------------------
 			!eparts = object array()
 			!eparts = !rec[2].split()
 			handle any
 				skip
 			endhandle
-			if (!eparts.size().lt(8)) then
+			if (!eparts.size().lt(16)) then
 				skip
 			endif
-			!ax = !eparts[2].replace('mm', '').real()
-			!ay = !eparts[4].replace('mm', '').real()
-			!cx = !eparts[6].replace('mm', '').real()
-			!cy = !eparts[8].replace('mm', '').real()
-			!bx1.append(min(!ax, !cx))
-			!bx2.append(max(!ax, !cx))
-			!by1.append(min(!ay, !cy))
-			!by2.append(max(!ay, !cy))
+			!exs = object array()
+			!eys = object array()
+			do !ci from 1 to 4
+				!cix = !ci * 4 - 2
+				!ciy = !ci * 4
+				!exs.append(!eparts[!cix].replace('mm', '').real())
+				!eys.append(!eparts[!ciy].replace('mm', '').real())
+			enddo
+			!xlo = !exs[1]
+			!xhi = !exs[1]
+			!ylo = !eys[1]
+			!yhi = !eys[1]
+			do !ci from 2 to 4
+				!xlo = min(!xlo, !exs[!ci])
+				!xhi = max(!xhi, !exs[!ci])
+				!ylo = min(!ylo, !eys[!ci])
+				!yhi = max(!yhi, !eys[!ci])
+			enddo
+			!bx1.append(!xlo)
+			!bx2.append(!xhi)
+			!by1.append(!ylo)
+			!by2.append(!yhi)
 		enddo
 		if (!bx1.size().eq(0)) then
 			skip
 		endif
 		------------------------------------------------------------------
-		-- the dimension points of this side, read in a pass of their    --
-		-- own: navigating to each one moves CE, and CE has to be back   --
-		-- on the LDIM before a single GAP can be written                --
+		-- every line this side which might be crossed, as a point on it --
+		-- and the element the break has to be written with CE on. two   --
+		-- kinds go in the same list so the crossing test and the GAP    --
+		-- below are written once:                                       --
+		--   a dimension point   -> its projection line, gapped on the   --
+		--                          LDIM the point hangs off            --
+		--   a grid bubble       -> its leader, gapped on the SLAB      --
+		------------------------------------------------------------------
+		!ldimpath = !name & '/SS/S1/V1/ateLINE_' & !dir
+		------------------------------------------------------------------
+		-- the dimension points are read in a pass of their own:         --
+		-- navigating to each one moves CE, and it is the LDIM that has  --
+		-- to be collected from                                          --
 		------------------------------------------------------------------
 		$!name/SS/S1/V1/ateLINE_$!dir
 		handle any
@@ -109,6 +382,7 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 		handle any
 			!dps = object array()
 		endhandle
+		!pnav = object array()
 		!pxs = object array()
 		!pys = object array()
 		do !dp values !dps
@@ -126,16 +400,83 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 				!dsh = ''
 			endhandle
 			if (!dsh.neq('')) then
-				!pxs.append(!dsh.part(2).replace('mm', '').real())
-				!pys.append(!dsh.part(4).replace('mm', '').real())
+				!pnav.append(!ldimpath)
+				!dpx = !dsh.part(2).replace('mm', '').real()
+				!dpy = !dsh.part(4).replace('mm', '').real()
+				!pxs.append(!dpx)
+				!pys.append(!dpy)
+				--------------------------------------------------------
+				-- only the coordinate ALONG the border is compared:    --
+				-- the other one is depth, and a tick and a point on    --
+				-- the same side share it by construction              --
+				--------------------------------------------------------
+				!dpalong = !dpx
+				if (!dir.eq('right') or !dir.eq('left')) then
+					!dpalong = !dpy
+				endif
+				!ontick = false
+				do !tk values !mgticks
+					!tkrec = !tk.split('~')
+					handle any
+						skip
+					endhandle
+					if (!tkrec.size().lt(3)) then
+						skip
+					endif
+					if (not(!tkrec[1].eqnocase(!dir))) then
+						skip
+					endif
+					!tkav = !tkrec[2].replace('mm', '')
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!tkav = !tkrec[3].replace('mm', '')
+					endif
+					!tkan = !tkav.real()
+					!tkd = !tkan - !dpalong
+					!tklo = !mgtktol * -1
+					if (!tkd.gt(!mgtktol)) then
+						skip
+					endif
+					if (!tkd.lt(!tklo)) then
+						skip
+					endif
+					!ontick = true
+				enddo
+				!plclwant = !mgplclwant
+				if (!ontick) then
+					!plclwant = !mgtick + !mgplclwant
+				endif
+				!plclv = !plclwant - !mgbase
+				if (!plclv.lt(0)) then
+					!plclv = 0
+				endif
+				!plcls = !plclv.string('D2') & 'mm'
+				PLCLTX '$!plcls'
+				!plclback = ''
+				var !plclback plcltx
+				handle any
+					!plclback = 'UNREADABLE'
+				endhandle
+				!mgdbg.append('PLCL ' & !dir & ' along=' & !dpalong.string('D2') & ' ontick=' & !ontick.string() & ' want=' & !plclwant.string('D2') & ' wrote=' & !plcls & ' readback=' & !plclback & ' on=' & !dp)
+			endif
+		enddo
+		------------------------------------------------------------------
+		-- and this side's grid bubbles, already worked out above        --
+		------------------------------------------------------------------
+		do !gi from 1 to !gbxs.size()
+			if (!gbsides[!gi].eq(!dir)) then
+				!pnav.append(!gbrefs[!gi])
+				!pxs.append(!gbxs[!gi])
+				!pys.append(!gbys[!gi])
 			endif
 		enddo
 		------------------------------------------------------------------
 		-- and the breaks. on the right and left sides the projection    --
 		-- lines run across the sheet and the texts stand up it, so a    --
 		-- line is crossed when its own y falls inside the text's, and   --
-		-- the break is as long as the text is wide. the top and bottom  --
-		-- sides are the same thing with the axes swapped                --
+		-- the break is centred on the text. the top and bottom sides    --
+		-- are the same thing with the axes swapped. the text's box      --
+		-- decides whether, where AND how long -- its span across the   --
+		-- line, plus !mgmarg either end                                 --
 		------------------------------------------------------------------
 		do !bi from 1 to !bx1.size()
 			do !pi from 1 to !pxs.size()
@@ -147,16 +488,24 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 					if (!pys[!pi].gt(!by1[!bi]) and !pys[!pi].lt(!by2[!bi])) then
 						!gx = (!bx1[!bi] + !bx2[!bi]) * 0.5
 						!gy = !pys[!pi]
-						!glen = !bx2[!bi] - !bx1[!bi] + !mgmargin + !mgmargin
+						!glen = !bx2[!bi] - !bx1[!bi] + !mgmarg
 						!hit = true
 					endif
 				else
 					if (!pxs[!pi].gt(!bx1[!bi]) and !pxs[!pi].lt(!bx2[!bi])) then
 						!gx = !pxs[!pi]
 						!gy = (!by1[!bi] + !by2[!bi]) * 0.5
-						!glen = !by2[!bi] - !by1[!bi] + !mgmargin + !mgmargin
+						!glen = !by2[!bi] - !by1[!bi] + !mgmarg
 						!hit = true
 					endif
+				endif
+				----------------------------------------------------------
+				-- never let a bad measurement produce a zero or negative --
+				-- break: that is a GAP command which does nothing, and   --
+				-- it would look exactly like the gap pass not running    --
+				----------------------------------------------------------
+				if (!hit and !glen.lt(!mgmarg)) then
+					!glen = !mgmarg
 				endif
 				if (!hit) then
 					----------------------------------------------------------
@@ -170,16 +519,44 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 					!gxs = !gx.string('D3').replace('mm', '')
 					!gys = !gy.string('D3').replace('mm', '')
 					!gds = !glen.string('D3').replace('mm', '')
-					$!name/SS/S1/V1/ateLINE_$!dir
+					----------------------------------------------------------
+					-- CE goes on whatever owns the line -- the LDIM for a   --
+					-- projection line, the SLAB for a bubble's leader.      --
+					-- LDIM is the right element for the first: the user has --
+					-- written gaps there by hand many times (2026-09-07).   --
+					-- AVEVA's own Gap Manager identifies only               --
+					-- SLAB GLAB RDIM PDIM DPOI DPPT DPBA                    --
+					-- (draft/forms/dragapmanager.pmlfrm:200), but that is   --
+					-- the filter on what its cursor may pick, not a limit   --
+					-- on the command                                        --
+					--                                                        --
+					-- a refusal is recorded with its message: a bare        --
+					-- GAPFAIL only says that something was wrong, and one   --
+					-- round of that costs a whole redraw to find out. it is --
+					-- how the DISTANCE spelling was caught                  --
+					----------------------------------------------------------
+					!gdone = false
+					!gnav = true
+					!gerr = ''
+					!gon = !pnav[!pi]
+					$!gon
 					handle any
-						skip
+						!gnav = false
+						!gerr = 'nav: ' & !!error.text
 					endhandle
-					GAP AT X $!gxs Y $!gys DISTANCE $!gds
-					handle any
-						!mgdbg.append('GAPFAIL ' & !dir & ' x=' & !gxs & ' y=' & !gys & ' d=' & !gds)
-					elsehandle none
-						!mgdbg.append('GAP ' & !dir & ' x=' & !gxs & ' y=' & !gys & ' d=' & !gds)
-					endhandle
+					if (!gnav) then
+						GAP AT X $!gxs Y $!gys LENGTH $!gds
+						handle any
+							!gerr = !!error.text
+						elsehandle none
+							!gdone = true
+						endhandle
+					endif
+					if (!gdone) then
+						!mgdbg.append('GAP ' & !dir & ' x=' & !gxs & ' y=' & !gys & ' d=' & !gds & ' on=' & !gon)
+					else
+						!mgdbg.append('GAPFAIL ' & !dir & ' x=' & !gxs & ' y=' & !gys & ' d=' & !gds & ' on=' & !gon & ' err=' & !gerr)
+					endif
 				endif
 			enddo
 		enddo
@@ -194,7 +571,7 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	handle any
 		return
 	endhandle
-	!mgf.writerecord('GAPRUN texts=' & !mgtexts.size().string())
+	!mgf.writerecord('GAPRUN ticks=' & !mgticks.size().string() & ' texts=' & !mgtexts.size().string() & ' bubbles=' & !gbrefs.size().string() & ' clearfails=' & !clrn.string() & ' lastclearerr=' & !clrerr)
 	do !mi from 1 to !mgdbg.size()
 		!mgf.writerecord(!mgdbg[!mi])
 	enddo

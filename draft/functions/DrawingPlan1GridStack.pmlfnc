@@ -1,0 +1,162 @@
+-------------------------------------------------------------------
+-- Function : what to do with a bubble landing where one already   --
+--            stands                                               --
+-- Auther   : tw tseng                                             --
+-- Date     : 2026/09/07                                           --
+--                                                                  --
+-- more than one grid system can sit over the same ground -- the    --
+-- user copied a set of column lines in place to test this and      --
+-- changed one of the numbers, so both cases are on the drawing at  --
+-- once. their rule:                                                --
+--   same number      -> only one bubble                            --
+--   different number -> both, stacked out along the leader so the  --
+--                       two numbers do not print on top of each    --
+--                       other                                      --
+--                                                                  --
+-- the number is the GRIDPL's IDPLANE, which is what the label      --
+-- template prints as #gridid (user, 2026-09-07). it is not on the  --
+-- REFGLN -- every one of those is unnamed in this project, which   --
+-- is what the 2026-08-13 hunt recorded in README concluded -- and  --
+-- it cannot be read back off the SLAB either: BTEXT on a templated --
+-- SLAB answers nothing (probed live, all 26 came back UNREADABLE)  --
+--                                                                  --
+-- the comparison is against !!DrawingPlan1GridBubbles, which the   --
+-- two .CreateGridSymbol*() methods append to as they go, one       --
+-- 'side~x~y~id' each. so only bubbles already placed this run are  --
+-- seen, and the first one to arrive at a spot is always the one    --
+-- that keeps its position and its leader                           --
+--                                                                  --
+-- answers 'SKIP' for a bubble which must not be drawn at all, or   --
+-- how far out to push it in sheet mm ('0' for the first one there) --
+-------------------------------------------------------------------
+define function !!DrawingPlan1GridStack(!side is string, !gbx is real, !gby is real, !gid is string) is string
+	----------------------------------------------------------------
+	-- centre to centre of two stacked bubbles: the circle's own    --
+	-- diameter, so they end up touching rather than overlapping or --
+	-- drifting apart. the form already carries it on the Grid tab  --
+	-- ('Diameter', default 10) and                                 --
+	-- DrawingPlan1LineNoAnnotation:3009 reads the same field to    --
+	-- keep pipe numbers clear of a bubble -- so the stack follows  --
+	-- whatever the user sets there rather than a second number      --
+	-- hidden in here. the fallback is only for the case where the   --
+	-- form is not loaded                                           --
+	----------------------------------------------------------------
+	!gbpitch = 10
+	!gbpitch = !!DrawingPlan1.griddia.val
+	handle any
+		!gbpitch = 10
+	endhandle
+	----------------------------------------------------------------
+	-- how close along the border counts as the same spot. the      --
+	-- copied lines land within 0.01mm of each other while genuine  --
+	-- neighbouring column lines are tens of mm apart on the sheet, --
+	-- so there is a lot of room between the two                    --
+	----------------------------------------------------------------
+	!gbtol = 1
+	----------------------------------------------------------------
+	-- with no number to compare there is nothing to decide, so the --
+	-- bubble is placed exactly as it would have been before any of --
+	-- this existed. never treat two unknowns as the same, or a     --
+	-- reading which quietly stops working would start deleting     --
+	-- half the bubbles on the drawing                              --
+	----------------------------------------------------------------
+	if (!gid.eq('')) then
+		return '0'
+	endif
+	----------------------------------------------------------------
+	-- the caller's !gbx / !gby are built out of a POSITION, so they --
+	-- still carry their unit -- string() on them gives             --
+	-- '445.051mm'. the records they get compared against were      --
+	-- written with string() too and are read back with the unit     --
+	-- stripped, and subtracting a bare number from one which still  --
+	-- has its mm on it is                                           --
+	--   (47,15)   CP: Syntax error                                  --
+	-- caught live 2026-09-07, and it is why only the FIRST bubble   --
+	-- on each side ever got through: with no same-side record to    --
+	-- compare against, the subtraction never ran                    --
+	--                                                                --
+	-- so both sides of every comparison are bare numbers from here  --
+	-- down, the way every other coordinate in this program is       --
+	-- handled                                                       --
+	----------------------------------------------------------------
+	-- one plain step at a time, and NO handle: string() is a global  --
+	-- function and chaining .replace() straight onto its result is   --
+	-- the abs() trap again. with a handle round it the failure was   --
+	-- silent -- !bx fell to 0, every delta came out as the whole     --
+	-- sheet width, nothing ever matched, and the log said stack=0    --
+	-- err=[] as if the comparison had simply found nothing           --
+	!bxs = string(!gbx)
+	!bxs = !bxs.replace('mm', '')
+	!bx = !bxs.real()
+	!bys = string(!gby)
+	!bys = !bys.replace('mm', '')
+	!by = !bys.real()
+	!stack = 0
+	!n = 0
+	!n = !!DrawingPlan1GridBubbles.size()
+	handle any
+		!n = 0
+	endhandle
+	do !i from 1 to !n
+		!rec = object array()
+		!rec = !!DrawingPlan1GridBubbles[!i].split('~')
+		handle any
+			skip
+		endhandle
+		if (!rec.size().lt(4)) then
+			skip
+		endif
+		if (not(!rec[1].eqnocase(!side))) then
+			skip
+		endif
+		------------------------------------------------------------
+		-- only the axis running ALONG the border is compared. the  --
+		-- other one is depth, and every bubble on a side shares it --
+		-- by design, so comparing it would match everything        --
+		------------------------------------------------------------
+		------------------------------------------------------------
+		-- written out one plain step at a time on purpose. the      --
+		-- first version had                                          --
+		--   if (abs(!delta).gt(!gbtol)) then                         --
+		-- and every call which got this far answered                 --
+		--   (47,15)   CP: Syntax error                               --
+		-- while the first bubble of each side -- the one with no     --
+		-- same-side record to compare against, so this never ran --  --
+		-- came back clean. calling a method ON THE RESULT OF a       --
+		-- global function is the same trap README records for        --
+		-- object position() and .distance(). EquiAnnotation only     --
+		-- ever writes abs() with the operator form, never .gt()      --
+		------------------------------------------------------------
+		!recv = ''
+		if (!side.eqnocase('Left') or !side.eqnocase('Right')) then
+			!recv = !rec[3].replace('mm', '')
+		else
+			!recv = !rec[2].replace('mm', '')
+		endif
+		!recn = !recv.real()
+		!delta = 0
+		if (!side.eqnocase('Left') or !side.eqnocase('Right')) then
+			!delta = !recn - !by
+		else
+			!delta = !recn - !bx
+		endif
+		!lolim = !gbtol * -1
+		!far = false
+		if (!delta.gt(!gbtol)) then
+			!far = true
+		endif
+		if (!delta.lt(!lolim)) then
+			!far = true
+		endif
+		if (!far) then
+			skip
+		endif
+		!recid = !rec[4]
+		if (!recid.eq(!gid)) then
+			return 'SKIP'
+		endif
+		!stack = !stack + 1
+	enddo
+	!push = !stack * !gbpitch
+	return !push.string()
+endfunction

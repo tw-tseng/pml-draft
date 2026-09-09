@@ -61,6 +61,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	Asubtended 0degree
 	Pjustification Towards 
 	Oshttx '2mm'
+	----------------------------------------------------------------
+	-- Proj line clearance stays 0 at every level above the point.  --
+	-- the real value is written per DPOI in                        --
+	-- DrawingPlan1MatchGaps, because a point standing at a match   --
+	-- line tick has to clear the whole tick and the rest do not.   --
+	-- these values STACK downwards, so anything left here would be --
+	-- added to what the point asks for                             --
+	----------------------------------------------------------------
 	Plcltx '0mm'
 	Doffset 25mm
 	Dmsptx '0mm'
@@ -90,7 +98,19 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	MColour Cyan
 	CHStyle Off
 	CHColour Grey
-  Cheitx '3.00mm'
+  ----------------------------------------------------------------
+  -- pipe label / dimension layer character height. read from the --
+  -- form so a project can set its own; the literal stays as the  --
+  -- fallback for when the form is not loaded. NOT wrapped round  --
+  -- anything that could fail silently -- see README on handle    --
+  ----------------------------------------------------------------
+  !cheilinev = 3
+  !cheilinev = !!DrawingPlan1.lineheitx.val
+  handle any
+    !cheilinev = 3
+  endhandle
+  !cheiline = !cheilinev.string('D2') & 'mm'
+  Cheitx '$!cheiline'
 
 	--------------------------------------------------------------------
 	-- GLABs from a previous run, and every !gelem this run actually   --
@@ -1181,8 +1201,66 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		endhandle
 		!ldimref = ce
 		Dtangle par
-	--		Dlcntmode 'on'-----------------------------------------------------------------------------------------------------
+		----------------------------------------------------------------
+		-- without this the dimension TEXT trims the dimension LINE:   --
+		-- E3D's own wording for the attribute (property grid calls it --
+		-- 'Dim line continuous') is "On/Off dimension lines trimming  --
+		-- by dimension line text". the hole it cuts grows with the    --
+		-- text, so raising the height to 4mm broke the chains open -- --
+		-- and not only the tight ones: a 932 with 18mm of paper       --
+		-- either side broke just the same, which is what ruled out    --
+		-- 'the number does not fit'. Gboxtx on the layer was the      --
+		-- other candidate and changed nothing (both tried live,       --
+		-- 2026-09-08). it sat commented out here since the initial    --
+		-- baseline, harmless only while every dimension was 3mm       --
+		--                                                              --
+		-- the value must be QUOTED. bare On is                         --
+		--   (47,15)   CP: Syntax error                                 --
+		-- with the caret under the On, even though the property grid   --
+		-- displays it as On and other enumerations here (Dterminator   --
+		-- Arrows, Alignment Base) do take a bare word                  --
+		----------------------------------------------------------------
+		Dlcntmode 'on'
+		----------------------------------------------------------------
+		-- projection line clearance is decided PER POINT, in           --
+		-- DrawingPlan1MatchGaps: a point standing at a match line      --
+		-- tick has to clear the tick's whole length, the rest only     --
+		-- need the plain gap. so the LDIM contributes nothing          --
+		--                                                              --
+		-- zero and not simply left out: a DPOI's own value STACKS on   --
+		-- top of its owner's rather than replacing it -- 3 here and 3  --
+		-- on the point measured 6mm on the sheet (2026-09-08). while   --
+		-- the points read 'default' the owner's value was all there    --
+		-- was, which is why it looked like plain inheritance at first  --
+		----------------------------------------------------------------
+		Plcltx '0mm'
 		Tsiztx '2mm'
+		----------------------------------------------------------------
+		-- Tsiztx above is the TERMINATOR size, not text -- Dterid and --
+		-- Fterid on the next lines are its symbol. the dimension TEXT --
+		-- used to inherit ateLINE's Cheitx, so it could never differ  --
+		-- from the pipe labels sharing that layer. written on the     --
+		-- LDIM itself so the form's 'Dimension Text Height' stands on --
+		-- its own. each DPOI under an LDIM can carry its own height   --
+		-- too (user, 2026-09-08) if per-point sizes are ever wanted   --
+		--                                                              --
+		-- the attribute is DTCHEIGHT, not CHEITX: an LDIM answers      --
+		--   (2,201) Element LDIMENSION ... does not have attribute     --
+		--   CHEITX                                                     --
+		-- CHEITX/CHEIGHT live on the LAYE. on the dimension itself it  --
+		-- is DTCHEIGHT for the dimension text and PTCHEIGHT for the    --
+		-- projection line text (PMLLIB supports/draft/objects/         --
+		-- mdsabadimatta.pmlobj lists both against a NEW LDIM, and      --
+		-- reads them back as .dtch / .ptch). only the dimension text   --
+		-- is wired here -- nothing in this program prints PLTX         --
+		----------------------------------------------------------------
+		!cheidimv = 3
+		!cheidimv = !!DrawingPlan1.dimheitx.val
+		handle any
+			!cheidimv = 3
+		endhandle
+		!cheidim = !cheidimv.string('D2') & 'mm'
+		DTCHEIGHT $!cheidim
 		Dterid 8103
 		Fterid 8103
 		if (!dir.eq('right') or !dir.eq('left')) then
@@ -1281,7 +1359,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- as GLABs of their own once the dimension line is in place. all    --
 		-- of these are sheet mm and are meant to be tuned by eye            --
 		--                                                                   --
-		--   !glabmin   the least room two labels may have between them      --
+		--   !glabmin   the floor under the room two labels may have between --
+		--              them, and !glabair the air added on top of the       --
+		--              taller of their two character heights. a flat        --
+		--              minimum is only right while every label is the same  --
+		--              height: at 4mm it left 1mm of air between two 3mm    --
+		--              pipe names but NONE between two 4mm equipment names, --
+		--              which is what the user saw overlapping on            --
+		--              2026-09-07. the labels are anchored on one side      --
+		--              (see !gloff), so what sits between two anchors is    --
+		--              one label's character height                         --
 		--              along the dimension. one which would land closer     --
 		--              than this to the one before is pushed on until it    --
 		--              clears it, and gets a bent leader back to its own    --
@@ -1326,11 +1413,20 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- Bpoftx X -5mm Y 0mm X -8mm Y -5mm                               --
 		----------------------------------------------------------------------
 		!glabmin = 4
+		!glabair = 1
 		!glabclr = 6
 		!glabrun = 2
 		!glabdiag = 4
 		!glabchei = 3
+		!glabchei = !!DrawingPlan1.lineheitx.val
+		handle any
+			!glabchei = 3
+		endhandle
 		!glabceqi = 4
+		!glabceqi = !!DrawingPlan1.equiheitx.val
+		handle any
+			!glabceqi = 4
+		endhandle
 		!glabstyle = '/PW-LEAD_NOFRAME'
 		!glabtxtgap = 1
 		!glabfig = 5
@@ -2446,6 +2542,65 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			endhandle
 		enddo
 		--------------------------------------------------------------------
+		-- lift the dimension text clear of the dimension line.            --
+		--                                                                  --
+		-- the text is centred ON the line and there is no justification   --
+		-- attribute to change that: E3D's attribute list carries a 'Proj  --
+		-- line text justification' but no dimension equivalent, only      --
+		-- DTOFTX -- 'Dimension line text offset from default dimension    --
+		-- line location'. while Dlcntmode was off this never showed,      --
+		-- because the text trimmed the line out from under itself         --
+		--                                                                  --
+		-- it belongs to the DPOI, not the LDIM (user, 2026-09-08: on a    --
+		-- DPOI every other dimension attribute reads 'By Owner' and this  --
+		-- one is its own). written over !claimeddpois, which holds the    --
+		-- points REUSED this run as well as the ones just created, so an  --
+		-- update lifts old points too instead of leaving them straddling  --
+		--                                                                  --
+		-- X and Y are the DIMENSION's own axes, not the sheet's, so Y is  --
+		-- across the line whichever way the chain runs (user, 2026-09-08).--
+		-- one value covers all four sides -- do NOT add per-side signs    --
+		--                                                                  --
+		-- 0.6 of the char height: caps are 0.8 of it (E3D's own wording,  --
+		-- so 4mm here prints 3.2mm letters), half a letter is 0.4 and the --
+		-- remaining 0.2 leaves a quarter-letter gap under the text. that  --
+		-- factor is the one number to tune                                --
+		--------------------------------------------------------------------
+		!dtchei = 3
+		!dtchei = !!DrawingPlan1.dimheitx.val
+		handle any
+			!dtchei = 3
+		endhandle
+		!dtoff = !dtchei * 0.6
+		----------------------------------------------------------------
+		-- the WHOLE position goes inside quotes, units included:       --
+		--   DTOFTX 'X 0mm Y 4mm'         works (user, 2026-09-08)      --
+		--   DTOFTX X 0 Y 1.80            (47,15) CP: Syntax error      --
+		--   DTOFTX X 0mm Y 1.80mm        not tried -- quoting fixed it --
+		-- which is the *tx family convention this program already      --
+		-- follows everywhere -- Cheitx '3mm', Gboxtx '1mm', and        --
+		-- Dlcntmode 'on' above. an unquoted bare word or a bare X/Y    --
+		-- pair is rejected by the parser before the element is even    --
+		-- looked at, which is why the error is a syntax error and not  --
+		-- 'does not have attribute'                                    --
+		----------------------------------------------------------------
+		!dtoffs = !dtoff.string('D2') & 'mm'
+		do !cdo values !claimeddpois
+			$!cdo
+			handle any
+				skip
+			endhandle
+			DTOFTX 'X 0mm Y $!dtoffs'
+		enddo
+		----------------------------------------------------------------
+		-- the loop above leaves CE on the last point it touched. put   --
+		-- it back on this side's LDIM before the cleanup walks below,  --
+		-- which is the class of bug commit c0a3e5d was about           --
+		----------------------------------------------------------------
+		$!name/SS/S1/V1/ateLINE_$!dir
+		handle any
+		endhandle
+		--------------------------------------------------------------------
 		-- the DDNA every point this run claimed is carrying. read here,   --
 		-- in a pass of its own, because the walk below is navigating one  --
 		-- existing point at a time and must not go wandering off to a     --
@@ -3023,6 +3178,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			$!name/SS/S1/V1/ateLINE
 			!gprev = 0
 			!gprevplace = 0
+			!gprevchei = 0
 			!gfirstlab = true
 			do !i from 1 to !glabrec.size()
 				!gparts = !glabrec[!i].split('~')
@@ -3391,7 +3547,33 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- problem (2026-08-27, reverted after three rounds of        --
 				-- overshoot reports on the same i=7/i=8 pair)                --
 				----------------------------------------------------------------
-				!gminclr = !glabmin
+				----------------------------------------------------------------
+				-- the room between this label and the one before it: the       --
+				-- taller of the two character heights plus !glabair. what      --
+				-- actually sits between the two anchor points is one label's   --
+				-- height -- the previous one's on right/left where the text    --
+				-- grows away from !gplace, this one's on up/down where it      --
+				-- grows back towards it -- so the taller of the pair covers    --
+				-- both without having to branch on the side                    --
+				--                                                               --
+				-- 3mm pipe names come out at 4mm, exactly the flat !glabmin    --
+				-- this replaces, so nothing moves on a drawing of pipe labels  --
+				-- alone. 4mm equipment names come out at 5mm, where the flat   --
+				-- 4 left them touching (user, 2026-09-07)                      --
+				--                                                               --
+				-- this is a HEIGHT, not the text width tried and reverted on   --
+				-- 2026-08-27: that overshot by an order of magnitude because   --
+				-- width runs along the text, not across the band               --
+				----------------------------------------------------------------
+				!gcheir = !gchei.real()
+				!gclrh = !gcheir
+				if (!gprevchei.gt(!gclrh)) then
+					!gclrh = !gprevchei
+				endif
+				!gminclr = !gclrh + !glabair
+				if (!gminclr.lt(!glabmin)) then
+					!gminclr = !glabmin
+				endif
 				!gplace = !gseed
 				if (not(!gfirstlab)) then
 					!gmin = !gprevplace + !gminclr
@@ -3419,7 +3601,6 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- drop the label into the next one; it can run at most as  --
 				-- many times as there are bands                            --
 				-------------------------------------------------------------
-				!gcheir = !gchei.real()
 				!glowoff = !gloff * !gcheir
 				!glowbound = 0
 				!ghaslow = false
@@ -3535,6 +3716,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- with bpoftx X 0mm Y 0mm (2026-08-24, reported live)           --
 				!gstepabs = abs(!gstep)
 				!gprevplace = !gplace
+				!gprevchei = !gcheir
 				-------------------------------------------------------------
 				-- the end of this point's projection line, in sheet        --
 				-- coordination, is what the leader is aimed at             --

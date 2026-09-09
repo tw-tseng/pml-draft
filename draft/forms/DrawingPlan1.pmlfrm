@@ -60,7 +60,7 @@ layout form !!DrawingPlan1 dialog dock
 			toggle .openshee at xmin.canvas ymax.canvas+0.1   'Open SHEE after finish'
 			toggle .delshee  at xmin.openshee ymax.openshee+0.1 'Overwrite Existing DRWG'
 			
-			button .save   'Save'   at xmin.delshee   ymax.delshee+2 width 6 call '!This.Save()'
+			button .save   'Save'   at xmin.delshee   ymax.delshee+0.4 width 6 call '!This.Save()'
 			button .load   'Load'   at xmax.save+0.8  ymin.save        width 6 call '!This.Load()'
 
 		exit
@@ -128,8 +128,28 @@ layout form !!DrawingPlan1 dialog dock
 --			para .sketch at xmax.griddist+2 ymin.griddist pixmap width 5 height 5
 		exit
 		frame .anno 'Annotation'
-			text .annotext  'Text Height' tagwidth 12 width 40 is string
-			toggle .autoplace at xmin.annotext ymax.annotext+0.1  'Automatic Label Placement'
+			--------------------------------------------------------------
+			-- text heights: one field per thing the user can see, each  --
+			-- feeding EVERY place that height is written. .annotext     --
+			-- keeps its gadget name so settings files saved by an older --
+			-- form still load; only its label changed, from the far too --
+			-- broad 'Text Height' to what it actually drives -- the     --
+			-- five component label layers and the support symbol        --
+			--------------------------------------------------------------
+			text .annotext  'Component Label Height' tagwidth 22 width 6 is string
+			text .lineheitx 'Pipe Label Height'      tagwidth 22 at xmin.annotext ymax.annotext+0.1 width 6 is real
+			text .equiheitx 'Equipment Name Height'  tagwidth 22 at xmin.lineheitx ymax.lineheitx+0.1 width 6 is real
+			text .dimheitx  'Dimension Text Height'  tagwidth 22 at xmin.equiheitx ymax.equiheitx+0.1 width 6 is real
+			--------------------------------------------------------------
+			-- the match line text used to read .dwgnohei -- the Dwg.No.  --
+			-- height on the BorderText tab -- so changing the drawing    --
+			-- number in the title block silently resized every match     --
+			-- line callout on the sheet, from another tab. string, not   --
+			-- real, because the call sites pass it straight through as   --
+			-- cheitx |<val>| the way .dwgnohei always did                --
+			--------------------------------------------------------------
+			text .matchhei  'Match Line Text Height' tagwidth 22 at xmin.dimheitx ymax.dimheitx+0.1 width 6 is string
+			toggle .autoplace at xmin.annotext ymax.matchhei+0.1  'Automatic Label Placement'
 			frame .instframe 'Instrument' at xmin.annotext ymax.autoplace+0.1
 				toggle .insttog  'Create Label'
 				text .insttext1 'Inst Rule'   tagwidth 12 at xmin.insttog ymax.insttog+0.1 width 40 is string
@@ -290,7 +310,7 @@ define method .DrawingPlan1()
 	endhandle
   !this.griddist.val = 50
   !this.gridgap.val = 3
-  !this.gridhei.val = 3
+  !this.gridhei.val = 4
   !this.griddia.val = 10
 	!this.northtext.val = |/DRA/MAS/SYMBOLS/GEN/MISC/P-NARR|
 	!this.northsca.val = 1
@@ -300,6 +320,10 @@ define method .DrawingPlan1()
 	!this.openshee.val = true
 	!this.delshee.val = true
 	!this.annotext.val = |3|
+	!this.lineheitx.val = 3
+	!this.equiheitx.val = 4
+	!this.dimheitx.val = 3
+	!this.matchhei.val = |4|
 	!this.autoplace.val=TRUE
 	!this.insttog.val=TRUE
 	!this.insttext1.val = |ALL INST WITH ISNAMED|
@@ -780,7 +804,13 @@ define method .Apply()
 				
 				NEW CIRCLE
 				Origin Centre Offset X 0mm Y 0mm
-				DIAM 10mm
+				-- bubble size from the Annotation tab. .insttext3 'Diameter'  --
+				-- had no reader at all until now: field, default and Save     --
+				-- record existed, nothing consumed it, and the circle was     --
+				-- this literal (same shape as .gridhei, 2026-09-08)           --
+				!instdiav = !this.insttext3.val
+				!instdia = !instdiav.string('D2') & 'mm'
+				DIAM $!instdia
 				NLSTYL Solid
 				NLCOLO 5
 				FSTYLE Off
@@ -1570,9 +1600,9 @@ define method .Apply()
 				-- calls it again after moving the view, and it is that second --
 				-- set of positions the gaps have to line up with              --
 				--                                                              --
-				-- it leaves CE on an LDIM, so the view is navigated back to    --
-				-- afterwards -- reading VIEWDIR or VSCA off the wrong element  --
-				-- is what broke EquiAnnotation on the update path (c0a3e5d)    --
+				-- it leaves CE on an LDIM or a bubble, so the view is         --
+				-- navigated back to afterwards -- reading VIEWDIR or VSCA off  --
+				-- the wrong element is what broke EquiAnnotation (c0a3e5d)     --
 				----------------------------------------------------------------
 				!!DrawingPlan1MatchGaps(!name)
 				handle any
@@ -2122,9 +2152,9 @@ define method .Apply()
 				-- calls it again after moving the view, and it is that second --
 				-- set of positions the gaps have to line up with              --
 				--                                                              --
-				-- it leaves CE on an LDIM, so the view is navigated back to    --
-				-- afterwards -- reading VIEWDIR or VSCA off the wrong element  --
-				-- is what broke EquiAnnotation on the update path (c0a3e5d)    --
+				-- it leaves CE on an LDIM or a bubble, so the view is         --
+				-- navigated back to afterwards -- reading VIEWDIR or VSCA off  --
+				-- the wrong element is what broke EquiAnnotation (c0a3e5d)     --
 				----------------------------------------------------------------
 				!!DrawingPlan1MatchGaps(!name)
 				handle any
@@ -2523,7 +2553,8 @@ define method .NozzleAnnotation(!name is string)
 	Plclearance 0mm
 	Doffset 25mm
 	Dmspacing 0mm
-	Cheight 3mm
+	!cheicomp = !this.annotext.val & 'mm'
+	Cheight $!cheicomp
 	Lleader true
 	Lframe false
 	Lshape Straight
@@ -2797,6 +2828,10 @@ define method .Save()
 		!ff.writerecord('!this.gridhei.val' & '=' & !this.gridhei.val)
 		!ff.writerecord('!this.griddia.val' & '=' & !this.griddia.val)
 		!ff.writerecord('!this.annotext.val' & '=|' & !this.annotext.val & '|')
+		!ff.writerecord('!this.lineheitx.val' & '=' & !this.lineheitx.val)
+		!ff.writerecord('!this.equiheitx.val' & '=' & !this.equiheitx.val)
+		!ff.writerecord('!this.dimheitx.val' & '=' & !this.dimheitx.val)
+		!ff.writerecord('!this.matchhei.val' & '=|' & !this.matchhei.val & '|')
 		!ff.writerecord('!this.autoplace.val' & '=' & !this.autoplace.val)
 		!ff.writerecord('!this.insttog.val' & '=' & !this.insttog.val)
 		!ff.writerecord('!this.insttext1.val' & '=|' & !this.insttext1.val & '|')
@@ -2984,11 +3019,20 @@ define method .Load()
 						!this.dest.val = ''
 					else
 						!savedce = name
+						-------------------------------------------------------------
+						-- the navigation has to come BEFORE the handler. it used   --
+						-- to sit in the elsehandle none block, which runs when the --
+						-- guarded statement did NOT fail -- so the guarded         --
+						-- statement was '!destvalid = true', which cannot fail,    --
+						-- and $!destref ran outside the handler entirely. the      --
+						-- check described above therefore never caught anything:   --
+						--   (2,107) Undefined reference =2013286677/35036          --
+						-- killed the whole .Load() instead of warning (2026-09-09) --
+						-------------------------------------------------------------
 						!destvalid = true
+						$!destref
 						handle any
 							!destvalid = false
-						elsehandle none
-							$!destref
 						endhandle
 						if (!destvalid) then
 							!this.dest.val = !destref
@@ -2996,9 +3040,9 @@ define method .Load()
 							!this.dest.val = ''
 							!!alert.warning('The saved Destination no longer exists in this database. Please set it again with the CE button next to Destination.')
 						endif
+						-- same shape as above: navigate, THEN handle             --
+						$!savedce
 						handle any
-						elsehandle none
-							$!savedce
 						endhandle
 					endif
 					if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
@@ -3173,7 +3217,8 @@ define method .ValveAnnotation(!name is string)
 	Plclearance 0mm
 	Doffset 25mm
 	Dmspacing 0mm
-	Cheight 3mm
+	!cheicomp = !this.annotext.val & 'mm'
+	Cheight $!cheicomp
 	Lleader true
 	Lframe false
 	Lshape Straight
@@ -3273,7 +3318,8 @@ define method .ReduAnnotation(!name is string)
 	Plclearance 0mm
 	Doffset 25mm
 	Dmspacing 0mm
-	Cheight 3mm
+	!cheicomp = !this.annotext.val & 'mm'
+	Cheight $!cheicomp
 	Lleader true
 	Lframe false
 	Lshape Straight
@@ -3387,7 +3433,8 @@ define method .InstAnnotation(!name is string)
 	Plclearance 0mm
 	Doffset 25mm
 	Dmspacing 0mm
-	Cheight 3mm
+	!cheicomp = !this.annotext.val & 'mm'
+	Cheight $!cheicomp
 	Lleader true
 	Lframe false
 	Lshape Straight
@@ -3425,6 +3472,34 @@ define method .InstAnnotation(!name is string)
 	Grsystem Nulref
 	SpPurpose unset
 	Function unset
+	----------------------------------------------------------------
+	-- the bubble circle lives in the NAME_CIRC symbol, which is   --
+	-- built once by .Apply() on the create path only. re-applied  --
+	-- here, which runs on both paths, so changing Diameter and    --
+	-- updating an existing drawing works the same as creating a   --
+	-- new one -- the rule agreed for text heights, 2026-09-08     --
+	----------------------------------------------------------------
+	!instdiav = !this.insttext3.val
+	!instdia = !instdiav.string('D2') & 'mm'
+	$!name/SS/LALB/NAME_CIRC
+	handle any
+	elsehandle none
+		var !ncircs coll all circle for ce
+		do !nc values !ncircs
+			$!nc
+			handle any
+				skip
+			endhandle
+			DIAM $!instdia
+		enddo
+	endhandle
+	----------------------------------------------------------------
+	-- back onto the layer: the NEW SLABs below are created under  --
+	-- whatever CE is left here                                    --
+	----------------------------------------------------------------
+	$!name/SS/S1/V1/ateINST
+	handle any
+	endhandle
 	
 	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
 	!ff.open('append')
@@ -3447,7 +3522,14 @@ define method .InstAnnotation(!name is string)
 		Blnk true
 		Bmargin 0mm
 		Xyscale 1 1
-		Cheitx '3mm'
+		----------------------------------------------------------------
+		-- the bubble text. hard coded 3mm here beat the ateINST layer  --
+		-- set just above, so Component Label Height moved every other  --
+		-- component label and left the instrument numbers at 3mm       --
+		-- (reported 2026-09-08, q Cheitx on the SLAB still said 3mm)   --
+		----------------------------------------------------------------
+		!cheiinst = !this.annotext.val & 'mm'
+		Cheitx '$!cheiinst'
 		Lvisibility true
 		Txcolour Yellow
 		LLColour Cyan
@@ -3534,7 +3616,54 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 			!gby = !gby + !fdel
 		endif
 	endif
-	!!DrawingPlan1GridBubbles.append(!agside & '~' & string(!gbx) & '~' & string(!gby))
+	----------------------------------------------------------------------
+	-- another bubble may already be standing on this exact spot: this   --
+	-- project has more than one grid system over the same ground. the   --
+	-- same number twice is the same column position twice, so this one  --
+	-- is dropped; a different number is a real second label and gets     --
+	-- stacked one circle further out, sharing the leader of the one     --
+	-- below it (user's rule and sketch, 2026-09-07)                     --
+	--                                                                    --
+	-- the drop happens BEFORE the claim below, so a duplicate left on   --
+	-- the layer by an earlier run goes unclaimed and is deleted by      --
+	-- DrawingPlan1GridAnnotation's own cleanup -- nothing extra needed  --
+	----------------------------------------------------------------------
+	!gid = !!DrawingPlan1GridIdNow
+	handle any
+		!gid = ''
+	endhandle
+	!gstack = '0'
+	!gstackerr = ''
+	!gstack = !!DrawingPlan1GridStack(!agside, !gbx, !gby, !gid)
+	handle any
+		!gstack = '0'
+		!gstackerr = !!error.text
+	endhandle
+	if (!gstack.eq('SKIP')) then
+		return
+	endif
+	!gpush = !gstack.real()
+	if (!gpush.gt(0)) then
+		------------------------------------------------------------------
+		-- outwards, on the axis that crosses the border. !x / !y are    --
+		-- still in sheet coordination here -- the rcode swap is below   --
+		-- -- so this is the same footing the frozen-depth shift works on --
+		------------------------------------------------------------------
+		if (!agside.eqnocase('Top')) then
+			!y = !y + !gpush
+			!gby = !gby + !gpush
+		elseif (!agside.eqnocase('Bottom')) then
+			!y = !y - !gpush
+			!gby = !gby - !gpush
+		elseif (!agside.eqnocase('Right')) then
+			!x = !x + !gpush
+			!gbx = !gbx + !gpush
+		else
+			!x = !x - !gpush
+			!gbx = !gbx - !gpush
+		endif
+	endif
+	!!DrawingPlan1GridBubbles.append(!agside & '~' & string(!gbx) & '~' & string(!gby) & '~' & !gid)
 	handle any
 	endhandle
 
@@ -3573,7 +3702,7 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 	!gsref = !!DrawingPlan1GridClaim(!refgln, !agside, !nppt)
 	!dbgg = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
 	!dbgg.open('append')
-	!dbgg.writerecord('GRIDBUB side=' & !agside & ' nppt=' & !nppt.string() & ' new=' & !gsref.eq('').string() & ' xypo=' & !x.string('D3') & ' ' & !y.string('D3') & ' sheet=' & !gbx.string('D3') & ' ' & !gby.string('D3') & ' gln=' & !refgln)
+	!dbgg.writerecord('GRIDBUB side=' & !agside & ' nppt=' & !nppt.string() & ' new=' & !gsref.eq('').string() & ' xypo=' & !x.string('D3') & ' ' & !y.string('D3') & ' sheet=' & !gbx.string('D3') & ' ' & !gby.string('D3') & ' id=' & !gid & ' push=' & !gpush.string('D1') & ' stack=' & !gstack & ' err=[' & !gstackerr & '] gln=' & !refgln)
 	!dbgg.close()
 	handle any
 	endhandle
@@ -3585,6 +3714,14 @@ define method .CreateGridSymbolwithIntersection(!i is real, !p12linesh is line, 
 		XYPO $!x $!y
 		APOF $!xap $!yap
 		Agside |$!agside|
+		----------------------------------------------------------------
+		-- a stacked bubble shares the leader of the one it sits on, so --
+		-- it must not draw its own: that line would run straight       --
+		-- through the circle below it                                  --
+		----------------------------------------------------------------
+		if (!gpush.gt(0)) then
+			Lleader false
+		endif
 		----------------------------------------------------------------
 		-- turn the symbol back upright when the view is rotated       --
 		----------------------------------------------------------------
@@ -3622,23 +3759,32 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 	endif
 
 	---------------------------------------------------------------------------------
-	-- check if distance between !thispossh and view frame is larger than 100mm    --
-	-- if YES, create grid label that extends 25mm from !thispossh                 --
-	-- otherwise extends 25mm from intersection between !p12linesh and view frame  --
+	-- the bubble goes GRIDDIST beyond where this grid line meets the view frame,   --
+	-- always. never beside the line's own end                                      --
+	--                                                                               --
+	-- this is the method called for an end which stops INSIDE the view -- see the  --
+	-- !total = 1 and !total = 0 branches of DrawingPlan1GridAnnotation.pmlfnc. it   --
+	-- used to put the bubble GRIDDIST past that end whenever the end was more than  --
+	-- 100mm from the frame, which landed it in the middle of the drawing on top of  --
+	-- the model (user, 2026-09-07)                                                  --
+	--                                                                               --
+	-- user's rule: every column position gets a bubble, and they all line up        --
+	-- outside the frame. so a grid line which stops short gets its bubble on the    --
+	-- frame like every other one -- which is what                                   --
+	-- .CreateGridSymbolwithIntersection() has always done for the ends that do      --
+	-- cross, and the two now agree                                                  --
+	--                                                                               --
+	-- the intersection is of the line EXTENDED, so it exists even for a line which  --
+	-- never reaches the frame: DrawingPlan1GridAnnotation collects them by crossing  --
+	-- unbounded lines and only afterwards tests which ones are on the bounded one   --
 	---------------------------------------------------------------------------------
 	!line = object line(!thatpossh.position(), !thispossh.position())
 	!dir = !line.direction()
-	if (!thispossh.position().distance(!this.intersections.getindexed(!i).split('-').getindexed(2).position()).geq(100)) then
-	  !x = !thispossh.position().offset(!dir, !this.griddist.val).east - !thispossh.position().east
-	  !y = !thispossh.position().offset(!dir, !this.griddist.val).north - !thispossh.position().north
-		!xap = !thispossh.position().offset(!dir, !this.gridgap.val).east - !thispossh.position().east
-		!yap = !thispossh.position().offset(!dir, !this.gridgap.val).north - !thispossh.position().north
-	else
-		!x = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.griddist.val).east - !thispossh.position().east
-		!y = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.griddist.val).north - !thispossh.position().north
-		!xap = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.gridgap.val).east - !thispossh.position().east
-		!yap = !this.intersections.getindexed(!i).split('-').getindexed(2).position().offset(!dir, !this.gridgap.val).north - !thispossh.position().north
-	endif
+	!gintpt = !this.intersections.getindexed(!i).split('-').getindexed(2).position()
+	!x = !gintpt.offset(!dir, !this.griddist.val).east - !thispossh.position().east
+	!y = !gintpt.offset(!dir, !this.griddist.val).north - !thispossh.position().north
+	!xap = !gintpt.offset(!dir, !this.gridgap.val).east - !thispossh.position().east
+	!yap = !gintpt.offset(!dir, !this.gridgap.val).north - !thispossh.position().north
 	----------------------------------------------------------------------
 	-- same as .CreateGridSymbolwithIntersection(): the sheet position of --
 	-- the bubble, kept for the pipe number labels to stay clear of. !x / --
@@ -3666,7 +3812,54 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 			!gby = !gby + !fdel
 		endif
 	endif
-	!!DrawingPlan1GridBubbles.append(!agside & '~' & string(!gbx) & '~' & string(!gby))
+	----------------------------------------------------------------------
+	-- another bubble may already be standing on this exact spot: this   --
+	-- project has more than one grid system over the same ground. the   --
+	-- same number twice is the same column position twice, so this one  --
+	-- is dropped; a different number is a real second label and gets     --
+	-- stacked one circle further out, sharing the leader of the one     --
+	-- below it (user's rule and sketch, 2026-09-07)                     --
+	--                                                                    --
+	-- the drop happens BEFORE the claim below, so a duplicate left on   --
+	-- the layer by an earlier run goes unclaimed and is deleted by      --
+	-- DrawingPlan1GridAnnotation's own cleanup -- nothing extra needed  --
+	----------------------------------------------------------------------
+	!gid = !!DrawingPlan1GridIdNow
+	handle any
+		!gid = ''
+	endhandle
+	!gstack = '0'
+	!gstackerr = ''
+	!gstack = !!DrawingPlan1GridStack(!agside, !gbx, !gby, !gid)
+	handle any
+		!gstack = '0'
+		!gstackerr = !!error.text
+	endhandle
+	if (!gstack.eq('SKIP')) then
+		return
+	endif
+	!gpush = !gstack.real()
+	if (!gpush.gt(0)) then
+		------------------------------------------------------------------
+		-- outwards, on the axis that crosses the border. !x / !y are    --
+		-- still in sheet coordination here -- the rcode swap is below   --
+		-- -- so this is the same footing the frozen-depth shift works on --
+		------------------------------------------------------------------
+		if (!agside.eqnocase('Top')) then
+			!y = !y + !gpush
+			!gby = !gby + !gpush
+		elseif (!agside.eqnocase('Bottom')) then
+			!y = !y - !gpush
+			!gby = !gby - !gpush
+		elseif (!agside.eqnocase('Right')) then
+			!x = !x + !gpush
+			!gbx = !gbx + !gpush
+		else
+			!x = !x - !gpush
+			!gbx = !gbx - !gpush
+		endif
+	endif
+	!!DrawingPlan1GridBubbles.append(!agside & '~' & string(!gbx) & '~' & string(!gby) & '~' & !gid)
 	handle any
 	endhandle
 
@@ -3705,7 +3898,7 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 	!gsref = !!DrawingPlan1GridClaim(!refgln, !agside, !nppt)
 	!dbgg = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
 	!dbgg.open('append')
-	!dbgg.writerecord('GRIDBUB side=' & !agside & ' nppt=' & !nppt.string() & ' new=' & !gsref.eq('').string() & ' xypo=' & !x.string('D3') & ' ' & !y.string('D3') & ' sheet=' & !gbx.string('D3') & ' ' & !gby.string('D3') & ' gln=' & !refgln)
+	!dbgg.writerecord('GRIDBUB side=' & !agside & ' nppt=' & !nppt.string() & ' new=' & !gsref.eq('').string() & ' xypo=' & !x.string('D3') & ' ' & !y.string('D3') & ' sheet=' & !gbx.string('D3') & ' ' & !gby.string('D3') & ' id=' & !gid & ' push=' & !gpush.string('D1') & ' stack=' & !gstack & ' err=[' & !gstackerr & '] gln=' & !refgln)
 	!dbgg.close()
 	handle any
 	endhandle
@@ -3717,6 +3910,14 @@ define method .CreateGridSymbol(!i is real, !p12linesh is line, !thispossh is st
 		XYPO $!x $!y
 		APOF $!xap $!yap
 		Agside |$!agside|
+		----------------------------------------------------------------
+		-- a stacked bubble shares the leader of the one it sits on, so --
+		-- it must not draw its own: that line would run straight       --
+		-- through the circle below it                                  --
+		----------------------------------------------------------------
+		if (!gpush.gt(0)) then
+			Lleader false
+		endif
 		----------------------------------------------------------------
 		-- turn the symbol back upright when the view is rotated       --
 		----------------------------------------------------------------
@@ -4662,10 +4863,10 @@ $)
 				if not(!tempt.eqnocase('')) then
 					!posx = !sortedtypes[!i].split('!').getindexed(3).real() + (!sortedtypes[!i + 1].split('!').getindexed(3).real() - !sortedtypes[!i].split('!').getindexed(3).real()) * 0.5
 					!posy = !!DrawingPlan1.viewURsh.part(4).real() + 1
-					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center txcolour yellow font 1    $( old = 90  tbody $)
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.matchhei.val| alig bbody just center txcolour yellow font 1    $( old = 90  tbody $)
 --							!posx = !!DrawingPlan1.viewURsh.part(2).real() + 1
 --							!posy = !sortedtypes[!i].split('!').getindexed(4).real() + (!sortedtypes[!i + 1].split('!').getindexed(4).real() - !sortedtypes[!i].split('!').getindexed(4).real()) * 0.5
---							new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| alig tbody just center txcolour yellow font 1
+--							new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.matchhei.val| alig tbody just center txcolour yellow font 1
 				endif
 			endif
 			------------------------------------------------------------------
@@ -4717,10 +4918,10 @@ $)
 		if not(!tempt.eqnocase('')) then
 			!posx = (!!DrawingPlan1.viewURsh.part(2).real() - !!DrawingPlan1.viewULsh.part(2).real()) * 0.5
 			!posy = !!DrawingPlan1.viewURsh.part(4).real() + 1
-			new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center txcolour yellow font 1
+			new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.matchhei.val| alig bbody just center txcolour yellow font 1
 --					!posx = !!DrawingPlan1.viewURsh.part(2).real() + 1
 --					!posy = !!DrawingPlan1.viewLRsh.part(4).real() + (!!DrawingPlan1.viewURsh.part(4).real() - !!DrawingPlan1.viewLRsh.part(4).real()) * 0.5
---					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| alig tbody just center txcolour yellow font 1
+--					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.matchhei.val| alig tbody just center txcolour yellow font 1
 		endif
 	endif
 endmethod
@@ -4743,7 +4944,8 @@ define method .SuptAnnotation(!name is string)
 	Plclearance 0mm
 	Doffset 25mm
 	Dmspacing 0mm
-	Cheight 3mm
+	!cheicomp = !this.annotext.val & 'mm'
+	Cheight $!cheicomp
 	Lleader true
 	Lframe false
 	Lshape Straight
@@ -4793,7 +4995,11 @@ define method .SuptAnnotation(!name is string)
     JUST Centre
     ALIGN Hbody
     FONT 1
-    CHEITX '3mm'
+    -- same value as the flat oval branch reads from .annotext --
+    -- hard coding it here kept one of the two support styles  --
+    -- at 3mm whatever the form said                           --
+    !cheisupt = !this.annotext.val & 'mm'
+    CHEITX '$!cheisupt'
     CSPATX '0'
     LSPATX '0'
     TXCOLO 1
@@ -4862,7 +5068,11 @@ define method .SuptAnnotation(!name is string)
 		Blnk true
 		Bmargin 0mm
 		Xyscale 1 1
-		Cheitx '3mm'
+		-- same value as the flat oval branch reads from .annotext --
+		-- hard coding it here kept one of the two support styles  --
+		-- at 3mm whatever the form said                           --
+		!cheisupt = !this.annotext.val & 'mm'
+		Cheitx '$!cheisupt'
 		Lvisibility true
 		Txcolour Yellow
 		LLColour Cyan

@@ -12,7 +12,7 @@ pml.index
 # back and forth while chasing a bug and is overwritten every time,
 # check.txt/check2.txt/check3.txt... are debug dumps
 check*.txt
-error.png
+error*.png
 CreateBoxInAutoCAD/drawing index_e3dbox.csv
 CreateBoxInAutoCAD/drawing index.dwg
 CreateBoxInAutoCAD/e3dbox_light.mnr
@@ -44,3 +44,13 @@ draft/functions/egg.txt
 draft/functions/egg1.txt
 icons/Grid.png
 版次程式檢查清單.pdf
+
+# working clutter from the 2026-09 text-height batch
+.claude/
+temp.txt
+notion_gap_note.md
+# label dumps written by LineNoAnnotation while comparing rebuild vs update
+glabtext_*.txt
+# hand-made backups kept beside the real form while editing it
+draft/forms/DrawingPlan1 - Copy.pmlfrm
+draft/forms/DrawingPlan1 - 複製.pmlfrm

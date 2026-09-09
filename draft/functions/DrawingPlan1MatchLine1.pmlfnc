@@ -83,6 +83,15 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				handle any
 				endhandle
 			endif
+			----------------------------------------------------------------
+			-- recorded whether it was just drawn or reused: MatchGaps has --
+			-- to know where every tick ended up this run, not only the    --
+			-- new ones. base position only -- the far end is always 10mm  --
+			-- further out and MatchGaps works that out for itself         --
+			----------------------------------------------------------------
+			!!DrawingPlan1MatchTicks.append(!dir & '~' & !tkxs & '~' & !tkys)
+			handle any
+			endhandle
 		endif
 	enddo
 	--------------------------------------------------------------------
@@ -235,7 +244,7 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
 					!mlref = !!DrawingPlan1MatchClaimRef(!mlsig)
 					if (!mlref.eq('')) then
-						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center txcolour yellow font 1
+						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.matchhei.val| just center txcolour yellow font 1
 						if !dir.eq('right') then
 							alig tbody
 						else
@@ -314,7 +323,7 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					!mlsig = 'T~' & !posx.string() & '~' & !posy.string() & '~' & !tempt
 					!mlref = !!DrawingPlan1MatchClaimRef(!mlsig)
 					if (!mlref.eq('')) then
-						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| just center txcolour yellow font 1
+						new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.matchhei.val| just center txcolour yellow font 1
 						if !dir.eq('up') then
 							alig bbody
 						else
@@ -452,13 +461,13 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 			!mlref = !!DrawingPlan1MatchClaimRef(!mlsig)
 			if (!mlref.eq('')) then
 				if !dir.eq('right') then
-					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center alig tbody txcolour yellow font 1
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.matchhei.val| just center alig tbody txcolour yellow font 1
 				elseif !dir.eq('left') then
-					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.dwgnohei.val| just center alig bbody txcolour yellow font 1
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 90 cheitx |$!!DrawingPlan1.matchhei.val| just center alig bbody txcolour yellow font 1
 				elseif !dir.eq('up') then
-					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center alig bbody txcolour yellow font 1
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.matchhei.val| alig bbody just center alig bbody txcolour yellow font 1
 				elseif !dir.eq('down') then
-					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.dwgnohei.val| alig bbody just center alig tbody txcolour yellow font 1
+					new texp btext |$!tempt| origin x $!posx y $!posy adegrees 0 cheitx |$!!DrawingPlan1.matchhei.val| alig bbody just center alig tbody txcolour yellow font 1
 				endif
 			else
 				-- reuse-must-move, same reasoning as the multi-count branch above --
