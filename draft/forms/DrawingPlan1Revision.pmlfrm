@@ -1,0 +1,909 @@
+--------------------------------------------------
+-- Copyright ATOMTECH Ltd 2026                  --
+--                                              --
+-- Function : Revise (issue) GA drawings        --
+-- Author   : Tseng                             --
+-- Date     : 2026/09/13                        --
+--------------------------------------------------
+--
+-- Stand-alone revision form. It does not depend on DrawingPlan1 and
+-- nothing is passed between the two: DrawingPlan1 draws, this form
+-- turns what was drawn into a numbered revision.
+--
+-- The agreed design is the "revision program (2026-09-13)" toggle on the
+-- project's Notion page (E3D pipe-plan program summary, page id
+-- 3c8dd89e-3acd-80a7-9a3d-cecae639393f, toggle id
+-- 3dadd89e-3acd-8156-8692-cbc39c1a742c) -- read that before changing
+-- the rules below. In short:
+--
+--   * the user builds a list of SHEEs with Add CE / Remove / Remove All.
+--     Add CE takes the sheet CE is on or inside, or every sheet below
+--     CE when it stands above them (DRWG, REGI, DEPT). Remove drops the
+--     row selected in the table, or the sheet CE resolves to when no
+--     row is selected. the list IS the work list, no separate tick box
+--   * the revision codes and their order come from <PROJID>_REV.txt in
+--     the project folder (one level above evar '<projcode>000'). the
+--     project owner maintains it, this form never writes it
+--   * a REVI only counts as a real revision when BOTH RVSN and STEXT
+--     are set. STEXT is written last, so it doubles as the "this one
+--     was finished" flag. anything without it is ignored
+--   * REVIs are not named. nothing here needs a name, and an unnamed
+--     REVI cannot clash on (41,12)
+--   * per sheet: NEW REVI -> CreateSnapshot -> Q PICF -> DXF -> STEXT.
+--     one SAVEWORK before the whole batch, never after -- saving the
+--     result is the user's decision
+--   * a failure skips that sheet and carries on. the batch usually runs
+--     after hours, so everything is written to <PROJID>_REV.log as well
+--     as reported at the end
+--
+--------------------------------------------------
+
+import 'Aveva.Pdms.SDInteraction.UI'
+handle any
+endhandle
+using namespace 'Aveva.Pdms.SDInteraction.UI.Gui.RevisionControl'
+handle any
+endhandle
+-- the three-column sheet table is a .NET grid: a plain PML list uses a
+-- proportional font, so space-padded columns never line up
+import 'GridControl'
+handle any
+endhandle
+using namespace 'Aveva.Core.Presentation'
+handle any
+endhandle
+
+layout form !!DrawingPlan1Revision dialog dock
+	!this.formTitle = 'Drawing Revision'
+
+	paragraph .seqinfo text 'Sequence file: not loaded' width 64
+	container .rows nobox PmlNetControl 'NET' at xmin.seqinfo ymax.seqinfo+0.3 width 50 height 12
+	button .addce  'Add CE'      at xmax.rows+0.5 ymin.rows      width 12 call '!this.AddCe()'
+	button .remce  'Remove'      at xmin.addce  ymax.addce+0.3   width 12 call '!this.RemoveCe()'
+	button .remall 'Remove All'  at xmin.addce  ymax.remce+0.3   width 12 call '!this.RemoveAll()'
+	option .target 'Revision'    at xmin.rows   ymax.rows+0.3    tagwidth 9 width 12
+	text   .author 'Author'      at xmax.target+1 ymin.target    tagwidth 7 width 18 is string
+	button .apply  'Apply'       at xmin.rows   ymax.target+0.5  width 12 call '!this.Apply()'
+	button .cancel 'Cancel'      at xmax.apply+2 ymin.apply      width 12 call '!this.Close()'
+
+	member .grid   is NETGRIDCONTROL $( the .NET grid living in .rows $)
+	member .projcode is string  $( 3-letter project code, the same one the <code>000 evars are built on $)
+	member .seq    is array    $( revision codes from <PROJID>_REV.txt, in file order              $)
+	member .seqok  is boolean  $( the sequence file was found and holds at least one code          $)
+	member .seqdir is string   $( project folder holding the sequence file and the log, no trailing \ $)
+	member .shees  is array    $( SHEE dbref strings in the list, in display order                  $)
+	member .cur    is array    $( per sheet: current code, '' = no revision yet, '?' = code not in file $)
+	member .nxt    is array    $( per sheet: code it will be revised to, '' = skip this sheet       $)
+	member .reuse  is array    $( per sheet: dbref of an unfinished REVI carrying the target code, '' = none. Apply finishes it instead of NEW $)
+exit
+
+-------------
+-- initial --
+-------------
+define method .DrawingPlan1Revision()
+	var !projcode proj code
+	!this.projcode = !projcode.upcase()
+	!this.shees = object array()
+	!this.cur   = object array()
+	!this.nxt   = object array()
+	!this.reuse = object array()
+
+	using namespace 'Aveva.Core.Presentation'
+	!this.grid = object NETGRIDCONTROL()
+	!this.rows.control = !this.grid.handle()
+	!this.grid.fixedHeaders(false)
+	!this.grid.outlookGroupStyle(false)
+	!this.grid.columnExcelFilter(false)
+	!this.grid.headerSort(false)
+	!this.grid.columnSummaries(false)
+	!this.grid.singleRowSelection(true)
+
+	!this.LoadSequence()
+
+	-- Q LOGIN (the Windows account), not Q USER (the E3D user, usually SYSTEM)
+	var !login login
+	!this.author.val = !login
+	!this.target.callback = '!this.Refresh()'
+	!this.Refresh()
+endmethod
+
+define method .Close()
+	kill !!DrawingPlan1Revision
+endmethod
+
+----------------------------------------------------------------------
+-- read <PROJID>_REV.txt. one code per line in order, blank lines   --
+-- and lines starting with -- are ignored. the first code is what a --
+-- sheet with no revision yet is issued at                          --
+----------------------------------------------------------------------
+define method .LoadSequence()
+	!this.seq    = object array()
+	!this.seqok  = false
+	!this.seqdir = ''
+
+	!evname = !this.projcode.lowcase() & '000'
+	!p000 = ''
+	var !p000 evar '$!evname'
+	handle any
+		!p000 = ''
+	endhandle
+	if (!p000.eq('')) then
+		!this.seqinfo.val = 'Sequence file: evar ' & !evname & ' is empty (proj code ' & !this.projcode & ')'
+		return
+	endif
+
+	-- evar points at ...\<projcode>000. the file lives one level up
+	!p = !p000.replace('/', '\')
+	if (!p.substring(!p.length(), 1).eq('\')) then
+		!p = !p.substring(1, !p.length() - 1)
+	endif
+	!parts = !p.split('\')
+	!dir = ''
+	do !i from 1 to (!parts.size() - 1)
+		if (!i.gt(1)) then
+			!dir = !dir & '\'
+		endif
+		!dir = !dir & !parts[!i]
+	enddo
+	!this.seqdir = !dir
+
+	!path = !dir & '\' & !this.projcode & '_REV.txt'
+	!f = object FILE(!path)
+	if (not !f.exists()) then
+		!this.seqinfo.val = 'Sequence file: NOT FOUND ' & !path
+		return
+	endif
+	!f.open('read')
+	!lines = !f.readfile()
+	!f.close()
+
+	do !line values !lines
+		!t = !line.trim()
+		skip if (!t.eq(''))
+		if (!t.length().geq(2)) then
+			skip if (!t.substring(1, 2).eq('--'))
+		endif
+		!this.seq.append(!t)
+	enddo
+
+	if (!this.seq.size().eq(0)) then
+		!this.seqinfo.val = 'Sequence file: EMPTY ' & !path
+		return
+	endif
+
+	!this.seqok = true
+	!this.seqinfo.val = 'Sequence file: ' & !path & '  (' & !this.seq.size() & ' codes)'
+
+	-- entry 1 is the "next after current" mode, the rest are explicit codes
+	!opts = object array()
+	!opts.append('Next')
+	!opts.appendarray(!this.seq)
+	!this.target.dtext = !opts
+	!this.target.val = 1
+endmethod
+
+-- position of a code in the sequence, 0 when it is not there
+define method .SeqIndex(!code is STRING) is REAL
+	do !i from 1 to !this.seq.size()
+		if (!this.seq[!i].eq(!code)) then
+			return !i
+		endif
+	enddo
+	return 0
+endmethod
+
+----------------------------------------------------------------------
+-- the SHEE that CE is, or sits inside. '' when CE is above every   --
+-- SHEE (DRWG, REGI, ...) or outside DRAFT altogether. CE is put     --
+-- back where it was                                                --
+----------------------------------------------------------------------
+define method .SheetOfCe() is STRING
+	!save  = !!ce
+	!found = ''
+	do !i from 1 to 30
+		var !type type
+		if (!type.eq('SHEE')) then
+			var !found ref
+			break
+		endif
+		break if (!type.eq('WORL'))
+		!!ce = !!ce.owner
+		handle any
+			break
+		endhandle
+	enddo
+	!!ce = !save
+	return !found
+endmethod
+
+define method .AddSheet(!ref is STRING)
+	if (!ref.eq('')) then
+		return
+	endif
+	do !s values !this.shees
+		if (!s.eq(!ref)) then
+			return
+		endif
+	enddo
+	!this.shees.append(!ref)
+endmethod
+
+----------------------------------------------------------------------
+-- one button for both cases. CE on or inside a SHEE: that sheet.   --
+-- CE above the sheets (DRWG, REGI, DEPT): every SHEE below it, any --
+-- depth. nothing is added twice                                    --
+----------------------------------------------------------------------
+define method .AddCe()
+	!ref = !this.SheetOfCe()
+	if (!ref.neq('')) then
+		!this.AddSheet(!ref)
+		!this.Refresh()
+		return
+	endif
+	var !coll coll all shee for ce
+	handle any
+		!coll = object array()
+	endhandle
+	if (!coll.size().eq(0)) then
+		!!alert.error('CE is not a SHEE, is not inside one, and has no SHEE below it')
+		return
+	endif
+	do !s values !coll
+		!this.AddSheet(!s)
+	enddo
+	!this.Refresh()
+endmethod
+
+----------------------------------------------------------------------
+-- a row selected in the table wins; with nothing selected, fall     --
+-- back to the sheet CE is on or inside. row tags are 1-based and in --
+-- the order Refresh bound them, which is the order of !this.shees   --
+----------------------------------------------------------------------
+define method .RemoveCe()
+	!ref = ''
+	!picked = false
+	!picked = !this.grid.getSelectedRows().set()
+	handle any
+		!picked = false
+	endhandle
+	if (!picked) then
+		!rowno = !this.grid.getSelectedRowTags()[1].real()
+		handle any
+			!rowno = 0
+		endhandle
+		if (!rowno.geq(1) and !rowno.leq(!this.shees.size())) then
+			!ref = !this.shees[!rowno]
+		endif
+	endif
+	if (!ref.eq('')) then
+		!ref = !this.SheetOfCe()
+	endif
+	if (!ref.eq('')) then
+		!!alert.error('Select a row in the table, or make a SHEE (or something inside one) the CE')
+		return
+	endif
+	!keep = object array()
+	do !s values !this.shees
+		if (!s.neq(!ref)) then
+			!keep.append(!s)
+		endif
+	enddo
+	!this.shees = !keep
+	!this.Refresh()
+endmethod
+
+define method .RemoveAll()
+	!this.shees = object array()
+	!this.Refresh()
+endmethod
+
+----------------------------------------------------------------------
+-- rescan every sheet in the list and redraw the rows.              --
+--                                                                  --
+-- current version: of the REVIs that have BOTH rvsn and stext, the --
+-- one whose code sits furthest along the sequence. a finished REVI --
+-- whose code is not in the file at all marks the sheet '?' and it  --
+-- is left alone. REVIs missing stext are unfinished: they never    --
+-- count as a version, but one carrying the target code is          --
+-- remembered so Apply can finish it instead of making a duplicate  --
+--                                                                  --
+-- next version: 'Next' mode is current + 1. an explicit code is    --
+-- accepted only when it lies after the current one, which also     --
+-- guarantees no finished REVI already has it. anything else leaves --
+-- the Next column blank and Apply skips the row                    --
+----------------------------------------------------------------------
+define method .Refresh()
+	-- keep the table in box-name order whatever order the sheets came in
+	if (!this.shees.size().gt(1)) then
+		!names = object array()
+		do !s values !this.shees
+			!names.append(!this.BoxName(!s))
+		enddo
+		!this.shees.reindex(!names.sortedIndices())
+		handle any
+		endhandle
+	endif
+
+	!this.cur   = object array()
+	!this.nxt   = object array()
+	!this.reuse = object array()
+
+	!pick = ''
+	if (!this.seqok) then
+		if (!this.target.val.gt(1)) then
+			!pick = !this.seq[!this.target.val - 1]
+		endif
+	endif
+
+	!rows = object array()
+	!any  = false
+	do !i from 1 to !this.shees.size()
+		!ref = !this.shees[!i]
+		!cur   = ''
+		!nxt   = ''
+		!reuse = ''
+		!curidx  = 0
+		!unknown = false
+		!inccode = object array()
+		!incref  = object array()
+
+		var !revs coll all revi for $!ref
+		handle any
+			!revs = object array()
+		endhandle
+		do !r values !revs
+			!rvsn = ''
+			!stext = ''
+			var !rvsn rvsn of $!r
+			handle any
+				!rvsn = ''
+			endhandle
+			var !stext stext of $!r
+			handle any
+				!stext = ''
+			endhandle
+			!rvsn  = !rvsn.trim()
+			!stext = !stext.trim()
+			if (!rvsn.upcase().eq('UNSET')) then
+				!rvsn = ''
+			endif
+			if (!stext.upcase().eq('UNSET')) then
+				!stext = ''
+			endif
+			skip if (!rvsn.eq(''))
+			if (!stext.eq('')) then
+				!inccode.append(!rvsn)
+				!incref.append(!r)
+				skip
+			endif
+			!idx = !this.SeqIndex(!rvsn)
+			if (!idx.eq(0)) then
+				!unknown = true
+			elseif (!idx.gt(!curidx)) then
+				!curidx = !idx
+			endif
+		enddo
+
+		if (!unknown) then
+			!cur = '?'
+		elseif (!curidx.gt(0)) then
+			!cur = !this.seq[!curidx]
+		endif
+
+		if (!this.seqok and not !unknown) then
+			if (!pick.eq('')) then
+				if (!curidx.lt(!this.seq.size())) then
+					!nxt = !this.seq[!curidx + 1]
+				endif
+			else
+				if (!this.SeqIndex(!pick).gt(!curidx)) then
+					!nxt = !pick
+				endif
+			endif
+		endif
+
+		if (!nxt.neq('')) then
+			do !k from 1 to !inccode.size()
+				if (!inccode[!k].eq(!nxt)) then
+					!reuse = !incref[!k]
+					break
+				endif
+			enddo
+			!any = true
+		endif
+
+		!this.cur.append(!cur)
+		!this.nxt.append(!nxt)
+		!this.reuse.append(!reuse)
+
+		!curtxt = !cur
+		if (!cur.eq('')) then
+			!curtxt = '-'
+		endif
+		!row = object array()
+		!row[1] = !this.BoxName(!ref)
+		!row[2] = !curtxt
+		!row[3] = !nxt
+		!rows.append(!row)
+	enddo
+
+	!headings = object array()
+	!headings.append('Box')
+	!headings.append('Current')
+	!headings.append('Next')
+	using namespace 'Aveva.Core.Presentation'
+	!nds = object NETDATASOURCE('Sheets', !headings, !rows)
+	!this.grid.bindToDataSource(!nds)
+	handle any
+	endhandle
+	-- binding resets every column to a stub width, so refit after each one
+	!this.grid.autoFitColumns()
+	handle any
+	endhandle
+	!this.apply.active = (!this.seqok and !any)
+endmethod
+
+----------------------------------------------------------------------
+-- /X/SS/S1 -> X, which is what DrawingPlan1 shows in its own list.  --
+-- X may itself look like =23718/1671: an unnamed box EQUI is known  --
+-- by its reference, and that reference becomes the drawing name.   --
+-- anything not ending in /SS/S1 is shown as it is                   --
+----------------------------------------------------------------------
+define method .BoxName(!ref is STRING) is STRING
+	!name = ''
+	var !name name of $!ref
+	handle any
+		!name = !ref
+	endhandle
+	if (!name.length().gt(7)) then
+		if (!name.substring(!name.length() - 5, 6).eq('/SS/S1')) then
+			!core = !name.substring(2, !name.length() - 7)
+			if (!core.neq('')) then
+				return !core
+			endif
+		endif
+	endif
+	return !name
+endmethod
+
+-- 'hh:mm dd Mon yyyy', the form REVD and SETCOMPDATE both use
+define method .NowStamp() is STRING
+	!mon = object array()
+	!mon.append('Jan')
+	!mon.append('Feb')
+	!mon.append('Mar')
+	!mon.append('Apr')
+	!mon.append('May')
+	!mon.append('Jun')
+	!mon.append('Jul')
+	!mon.append('Aug')
+	!mon.append('Sep')
+	!mon.append('Oct')
+	!mon.append('Nov')
+	!mon.append('Dec')
+	!d  = object DATETIME()
+	!hh = !d.hour().string()
+	!mm = !d.minute().string()
+	!dd = !d.date().string()
+	if (!hh.length().eq(1)) then
+		!hh = '0' & !hh
+	endif
+	if (!mm.length().eq(1)) then
+		!mm = '0' & !mm
+	endif
+	if (!dd.length().eq(1)) then
+		!dd = '0' & !dd
+	endif
+	return !hh & ':' & !mm & ' ' & !dd & ' ' & !mon[!d.month()] & ' ' & !d.year().string()
+endmethod
+
+----------------------------------------------------------------------
+-- /%APSPIC%/26/M2013286677-151450-10000-3                          --
+--     -> <value of evar APSPIC>\26\M2013286677-151450-10000-3      --
+-- '' when the evar cannot be resolved. the project code is taken   --
+-- from the string itself, nothing is hard-wired                    --
+----------------------------------------------------------------------
+define method .PicPath(!picf is STRING) is STRING
+	!s = !picf
+	if (!s.length().lt(3)) then
+		return ''
+	endif
+	if (!s.substring(1, 1).eq('/')) then
+		!s = !s.substring(2, !s.length() - 1)
+	endif
+	if (!s.substring(1, 1).neq('%')) then
+		return !s.replace('/', '\')
+	endif
+	!rest   = !s.substring(2, !s.length() - 1)
+	!evname = !rest.before('%')
+	!tail   = !rest.after('%')
+	!base   = ''
+	var !base evar '$!evname'
+	handle any
+		!base = ''
+	endhandle
+	if (!base.eq('')) then
+		return ''
+	endif
+	!base = !base.replace('/', '\')
+	if (!base.substring(!base.length(), 1).eq('\')) then
+		!base = !base.substring(1, !base.length() - 1)
+	endif
+	return !base & !tail.replace('/', '\')
+endmethod
+
+----------------------------------------------------------------------
+-- write REVD (attribute RVDT) on the CE. RVDT is string(12) (DMRM  --
+-- 17.22.21): anything longer is refused with the misleading (2,9)  --
+-- Too many values given -- 21:31 13 Sep 2026 is 17 chars and was   --
+-- rejected that way on 2026-09-13. so the time cannot live here.   --
+-- '' = success, otherwise the error text                            --
+----------------------------------------------------------------------
+define method .SetRevd(!stamp is STRING) is STRING
+	-- user decision 2026-09-13: REVD = 'dd Mon yyyy', the SETCOMPDATE
+	-- date form without the time (11 chars, fits string(12)). the
+	-- hyphenated form is only a fallback for a version that dislikes
+	-- the spaces; !stamp (the full hh:mm form) is kept for the log only
+	!d   = object DATETIME()
+	!dd  = !d.date().string()
+	if (!dd.length().eq(1)) then
+		!dd = '0' & !dd
+	endif
+	!mon = !d.monthString().string().substring(1, 3)
+	!yy  = !d.year().string()
+	!forms = object array()
+	!forms.append(!dd & ' ' & !mon & ' ' & !yy)
+	!forms.append(!dd & '-' & !mon & '-' & !yy)
+
+	!err = ''
+	do !k from 1 to !forms.size()
+		!try = !forms[!k]
+		!set = false
+		REVD |$!try|
+		handle any
+			!err = !!error.text
+		elsehandle none
+			!set = true
+		endhandle
+		if (!set) then
+			if (!k.gt(1)) then
+				!this.Log('REVD took form ' & !k & ' (' & !try & '); form 1 (' & !forms[1] & ') was rejected: ' & !err)
+			endif
+			return ''
+		endif
+	enddo
+	return !err
+endmethod
+
+-- one line into <PROJID>_REV.log, silently dropped when the folder is unknown
+define method .Log(!line is STRING)
+	if (!this.seqdir.eq('')) then
+		return
+	endif
+	!f = object FILE(!this.seqdir & '\' & !this.projcode & '_REV.log')
+	!opened = true
+	!f.open('append')
+	handle any
+		!opened = false
+	endhandle
+	if (!opened) then
+		!f.writerecord(!this.NowStamp() & '  ' & !line)
+		!f.close()
+	endif
+endmethod
+
+----------------------------------------------------------------------
+-- the batch. no confirmation dialog: the SAVEWORK that must come   --
+-- first stores the state the user has already checked, and whether --
+-- to save the revisions afterwards is the user's call, not ours    --
+----------------------------------------------------------------------
+define method .Apply()
+	if (not !this.seqok) then
+		!!alert.error('Sequence file not loaded')
+		return
+	endif
+
+	-- run against what is on screen, not against a stale scan
+	!this.Refresh()
+	!todo = 0
+	do !i from 1 to !this.shees.size()
+		if (!this.nxt[!i].neq('')) then
+			!todo = !todo + 1
+		endif
+	enddo
+	if (!todo.eq(0)) then
+		!!alert.error('Nothing to do: no sheet has a next revision')
+		return
+	endif
+
+	!author = !this.author.val.trim()
+	!save   = !!ce
+	!this.Log('---- Apply: ' & !todo & ' sheet(s), author ' & !author)
+
+	-- what each sheet holds right now, so a run explains itself afterwards
+	do !i from 1 to !this.shees.size()
+		!ref = !this.shees[!i]
+		var !revs coll all revi for $!ref
+		handle any
+			!revs = object array()
+		endhandle
+		!desc = ''
+		do !r values !revs
+			!rv = ''
+			!st = ''
+			var !rv rvsn of $!r
+			handle any
+			endhandle
+			var !st stext of $!r
+			handle any
+			endhandle
+			!flag = 'complete'
+			if (!st.trim().eq('') or !st.trim().upcase().eq('UNSET')) then
+				!flag = 'no stext'
+			endif
+			!desc = !desc & ' [' & !r & ' rvsn=' & !rv.trim() & ' ' & !flag & ']'
+		enddo
+		!this.Log(!this.BoxName(!ref) & '  revis=' & !revs.size() & !desc & '  cur=' & !this.cur[!i] & ' next=' & !this.nxt[!i] & ' reuse=' & !this.reuse[!i])
+	enddo
+
+	-- one SAVEWORK for the whole batch, and only when there is something to save
+	!session = current session
+	if (!session.modified()) then
+		!errtxt = ''
+		SAVEWORK
+		handle any
+			!errtxt = !!error.text
+		endhandle
+		if (!errtxt.neq('')) then
+			!this.Log('SAVEWORK failed: ' & !errtxt)
+			!!alert.error('SAVEWORK failed, nothing was revised: ' & !errtxt)
+			return
+		endif
+		!this.Log('SAVEWORK done')
+	else
+		!this.Log('SAVEWORK skipped, nothing modified')
+	endif
+
+	!fails = object array()
+	!done  = 0
+	do !i from 1 to !this.shees.size()
+		!nxt = !this.nxt[!i]
+		skip if (!nxt.eq(''))
+		!ref    = !this.shees[!i]
+		!box    = !this.BoxName(!ref)
+		!ok     = true
+		!step   = ''
+		!errtxt = ''
+		!stamp  = !this.NowStamp()
+
+		--------------------------------------------------------------
+		-- 1  the REVI. an unfinished one carrying this code is taken --
+		--    over rather than duplicated. REVD is written now, so   --
+		--    SETCOMPDATE REVD lands on the SAVEWORK session above    --
+		--------------------------------------------------------------
+		if (!this.reuse[!i].neq('')) then
+			!step = 'reuse REVI'
+			!rstr = !this.reuse[!i]
+			$!rstr
+			handle any
+				!ok = false
+				!errtxt = !!error.text
+			endhandle
+			!this.Log(!box & ' -> ' & !nxt & '  taking over unfinished REVI ' & !rstr)
+		else
+			!step = 'NEW REVI'
+			-- NEW with CE on the sheet inserts as its FIRST member, and E3D
+			-- calls the LAST REVI in member order the latest (the GUI's own
+			-- revisions go at the very end, after NOTE etc. -- seen
+			-- 2026-09-13). so stand on the last member first, then NEW puts
+			-- the REVI after it. an empty sheet leaves CE on the sheet
+			$!ref
+			LAST MEM
+			handle any
+			endhandle
+			NEW REVI
+			handle any
+				!ok = false
+				!errtxt = !!error.text
+			endhandle
+			!this.Log(!box & ' -> ' & !nxt & '  NEW REVI')
+		endif
+		if (!ok) then
+			!revi = !!ce
+			!step = 'RVSN'
+			RVSN |$!nxt|
+			handle any
+				!ok = false
+				!errtxt = !!error.text
+			endhandle
+		endif
+		if (!ok) then
+			!step = 'REVD'
+			!errtxt = !this.SetRevd(!stamp)
+			if (!errtxt.neq('')) then
+				!ok = false
+			endif
+		endif
+		if (!ok) then
+			!step = 'RVAU'
+			RVAU |$!author|
+			handle any
+				!ok = false
+				!errtxt = !!error.text
+			endhandle
+		endif
+
+		--------------------------------------------------------------
+		-- 2  snapshot. PmlRevisionControl acts on the sheet that is --
+		--    current in the canvas -- whether PmlLoadSheet can stand --
+		--    in for that is the open test in the Notion toggle. if   --
+		--    it turns out the canvas must be switched, this is where --
+		--    that goes                                               --
+		--------------------------------------------------------------
+		if (!ok) then
+			!step = 'CreateSnapshot'
+			-- the file-top using namespace did not reach this scope (46,87 on
+			-- 2026-09-13); the grid only works because its namespace is
+			-- repeated inside the method, so do the same here
+			using namespace 'Aveva.Pdms.SDInteraction.UI.Gui.RevisionControl'
+			!rc = object PmlRevisionControl()
+			handle any
+				!ok = false
+				!errtxt = !!error.text
+			endhandle
+		endif
+		if (!ok) then
+			-- without an explicit sheet the API found no revision at all on
+			-- 2026-09-13: (40,152) Unable to find revision A while the GUI
+			-- listed A. the manual says a sheet opened with PmlLoadSheet
+			-- takes precedence over the canvas sheet even in graphical
+			-- mode, so give it the sheet explicitly. the bare calls stay
+			-- as fallbacks and everything is logged
+			!snap = false
+			!loaded = false
+			using namespace 'Aveva.Pdms.SDInteraction.UI.Process'
+			!ld = object PmlLoadSheet()
+			handle any
+				!this.Log(!box & ' -> ' & !nxt & '  PmlLoadSheet not available: ' & !!error.text)
+			elsehandle none
+				!ld.Open(!ref.dbref())
+				handle any
+					!this.Log(!box & ' -> ' & !nxt & '  PmlLoadSheet.Open refused: ' & !!error.text)
+				elsehandle none
+					!loaded = true
+				endhandle
+			endhandle
+			if (!loaded) then
+				!rc.CreateSnapshot(!revi)
+				handle any
+					!errtxt = !!error.text
+					!this.Log(!box & ' -> ' & !nxt & '  CreateSnapshot(dbref) after PmlLoadSheet refused: ' & !errtxt)
+				elsehandle none
+					!snap = true
+					!this.Log(!box & ' -> ' & !nxt & '  CreateSnapshot(dbref) after PmlLoadSheet accepted')
+				endhandle
+				!ld.Close()
+				handle any
+				endhandle
+			endif
+			if (not !snap) then
+				!rc.CreateSnapshot(!revi)
+				handle any
+					!errtxt = !!error.text
+				elsehandle none
+					!snap = true
+				endhandle
+			endif
+			if (not !snap) then
+				!this.Log(!box & ' -> ' & !nxt & '  CreateSnapshot(dbref) refused: ' & !errtxt)
+				!rc.CreateSnapshot(!nxt)
+				handle any
+					!errtxt = !!error.text
+				elsehandle none
+					!snap = true
+					!this.Log(!box & ' -> ' & !nxt & '  CreateSnapshot(rvsn string) accepted')
+				endhandle
+			endif
+			if (not !snap) then
+				!this.Log(!box & ' -> ' & !nxt & '  CreateSnapshot(rvsn string) refused: ' & !errtxt)
+				$!ref
+				!rc.CreateSnapshot(!nxt)
+				handle any
+					!errtxt = !!error.text
+				elsehandle none
+					!snap = true
+					!this.Log(!box & ' -> ' & !nxt & '  CreateSnapshot(rvsn string, CE on sheet) accepted')
+				endhandle
+			endif
+			if (not !snap) then
+				!ok = false
+			endif
+		endif
+
+		--------------------------------------------------------------
+		-- 3  the picture file name, read AFTER the snapshot because --
+		--    CreateSnapshot bumps the PVNO on the end of it         --
+		--------------------------------------------------------------
+		if (!ok) then
+			!step = 'PICF'
+			!picf = ''
+			$!ref
+			var !picf picf
+			handle any
+				var !picf picfilename
+				handle any
+					!ok = false
+					!errtxt = !!error.text
+				endhandle
+			endhandle
+			if (!ok and !picf.trim().eq('')) then
+				!ok = false
+				!errtxt = 'PICF is empty'
+			endif
+		endif
+
+		--------------------------------------------------------------
+		-- 4  DXF next to the picture file, same name plus .dxf.     --
+		--    every revision keeps its own                            --
+		--------------------------------------------------------------
+		if (!ok) then
+			!step = 'DXF'
+			!dxf = !this.PicPath(!picf.trim())
+			if (!dxf.eq('')) then
+				!ok = false
+				!errtxt = 'cannot resolve ' & !picf
+			else
+				!dxf = !dxf & '.dxf'
+				$!ref
+				LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF '$!dxf'
+				handle any
+					!ok = false
+					!errtxt = !!error.text
+				endhandle
+			endif
+		endif
+
+		--------------------------------------------------------------
+		-- 5  STEXT last: it is the "finished" flag Refresh looks for --
+		--------------------------------------------------------------
+		if (!ok) then
+			!step = 'STEXT'
+			!pv = !picf.trim()
+			!!ce = !revi
+			STEXT |$!pv|
+			handle any
+				!ok = false
+				!errtxt = !!error.text
+			endhandle
+		endif
+
+		if (!ok) then
+			!done = !done + 1
+			!this.Log(!box & ' -> ' & !nxt & '  OK  ' & !picf.trim())
+		else
+			!fails.append(!box & ' -> ' & !nxt & ' (' & !step & ')')
+			!this.Log(!box & ' -> ' & !nxt & '  FAILED at ' & !step & ': ' & !errtxt)
+		endif
+	enddo
+
+	!!ce = !save
+	handle any
+	endhandle
+	!this.Log('---- Apply end: ' & !done & ' OK, ' & !fails.size() & ' failed')
+	!this.Refresh()
+
+	!msg = 'Revision finished: ' & !done & ' OK, ' & !fails.size() & ' failed.'
+	if (!fails.size().gt(0)) then
+		!msg = !msg & ' Failed: '
+		do !k from 1 to !fails.size()
+			if (!k.gt(1)) then
+				!msg = !msg & '; '
+			endif
+			!msg = !msg & !fails[!k]
+		enddo
+		!msg = !msg & '. See ' & !this.projcode & '_REV.log in ' & !this.seqdir
+		!!alert.error(!msg)
+	else
+		!!alert.message(!msg & ' Revisions are NOT saved yet - SAVEWORK when you are happy with them.')
+	endif
+endmethod
