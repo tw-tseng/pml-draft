@@ -56,13 +56,11 @@ endhandle
 layout form !!DrawingPlan1Revision dialog dock
 	!this.formTitle = 'Drawing Revision'
 
-	paragraph .seqinfo text 'Sequence file: not loaded' width 64
-	container .rows nobox PmlNetControl 'NET' at xmin.seqinfo ymax.seqinfo+0.3 width 50 height 12
+	container .rows nobox PmlNetControl 'NET' width 50 height 12
 	button .addce  'Add CE'      at xmax.rows+0.5 ymin.rows      width 12 call '!this.AddCe()'
 	button .remce  'Remove'      at xmin.addce  ymax.addce+0.3   width 12 call '!this.RemoveCe()'
 	button .remall 'Remove All'  at xmin.addce  ymax.remce+0.3   width 12 call '!this.RemoveAll()'
 	option .target 'Revision'    at xmin.rows   ymax.rows+0.3    tagwidth 9 width 12
-	text   .author 'Author'      at xmax.target+1 ymin.target    tagwidth 7 width 18 is string
 	button .apply  'Apply'       at xmin.rows   ymax.target+0.5  width 12 call '!this.Apply()'
 	button .cancel 'Cancel'      at xmax.apply+2 ymin.apply      width 12 call '!this.Close()'
 
@@ -70,6 +68,7 @@ layout form !!DrawingPlan1Revision dialog dock
 	member .projcode is string  $( 3-letter project code, the same one the <code>000 evars are built on $)
 	member .seq    is array    $( revision codes from <PROJID>_REV.txt, in file order              $)
 	member .seqok  is boolean  $( the sequence file was found and holds at least one code          $)
+	member .seqerr is string   $( why it is not ok -- shown once when the form opens, and by Apply $)
 	member .seqdir is string   $( project folder holding the sequence file and the log, no trailing \ $)
 	member .shees  is array    $( SHEE dbref strings in the list, in display order                  $)
 	member .cur    is array    $( per sheet: current code, '' = no revision yet, '?' = code not in file $)
@@ -99,10 +98,14 @@ define method .DrawingPlan1Revision()
 	!this.grid.singleRowSelection(true)
 
 	!this.LoadSequence()
+	-- user decision 2026-09-14: no on-form 'Sequence file: ...' line, it
+	-- told the user nothing useful when things worked. when they do not,
+	-- say so once here -- Apply is greyed out below and would otherwise
+	-- go grey without a word
+	if (not !this.seqok) then
+		!!alert.error(!this.seqerr)
+	endif
 
-	-- Q LOGIN (the Windows account), not Q USER (the E3D user, usually SYSTEM)
-	var !login login
-	!this.author.val = !login
 	!this.target.callback = '!this.Refresh()'
 	!this.Refresh()
 endmethod
@@ -119,6 +122,7 @@ endmethod
 define method .LoadSequence()
 	!this.seq    = object array()
 	!this.seqok  = false
+	!this.seqerr = 'Sequence file: not loaded'
 	!this.seqdir = ''
 
 	!evname = !this.projcode.lowcase() & '000'
@@ -128,29 +132,26 @@ define method .LoadSequence()
 		!p000 = ''
 	endhandle
 	if (!p000.eq('')) then
-		!this.seqinfo.val = 'Sequence file: evar ' & !evname & ' is empty (proj code ' & !this.projcode & ')'
+		!this.seqerr = 'Sequence file: evar ' & !evname & ' is empty (proj code ' & !this.projcode & ')'
 		return
 	endif
 
-	-- evar points at ...\<projcode>000. the file lives one level up
+	-- evar points at ...\<projcode>000. the file lives one level up.
+	-- drop the last path component only; do not split and rejoin, that
+	-- loses the leading \\ of a UNC path (\\SVRE3D\pdms_proj\...)
 	!p = !p000.replace('/', '\')
 	if (!p.substring(!p.length(), 1).eq('\')) then
 		!p = !p.substring(1, !p.length() - 1)
 	endif
 	!parts = !p.split('\')
-	!dir = ''
-	do !i from 1 to (!parts.size() - 1)
-		if (!i.gt(1)) then
-			!dir = !dir & '\'
-		endif
-		!dir = !dir & !parts[!i]
-	enddo
+	!last  = !parts[!parts.size()]
+	!dir   = !p.substring(1, !p.length() - !last.length() - 1)
 	!this.seqdir = !dir
 
 	!path = !dir & '\' & !this.projcode & '_REV.txt'
 	!f = object FILE(!path)
 	if (not !f.exists()) then
-		!this.seqinfo.val = 'Sequence file: NOT FOUND ' & !path
+		!this.seqerr = 'Sequence file: NOT FOUND ' & !path
 		return
 	endif
 	!f.open('read')
@@ -167,12 +168,12 @@ define method .LoadSequence()
 	enddo
 
 	if (!this.seq.size().eq(0)) then
-		!this.seqinfo.val = 'Sequence file: EMPTY ' & !path
+		!this.seqerr = 'Sequence file: EMPTY ' & !path
 		return
 	endif
 
-	!this.seqok = true
-	!this.seqinfo.val = 'Sequence file: ' & !path & '  (' & !this.seq.size() & ' codes)'
+	!this.seqok  = true
+	!this.seqerr = ''
 
 	-- entry 1 is the "next after current" mode, the rest are explicit codes
 	!opts = object array()
@@ -599,7 +600,7 @@ endmethod
 ----------------------------------------------------------------------
 define method .Apply()
 	if (not !this.seqok) then
-		!!alert.error('Sequence file not loaded')
+		!!alert.error(!this.seqerr)
 		return
 	endif
 
@@ -616,7 +617,11 @@ define method .Apply()
 		return
 	endif
 
-	!author = !this.author.val.trim()
+	-- RVAU is always the Windows account: Q LOGIN, not Q USER (the E3D
+	-- user, usually SYSTEM). user decision 2026-09-14: no Author field,
+	-- nothing to edit here
+	var !author login
+	!author = !author.trim()
 	!save   = !!ce
 	!this.Log('---- Apply: ' & !todo & ' sheet(s), author ' & !author)
 

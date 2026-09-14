@@ -1633,12 +1633,15 @@ define method .Apply()
 				-- are never touched below either -- view placement is frozen.     --
 				-- DRAWLIST/LIMITS/CDLIMITS redo every run; VSEC/FPLA redo only if --
 				-- the box actually changed; SIZE is recalculated symmetric around --
-				-- the frozen sheet centre (see the blocks below). only            --
-				-- LineNoAnnotation is called below; the other annotation          --
-				-- functions (Equi/Grid/Flow/MatchLine) do not have reuse logic    --
-				-- yet and would duplicate or error if run here, so                --
-				-- .allintersections stays empty and grid crossings are simply     --
-				-- left untouched this run                                        --
+				-- the frozen sheet centre (see the blocks below). Grid/MatchTicks/ --
+				-- LineNo/Equi/MatchLine/MatchGaps run below with per-element      --
+				-- reuse. NOT run on this path (user decision 2026-09-14, to be    --
+				-- revisited once drawings are issued in volume): the five BlankPos --
+				-- SLAB passes (Redu/Nozzle/Valve/Inst/Supt, with DimLines and the --
+				-- DXF export) and FlowAnnotation -- those labels stay exactly as  --
+				-- the last rebuild left them. also by decision: no confirmation   --
+				-- prompt before updating a revised sheet, a REVI simply means     --
+				-- update, never rebuild                                           --
 				--------------------------------------------------------------------
 				!dbgf3 = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check3.txt')
 				!dbgf3.open('overwrite')
@@ -2140,8 +2143,8 @@ define method .Apply()
 				-- part of it -- leaving it out was why the match line stayed on --
 				-- the OLD border after the first box-grew test (2026-08-28)     --
 				--                                                               --
-				-- Grid/Flow still have no reuse logic and are still left out;   --
-				-- they are the next two steps                                   --
+				-- Flow and the five BlankPos SLAB passes are still left out --  --
+				-- deferred, see the note at the top of this branch              --
 				------------------------------------------------------------------
 				$!name/SS/S1/V1
 				!!DrawingPlan1MatchLine(!name, !equistr)
