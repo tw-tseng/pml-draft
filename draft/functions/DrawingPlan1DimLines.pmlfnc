@@ -1,0 +1,185 @@
+--------------------------------------------------
+-- Function : list the dimension projection      --
+--            lines a label may be laid on       --
+-- Auther   : tw tseng                           --
+-- Date     : 2026/09/11                         --
+--------------------------------------------------
+
+------------------------------------------------------------------------
+-- BlankPos treats every entity in the exported DXF as something a     --
+-- label must not touch. that is right for a pipe and wrong for a      --
+-- dimension PROJECTION line: a label may stand on one, because        --
+-- DrawingPlan1MatchGaps takes a piece out of the line afterwards with --
+-- GAP. without this the whole band round the match line box counts as --
+-- solid and labels get pushed right across the drawing on very long   --
+-- leaders (user, 2026-09-11)                                          --
+--                                                                      --
+-- the list is written BY PML rather than worked out by BlankPos from  --
+-- the DXF, for two reasons:                                           --
+--   * a line is only safe to stand on if something can break it, and  --
+--     it is PML that does the breaking. one list answers both "may a  --
+--     label go here" and "what do I break afterwards", so the two     --
+--     cannot drift apart                                              --
+--   * in the DXF a line the user drew by hand, or a callout, looks    --
+--     exactly like a dimension line -- both are plain modelspace      --
+--     entities on layer 0, and neither VLAYER nor groupDims separates --
+--     them (see the dead ends listed in BlankPos's source). guessing  --
+--     would let a label stand on a line nothing ever breaks (user,    --
+--     2026-09-11)                                                     --
+--                                                                      --
+-- the dimension LINE itself -- the long one running along the chain -- --
+-- is deliberately NOT listed. GAP does work on it (user, 2026-09-11)  --
+-- but a label should not stand on it, and leaving it out of the list  --
+-- is all it takes: BlankPos treats anything unlisted as solid         --
+--                                                                      --
+-- nothing here caps how long a break may be. a label lying ALONG a    --
+-- projection line rather than across it needs a break as long as the  --
+-- label, which is a big hole -- but the user's call (2026-09-11) is   --
+-- that fitting the label matters more, because on a crowded sheet a   --
+-- cap is exactly what leaves it nowhere to go                         --
+--                                                                      --
+-- runs after DrawingPlan1LineNoAnnotation has built the four chains   --
+-- and before BlankPos is called, so the positions are the ones in the --
+-- DXF BlankPos is about to read                                       --
+------------------------------------------------------------------------
+define function !!DrawingPlan1DimLines(!name is string) is array
+
+	!out = object array()
+	!dirlist = 'right left down up'
+
+	do !j from 1 to 4
+		!dir = !dirlist.part(!j)
+		------------------------------------------------------------------
+		-- a side whose chain was never made is not an error: a view may --
+		-- have nothing to dimension on that side                        --
+		------------------------------------------------------------------
+		$!name/SS/S1/V1/ateLINE_$!dir
+		handle any
+			skip
+		endhandle
+		------------------------------------------------------------------
+		-- right and left run up the sheet, so their depth is x and the  --
+		-- coordinate along the chain is y. up and down are the same     --
+		-- thing with the axes swapped                                   --
+		------------------------------------------------------------------
+		!isvert = false
+		if (!dir.eq('right') or !dir.eq('left')) then
+			!isvert = true
+		endif
+		------------------------------------------------------------------
+		-- where this side's dimension line sits, in sheet mm: the line  --
+		-- is DOFFSET from the chain's FIRST point. same reading         --
+		-- DrawingPlan1LineNoAnnotation takes to keep a rebuilt chain on --
+		-- the depth the last run left it, and for the same reason --    --
+		-- nothing is assumed about where a point ought to sit           --
+		------------------------------------------------------------------
+		!doffs = 'BAD'
+		var !doffs doffset
+		handle any
+			!doffs = 'BAD'
+		endhandle
+		if (!doffs.eq('BAD')) then
+			skip
+		endif
+		------------------------------------------------------------------
+		-- member 1 is that first point. navigating to it moves CE, so   --
+		-- the LDIM is gone back to before the points are collected      --
+		------------------------------------------------------------------
+		!linedepth = 0
+		!hasdepth  = false
+		!fm = 1
+		$!fm
+		handle any
+		elsehandle none
+			!fposh = ''
+			var !fpos pos
+			handle any
+			elsehandle none
+				var !fposh shpos of $!fpos
+				handle any
+					!fposh = ''
+				endhandle
+			endhandle
+			if (not(!fposh.eq(''))) then
+				if (!isvert) then
+					!fdepth = !fposh.part(2).replace('mm', '').real()
+				else
+					!fdepth = !fposh.part(4).replace('mm', '').real()
+				endif
+				!linedepth = !fdepth + !doffs.replace('mm', '').real()
+				!hasdepth  = true
+			endif
+		endhandle
+		$!name/SS/S1/V1/ateLINE_$!dir
+		handle any
+			skip
+		endhandle
+		if (not(!hasdepth)) then
+			skip
+		endif
+		------------------------------------------------------------------
+		-- the points are collected before any of them is navigated to,  --
+		-- because it is the LDIM they have to be collected from         --
+		------------------------------------------------------------------
+		!dps = object array()
+		var !dps coll all dpoi for ce
+		handle any
+			!dps = object array()
+		endhandle
+		do !dp values !dps
+			$!dp
+			handle any
+				skip
+			endhandle
+			!dsh = ''
+			var !dpos pos
+			handle any
+				skip
+			endhandle
+			var !dsh shpos of $!dpos
+			handle any
+				!dsh = ''
+			endhandle
+			if (!dsh.eq('')) then
+				skip
+			endif
+			!dpx = !dsh.part(2).replace('mm', '').real()
+			!dpy = !dsh.part(4).replace('mm', '').real()
+			--------------------------------------------------------------
+			-- from the point out to the dimension line. the drawn line  --
+			-- actually starts PLCLTX short of the point, which this     --
+			-- does not take off: over-reporting the extent only offers  --
+			-- BlankPos a few more mm of what is really blank paper,     --
+			-- while under-reporting would let a label stand on a piece  --
+			-- of real line that MatchGaps then never breaks. the clear- --
+			-- ance is decided per point over there and is not worth     --
+			-- working out twice                                         --
+			--------------------------------------------------------------
+			if (!isvert) then
+				!x1 = !dpx
+				!y1 = !dpy
+				!x2 = !linedepth
+				!y2 = !dpy
+			else
+				!x1 = !dpx
+				!y1 = !dpy
+				!x2 = !dpx
+				!y2 = !linedepth
+			endif
+			!rec = 'dimline ' & !dir & ' ' & !x1.string('D3') & ' ' & !y1.string('D3') & ' ' & !x2.string('D3') & ' ' & !y2.string('D3')
+			--------------------------------------------------------------
+			-- two points on one spot -- a labelled point and the grid   --
+			-- crossing under it, or two supports on one hanger -- draw  --
+			-- one line, and it wants one break, not two on top of each  --
+			-- other (three such pairs on the first real list,           --
+			-- 2026-09-11)                                               --
+			--------------------------------------------------------------
+			if (!out.findFirst(!rec).unset()) then
+				!out.append(!rec)
+			endif
+		enddo
+	enddo
+
+	return !out
+
+endfunction

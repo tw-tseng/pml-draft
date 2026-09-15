@@ -1221,6 +1221,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- Arrows, Alignment Base) do take a bare word                  --
 		----------------------------------------------------------------
 		Dlcntmode 'on'
+		handle any
+			------------------------------------------------------------
+			-- guarded because the attribute is not in every E3D build. --
+			-- where it is missing the bare command aborts the run      --
+			-- (user, 2026-09-12: this machine's E3D errors on it). the --
+			-- only loss is the trimming above -- dimension text eats a --
+			-- hole in its own line again, which is cosmetic and must   --
+			-- not cost the whole drawing                               --
+			------------------------------------------------------------
+		endhandle
 		----------------------------------------------------------------
 		-- projection line clearance is decided PER POINT, in           --
 		-- DrawingPlan1MatchGaps: a point standing at a match line      --

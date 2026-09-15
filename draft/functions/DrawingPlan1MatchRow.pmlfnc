@@ -1,0 +1,211 @@
+-------------------------------------------------------------------
+-- match line text moved out a row when its own row is taken      --
+-- Date     : 2026-09-11                                          --
+--                                                                --
+-- a side's text is centred on the stretch of border between two  --
+-- ticks and is often longer than that stretch, so it runs into   --
+-- the next text on the same side, or past the corner into the   --
+-- text standing on the neighbouring side. seen live 2026-09-11,  --
+-- both ways: 'SEE Copy-of-26001-AG-001' through 'MATCH LINE      --
+-- N292345 SEE 26001-AG-010' along the bottom, and the same text  --
+-- standing on the left crossing the bottom's at the corner       --
+--                                                                --
+-- the user's answer (picture, 2026-09-11) is that the text keeps --
+-- its place ALONG the border and moves OUT, away from the view,  --
+-- until it stands clear -- not slid along the line, which on a   --
+-- side too short for all its texts only piles them on each other --
+--                                                                --
+-- so: CE is the text, just put down on !posx/!posy, one text     --
+-- height off the border (row 1). it is read back as a box and    --
+-- tried there, then one row further out at a time -- a row is a  --
+-- text height plus 1mm -- against everything already on the     --
+-- sheet that it must not cross: the texts placed before it this  --
+-- run (!!DrawingPlan1MatchTexts) and the dimension chains and    --
+-- grid bubbles (!!DrawingPlan1MatchObst, see MatchObstacles).    --
+-- the first clear row wins; the dimension chain is a band a few  --
+-- mm wide, so a text that cannot sit inside it lands on the far  --
+-- side of the chain, which is where the user's picture put it    --
+--                                                                --
+-- one line per text goes to check_gap.txt, 'MROW ...', row 1    --
+-- and row 12 alike, so a text left on a taken row (nothing free  --
+-- within twelve) can be told from one this never saw             --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchRow(!dir is string, !posx is real, !posy is real)
+	!maxrow = 12
+	!ext = ''
+	var !ext extent btext
+	handle any
+		return
+	endhandle
+	!eparts = object array()
+	!eparts = !ext.split()
+	handle any
+		return
+	endhandle
+	if (!eparts.size().lt(16)) then
+		return
+	endif
+	!x1 = 0
+	!x2 = 0
+	!y1 = 0
+	!y2 = 0
+	do !ci from 1 to 4
+		!cix = !ci * 4 - 2
+		!ciy = !ci * 4
+		!vx = !eparts[!cix].replace('mm', '').real()
+		!vy = !eparts[!ciy].replace('mm', '').real()
+		if (!ci.eq(1)) then
+			!x1 = !vx
+			!x2 = !vx
+			!y1 = !vy
+			!y2 = !vy
+		else
+			!x1 = min(!x1, !vx)
+			!x2 = max(!x2, !vx)
+			!y1 = min(!y1, !vy)
+			!y2 = max(!y2, !vy)
+		endif
+	enddo
+	-------------------------------------------------------------
+	-- which way is out, and how tall a row is on this side     --
+	-------------------------------------------------------------
+	!ox = 0
+	!oy = 0
+	!rowh = 0
+	if (!dir.eq('right')) then
+		!ox = 1
+		!rowh = !x2 - !x1
+	elseif (!dir.eq('left')) then
+		!ox = -1
+		!rowh = !x2 - !x1
+	elseif (!dir.eq('up')) then
+		!oy = 1
+		!rowh = !y2 - !y1
+	else
+		!oy = -1
+		!rowh = !y2 - !y1
+	endif
+	!step = !rowh + 1
+	-------------------------------------------------------------
+	-- everything to keep off, as one list of boxes. the texts  --
+	-- already placed get 1mm round them, the obstacles were    --
+	-- widened when they were listed                            --
+	-------------------------------------------------------------
+	!bx1 = object array()
+	!by1 = object array()
+	!bx2 = object array()
+	!by2 = object array()
+	!obst = object array()
+	!obst = !!DrawingPlan1MatchObst
+	handle any
+		!obst = object array()
+	endhandle
+	do !oi from 1 to !obst.size()
+		!op = object array()
+		!op = !obst[!oi].split('~')
+		handle any
+			skip
+		endhandle
+		if (!op.size().lt(4)) then
+			skip
+		endif
+		!bx1.append(!op[1].real())
+		!by1.append(!op[2].real())
+		!bx2.append(!op[3].real())
+		!by2.append(!op[4].real())
+	enddo
+	!texts = object array()
+	!texts = !!DrawingPlan1MatchTexts
+	handle any
+		!texts = object array()
+	endhandle
+	do !ti from 1 to !texts.size()
+		!rec = object array()
+		!rec = !texts[!ti].split('~')
+		handle any
+			skip
+		endhandle
+		if (!rec.size().lt(2)) then
+			skip
+		endif
+		!tp = object array()
+		!tp = !rec[2].split()
+		handle any
+			skip
+		endhandle
+		if (!tp.size().lt(16)) then
+			skip
+		endif
+		!tx1 = 0
+		!tx2 = 0
+		!ty1 = 0
+		!ty2 = 0
+		do !ci from 1 to 4
+			!cix = !ci * 4 - 2
+			!ciy = !ci * 4
+			!vx = !tp[!cix].replace('mm', '').real()
+			!vy = !tp[!ciy].replace('mm', '').real()
+			if (!ci.eq(1)) then
+				!tx1 = !vx
+				!tx2 = !vx
+				!ty1 = !vy
+				!ty2 = !vy
+			else
+				!tx1 = min(!tx1, !vx)
+				!tx2 = max(!tx2, !vx)
+				!ty1 = min(!ty1, !vy)
+				!ty2 = max(!ty2, !vy)
+			endif
+		enddo
+		!bx1.append(!tx1 - 1)
+		!by1.append(!ty1 - 1)
+		!bx2.append(!tx2 + 1)
+		!by2.append(!ty2 + 1)
+	enddo
+	-------------------------------------------------------------
+	-- row by row, out from the border. the first clear one is  --
+	-- taken; if none of the twelve is, the text stays on row 1 --
+	-------------------------------------------------------------
+	!row = 0
+	!found = false
+	!hit = ''
+	do !k from 1 to !maxrow
+		!d = (!k - 1) * !step
+		!cx1 = !x1 + !ox * !d
+		!cx2 = !x2 + !ox * !d
+		!cy1 = !y1 + !oy * !d
+		!cy2 = !y2 + !oy * !d
+		!free = true
+		do !bi from 1 to !bx1.size()
+			if (!cx1.lt(!bx2[!bi]) and !cx2.gt(!bx1[!bi]) and !cy1.lt(!by2[!bi]) and !cy2.gt(!by1[!bi])) then
+				!free = false
+				if (!k.eq(1)) then
+					!hit = !bx1[!bi].string('D1') & ',' & !by1[!bi].string('D1') & '..' & !bx2[!bi].string('D1') & ',' & !by2[!bi].string('D1')
+				endif
+				break
+			endif
+		enddo
+		if (!free) then
+			!row = !k
+			!found = true
+			break
+		endif
+	enddo
+	!dout = 0
+	if (!found) then
+		!dout = (!row - 1) * !step
+	endif
+	!!DrawingPlan1MatchRowLog.append('MROW ' & !dir & ' row=' & !row.string() & ' out=' & !dout.string('D1') & ' box=' & !x1.string('D1') & ',' & !y1.string('D1') & '..' & !x2.string('D1') & ',' & !y2.string('D1') & ' row1hit=' & !hit)
+	handle any
+	endhandle
+	if (!row.leq(1)) then
+		return
+	endif
+	!nx = !posx + !ox * !dout
+	!ny = !posy + !oy * !dout
+	!nxs = !nx.string()
+	!nys = !ny.string()
+	ORIG X $!nxs Y $!nys
+	handle any
+	endhandle
+endfunction

@@ -29,15 +29,16 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	-- boxes on the positions the sheet actually ends up with          --
 	--------------------------------------------------------------------
 	!!DrawingPlan1MatchTexts = object array()
+	!!DrawingPlan1MatchRowLog = object array()
 	--------------------------------------------------------------------
-	-- and the match line ticks, for the same reason: a tick runs OUT  --
-	-- of the border, which is the same direction a dimension's        --
-	-- projection line runs, so the two are collinear wherever they    --
-	-- share a position along the border and the projection line is    --
-	-- drawn straight down the tick. MatchGaps pushes those points     --
-	-- clear -- see the PLCLTX pass there                              --
+	-- and what the texts have to keep off when their own row is taken --
+	-- (user, 2026-09-11): the dimension chains and the grid bubbles,  --
+	-- listed once here, read by DrawingPlan1MatchRow for every text   --
 	--------------------------------------------------------------------
-	!!DrawingPlan1MatchTicks = object array()
+	!!DrawingPlan1MatchObst = object array()
+	!!DrawingPlan1MatchObstacles(!name)
+	handle any
+	endhandle
 	do !jj from 1 to 4
 		!dir = !dirlist.part(!jj)
 		$!name/SS/S1/V1

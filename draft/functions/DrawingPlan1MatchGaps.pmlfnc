@@ -96,8 +96,21 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	!mgplclwant = 3
 	!mgbase = 3
 	!mgtktol = 1
+	----------------------------------------------------------------------
+	-- the tick positions already exist: DrawingPlan1MatchTicks works    --
+	-- them out before the line number annotation runs and leaves them   --
+	-- in !!DrawingPlan1MatchTickPos as 'dir~x~y~angle'. both            --
+	-- LineNoAnnotation and MatchLine1 read that same list, so a tick    --
+	-- and its own dimension point come from one source                  --
+	--                                                                    --
+	-- a second list was collected here at first and came back empty:    --
+	-- the name chosen for it, !!DrawingPlan1MatchTicks, is the FUNCTION --
+	-- of that name -- globals and functions share the !! namespace --   --
+	-- and the append was wrapped in a bare handle, so it failed in      --
+	-- silence. only the ticks= count in GAPRUN showed it (2026-09-09)   --
+	----------------------------------------------------------------------
 	!mgticks = object array()
-	!mgticks = !!DrawingPlan1MatchTicks
+	!mgticks = !!DrawingPlan1MatchTickPos
 	handle any
 		!mgticks = object array()
 	endhandle
@@ -562,6 +575,184 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 		enddo
 	enddo
 	----------------------------------------------------------------------
+	-- and the labels. since 2026-09-11 BlankPos may lay a label across  --
+	-- a dimension projection line -- DrawingPlan1DimLines tells it which --
+	-- ones -- on the promise that the line is broken under it here. the --
+	-- same function gives the segments again now rather than reusing    --
+	-- what BlankPos was sent, because .RecenterView may have moved the  --
+	-- view in between and it is where things ARE that has to be broken  --
+	--                                                                    --
+	-- every label in the view is tested, not only the ones BlankPos     --
+	-- placed: one anybody put across a projection line looks the same   --
+	-- and wants the same break. EXTENT BTEX gives the text's four       --
+	-- corners, min/max on each axis exactly as for the match line texts --
+	-- above, plus !lbmarg for the frame a support label carries, which  --
+	-- the text extent does not include                                  --
+	--                                                                    --
+	-- the test is against the SEGMENT, both ends. a match line text     --
+	-- sits in the band every projection line crosses, so the sides      --
+	-- above only ask "is the line's coordinate inside the text" -- but  --
+	-- a label can be anywhere in the box, and a line may well stop      --
+	-- short of it. a break asked for where no line runs is the hole in  --
+	-- the middle of nothing again. so the break is centred on the       --
+	-- OVERLAP of line and label, and is as long as that overlap         --
+	--                                                                    --
+	-- no cap on that length: a label lying along a line rather than     --
+	-- across it takes the whole overlap out. the user's call            --
+	-- (2026-09-11) -- fitting the label matters more than the hole      --
+	----------------------------------------------------------------------
+	!lbmarg = 2
+	!dlsegs = object array()
+	!dlsegs = !!DrawingPlan1DimLines(!name)
+	handle any
+		!dlsegs = object array()
+	endhandle
+	!lbrefs = object array()
+	!lbok = true
+	$!name/SS/S1/V1
+	handle any
+		!lbok = false
+	endhandle
+	if (!lbok) then
+		var !lbrefs coll all (slab glab) for ce
+		handle any
+			!lbrefs = object array()
+		endhandle
+	endif
+	!lbn = 0
+	do !lb values !lbrefs
+		$!lb
+		handle any
+			skip
+		endhandle
+		------------------------------------------------------------
+		-- not the grid bubbles. they hang outside the dimension    --
+		-- line, so no projection line reaches them, and the pass   --
+		-- above has already dealt with their leaders. left in, a   --
+		-- bubble that did overlap one would only add a break the   --
+		-- tick logic already accounts for                          --
+		------------------------------------------------------------
+		if (not(!gslabs.findFirst(!lb).unset())) then
+			skip
+		endif
+		!lbext = ''
+		var !lbext extent btex
+		handle any
+			skip
+		endhandle
+		!lbparts = object array()
+		!lbparts = !lbext.split()
+		handle any
+			skip
+		endhandle
+		if (!lbparts.size().lt(16)) then
+			skip
+		endif
+		!lxs = object array()
+		!lys = object array()
+		do !ci from 1 to 4
+			!cix = !ci * 4 - 2
+			!ciy = !ci * 4
+			!lxs.append(!lbparts[!cix].replace('mm', '').real())
+			!lys.append(!lbparts[!ciy].replace('mm', '').real())
+		enddo
+		!lx1 = !lxs[1]
+		!lx2 = !lxs[1]
+		!ly1 = !lys[1]
+		!ly2 = !lys[1]
+		do !ci from 2 to 4
+			!lx1 = min(!lx1, !lxs[!ci])
+			!lx2 = max(!lx2, !lxs[!ci])
+			!ly1 = min(!ly1, !lys[!ci])
+			!ly2 = max(!ly2, !lys[!ci])
+		enddo
+		!lx1 = !lx1 - !lbmarg
+		!lx2 = !lx2 + !lbmarg
+		!ly1 = !ly1 - !lbmarg
+		!ly2 = !ly2 + !lbmarg
+		!lbn = !lbn + 1
+		do !ds values !dlsegs
+			!dsp = object array()
+			!dsp = !ds.split()
+			handle any
+				skip
+			endhandle
+			if (!dsp.size().lt(6)) then
+				skip
+			endif
+			!ddir = !dsp[2]
+			!sx1  = !dsp[3].real()
+			!sy1  = !dsp[4].real()
+			!sx2  = !dsp[5].real()
+			!sy2  = !dsp[6].real()
+			!hit  = false
+			if (!ddir.eq('right') or !ddir.eq('left')) then
+				------------------------------------------------------------
+				-- a horizontal line at y = sy1. crossed when that y is    --
+				-- inside the label and the line's x-span overlaps the    --
+				-- label's. the min/max results go through variables,     --
+				-- since a method cannot be called on what a function     --
+				-- returns                                                 --
+				------------------------------------------------------------
+				if (!sy1.gt(!ly1) and !sy1.lt(!ly2)) then
+					!slo = min(!sx1, !sx2)
+					!shi = max(!sx1, !sx2)
+					!olo = max(!slo, !lx1)
+					!ohi = min(!shi, !lx2)
+					if (!ohi.gt(!olo)) then
+						!gx   = (!olo + !ohi) * 0.5
+						!gy   = !sy1
+						!glen = !ohi - !olo
+						!hit  = true
+					endif
+				endif
+			else
+				if (!sx1.gt(!lx1) and !sx1.lt(!lx2)) then
+					!slo = min(!sy1, !sy2)
+					!shi = max(!sy1, !sy2)
+					!olo = max(!slo, !ly1)
+					!ohi = min(!shi, !ly2)
+					if (!ohi.gt(!olo)) then
+						!gx   = !sx1
+						!gy   = (!olo + !ohi) * 0.5
+						!glen = !ohi - !olo
+						!hit  = true
+					endif
+				endif
+			endif
+			if (!hit and !glen.lt(!mgmarg)) then
+				!glen = !mgmarg
+			endif
+			if (!hit) then
+				!gxs = !gx.string('D3').replace('mm', '')
+				!gys = !gy.string('D3').replace('mm', '')
+				!gds = !glen.string('D3').replace('mm', '')
+				!gdone = false
+				!gnav  = true
+				!gerr  = ''
+				!gon   = !name & '/SS/S1/V1/ateLINE_' & !ddir
+				$!gon
+				handle any
+					!gnav = false
+					!gerr = 'nav: ' & !!error.text
+				endhandle
+				if (!gnav) then
+					GAP AT X $!gxs Y $!gys LENGTH $!gds
+					handle any
+						!gerr = !!error.text
+					elsehandle none
+						!gdone = true
+					endhandle
+				endif
+				if (!gdone) then
+					!mgdbg.append('LGAP ' & !ddir & ' x=' & !gxs & ' y=' & !gys & ' d=' & !gds & ' label=' & !lb)
+				else
+					!mgdbg.append('LGAPFAIL ' & !ddir & ' x=' & !gxs & ' y=' & !gys & ' d=' & !gds & ' label=' & !lb & ' err=' & !gerr)
+				endif
+			endif
+		enddo
+	enddo
+	----------------------------------------------------------------------
 	-- one line per break attempted, so a run which drew none can be     --
 	-- told apart from one whose GAPs were refused. remove with the rest --
 	-- of the diagnostics (see the checklist's step 7)                   --
@@ -571,7 +762,15 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	handle any
 		return
 	endhandle
-	!mgf.writerecord('GAPRUN ticks=' & !mgticks.size().string() & ' texts=' & !mgtexts.size().string() & ' bubbles=' & !gbrefs.size().string() & ' clearfails=' & !clrn.string() & ' lastclearerr=' & !clrerr)
+	!mgf.writerecord('GAPRUN ticks=' & !mgticks.size().string() & ' texts=' & !mgtexts.size().string() & ' bubbles=' & !gbrefs.size().string() & ' labels=' & !lbn.string() & ' segs=' & !dlsegs.size().string() & ' clearfails=' & !clrn.string() & ' lastclearerr=' & !clrerr)
+	!mcl = object array()
+	!mcl = !!DrawingPlan1MatchRowLog
+	handle any
+		!mcl = object array()
+	endhandle
+	do !mi from 1 to !mcl.size()
+		!mgf.writerecord(!mcl[!mi])
+	enddo
 	do !mi from 1 to !mgdbg.size()
 		!mgf.writerecord(!mgdbg[!mi])
 	enddo

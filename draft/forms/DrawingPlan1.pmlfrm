@@ -243,6 +243,9 @@ layout form !!DrawingPlan1 dialog dock
 	member .equiparray is array   $( array for equipments are dimensioned $)
 	member .userevar is string    $( for path of text file  $)
 	member .supttmp is string     $( for support callout template  $)
+	member .suptstack is array    $( support labels sharing one point: '<top slab> <line height> <slab below> ...'  $)
+	member .blankdir is string    $( folder BlankPos reads and writes, always ends with a backslash  $)
+	member .blankexe is string    $( full path of BlankPos.exe  $)
 	member .rcode is string       $( view rcode, 'up' or 'left'  $)
 	member .labbandup is real       $( how far the annotation reaches past  $)
 	member .labbanddown is real     $( the border of the view on each side, $)
@@ -345,6 +348,66 @@ define method .DrawingPlan1()
 	if !this.userevar.eq('') then
 		!this.userevar = 'c:\temp\'
 	endif
+	--------------------------------------------------------------------
+	-- where BlankPos reads and writes. AVEVA_DESIGN_USER is E3D's own --
+	-- writable per user area -- PMLLIB's saverestoreview keeps its    --
+	-- .dat files there -- so it survives an E3D upgrade and two       --
+	-- people on one machine do not share one WriteLabelToText.txt.    --
+	-- no sub folder is made: PML has no directory create, and this    --
+	-- one is certain to already exist. the old hard coded path is     --
+	-- kept as the fallback for an environment without the variable    --
+	--------------------------------------------------------------------
+	!this.blankdir = !!evar('AVEVA_DESIGN_USER')
+	handle any
+		!this.blankdir = ''
+	endhandle
+	if !this.blankdir.eq('') then
+		!this.blankdir = 'D:\Documents\Python\'
+	endif
+	----------------------------------------------------------------
+	-- AVEVA's own code concatenates this variable straight onto a  --
+	-- file name (saverestoreview.pmlfrm), so it is expected to end --
+	-- with a separator. do not rely on that -- put one on if the   --
+	-- site has set it without                                      --
+	----------------------------------------------------------------
+	!nbd    = !this.blankdir.length()
+	!lastch = !this.blankdir.substring(!nbd, 1)
+	if (not(!lastch.eq('\'))) then
+		!this.blankdir = !this.blankdir & '\'
+	endif
+	--------------------------------------------------------------------
+	-- BlankPos.exe lives in a bin folder beside a PML library, so that --
+	-- anyone who can load this form can also reach it -- the old hard  --
+	-- coded D: path did not exist on every machine (user, 2026-09-09). --
+	-- PMLLIB is a ';' separated search path, e.g.                      --
+	--   L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1;C:\AVEVA\EVERYT~1.10\pmllib\;...  --
+	-- so it is walked in that order and the first bin\BlankPos.exe    --
+	-- that exists wins. entries arrive both with and without a         --
+	-- trailing backslash, hence the normalising below                  --
+	--------------------------------------------------------------------
+	!this.blankexe = ''
+	!pmllib = !!evar('PMLLIB')
+	handle any
+		!pmllib = ''
+	endhandle
+	!pmldirs = !pmllib.split(';')
+	do !pmldir values !pmldirs
+		!pd = !pmldir.trim()
+		if (!pd.eq('')) then
+			skip
+		endif
+		!npd    = !pd.length()
+		!pdlast = !pd.substring(!npd, 1)
+		if (not(!pdlast.eq('\'))) then
+			!pd = !pd & '\'
+		endif
+		!bpcand = !pd & 'bin\BlankPos.exe'
+		!bpfile = object file(!bpcand)
+		if (!bpfile.exists()) then
+			!this.blankexe = !bpcand
+			break
+		endif
+	enddo
 	!this.dest.active = false
 	------------------------------------------
 	-- select the first REGI as destination --
@@ -1401,16 +1464,23 @@ define method .Apply()
 				
 				-----------------------------------------------------------------------------
 				-- label placement automatically                                           --
-				-- 1. pml write label info. in D:\Documents\Python\WriteLabelToText.txt    --
+				-- 1. pml writes label info. to WriteLabelToText.txt in .blankdir        --
 				-- 2. python read the file and find blank space for each                   --
-				-- 3. python write blank space info. in D:\Documents\Python\LabelSpace.txt --
+				-- 3. python writes blank space info. to LabelSpace.txt in the same dir  --
 				-- 4. pml read the file and reposition labels to blank space               --
 				-----------------------------------------------------------------------------
-				!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+				!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
 				if !ff.exists() then
 					!ff.deletefile()
 				endif
-				LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF 'D:\Documents\Python\BlankPos1.dxf'	
+				--------------------------------------------------------------
+				-- and the record of which support labels share a point, so --
+				-- that a run with the support toggle off cannot be read    --
+				-- against the slabs of the run before it                   --
+				--------------------------------------------------------------
+				!this.suptstack = object array()
+				!bpdxf = !this.blankdir & 'BlankPos1.dxf'
+				LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF '$!bpdxf'
 				
 				----------------------------
 				-- reducer, rt annotation --
@@ -1461,10 +1531,86 @@ define method .Apply()
 					last
 					!this.SuptAnnotation(!name)
 				endif
+				------------------------------------------------------------------
+				-- and the lines a label is ALLOWED to stand on, appended to the --
+				-- same file after every annotation has had its say. see         --
+				-- DrawingPlan1DimLines for why this list is PML's to write and  --
+				-- not something BlankPos works out from the DXF                 --
+				--                                                                --
+				-- an empty list is the old behaviour exactly -- every entity    --
+				-- solid -- so a side that could not be read costs nothing but   --
+				-- the space it would have opened up                             --
+				------------------------------------------------------------------
+				!dlrecs = object array()
+				!dlrecs = !!DrawingPlan1DimLines(!name)
+				handle any
+					!dlrecs = object array()
+				endhandle
+				if (!dlrecs.size().gt(0)) then
+					!dlopen = true
+					!dlf = object file(!this.blankdir & 'WriteLabelToText.txt')
+					!dlf.open('append')
+					handle any
+						!dlopen = false
+					endhandle
+					if (!dlopen) then
+						do !dlr values !dlrecs
+							!dlf.writerecord(!dlr)
+						enddo
+						!dlf.close()
+						handle any
+						endhandle
+					endif
+				endif
 				
-				syscom |D:\Documents\Python\dist\BlankPos.exe|
+				------------------------------------------------------------------
+				-- the folder goes on the command line, so PML is the only place --
+				-- that decides it and the exe never needs a rebuild to follow   --
+				-- it. strip the trailing backslash first: Windows argv parsing  --
+				-- reads a backslash before the closing quote as an escape and   --
+				-- would swallow the quote, handing the exe a mangled path       --
+				------------------------------------------------------------------
+				!bpnd  = !this.blankdir.length() - 1
+				!bparg = !this.blankdir.substring(1, !bpnd)
+				------------------------------------------------------------------
+				-- and the match line rectangle, so BlankPos can keep labels     --
+				-- inside it where it can. outside the box is where the          --
+				-- dimensions live, and a leader dragged out there crosses them. --
+				-- BlankPos cannot test that directly -- the DXF export puts     --
+				-- every entity on layer 0, so a dimension line and a pipe       --
+				-- centre line are indistinguishable to it -- so staying inside  --
+				-- the box stands in for it. the four match line straights are   --
+				-- drawn on exactly these corners, see DrawingPlan1MatchLine,    --
+				-- and on the sheet the box is always square, so two corners do  --
+				------------------------------------------------------------------
+				!bpx1 = !this.boxLLsh.part(2).real()
+				!bpy1 = !this.boxLLsh.part(4).real()
+				!bpx2 = !this.boxURsh.part(2).real()
+				!bpy2 = !this.boxURsh.part(4).real()
+				!bprect = '' & !bpx1 & ' ' & !bpy1 & ' ' & !bpx2 & ' ' & !bpy2
+				------------------------------------------------------------------
+				-- say so loudly when the exe was not found on the PMLLIB path. --
+				-- letting the syscom fail quietly would leave every label at    --
+				-- its XYPO 15 15 starting point with nothing to say why         --
+				------------------------------------------------------------------
+				if (!this.blankexe.eq('')) then
+					!!alert.error('BlankPos.exe not found in any bin folder on the PMLLIB search path - labels will not be repositioned')
+				else
+					--------------------------------------------------------------
+					-- the whole command carries one extra pair of quotes round  --
+					-- the outside. cmd /c, given a string with more than two    --
+					-- quote characters, strips the leading one and the last one --
+					-- -- so a plain '"exe" "dir" "rect"' reaches the shell as   --
+					-- exe" "dir" "rect and fails on an executable name with a   --
+					-- trailing quote, silently (nothing was written at all,     --
+					-- 2026-09-10; the same command run by hand worked). the     --
+					-- outer pair is what gets eaten instead                     --
+					--------------------------------------------------------------
+					!bpcmd = '""' & !this.blankexe & '" "' & !bparg & '" "' & !bprect & '""'
+					syscom |$!bpcmd|
+				endif
 				
-				!ff = object file('D:\Documents\Python\LabelSpace.txt')
+				!ff = object file(!this.blankdir & 'LabelSpace.txt')
 				if !ff.exists() then
 					!ff.open('read')
 					!lines =!ff.readfile()
@@ -1473,23 +1619,158 @@ define method .Apply()
 						$!slab
 						var !apos ( pos of ddna of $!slab wrt worl )
 						var !apos1 shpos of $!apos
-						if !rcode.eqnocase('up') then
+						------------------------------------------------------------------
+						-- a label BlankPos could only fit by standing on end comes back --
+						-- with 270 in field 9. field 9 is absent when the deployed      --
+						-- BlankPos predates this, which reads as no turn                --
+						--                                                                --
+						-- these are TWO different turns and the first version of this   --
+						-- conflated them (2026-09-11, measured off a real sheet):        --
+						--                                                                --
+						--  * rcode left turns the whole VIEW. XYPO counts in the view's  --
+						--    own frame, so its axes turn with it and the x/y swap below  --
+						--    is what puts a label where the sheet coordinate says. this  --
+						--    is the original behaviour and is keyed on rcode ALONE       --
+						--                                                                --
+						--  * field 9 turns ONE LABEL. Adegrees only turns the text --   --
+						--    it does not move the frame XYPO counts in -- so a turned    --
+						--    label's position is worked out exactly like an unturned     --
+						--    one. taking the rcode-left branch for it put every turned   --
+						--    label somewhere else entirely: /162966 was asked for sheet  --
+						--    (405.8, 399.9) and landed on (265.1, 365.8), 140mm away,    --
+						--    which is why it sat outside the match line box on a leader  --
+						--    across half the drawing                                     --
+						------------------------------------------------------------------
+						!lparts = !lines[!i].split()
+						!nlp    = !lparts.size()
+						!lrot   = 0
+						if (!nlp.gt(8)) then
+							!lrot = !lparts[9].real()
+						endif
+						!turned = !lrot.gt(45)
+						------------------------------------------------------------------
+						-- position: the view's frame, and nothing else                  --
+						------------------------------------------------------------------
+						if (!rcode.eqnocase('up')) then
 							!newx = !lines[!i].part(2).real() - !apos1.part(2).replace('mm', '').real()
 							!newy = !lines[!i].part(3).real() - !apos1.part(4).replace('mm', '').real()
+							!adeg = 0
 						else
-							----------------
-							-- rcode left --
-							----------------
+							--------------------------------------------------------------
+							-- rcode left: the view is round 90 degrees, so view +x runs  --
+							-- up the sheet and XYPO swaps with it. 270 cancels the turn  --
+							-- so the text still reads across the sheet                   --
+							--------------------------------------------------------------
 							!newx = !lines[!i].part(3).real() - !apos1.part(4).replace('mm', '').real()
 							!newy = ( !lines[!i].part(2).real() - !apos1.part(2).replace('mm', '').real()) * -1
-							Adegrees 270
+							!adeg = 270
 						endif
+						------------------------------------------------------------------
+						-- and the label's own turn on top of that, as an angle only.    --
+						--                                                                --
+						-- 90 and not 270, so a label that had to stand on end reads     --
+						-- the way the dimension figures beside it already do: bottom to  --
+						-- top, head tilted left. 270 was tried first and came out the    --
+						-- other way up (user, 2026-09-11). this also decides which end   --
+						-- of the stack the longest row goes -- see the table below       --
+						------------------------------------------------------------------
+						if (!turned) then
+							!adeg = !adeg + 90
+							if (!adeg.gt(359)) then
+								!adeg = !adeg - 360
+							endif
+						endif
+						------------------------------------------------------------------
+						-- spelled out rather than substituted from the number: a REAL   --
+						-- can come back as 270.00000 and this is a command line, not a  --
+						-- PML expression                                                --
+						------------------------------------------------------------------
+						!adegs = '0'
+						if (!adeg.eq(90)) then
+							!adegs = '90'
+						elseif (!adeg.eq(180)) then
+							!adegs = '180'
+						elseif (!adeg.eq(270)) then
+							!adegs = '270'
+						endif
+						Adegrees $!adegs
 						XYPO $!newx $!newy
+						------------------------------------------------------------------
+						-- which way is UP for whoever reads this label, in the same      --
+						-- frame XYPO counts in. the rows of a stack go this way, longest --
+						-- at the top:                                                     --
+						--   Adegrees   0 -> +y      90 -> -x                             --
+						--            180 -> -y     270 -> +x                             --
+						------------------------------------------------------------------
+						!rowdx = 0
+						!rowdy = 1
+						if (!adeg.eq(270)) then
+							!rowdx = 1
+							!rowdy = 0
+						elseif (!adeg.eq(180)) then
+							!rowdx = 0
+							!rowdy = -1
+						elseif (!adeg.eq(90)) then
+							!rowdx = -1
+							!rowdy = 0
+						endif
+						--------------------------------------------------------------
+						-- a support label that carries a stack was written out as   --
+						-- one block, so what came back is where the block goes, not --
+						-- where this label goes. lift it to the top row and hang    --
+						-- the rest underneath, along !rowdx/!rowdy above           --
+						--------------------------------------------------------------
+						!sparts = object array()
+						do !sline values !this.suptstack
+							!sp = !sline.split()
+							if (!sp[1].eq(!slab)) then
+								!sparts = !sp
+								break
+							endif
+						enddo
+						!shift = 0
+						!nsp   = !sparts.size()
+						if (!nsp.gt(0)) then
+							!slineh = !sparts[2].real()
+							!nrows  = !nsp - 1
+							!shift  = (!nrows - 1) * !slineh * 0.5
+							--------------------------------------------------------------
+							-- the rows run along whichever axis is UP for the reader,    --
+							-- not always y: a turned label reads down the sheet, so its  --
+							-- rows sit side by side instead. stacking them in y the way  --
+							-- an unturned one does put all three on one spot, one inside --
+							-- the next (2026-09-11, /162966's three rows)                --
+							--------------------------------------------------------------
+							!topx = !newx + !rowdx * !shift
+							!topy = !newy + !rowdy * !shift
+							XYPO $!topx $!topy
+							do !r from 3 to !nsp
+								!fslab = !sparts[!r]
+								$!fslab
+								var !fapos ( pos of ddna of $!fslab wrt worl )
+								var !fapos1 shpos of $!fapos
+								if (!rcode.eqnocase('up')) then
+									!fx0 = !lines[!i].part(2).real() - !fapos1.part(2).replace('mm', '').real()
+									!fy0 = !lines[!i].part(3).real() - !fapos1.part(4).replace('mm', '').real()
+								else
+									!fx0 = !lines[!i].part(3).real() - !fapos1.part(4).replace('mm', '').real()
+									!fy0 = ( !lines[!i].part(2).real() - !fapos1.part(2).replace('mm', '').real()) * -1
+								endif
+								Adegrees $!adegs
+								!rdown = !r - 2
+								!roff  = !shift - !rdown * !slineh
+								!fx    = !fx0 + !rowdx * !roff
+								!fy    = !fy0 + !rowdy * !roff
+								XYPO $!fx $!fy
+							enddo
+							$!slab
+						endif
 						--------------------------------------------------
 						-- change label connect point to make leader is --
 						-- from attachment point to label center point  --
 						--------------------------------------------------
-						if !lines[!i].part(8).eqnocase('box') then
+						!ltype = !lines[!i].part(8)
+						if (!ltype.matchwild('box*')) then
 							--------------------------------
 							-- create label text boundary --
 							--------------------------------
@@ -1572,9 +1853,64 @@ define method .Apply()
 									endif
 								enddo
 								!closestr = '' & !closept
-								!newx = !closestr.part(2).replace('mm', '').real() - !lines[!i].part(2).real()
-								!newy = !closestr.part(4).replace('mm', '').real() - !lines[!i].part(3).real()
-								cpoftx |$!newx $!newy|
+								!cdx = !closestr.part(2).replace('mm', '').real() - !lines[!i].part(2).real()
+								!cdy = !closestr.part(4).replace('mm', '').real() - !lines[!i].part(3).real()
+								--------------------------------------------------------
+								-- three frames, and cpoftx wants the third:            --
+								--                                                      --
+								--  sheet  what LabelSpace and the box corners above    --
+								--         are in                                       --
+								--  view   what XYPO counts in. a left hand view is the --
+								--         sheet turned 90, so x and y swap -- the same --
+								--         swap XYPO took further up                    --
+								--  text   what cpoftx counts in: the VIEW frame turned --
+								--         by Adegrees. found the hard way (2026-09-11): --
+								--         a label BlankPos had stood on end took its   --
+								--         leader straight through the frame to the     --
+								--         middle of the text, because a sheet offset   --
+								--         of (-1.8, 0) read as a text offset came out  --
+								--         on the sheet as (0, -1.8). it never showed   --
+								--         before because rcode left turns the view 90  --
+								--         and the text 270, which lands the text frame --
+								--         back on the sheet's                          --
+								--------------------------------------------------------
+								if (!rcode.eqnocase('up')) then
+									!vdx = !cdx
+									!vdy = !cdy
+								else
+									!vdx = !cdy
+									!vdy = !cdx * -1
+								endif
+								--------------------------------------------------------
+								-- the boundary above is the whole block, but a label  --
+								-- carrying a stack no longer sits at the block centre --
+								-- -- it was lifted to the top row. take that back out --
+								-- or the leader lands one row short. !rowdx/!rowdy    --
+								-- are in the view frame, so this goes here            --
+								--------------------------------------------------------
+								!vdx = !vdx - !rowdx * !shift
+								!vdy = !vdy - !rowdy * !shift
+								--------------------------------------------------------
+								-- view -> text. Adegrees is anticlockwise, so the      --
+								-- text's axes in the view are (cos, sin) and           --
+								-- (-sin, cos):                                          --
+								--     0: ( x,  y)     90: ( y, -x)                     --
+								--   180: (-x, -y)    270: (-y,  x)                     --
+								--------------------------------------------------------
+								if (!adeg.eq(90)) then
+									!cpx = !vdy
+									!cpy = !vdx * -1
+								elseif (!adeg.eq(180)) then
+									!cpx = !vdx * -1
+									!cpy = !vdy * -1
+								elseif (!adeg.eq(270)) then
+									!cpx = !vdy * -1
+									!cpy = !vdx
+								else
+									!cpx = !vdx
+									!cpy = !vdy
+								endif
+								cpoftx |$!cpx $!cpy|
 							endif
 						endif
 					enddo
@@ -2183,7 +2519,82 @@ define method .Apply()
 				------------------------------------------------------------------
 			endif
 		endhandle
+		---------------------------------------------------------------------
+		-- what DrawingPlan1Revision needs to know about this sheet's border --
+		-- goes into the DRWG's NTEXT (user 2026-09-15: a DRWG has no DESC): --
+		-- and the box of every text this form itself writes into the        --
+		-- border. the revision form compares everything inside the canvas   --
+		-- and, outside it, only those boxes -- so a changed drawing number  --
+		-- gets a cloud and a changed drafter or date never does, whatever   --
+		-- the project's border looks like. both paths, every run: the       --
+		-- canvas may have been picked again since                          --
+		---------------------------------------------------------------------
+		!this.WriteRevInfo(!name, !equistr)
 	enddo
+endmethod
+
+------------------------------------------------------------------------
+-- NTEXT of DRWG <name>/SS: 'CV x1 y1 x2 y2' (the canvas, sheet mm) and --
+-- 'W x1 y1 x2 y2' per text this form writes into the border, joined   --
+-- with ';'. read by DrawingPlan1Revision.Compare. the built in canvas  --
+-- is the one .RecenterView() falls back to when none was picked        --
+------------------------------------------------------------------------
+define method .WriteRevInfo(!name is string, !equistr is string)
+	!cv = 'CV 107 115 607 515'
+	if (not(!!DrawingPlan1.canvassize.unset())) then
+		!c = '' & !!DrawingPlan1.canvassize
+		!cv = 'CV ' & !c.part(2) & ' ' & !c.part(4) & ' ' & !c.part(6) & ' ' & !c.part(8)
+		handle any
+			!cv = 'CV 107 115 607 515'
+		endhandle
+	endif
+	!info = !cv
+	if not(!this.dwgnopos.val.eqnocase('')) and not(!this.dwgnohei.val.eqnocase('')) then
+		!w = !this.WatchRect(!this.dwgnopos.val, !this.dwgnohei.val, !equistr)
+		if (!w.neq('')) then
+			!info = !info & ';' & !w
+		endif
+	endif
+	$!name/SS
+	handle any
+		return
+	endhandle
+	NTEXT |$!info|
+	handle any
+	endhandle
+endmethod
+
+------------------------------------------------------------------------
+-- 'W x1 y1 x2 y2' round a border text written with alig base just    --
+-- left at 'x,y' (sheet mm), height !hei (with or without mm), !text. --
+-- the width is an estimate, 0.8 x height per character, which is all --
+-- the revision comparison needs: the box only says which changed     --
+-- primitives count, it is not drawn. '' when the numbers do not parse --
+------------------------------------------------------------------------
+define method .WatchRect(!pos is string, !hei is string, !text is string) is string
+	!xy = !pos.split(',')
+	if (!xy.size().lt(2)) then
+		return ''
+	endif
+	!x = !xy[1].trim().real()
+	handle any
+		return ''
+	endhandle
+	!y = !xy[2].trim().real()
+	handle any
+		return ''
+	endhandle
+	!hs = !hei.replace('mm', '').trim()
+	!h = !hs.real()
+	handle any
+		return ''
+	endhandle
+	!w = 0.8 * !h * !text.length() + 2
+	!x1 = !x - 1
+	!y1 = !y - 1
+	!x2 = !x + !w
+	!y2 = !y + !h + 1
+	return 'W ' & !x1.string('D1') & ' ' & !y1.string('D1') & ' ' & !x2.string('D1') & ' ' & !y2.string('D1')
 endmethod
 
 ------------------------------------------------------------------------
@@ -2596,7 +3007,7 @@ define method .NozzleAnnotation(!name is string)
 	SpPurpose unset
 	Function unset	
 	
-	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
 	!ff.open('append')
 
 	var !nozzs coll $!this.nozztext1.val within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
@@ -2622,7 +3033,7 @@ define method .NozzleAnnotation(!name is string)
 		XYPO 5 5
 
 		------------------------------------------------------------------
-		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+		-- save label info. in WriteLabelToText.txt under .blankdir     --
 		------------------------------------------------------------------
 		var !label ref
 		!shposx = !apos1.part(2).replace('mm', '')
@@ -3260,7 +3671,7 @@ define method .ValveAnnotation(!name is string)
 	SpPurpose unset
 	Function unset
 	
-	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
 	!ff.open('append')
 
 	var !valvs coll $!this.valvtext1.val within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
@@ -3285,7 +3696,7 @@ define method .ValveAnnotation(!name is string)
 		XYPO 5 5
 
 		------------------------------------------------------------------
-		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+		-- save label info. in WriteLabelToText.txt under .blankdir     --
 		------------------------------------------------------------------
 		var !label ref
 		!shposx = !apos1.part(2).replace('mm', '')
@@ -3361,7 +3772,7 @@ define method .ReduAnnotation(!name is string)
 	SpPurpose unset
 	Function unset
 	
-	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
 	!ff.open('append')
 
 	var !redus vscan for all (redu tee)
@@ -3396,7 +3807,7 @@ define method .ReduAnnotation(!name is string)
 				XYPO 10 10
 				
 				------------------------------------------------------------------
-				-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+				-- save label info. in WriteLabelToText.txt under .blankdir     --
 				------------------------------------------------------------------
 				var !label ref
 				!shposx = !apos1.part(2).replace('mm', '')
@@ -3504,7 +3915,7 @@ define method .InstAnnotation(!name is string)
 	handle any
 	endhandle
 	
-	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
+	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
 	!ff.open('append')
 	var !insts coll $!this.insttext1.val within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
 	do !inst values !insts
@@ -3543,7 +3954,7 @@ define method .InstAnnotation(!name is string)
 		XYPO 15 15
 
 		------------------------------------------------------------------
-		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+		-- save label info. in WriteLabelToText.txt under .blankdir     --
 		------------------------------------------------------------------
 		var !label ref
 		!shposx = !apos1.part(2).replace('mm', '')
@@ -5030,11 +5441,23 @@ define method .SuptAnnotation(!name is string)
     !this.supttmp = |$!name/SS/LALB/NAME_SUPT|
   endif
 	
-	!ff = object file('D:\Documents\Python\WriteLabelToText.txt')
-	!ff.open('append')
+	------------------------------------------------------------------
+	-- first pass: keep the attachments that really land on the      --
+	-- sheet and carry a STEXT, and remember where each one sits.    --
+	-- nothing is created yet -- two supports hung off the same node --
+	-- come out at one sheet position, and they have to be found     --
+	-- before any label is made so the block can be sized as a unit  --
+	------------------------------------------------------------------
+	!this.suptstack = object array()
+	!snames = object array()
+	!stexts = object array()
+	!sposs  = object array()
+	!sxs    = object array()
+	!sys    = object array()
+
 	var !insts coll all atta with isnamed within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
 	do !inst values !insts
-    $!name/SS/S1/V1/ateSUPT
+		$!name/SS/S1/V1/ateSUPT
 		------------------------------------------------------------------
 		-- see the note in .NozzleAnnotation() -- the volume above is    --
 		-- the world box containing the drawing box, the sheet position  --
@@ -5054,44 +5477,169 @@ define method .SuptAnnotation(!name is string)
 		if (!stext.eq('') or !stext.matchwild('*unset*')) then
 			skip
 		endif
-		NEW SLAB
-		DDNA $!inst
-		!ce = ref
-		if !this.supttog1.val then
-			!this.SuptAnnotation(!name, !stext)
-			!height = !this.annotext.val.real() * 1.2
-			!width = !stext.length() * !this.annotext.val.real() * 0.6 + !this.annotext.val.real() * 1.2
-			$!ce
-		else
-			!height = !this.annotext.val.real()
-			!width = !stext.length() * !this.annotext.val.real() * 0.6
+		!snames.append(!inst)
+		!stexts.append(!stext)
+		!sposs.append(!apos1)
+		!sxs.append(!apos1.part(2).replace('mm', '').real())
+		!sys.append(!apos1.part(4).replace('mm', '').real())
+	enddo
+
+	------------------------------------------------------------------
+	-- group the ones that share a point. 1mm on the sheet is well   --
+	-- under a line of text, so anything closer than that would have --
+	-- printed on top of its neighbour anyway                        --
+	------------------------------------------------------------------
+	!suptol = 1.0
+	!nsupt  = !snames.size()
+	!taken  = object array()
+	do !i from 1 to !nsupt
+		!taken.append(FALSE)
+	enddo
+	!groups = object array()
+	do !i from 1 to !nsupt
+		if (!taken[!i]) then
+			skip
 		endif
-		tmrf $!this.supttmp
-		Font 1
-		Blnk true
-		Bmargin 0mm
-		Xyscale 1 1
-		-- same value as the flat oval branch reads from .annotext --
-		-- hard coding it here kept one of the two support styles  --
-		-- at 3mm whatever the form said                           --
-		!cheisupt = !this.annotext.val & 'mm'
-		Cheitx '$!cheisupt'
-		Lvisibility true
-		Txcolour Yellow
-		LLColour Cyan
-		LFColour Cyan
-		Alignment Hbody
-		ABSO
-		AT $!apos1
-		XYPO 15 15
+		!taken[!i] = TRUE
+		!grp = object array()
+		!grp.append(!i)
+		!inext = !i + 1
+		do !j from !inext to !nsupt
+			if (!taken[!j]) then
+				skip
+			endif
+			!dx  = !sxs[!j] - !sxs[!i]
+			!dy  = !sys[!j] - !sys[!i]
+			!adx = !dx.abs()
+			!ady = !dy.abs()
+			if (!adx.lt(!suptol) and !ady.lt(!suptol)) then
+				!taken[!j] = TRUE
+				!grp.append(!j)
+			endif
+		enddo
+		!groups.append(!grp)
+	enddo
+
+	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
+	!ff.open('append')
+	!chsupt = !this.annotext.val.real()
+	if !this.supttog1.val then
+		!lineh = !chsupt * 1.2
+	else
+		!lineh = !chsupt
+	endif
+
+	!ngroup = !groups.size()
+	do !g from 1 to !ngroup
+		!grp = !groups[!g]
+		!gn  = !grp.size()
+		----------------------------------------------------------------
+		-- longest text first, so the block reads widest line at the   --
+		-- top and tapers downwards                                    --
+		----------------------------------------------------------------
+		!gnm1 = !gn - 1
+		do !a from 1 to !gnm1
+			do !b from 1 to !gnm1
+				!b1   = !b + 1
+				!ia   = !grp[!b]
+				!ib   = !grp[!b1]
+				!lena = !stexts[!ia].length()
+				!lenb = !stexts[!ib].length()
+				if (!lenb.gt(!lena)) then
+					!grp[!b]  = !ib
+					!grp[!b1] = !ia
+				endif
+			enddo
+		enddo
+		----------------------------------------------------------------
+		-- the block is what BlankPos has to find room for: as wide as --
+		-- its widest line and as tall as all of them stacked          --
+		----------------------------------------------------------------
+		!maxw = 0
+		do !k from 1 to !gn
+			!ik    = !grp[!k]
+			!stext = !stexts[!ik]
+			if !this.supttog1.val then
+				--------------------------------------------------------------
+				-- read straight off the flat oval built in .SuptAnnotation() --
+				-- below: the two arcs sit at +/- .33 per character and reach --
+				-- .5 further out at THPT, so the frame is .66 per character  --
+				-- plus one character height of end cap. the 0.6/1.2 this     --
+				-- used to declare was 3mm short on a 20 character tag, and   --
+				-- BlankPos only keeps 1mm of clearance, so the right hand    --
+				-- end of the frame sat on whatever line was next to it       --
+				--------------------------------------------------------------
+				!w = !stext.length() * !chsupt * 0.66 + !chsupt
+			else
+				!w = !stext.length() * !chsupt * 0.6
+			endif
+			if (!w.gt(!maxw)) then
+				!maxw = !w
+			endif
+		enddo
+		!stackh = !lineh * !gn
+
+		!anchor    = ''
+		!followers = ''
+		do !k from 1 to !gn
+			!ik    = !grp[!k]
+			!inst  = !snames[!ik]
+			!stext = !stexts[!ik]
+			!apos1 = !sposs[!ik]
+			$!name/SS/S1/V1/ateSUPT
+			NEW SLAB
+			DDNA $!inst
+			!ce = ref
+			if !this.supttog1.val then
+				!this.SuptAnnotation(!name, !stext)
+				$!ce
+			endif
+			tmrf $!this.supttmp
+			Font 1
+			Blnk true
+			Bmargin 0mm
+			Xyscale 1 1
+			-- same value as the flat oval branch reads from .annotext --
+			-- hard coding it here kept one of the two support styles  --
+			-- at 3mm whatever the form said                           --
+			!cheisupt = !this.annotext.val & 'mm'
+			Cheitx '$!cheisupt'
+			Lvisibility true
+			Txcolour Yellow
+			LLColour Cyan
+			LFColour Cyan
+			Alignment Hbody
+			ABSO
+			AT $!apos1
+			XYPO 15 15
+			var !label ref
+			if (!k.eq(1)) then
+				!anchor = !label
+			else
+				----------------------------------------------------------
+				-- the rows under the top one ride on its leader -- the  --
+				-- same reason a stacked grid bubble drops its own       --
+				----------------------------------------------------------
+				Lleader false
+				!followers = !followers & ' ' & !label
+			endif
+		enddo
 
 		------------------------------------------------------------------
-		-- save label info. in D:\Documents\Python\WriteLabelToText.txt --
+		-- save label info. in WriteLabelToText.txt under .blankdir     --
+		-- one record for the whole block, filed under the top label.    --
+		-- the rows below it are not offered to BlankPos at all -- they  --
+		-- are hung off the top one in .Apply() once BlankPos has said   --
+		-- where the block goes, see .suptstack                          --
 		------------------------------------------------------------------
-		var !label ref
-		!shposx = !apos1.part(2).replace('mm', '')
-		!shposy = !apos1.part(4).replace('mm', '')
-		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
+		!ianc   = !grp[1]
+		!aposa  = !sposs[!ianc]
+		!shposx = !aposa.part(2).replace('mm', '')
+		!shposy = !aposa.part(4).replace('mm', '')
+		!ff.writerecord(!anchor & ' ' & !shposx & ' ' & !shposy & ' ' & !maxw & ' ' & !stackh & ' boxr')
+		if (!gn.gt(1)) then
+			!this.suptstack.append(!anchor & ' ' & !lineh & !followers)
+		endif
 	enddo
 	!ff.close()
 endmethod

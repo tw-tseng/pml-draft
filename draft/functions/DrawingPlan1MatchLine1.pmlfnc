@@ -83,15 +83,6 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 				handle any
 				endhandle
 			endif
-			----------------------------------------------------------------
-			-- recorded whether it was just drawn or reused: MatchGaps has --
-			-- to know where every tick ended up this run, not only the    --
-			-- new ones. base position only -- the far end is always 10mm  --
-			-- further out and MatchGaps works that out for itself         --
-			----------------------------------------------------------------
-			!!DrawingPlan1MatchTicks.append(!dir & '~' & !tkxs & '~' & !tkys)
-			handle any
-			endhandle
 		endif
 	enddo
 	--------------------------------------------------------------------
@@ -304,6 +295,16 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					-- the text, which is not the same thing as breaking the  --
 					-- line, and E3D has GAP for the second (user, 2026-09-04)--
 					----------------------------------------------------------
+					---------------------------------------------------------
+					-- moved out a row if this row is already taken -- by a  --
+					-- text placed before it, the dimension chain or a grid  --
+					-- bubble -- see DrawingPlan1MatchRow (user, 2026-09-11). --
+					-- before the extent below is read, so the gap pass and  --
+					-- the texts after this one see where it ended up        --
+					---------------------------------------------------------
+					!!DrawingPlan1MatchRow(!dir, !posx, !posy)
+					handle any
+					endhandle
 					var !mgext extent btext
 					handle any
 						!mgext = ''
@@ -365,6 +366,16 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					-- the text, which is not the same thing as breaking the  --
 					-- line, and E3D has GAP for the second (user, 2026-09-04)--
 					----------------------------------------------------------
+					---------------------------------------------------------
+					-- moved out a row if this row is already taken -- by a  --
+					-- text placed before it, the dimension chain or a grid  --
+					-- bubble -- see DrawingPlan1MatchRow (user, 2026-09-11). --
+					-- before the extent below is read, so the gap pass and  --
+					-- the texts after this one see where it ended up        --
+					---------------------------------------------------------
+					!!DrawingPlan1MatchRow(!dir, !posx, !posy)
+					handle any
+					endhandle
 					var !mgext extent btext
 					handle any
 						!mgext = ''
@@ -519,6 +530,16 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 			-- the text, which is not the same thing as breaking the  --
 			-- line, and E3D has GAP for the second (user, 2026-09-04)--
 			----------------------------------------------------------
+			---------------------------------------------------------
+			-- moved out a row if this row is already taken -- by a  --
+			-- text placed before it, the dimension chain or a grid  --
+			-- bubble -- see DrawingPlan1MatchRow (user, 2026-09-11). --
+			-- before the extent below is read, so the gap pass and  --
+			-- the texts after this one see where it ended up        --
+			---------------------------------------------------------
+			!!DrawingPlan1MatchRow(!dir, !posx, !posy)
+			handle any
+			endhandle
 			var !mgext extent btext
 			handle any
 				!mgext = ''

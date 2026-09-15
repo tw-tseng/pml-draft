@@ -70,6 +70,33 @@
 --     revision's DXF when the clouds were drawn. DXFOUT exports an OUTL
 --     on layer 0 whatever VLAYRF says (2026-09-14), so the virtual layer
 --     /REVCLOUD is set only as a courtesy
+--   * revision triangle: every outer cloud gets an upright triangle with
+--     the revision code in it, drawn as an OUTL and a TEXP in the same
+--     REVCLOUD note (user decision 2026-09-15: no SYTM -- a SYMB carries
+--     no text and a SLAB would need a design element and a layer outside
+--     the note). the text height is the form's 'Rev text height' and
+--     sets the size of the triangle too. WHERE it goes is RevCloud's
+--     answer ('tri i x y' after each outer cloud): RevCloud knows every
+--     box on the new sheet and puts the triangle where it touches
+--     nothing, inside the CANVAS when the sequence file names one (user
+--     requirement 2026-09-15). no 'tri' record (older lists) = the top
+--     right corner of the cloud's box. the code is written into the
+--     .clouds.txt as a 'revision <code>' line so a restored set keeps
+--     its own code
+--   * the border (user, 2026-09-15: no rule says which border texts are
+--     TEXPs and which the backing sheet fills in, every project differs).
+--     so the border is declared, not read: inside the CANVAS everything
+--     is compared; outside it nothing is, except inside WATCH rectangles,
+--     where even the backing sheet's own text counts. DrawingPlan1 writes
+--     the canvas and the box of every border text it writes itself (the
+--     drawing number) into the DRWG's NTEXT as 'CV x1 y1 x2 y2;W x1 y1 x2
+--     y2' (user decision 2026-09-15), read here per sheet. <PROJID>_REV.txt
+--     adds, per project: 'CANVAS x1 y1 x2 y2' (used when the DRWG has no
+--     NTEXT -- drawn before this existed), 'WATCH x1 y1 x2 y2' for a title
+--     field the project wants clouded (typed or attribute, either way),
+--     'NOCLOUD x1 y1 x2 y2' for a spot inside the canvas that must never
+--     cloud. a sheet with no canvas at all falls back to RevCloud's
+--     older guess (backing sheet out, title strip out)
 --   * the DXF is <PICF>_<code>.dxf so every revision keeps its own file
 --     even when PICF did not move (user decision 2026-09-14)
 --   * a failure skips that sheet and carries on. the batch usually runs
@@ -103,7 +130,8 @@ layout form !!DrawingPlan1Revision dialog dock
 	button .remall 'Remove All'  at xmin.addce  ymax.remce+0.3   width 12 call '!this.RemoveAll()'
 	option .target 'Revision'    at xmin.rows   ymax.rows+0.3    tagwidth 9 width 12
 	toggle .skipsame at xmax.target+2 ymin.target 'Skip sheets with no drawing change'
-	button .apply  'Apply'       at xmin.rows   ymax.target+0.5  width 12 call '!this.Apply()'
+	text   .revhei 'Rev text height (mm)' at xmin.rows ymax.target+0.3 tagwidth 19 width 5 is REAL
+	button .apply  'Apply'       at xmin.rows   ymax.revhei+0.5  width 12 call '!this.Apply()'
 	button .cancel 'Cancel'      at xmax.apply+2 ymin.apply      width 12 call '!this.Close()'
 
 	member .grid   is NETGRIDCONTROL $( the .NET grid living in .rows $)
@@ -121,6 +149,9 @@ layout form !!DrawingPlan1Revision dialog dock
 	member .cloudexe is string $( full path of RevCloud.exe, '' = not found beside any PMLLIB entry       $)
 	member .workdir is string  $( folder for the temporary DXF and RevCloud's answer, ends with \        $)
 	member .cloudlines is array $( RevCloud's answer for the sheet being processed, line by line          $)
+	member .canvas     is string $( 'x1,y1,x2,y2' from the CANVAS line of the sequence file, '' = none     $)
+	member .nocloud    is array  $( 'x1,y1,x2,y2' per NOCLOUD line of the sequence file                    $)
+	member .watch      is array  $( 'x1,y1,x2,y2' per WATCH line of the sequence file                      $)
 	member .cleared    is real  $( cloud notes the last .ClearClouds deleted                              $)
 exit
 
@@ -140,6 +171,7 @@ define method .DrawingPlan1Revision()
 	-- an empty revision by accident is worse than a re-issue that has to
 	-- be asked for twice, so the skip is on by default
 	!this.skipsame.val = true
+	!this.revhei.val   = 3.5
 
 	--------------------------------------------------------------------
 	-- where the temporary DXF and RevCloud's answer go. same choice as  --
@@ -217,6 +249,9 @@ define method .LoadSequence()
 	!this.seq    = object array()
 	!this.seqok  = false
 	!this.cloudfrom = ''
+	!this.canvas  = ''
+	!this.nocloud = object array()
+	!this.watch   = object array()
 	!this.seqerr = 'Sequence file: not loaded'
 	!this.seqdir = ''
 
@@ -269,6 +304,23 @@ define method .LoadSequence()
 			endhandle
 			skip
 		endif
+		-- 'CANVAS / WATCH / NOCLOUD x1 y1 x2 y2', sheet mm
+		!kw = !t.part(1).upcase()
+		if (!kw.eq('CANVAS') or !kw.eq('NOCLOUD') or !kw.eq('WATCH')) then
+			!rect = !this.RectOf(!t)
+			if (!rect.eq('')) then
+				!this.seqerr = 'Sequence file: cannot read the rectangle on the line ' & !t & ' in ' & !path
+				return
+			endif
+			if (!kw.eq('CANVAS')) then
+				!this.canvas = !rect
+			elseif (!kw.eq('WATCH')) then
+				!this.watch.append(!rect)
+			else
+				!this.nocloud.append(!rect)
+			endif
+			skip
+		endif
 		!this.seq.append(!t)
 	enddo
 
@@ -295,6 +347,27 @@ define method .LoadSequence()
 endmethod
 
 -- position of a code in the sequence, 0 when it is not there
+-- 'WORD x1 y1 x2 y2' -> 'x1,y1,x2,y2', '' when the four are not numbers
+define method .RectOf(!t is STRING) is STRING
+	!out = ''
+	do !k from 2 to 5
+		!v = ''
+		!v = !t.part(!k).trim()
+		handle any
+			return ''
+		endhandle
+		!num = !v.real()
+		handle any
+			return ''
+		endhandle
+		if (!out.neq('')) then
+			!out = !out & ','
+		endif
+		!out = !out & !v
+	enddo
+	return !out
+endmethod
+
 define method .SeqIndex(!code is STRING) is REAL
 	do !i from 1 to !this.seq.size()
 		if (!this.seq[!i].eq(!code)) then
@@ -798,7 +871,59 @@ define method .Compare(!i is REAL, !box is STRING, !nxt is STRING) is STRING
 	-- one extra pair of quotes round the whole command: cmd /c strips the
 	-- first and the last quote character when there are more than two, so
 	-- the outer pair is what gets eaten (DrawingPlan1's BlankPos call)
-	!cmd = '""' & !this.cloudexe & '" --cloud-layer REVCLOUD "' & !prev & '" "' & !tmp & '" "' & !out & '""'
+	!hei = !this.revhei.val
+	handle any
+		!hei = 3.5
+	endhandle
+	if (!hei.leq(0)) then
+		!hei = 3.5
+	endif
+	!trisize = !hei * 2.8
+	!opts = ' --tri-size ' & !trisize.string('D2')
+	-- the canvas and DrawingPlan1's own border texts, from the DRWG's
+	-- NTEXT ('CV x1 y1 x2 y2;W x1 y1 x2 y2', a DRWG has no DESC); the
+	-- sequence file's CANVAS
+	-- only when the DRWG carries none
+	!cv = ''
+	!watches = object array()
+	!dsc = ''
+	var !dsc ntext of owner of $!ref
+	handle any
+		!dsc = ''
+	endhandle
+	!items = !dsc.split(';')
+	do !item values !items
+		!it = !item.trim()
+		skip if (!it.eq(''))
+		!rect = !this.RectOf(!it)
+		skip if (!rect.eq(''))
+		if (!it.part(1).upcase().eq('CV')) then
+			!cv = !rect
+		elseif (!it.part(1).upcase().eq('W')) then
+			!watches.append(!rect)
+		endif
+	enddo
+	!cvfrom = 'DRWG NTEXT'
+	if (!cv.eq('')) then
+		!cv = !this.canvas
+		!cvfrom = 'sequence file'
+	endif
+	do !r values !this.watch
+		!watches.append(!r)
+	enddo
+	if (!cv.neq('')) then
+		!opts = !opts & ' --canvas ' & !cv
+		do !r values !watches
+			!opts = !opts & ' --watch ' & !r
+		enddo
+		!this.Log(!box & ' -> ' & !nxt & '  compare: canvas ' & !cv & ' (' & !cvfrom & '), ' & !watches.size() & ' watched rectangle(s)')
+	else
+		!this.Log(!box & ' -> ' & !nxt & '  compare: no canvas (no NTEXT on the DRWG, no CANVAS line), border left to the RevCloud guess: backing sheet out, title strip out')
+	endif
+	do !r values !this.nocloud
+		!opts = !opts & ' --exclude ' & !r
+	enddo
+	!cmd = '""' & !this.cloudexe & '" --cloud-layer REVCLOUD' & !opts & ' "' & !prev & '" "' & !tmp & '" "' & !out & '""'
 	syscom |$!cmd|
 	handle any
 		return 'RevCloud did not run: ' & !!error.text
@@ -929,7 +1054,11 @@ define method .SaveCloudList(!dxf is STRING, !box is STRING, !nxt is STRING)
 		!this.Log(!box & ' -> ' & !nxt & '  clouds: cannot write ' & !path & ': ' & !!error.text)
 		return
 	endhandle
+	-- the code first, so .DrawClouds labels a restored set with the
+	-- revision it belongs to and not with the one being skipped
+	!f.writerecord('revision ' & !nxt)
 	do !line values !this.cloudlines
+		skip if (!line.trim().part(1).eq('revision'))
 		!f.writerecord(!line)
 	enddo
 	!f.close()
@@ -1030,7 +1159,9 @@ endmethod
 -- frame sends a second record for the band's inner edge (user      --
 -- sketch 2026-09-14: not a box round everything) -- red line, no   --
 -- fill, vertices straight from the 'v x y' records (sheet mm ==    --
--- DXF mm).                                                          --
+-- DXF mm). then one revision triangle per outer ring, the code     --
+-- from a 'revision <code>' line when the lines come from a kept    --
+-- list, otherwise the code being issued.                           --
 -- the next comparison takes them off the sheet first (see          --
 -- .ClearClouds), so nothing here has to be recognisable later. '' = --
 -- success, otherwise the error text                                --
@@ -1073,12 +1204,38 @@ define method .DrawClouds(!ref is STRING, !box is STRING, !nxt is STRING, !wantc
 
 	!ncloud = 0
 	!nvert  = 0
+	!code   = !nxt
+	!boxes  = object array()
+	!triat  = object array()
 	do !line values !this.cloudlines
 		!kw = !line.trim().part(1)
 		handle any
 			skip
 		endhandle
-		if (!kw.eq('cloud')) then
+		if (!kw.eq('revision')) then
+			!code = !line.trim().part(2)
+			handle any
+				!code = !nxt
+			endhandle
+		elseif (!kw.eq('cloud')) then
+			-- 'cloud i x1 y1 x2 y2 outer|hole': the box, for the triangle
+			!kind = ''
+			!kind = !line.trim().part(7)
+			handle any
+				!kind = ''
+			endhandle
+			if (!kind.eq('outer')) then
+				!boxes.append(!line.trim())
+				!triat.append('')
+			endif
+		elseif (!kw.eq('tri')) then
+			-- 'tri i x y': RevCloud's place for the last outer cloud's triangle
+			if (!triat.size().gt(0)) then
+				!triat[!triat.size()] = !line.trim().part(3) & ' ' & !line.trim().part(4)
+				handle any
+					!triat[!triat.size()] = ''
+				endhandle
+			endif
 			!!ce = !noteref
 			NEW OUTL
 			handle any
@@ -1105,7 +1262,130 @@ define method .DrawClouds(!ref is STRING, !box is STRING, !nxt is STRING, !wantc
 			!nvert = !nvert + 1
 		endif
 	enddo
-	!this.Log(!box & ' -> ' & !nxt & '  clouds: ' & !ncloud & ' drawn, ' & !nvert & ' vertices, in ' & !note)
+
+	-- the revision triangle at the top right of every outer cloud: an
+	-- upright equilateral triangle, side 2.8 x the text height, corner
+	-- just off the cloud's box, the code centred a third of the way up
+	!hei = !this.revhei.val
+	handle any
+		!hei = 3.5
+	endhandle
+	if (!hei.leq(0)) then
+		!hei = 3.5
+	endif
+	!side = !hei * 2.8
+	!ntri = 0
+	!nfree = 0
+	do !ib from 1 to !boxes.size()
+		!b  = !boxes[!ib]
+		!at = !triat[!ib]
+		!bx = 0
+		!by = 0
+		if (!at.neq('')) then
+			-- where RevCloud found room
+			!bx = !at.part(1).real()
+			handle any
+				!at = ''
+			endhandle
+			!by = !at.part(2).real()
+			handle any
+				!at = ''
+			endhandle
+		endif
+		if (!at.neq('')) then
+			!nfree = !nfree + 1
+		else
+			!bx = !b.part(4).real() + 0.5
+			handle any
+				skip
+			endhandle
+			!by = !b.part(5).real() + 0.5
+			handle any
+				skip
+			endhandle
+		endif
+		-- (no method on a bracketed expression: PML raises (47,15) at run time)
+		!rx2 = !bx + !side
+		!rxm = !bx + !side / 2
+		!ry2 = !by + !side * 0.866
+		!ryt = !by + !side * 0.3
+		!x1 = !bx.string('D3')
+		!x2 = !rx2.string('D3')
+		!xm = !rxm.string('D3')
+		!y1 = !by.string('D3')
+		!y2 = !ry2.string('D3')
+		!yt = !ryt.string('D3')
+		!!ce = !noteref
+		NEW OUTL
+		handle any
+			return 'NEW OUTL (triangle) failed: ' & !!error.text
+		endhandle
+		NLCOLOUR Red
+		handle any
+		endhandle
+		FSTYLE OFF
+		handle any
+		endhandle
+		LCLOSED true
+		handle any
+		endhandle
+		NEW VRTX
+		handle any
+			return 'NEW VRTX (triangle) failed: ' & !!error.text
+		endhandle
+		XYPO $!x1 $!y1
+		handle any
+			return 'triangle vertex refused: ' & !!error.text
+		endhandle
+		NEW VRTX
+		handle any
+			return 'NEW VRTX (triangle) failed: ' & !!error.text
+		endhandle
+		XYPO $!x2 $!y1
+		handle any
+			return 'triangle vertex refused: ' & !!error.text
+		endhandle
+		NEW VRTX
+		handle any
+			return 'NEW VRTX (triangle) failed: ' & !!error.text
+		endhandle
+		XYPO $!xm $!y2
+		handle any
+			return 'triangle vertex refused: ' & !!error.text
+		endhandle
+		!!ce = !noteref
+		!heimm = !hei.string() & 'mm'
+		NEW TEXP
+		handle any
+			return 'NEW TEXP (revision code) failed: ' & !!error.text
+		endhandle
+		BTEXT |$!code|
+		handle any
+			return 'revision code text refused: ' & !!error.text
+		endhandle
+		ORIGIN X $!xm Y $!yt
+		handle any
+			return 'revision code origin refused: ' & !!error.text
+		endhandle
+		CHEITX |$!heimm|
+		handle any
+			return 'revision code height refused: ' & !!error.text
+		endhandle
+		JUST Centre
+		handle any
+		endhandle
+		ALIGN Hbody
+		handle any
+		endhandle
+		TXCOLOUR Red
+		handle any
+		endhandle
+		FONT 1
+		handle any
+		endhandle
+		!ntri = !ntri + 1
+	enddo
+	!this.Log(!box & ' -> ' & !nxt & '  clouds: ' & !ncloud & ' drawn, ' & !nvert & ' vertices, ' & !ntri & ' triangle(s) marked ' & !code & ' at ' & !hei & 'mm (' & !nfree & ' placed by RevCloud), in ' & !note)
 	return ''
 endmethod
 

@@ -1,0 +1,164 @@
+-------------------------------------------------------------------
+-- what a match line text must keep off, as boxes on the sheet    --
+-- Date     : 2026-09-11                                          --
+--                                                                --
+-- filled once per DrawingPlan1MatchLine run, before the four     --
+-- sides put their texts down, and read by DrawingPlan1MatchRow   --
+-- each time a text has to look for a row further out. one       --
+-- record per box, 'x1~y1~x2~y2' in sheet mm, already widened by --
+-- the clearance a text should keep from it                      --
+--                                                                --
+-- two kinds of thing are in here:                                --
+--   * the dimension chain on each side -- its line, the figures  --
+--     standing on the line and the 2mm overshoot beyond it, as   --
+--     one band across the stretch the chain covers. the depth   --
+--     comes from the same reading DrawingPlan1DimLines makes    --
+--     (first point + DOFFSET), so the band is where the line     --
+--     actually is and not where a default says it ought to be   --
+--   * every SLAB and GLAB already on the view: the grid bubbles  --
+--     at this point in the run (the line number and support     --
+--     labels are placed later, by BlankPos, and keep off the    --
+--     match line texts by themselves because the texts are in   --
+--     the DXF it reads)                                          --
+--                                                                --
+-- the match line texts placed so far this run are not here --   --
+-- they are in !!DrawingPlan1MatchTexts, which grows as the      --
+-- sides are walked, and DrawingPlan1MatchRow reads that list    --
+-- directly                                                       --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchObstacles(!name is string)
+	!!DrawingPlan1MatchObst = object array()
+	!clear = 2
+	-------------------------------------------------------------
+	-- the dimension chains. DimLines answers one record per     --
+	-- projection line, 'dimline <dir> x1 y1 x2 y2', and the far --
+	-- end (x2,y2) of every one lies ON the dimension line -- so  --
+	-- the line's depth is x2 (right/left) or y2 (up/down), and  --
+	-- the stretch the chain covers is the spread of the near    --
+	-- ends along the side                                       --
+	-------------------------------------------------------------
+	!dtch = 3
+	!dtch = !!DrawingPlan1.dimheitx.val
+	handle any
+		!dtch = 3
+	endhandle
+	!band = !dtch + 3
+	!recs = object array()
+	!recs = !!DrawingPlan1DimLines(!name)
+	handle any
+		!recs = object array()
+	endhandle
+	!dirlist = 'right left down up'
+	do !j from 1 to 4
+		!dir = !dirlist.part(!j)
+		!have = false
+		!depth = 0
+		!alo = 0
+		!ahi = 0
+		do !ri from 1 to !recs.size()
+			!p = object array()
+			!p = !recs[!ri].split()
+			handle any
+				skip
+			endhandle
+			if (!p.size().lt(6)) then
+				skip
+			endif
+			if (not(!p[2].eq(!dir))) then
+				skip
+			endif
+			if (!dir.eq('right') or !dir.eq('left')) then
+				!a = !p[4].real()
+				!d = !p[5].real()
+			else
+				!a = !p[3].real()
+				!d = !p[6].real()
+			endif
+			if (!have) then
+				!alo = min(!alo, !a)
+				!ahi = max(!ahi, !a)
+			else
+				!alo = !a
+				!ahi = !a
+				!depth = !d
+				!have = true
+			endif
+		enddo
+		if (!have) then
+			!alo = !alo - !clear
+			!ahi = !ahi + !clear
+			!dlo = !depth - !band
+			!dhi = !depth + !band
+			if (!dir.eq('right') or !dir.eq('left')) then
+				!!DrawingPlan1MatchObst.append(!dlo.string() & '~' & !alo.string() & '~' & !dhi.string() & '~' & !ahi.string())
+			else
+				!!DrawingPlan1MatchObst.append(!alo.string() & '~' & !dlo.string() & '~' & !ahi.string() & '~' & !dhi.string())
+			endif
+		endif
+	enddo
+	-------------------------------------------------------------
+	-- the labels already standing: grid bubbles, at this point  --
+	-------------------------------------------------------------
+	$!name/SS/S1/V1
+	handle any
+		return
+	endhandle
+	!lbs = object array()
+	var !lbs coll all (slab glab) for ce
+	handle any
+		!lbs = object array()
+	endhandle
+	do !lb values !lbs
+		$!lb
+		handle any
+			skip
+		endhandle
+		!ext = ''
+		var !ext extent btex
+		handle any
+			skip
+		endhandle
+		!ep = object array()
+		!ep = !ext.split()
+		handle any
+			skip
+		endhandle
+		if (!ep.size().lt(16)) then
+			skip
+		endif
+		!x1 = 0
+		!x2 = 0
+		!y1 = 0
+		!y2 = 0
+		do !ci from 1 to 4
+			!cix = !ci * 4 - 2
+			!ciy = !ci * 4
+			!vx = !ep[!cix].replace('mm', '').real()
+			!vy = !ep[!ciy].replace('mm', '').real()
+			if (!ci.eq(1)) then
+				!x1 = !vx
+				!x2 = !vx
+				!y1 = !vy
+				!y2 = !vy
+			else
+				!x1 = min(!x1, !vx)
+				!x2 = max(!x2, !vx)
+				!y1 = min(!y1, !vy)
+				!y2 = max(!y2, !vy)
+			endif
+		enddo
+		-------------------------------------------------------
+		-- a bubble's circle reaches past its text's extent,  --
+		-- so this clearance is a little wider than the one   --
+		-- the rows keep between themselves                   --
+		-------------------------------------------------------
+		!x1 = !x1 - !clear - 1
+		!x2 = !x2 + !clear + 1
+		!y1 = !y1 - !clear - 1
+		!y2 = !y2 + !clear + 1
+		!!DrawingPlan1MatchObst.append(!x1.string() & '~' & !y1.string() & '~' & !x2.string() & '~' & !y2.string())
+	enddo
+	$!name/SS/S1/V1
+	handle any
+	endhandle
+endfunction
