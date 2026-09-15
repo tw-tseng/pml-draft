@@ -29,12 +29,53 @@
 --     was finished" flag. anything without it is ignored
 --   * REVIs are not named. nothing here needs a name, and an unnamed
 --     REVI cannot clash on (41,12)
---   * per sheet: NEW REVI -> CreateSnapshot -> Q PICF -> DXF -> STEXT.
---     one SAVEWORK before the whole batch, never after -- saving the
---     result is the user's decision
+--   * per sheet: old clouds off -> compare -> NEW REVI -> freeze labels
+--     -> CreateSnapshot -> Q PICF -> DXF -> new clouds -> STEXT. snapshot
+--     and DXF are both the clean picture, clouds live on the sheet only
+--     (user decision 2026-09-14). one SAVEWORK before the whole batch,
+--     never after -- saving the result is the user's decision
+--   * freeze labels: the component labels DrawingPlan1 lays out with
+--     BlankPos (layers ateNOZZ ateVALV ateREDU ateINST ateSUPT -- GLABs
+--     and SLABs alike) are created with OSET TRUE, so their XYPO is an
+--     offset from the design point and E3D drags them along when the
+--     element moves in the model. on a revised sheet that is wrong: the
+--     support tags rode 3.33mm with their pipe and showed as moved
+--     (user, 2026-09-15). OSET FALSE turns XYPO into an absolute page
+--     position -- E3D converts the value itself, the label does not
+--     shift -- and from then on the text stays put and only the leader
+--     follows the element. done here, at revision time, because that is
+--     the moment the sheet and the model agree; the update path is too
+--     late (the design point already reads the moved model). AVEVA's own
+--     abaarrange.pmlfnc switches OSET both ways the same way
+--   * compare: the sheet is exported to a temporary DXF and RevCloud.exe
+--     (bin\RevCloud.exe beside a PMLLIB entry, like BlankPos) diffs it
+--     against the previous revision's DXF. that answers two things: what
+--     changed (the clouds) and whether anything changed at all. with the
+--     'Skip sheets with no drawing change' toggle on, an unchanged sheet
+--     is left alone -- no REVI -- and reported apart from the failures.
+--     the Next column is the plan, the log is the result (user decision
+--     2026-09-14). a first revision has nothing to compare with and is
+--     always made
+--   * clouds: drawn from the revision named on a 'CLOUD <code>' line in
+--     <PROJID>_REV.txt onwards (project-wide, user decision 2026-09-14).
+--     they live in NOTE <sheet>/REVCLOUD, and only the latest revision
+--     carries them. the previous clouds are deleted BEFORE the temporary
+--     export, so what RevCloud compares is clean on both sides and no
+--     cloud ever has to be recognised (user suggestion 2026-09-15 --
+--     the read-back of OUTL vertices it replaced never worked: a VRTX
+--     holds no position of its own, only a PTRF, and three real runs
+--     clouded the old clouds over again). a sheet that is then skipped
+--     as unchanged, or whose comparison fails, gets its clouds back from
+--     <PICF>_<code>.clouds.txt, RevCloud's answer kept beside that
+--     revision's DXF when the clouds were drawn. DXFOUT exports an OUTL
+--     on layer 0 whatever VLAYRF says (2026-09-14), so the virtual layer
+--     /REVCLOUD is set only as a courtesy
+--   * the DXF is <PICF>_<code>.dxf so every revision keeps its own file
+--     even when PICF did not move (user decision 2026-09-14)
 --   * a failure skips that sheet and carries on. the batch usually runs
---     after hours, so everything is written to <PROJID>_REV.log as well
---     as reported at the end
+--     after hours, so everything is written to <PROJID>_REV.log. a dialog
+--     at the end only when something was skipped or failed -- an all-OK
+--     run shows itself in the Current column (user decision 2026-09-14)
 --
 --------------------------------------------------
 
@@ -61,6 +102,7 @@ layout form !!DrawingPlan1Revision dialog dock
 	button .remce  'Remove'      at xmin.addce  ymax.addce+0.3   width 12 call '!this.RemoveCe()'
 	button .remall 'Remove All'  at xmin.addce  ymax.remce+0.3   width 12 call '!this.RemoveAll()'
 	option .target 'Revision'    at xmin.rows   ymax.rows+0.3    tagwidth 9 width 12
+	toggle .skipsame at xmax.target+2 ymin.target 'Skip sheets with no drawing change'
 	button .apply  'Apply'       at xmin.rows   ymax.target+0.5  width 12 call '!this.Apply()'
 	button .cancel 'Cancel'      at xmax.apply+2 ymin.apply      width 12 call '!this.Close()'
 
@@ -74,6 +116,12 @@ layout form !!DrawingPlan1Revision dialog dock
 	member .cur    is array    $( per sheet: current code, '' = no revision yet, '?' = code not in file $)
 	member .nxt    is array    $( per sheet: code it will be revised to, '' = skip this sheet       $)
 	member .reuse  is array    $( per sheet: dbref of an unfinished REVI carrying the target code, '' = none. Apply finishes it instead of NEW $)
+	member .curref is array    $( per sheet: dbref of the REVI that IS the current version, '' = none      $)
+	member .cloudfrom is string $( code on the CLOUD line of <PROJID>_REV.txt; clouds from that revision on. '' = never $)
+	member .cloudexe is string $( full path of RevCloud.exe, '' = not found beside any PMLLIB entry       $)
+	member .workdir is string  $( folder for the temporary DXF and RevCloud's answer, ends with \        $)
+	member .cloudlines is array $( RevCloud's answer for the sheet being processed, line by line          $)
+	member .cleared    is real  $( cloud notes the last .ClearClouds deleted                              $)
 exit
 
 -------------
@@ -86,6 +134,52 @@ define method .DrawingPlan1Revision()
 	!this.cur   = object array()
 	!this.nxt   = object array()
 	!this.reuse = object array()
+	!this.curref = object array()
+	!this.cloudfrom = ''
+	!this.cloudlines = object array()
+	-- an empty revision by accident is worse than a re-issue that has to
+	-- be asked for twice, so the skip is on by default
+	!this.skipsame.val = true
+
+	--------------------------------------------------------------------
+	-- where the temporary DXF and RevCloud's answer go. same choice as  --
+	-- DrawingPlan1's .blankdir: AVEVA_DESIGN_USER is E3D's own writable --
+	-- per-user area, so two people on one machine do not share a file  --
+	--------------------------------------------------------------------
+	!this.workdir = !!evar('AVEVA_DESIGN_USER')
+	handle any
+		!this.workdir = ''
+	endhandle
+	if (!this.workdir.eq('')) then
+		!this.workdir = 'D:\Documents\Python\'
+	endif
+	if (!this.workdir.substring(!this.workdir.length(), 1).neq('\')) then
+		!this.workdir = !this.workdir & '\'
+	endif
+	--------------------------------------------------------------------
+	-- RevCloud.exe lives in a bin folder beside a PML library entry,    --
+	-- same rule as BlankPos.exe (DrawingPlan1 constructor): PMLLIB is a --
+	-- ';' separated search path, first bin\RevCloud.exe that exists wins --
+	--------------------------------------------------------------------
+	!this.cloudexe = ''
+	!pmllib = !!evar('PMLLIB')
+	handle any
+		!pmllib = ''
+	endhandle
+	!pmldirs = !pmllib.split(';')
+	do !pmldir values !pmldirs
+		!pd = !pmldir.trim()
+		skip if (!pd.eq(''))
+		if (!pd.substring(!pd.length(), 1).neq('\')) then
+			!pd = !pd & '\'
+		endif
+		!cand = !pd & 'bin\RevCloud.exe'
+		!cf = object FILE(!cand)
+		if (!cf.exists()) then
+			!this.cloudexe = !cand
+			break
+		endif
+	enddo
 
 	using namespace 'Aveva.Core.Presentation'
 	!this.grid = object NETGRIDCONTROL()
@@ -122,6 +216,7 @@ endmethod
 define method .LoadSequence()
 	!this.seq    = object array()
 	!this.seqok  = false
+	!this.cloudfrom = ''
 	!this.seqerr = 'Sequence file: not loaded'
 	!this.seqdir = ''
 
@@ -164,12 +259,28 @@ define method .LoadSequence()
 		if (!t.length().geq(2)) then
 			skip if (!t.substring(1, 2).eq('--'))
 		endif
+		-- 'CLOUD <code>': revision clouds are drawn from that code on.
+		-- one line for the whole project (user decision 2026-09-14)
+		if (!t.part(1).upcase().eq('CLOUD')) then
+			!this.cloudfrom = ''
+			!this.cloudfrom = !t.part(2).trim()
+			handle any
+				!this.cloudfrom = ''
+			endhandle
+			skip
+		endif
 		!this.seq.append(!t)
 	enddo
 
 	if (!this.seq.size().eq(0)) then
 		!this.seqerr = 'Sequence file: EMPTY ' & !path
 		return
+	endif
+	if (!this.cloudfrom.neq('')) then
+		if (!this.SeqIndex(!this.cloudfrom).eq(0)) then
+			!this.seqerr = 'Sequence file: CLOUD code ' & !this.cloudfrom & ' is not one of the revision codes in ' & !path
+			return
+		endif
 	endif
 
 	!this.seqok  = true
@@ -328,6 +439,7 @@ define method .Refresh()
 	!this.cur   = object array()
 	!this.nxt   = object array()
 	!this.reuse = object array()
+	!this.curref = object array()
 
 	!pick = ''
 	if (!this.seqok) then
@@ -343,6 +455,7 @@ define method .Refresh()
 		!cur   = ''
 		!nxt   = ''
 		!reuse = ''
+		!curr  = ''
 		!curidx  = 0
 		!unknown = false
 		!inccode = object array()
@@ -382,6 +495,7 @@ define method .Refresh()
 				!unknown = true
 			elseif (!idx.gt(!curidx)) then
 				!curidx = !idx
+				!curr   = !r
 			endif
 		enddo
 
@@ -416,6 +530,7 @@ define method .Refresh()
 		!this.cur.append(!cur)
 		!this.nxt.append(!nxt)
 		!this.reuse.append(!reuse)
+		!this.curref.append(!curr)
 
 		!curtxt = !cur
 		if (!cur.eq('')) then
@@ -594,6 +709,407 @@ define method .Log(!line is STRING)
 endmethod
 
 ----------------------------------------------------------------------
+-- the previous revision's DXF for sheet !i, '' when there is none.  --
+-- <PICF>_<code>.dxf first, then the plain <PICF>.dxf the 2026-09-13 --
+-- runs wrote                                                        --
+----------------------------------------------------------------------
+define method .PrevDxf(!i is REAL) is STRING
+	!curr = !this.curref[!i]
+	if (!curr.eq('')) then
+		return ''
+	endif
+	!stext = ''
+	var !stext stext of $!curr
+	handle any
+		!stext = ''
+	endhandle
+	!base = !this.PicPath(!stext.trim())
+	if (!base.eq('')) then
+		return ''
+	endif
+	!cand = !base & '_' & !this.cur[!i] & '.dxf'
+	!f = object FILE(!cand)
+	if (!f.exists()) then
+		return !cand
+	endif
+	!cand = !base & '.dxf'
+	!f = object FILE(!cand)
+	if (!f.exists()) then
+		return !cand
+	endif
+	return ''
+endmethod
+
+----------------------------------------------------------------------
+-- export the sheet as it stands and let RevCloud diff it against    --
+-- the previous revision's DXF. answers:                             --
+--   'none'  nothing to compare with (first revision)                --
+--   'same'  compared, no difference                                 --
+--   'diff'  compared, differences found; .cloudlines holds the      --
+--           outlines to draw                                        --
+--   anything else is an error text and the sheet fails on it: a     --
+--   previous revision whose DXF is missing, an exe that is not      --
+--   there, an export or a run that produced nothing. these are not  --
+--   silently turned into 'no clouds', an issued drawing without     --
+--   its clouds is a wrong drawing                                   --
+--                                                                   --
+-- the caller has taken the previous clouds off the sheet already,  --
+-- so the temporary DXF is as clean as the archived one              --
+----------------------------------------------------------------------
+define method .Compare(!i is REAL, !box is STRING, !nxt is STRING) is STRING
+	!ref  = !this.shees[!i]
+	!prev = !this.PrevDxf(!i)
+	if (!prev.eq('')) then
+		if (!this.curref[!i].eq('')) then
+			!this.Log(!box & ' -> ' & !nxt & '  compare: first revision, nothing to compare with')
+			return 'none'
+		endif
+		return 'previous revision ' & !this.cur[!i] & ' has no DXF beside its picture file (STEXT of ' & !this.curref[!i] & ')'
+	endif
+	if (!this.cloudexe.eq('')) then
+		return 'RevCloud.exe not found in any bin folder on the PMLLIB search path'
+	endif
+
+	!tmp = !this.workdir & 'RevCloud_new.dxf'
+	!out = !this.workdir & 'RevCloud_out.txt'
+	!f = object FILE(!tmp)
+	if (!f.exists()) then
+		!f.deletefile()
+		handle any
+		endhandle
+	endif
+	!f = object FILE(!out)
+	if (!f.exists()) then
+		!f.deletefile()
+		handle any
+		endhandle
+	endif
+
+	$!ref
+	LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF '$!tmp'
+	handle any
+		return 'temporary DXF export failed: ' & !!error.text
+	endhandle
+	!f = object FILE(!tmp)
+	if (not !f.exists()) then
+		return 'temporary DXF export wrote nothing to ' & !tmp
+	endif
+
+	-- one extra pair of quotes round the whole command: cmd /c strips the
+	-- first and the last quote character when there are more than two, so
+	-- the outer pair is what gets eaten (DrawingPlan1's BlankPos call)
+	!cmd = '""' & !this.cloudexe & '" --cloud-layer REVCLOUD "' & !prev & '" "' & !tmp & '" "' & !out & '""'
+	syscom |$!cmd|
+	handle any
+		return 'RevCloud did not run: ' & !!error.text
+	endhandle
+	!f = object FILE(!out)
+	if (not !f.exists()) then
+		return 'RevCloud gave no answer, see ' & !out & '.log'
+	endif
+	!f.open('read')
+	!lines = !f.readfile()
+	!f.close()
+	if (!lines.size().eq(0)) then
+		return 'RevCloud answer is empty, see ' & !out & '.log'
+	endif
+	!head = !lines[1].trim()
+	if (!head.part(1).neq('clouds')) then
+		return 'RevCloud answer not understood: ' & !head
+	endif
+	!n = !head.part(2).real()
+	handle any
+		return 'RevCloud answer not understood: ' & !head
+	endhandle
+	!this.Log(!box & ' -> ' & !nxt & '  compare: ' & !head & '  (against ' & !prev & ')')
+	if (!n.eq(0)) then
+		return 'same'
+	endif
+	!this.cloudlines = !lines
+	return 'diff'
+endmethod
+
+----------------------------------------------------------------------
+-- the clouds live in NOTE <sheet>/REVCLOUD. '' when the sheet has no --
+-- name to hang that on (every DrawingPlan1 sheet is /X/SS/S1)       --
+----------------------------------------------------------------------
+define method .CloudNote(!ref is STRING) is STRING
+	!sname = ''
+	var !sname name of $!ref
+	handle any
+		!sname = ''
+	endhandle
+	!sname = !sname.trim()
+	if (!sname.eq('') or !sname.substring(1, 1).neq('/')) then
+		return ''
+	endif
+	return !sname & '/REVCLOUD'
+endmethod
+
+----------------------------------------------------------------------
+-- the component labels of the sheet pinned to the page: OSET FALSE  --
+-- on every GLAB/SLAB under a layer named ate<NOZZ|VALV|REDU|INST|   --
+-- SUPT>, so a later model change stretches the leader but leaves    --
+-- the text where BlankPos put it (see the header). other labels are --
+-- left alone: line numbers and grid bubbles are re-placed by the    --
+-- update path itself, flow arrows must ride on the pipe. '' =       --
+-- success (a label that refuses is counted and logged, the revision --
+-- still goes out), otherwise the error text                         --
+----------------------------------------------------------------------
+define method .FreezeLabels(!ref is STRING, !box is STRING, !nxt is STRING) is STRING
+	!labs = object array()
+	var !labs coll all (glab slab) for $!ref
+	handle any
+		return 'cannot collect the labels of ' & !ref & ': ' & !!error.text
+	endhandle
+	!kinds   = ' NOZZ VALV REDU INST SUPT '
+	!frozen  = 0
+	!already = 0
+	!refused = 0
+	do !l values !labs
+		!lname = ''
+		var !lname name of owner of $!l
+		handle any
+			!lname = ''
+		endhandle
+		-- '/X/SS/S1/V1/ateSUPT' -> 'SUPT'
+		!kind = !lname.after('/ate').upcase()
+		skip if (!kind.eq(''))
+		skip if (not !kinds.matchwild('* ' & !kind & ' *'))
+		!os = ''
+		var !os oset of $!l
+		handle any
+			!os = ''
+		endhandle
+		if (!os.upcase().eq('FALSE')) then
+			!already = !already + 1
+			skip
+		endif
+		!nav = true
+		$!l
+		handle any
+			!nav = false
+		endhandle
+		if (not !nav) then
+			!refused = !refused + 1
+			skip
+		endif
+		OSET FALSE
+		handle any
+			!refused = !refused + 1
+			!this.Log(!box & ' -> ' & !nxt & '  freeze: ' & !l & ' under ' & !lname & ' refused OSET FALSE: ' & !!error.text)
+		elsehandle none
+			!frozen = !frozen + 1
+		endhandle
+	enddo
+	!this.Log(!box & ' -> ' & !nxt & '  freeze: ' & !frozen & ' label(s) pinned to the page (OSET FALSE), ' & !already & ' already, ' & !refused & ' refused')
+	return ''
+endmethod
+
+-- <PICF>_<code>.clouds.txt beside <PICF>_<code>.dxf
+define method .CloudListPath(!dxf is STRING) is STRING
+	if (!dxf.upcase().matchwild('*.DXF')) then
+		return !dxf.substring(1, !dxf.length() - 4) & '.clouds.txt'
+	endif
+	return !dxf & '.clouds.txt'
+endmethod
+
+----------------------------------------------------------------------
+-- RevCloud's answer for this revision, copied beside the DXF: what  --
+-- .RestoreClouds redraws when the next run takes the clouds off for --
+-- its comparison and then leaves the sheet at this revision. not    --
+-- fatal: without the copy a skipped sheet loses its clouds, which   --
+-- is logged when it happens                                         --
+----------------------------------------------------------------------
+define method .SaveCloudList(!dxf is STRING, !box is STRING, !nxt is STRING)
+	!path = !this.CloudListPath(!dxf)
+	!f = object FILE(!path)
+	!f.open('overwrite')
+	handle any
+		!this.Log(!box & ' -> ' & !nxt & '  clouds: cannot write ' & !path & ': ' & !!error.text)
+		return
+	endhandle
+	do !line values !this.cloudlines
+		!f.writerecord(!line)
+	enddo
+	!f.close()
+	handle any
+	endhandle
+	!this.Log(!box & ' -> ' & !nxt & '  clouds: list kept in ' & !path)
+endmethod
+
+----------------------------------------------------------------------
+-- the clouds of the sheet's current revision put back, from the    --
+-- list kept beside that revision's DXF (!prev, the file .Compare   --
+-- diffed against). for a sheet whose clouds came off for the       --
+-- comparison and which is not being revised after all. '' =        --
+-- success or nothing to do, otherwise the error text               --
+----------------------------------------------------------------------
+define method .RestoreClouds(!ref is STRING, !box is STRING, !nxt is STRING, !prev is STRING) is STRING
+	if (!prev.eq('')) then
+		return ''
+	endif
+	!path = !this.CloudListPath(!prev)
+	!f = object FILE(!path)
+	if (not !f.exists()) then
+		!this.Log(!box & ' -> ' & !nxt & '  clouds: WARNING the clouds of ' & !this.BoxName(!ref) & ' were taken off for the comparison and no list to redraw them from exists (' & !path & '). draw them again by revising, or accept the loss')
+		return 'no cloud list to restore from: ' & !path
+	endif
+	!f.open('read')
+	handle any
+		return 'cannot read ' & !path & ': ' & !!error.text
+	endhandle
+	!this.cloudlines = !f.readfile()
+	!f.close()
+	!errtxt = !this.DrawClouds(!ref, !box, !nxt, true, 'diff')
+	if (!errtxt.eq('')) then
+		!this.Log(!box & ' -> ' & !nxt & '  clouds: restored from ' & !path)
+	endif
+	return !errtxt
+endmethod
+
+----------------------------------------------------------------------
+-- the clouds off the sheet: before the comparison, so the temporary --
+-- export is clean, and again before the snapshot, which must be    --
+-- the clean picture. every NOTE under the sheet that is the cloud  --
+-- note by name OR carries FUNC REVCLOUD goes -- not just the one   --
+-- the name resolves to, so a stale or renamed one cannot survive a --
+-- revision. how many went is left in .cleared. '' = success        --
+----------------------------------------------------------------------
+define method .ClearClouds(!ref is STRING, !box is STRING, !nxt is STRING) is STRING
+	!note = !this.CloudNote(!ref)
+	if (!note.eq('')) then
+		return 'sheet ' & !ref & ' has no name, cannot place NOTE .../REVCLOUD'
+	endif
+	!notes = object array()
+	var !notes coll all note for $!ref
+	handle any
+		return 'cannot collect the NOTEs of ' & !ref & ': ' & !!error.text
+	endhandle
+	!this.cleared = 0
+	!ndel = 0
+	do !n values !notes
+		!nname = ''
+		var !nname name of $!n
+		handle any
+			!nname = ''
+		endhandle
+		!nfunc = ''
+		var !nfunc func of $!n
+		handle any
+			!nfunc = ''
+		endhandle
+		skip if (!nname.trim().neq(!note) and !nfunc.trim().upcase().neq('REVCLOUD'))
+		!nav = true
+		$!n
+		handle any
+			!nav = false
+		endhandle
+		if (not !nav) then
+			return 'cannot reach old clouds ' & !n & ' (' & !nname & ')'
+		endif
+		DELETE NOTE
+		handle any
+			return 'cannot delete old clouds ' & !n & ' (' & !nname & '): ' & !!error.text
+		endhandle
+		!ndel = !ndel + 1
+	enddo
+	!this.cleared = !ndel
+	if (!ndel.gt(0)) then
+		!this.Log(!box & ' -> ' & !nxt & '  clouds: ' & !ndel & ' old cloud note(s) deleted of ' & !notes.size() & ' NOTE(s) under the sheet')
+	endif
+	return ''
+endmethod
+
+----------------------------------------------------------------------
+-- new clouds, after the snapshot and the DXF (neither carries them).--
+-- NOTE <sheet>/REVCLOUD is rebuilt                                  --
+-- from RevCloud's answer when clouds are wanted and there is        --
+-- something to draw. one OUTL per 'cloud' record -- a scalloped    --
+-- band hugging the changed geometry, and a change shaped like a    --
+-- frame sends a second record for the band's inner edge (user      --
+-- sketch 2026-09-14: not a box round everything) -- red line, no   --
+-- fill, vertices straight from the 'v x y' records (sheet mm ==    --
+-- DXF mm).                                                          --
+-- the next comparison takes them off the sheet first (see          --
+-- .ClearClouds), so nothing here has to be recognisable later. '' = --
+-- success, otherwise the error text                                --
+----------------------------------------------------------------------
+define method .DrawClouds(!ref is STRING, !box is STRING, !nxt is STRING, !wantcloud is BOOLEAN, !cmp is STRING) is STRING
+	!note = !this.CloudNote(!ref)
+	if (!note.eq('')) then
+		return 'sheet ' & !ref & ' has no name, cannot place NOTE .../REVCLOUD'
+	endif
+
+	if (not !wantcloud) then
+		if (!this.cloudfrom.eq('')) then
+			!this.Log(!box & ' -> ' & !nxt & '  clouds: no CLOUD line in the sequence file, none drawn')
+		else
+			!this.Log(!box & ' -> ' & !nxt & '  clouds: ' & !nxt & ' is before CLOUD code ' & !this.cloudfrom & ', none drawn')
+		endif
+		return ''
+	endif
+	if (!cmp.neq('diff')) then
+		!this.Log(!box & ' -> ' & !nxt & '  clouds: nothing to draw (' & !cmp & ')')
+		return ''
+	endif
+
+	$!ref
+	NEW NOTE $!note
+	handle any
+		return 'NEW NOTE ' & !note & ' failed: ' & !!error.text
+	endhandle
+	!noteref = !!ce
+	FUNC |REVCLOUD|
+	handle any
+	endhandle
+	-- a courtesy only: DXFOUT puts the OUTLs on layer 0 regardless
+	-- (2026-09-14); the next comparison deletes the NOTE before
+	-- exporting, so the layer never matters
+	VLAYRF /REVCLOUD
+	handle any
+		!this.Log(!box & ' -> ' & !nxt & '  clouds: VLAYRF /REVCLOUD refused (' & !!error.text & '), not needed')
+	endhandle
+
+	!ncloud = 0
+	!nvert  = 0
+	do !line values !this.cloudlines
+		!kw = !line.trim().part(1)
+		handle any
+			skip
+		endhandle
+		if (!kw.eq('cloud')) then
+			!!ce = !noteref
+			NEW OUTL
+			handle any
+				return 'NEW OUTL failed: ' & !!error.text
+			endhandle
+			NLCOLOUR Red
+			handle any
+			endhandle
+			FSTYLE OFF
+			handle any
+			endhandle
+			!ncloud = !ncloud + 1
+		elseif (!kw.eq('v')) then
+			!vx = !line.trim().part(2)
+			!vy = !line.trim().part(3)
+			NEW VRTX
+			handle any
+				return 'NEW VRTX failed: ' & !!error.text
+			endhandle
+			XYPO $!vx $!vy
+			handle any
+				return 'VRTX XYPO ' & !vx & ' ' & !vy & ' refused: ' & !!error.text
+			endhandle
+			!nvert = !nvert + 1
+		endif
+	enddo
+	!this.Log(!box & ' -> ' & !nxt & '  clouds: ' & !ncloud & ' drawn, ' & !nvert & ' vertices, in ' & !note)
+	return ''
+endmethod
+
+----------------------------------------------------------------------
 -- the batch. no confirmation dialog: the SAVEWORK that must come   --
 -- first stores the state the user has already checked, and whether --
 -- to save the revisions afterwards is the user's call, not ours    --
@@ -623,7 +1139,11 @@ define method .Apply()
 	var !author login
 	!author = !author.trim()
 	!save   = !!ce
-	!this.Log('---- Apply: ' & !todo & ' sheet(s), author ' & !author)
+	!cf = !this.cloudfrom
+	if (!cf.eq('')) then
+		!cf = '(none)'
+	endif
+	!this.Log('---- Apply: ' & !todo & ' sheet(s), author ' & !author & ', clouds from ' & !cf & ', skip unchanged ' & !this.skipsame.val.string() & ', RevCloud ' & !this.cloudexe)
 
 	-- what each sheet holds right now, so a run explains itself afterwards
 	do !i from 1 to !this.shees.size()
@@ -669,8 +1189,9 @@ define method .Apply()
 		!this.Log('SAVEWORK skipped, nothing modified')
 	endif
 
-	!fails = object array()
-	!done  = 0
+	!fails   = object array()
+	!skipped = object array()
+	!done    = 0
 	do !i from 1 to !this.shees.size()
 		!nxt = !this.nxt[!i]
 		skip if (!nxt.eq(''))
@@ -680,6 +1201,55 @@ define method .Apply()
 		!step   = ''
 		!errtxt = ''
 		!stamp  = !this.NowStamp()
+
+		--------------------------------------------------------------
+		-- 0  the previous clouds off, then compare with the previous --
+		--    revision's DXF. clouds are wanted from the CLOUD code   --
+		--    on; the comparison is also what tells an unchanged      --
+		--    sheet apart, and with the toggle on such a sheet is     --
+		--    skipped: no REVI, and its clouds put back from the list --
+		--    kept beside its DXF. the same when the comparison       --
+		--    itself fails, so a failed sheet is not left bare        --
+		--------------------------------------------------------------
+		!wantcloud = false
+		if (!this.cloudfrom.neq('')) then
+			!wantcloud = !this.SeqIndex(!nxt).geq(!this.SeqIndex(!this.cloudfrom))
+		endif
+		!this.cloudlines = object array()
+		!this.cleared = 0
+		!cmp = 'none'
+		if (!wantcloud or !this.skipsame.val) then
+			!step = 'clear clouds'
+			!errtxt = !this.ClearClouds(!ref, !box, !nxt)
+			if (!errtxt.neq('')) then
+				!ok = false
+			endif
+		endif
+		if (!ok and (!wantcloud or !this.skipsame.val)) then
+			!step = 'compare'
+			!cmp  = !this.Compare(!i, !box, !nxt)
+			if (!cmp.eq('same') and !this.skipsame.val) then
+				!skipped.append(!box & ' (' & !this.cur[!i] & ')')
+				!this.Log(!box & ' -> ' & !nxt & '  no change since ' & !this.cur[!i] & ', not revised')
+				if (!this.cleared.gt(0)) then
+					!errtxt = !this.RestoreClouds(!ref, !box, !nxt, !this.PrevDxf(!i))
+					if (!errtxt.neq('')) then
+						!this.Log(!box & ' -> ' & !nxt & '  clouds: NOT restored: ' & !errtxt)
+					endif
+				endif
+				skip
+			endif
+			if (!cmp.neq('none') and !cmp.neq('same') and !cmp.neq('diff')) then
+				!ok = false
+				!errtxt = !cmp
+				if (!this.cleared.gt(0)) then
+					!err2 = !this.RestoreClouds(!ref, !box, !nxt, !this.PrevDxf(!i))
+					if (!err2.neq('')) then
+						!this.Log(!box & ' -> ' & !nxt & '  clouds: NOT restored: ' & !err2)
+					endif
+				endif
+			endif
+		endif
 
 		--------------------------------------------------------------
 		-- 1  the REVI. an unfinished one carrying this code is taken --
@@ -735,6 +1305,39 @@ define method .Apply()
 			handle any
 				!ok = false
 				!errtxt = !!error.text
+			endhandle
+		endif
+
+		--------------------------------------------------------------
+		-- 1b the previous revision's clouds off, before the snapshot: --
+		--    the snapshot is the clean picture (user decision        --
+		--    2026-09-14). usually nothing left after step 0; this is --
+		--    the sweep for a sheet that was not compared             --
+		--------------------------------------------------------------
+		if (!ok) then
+			!step = 'clear clouds'
+			!errtxt = !this.ClearClouds(!ref, !box, !nxt)
+			if (!errtxt.neq('')) then
+				!ok = false
+			endif
+			!!ce = !revi
+			handle any
+			endhandle
+		endif
+
+		--------------------------------------------------------------
+		-- 1c freeze the component labels on the page (OSET FALSE)   --
+		--    while the sheet still matches the model -- see the     --
+		--    header. a label that refuses is logged, not fatal      --
+		--------------------------------------------------------------
+		if (!ok) then
+			!step = 'freeze labels'
+			!errtxt = !this.FreezeLabels(!ref, !box, !nxt)
+			if (!errtxt.neq('')) then
+				!ok = false
+			endif
+			!!ce = !revi
+			handle any
 			endhandle
 		endif
 
@@ -848,8 +1451,12 @@ define method .Apply()
 		endif
 
 		--------------------------------------------------------------
-		-- 4  DXF next to the picture file, same name plus .dxf.     --
-		--    every revision keeps its own                            --
+		-- 4  DXF next to the picture file: <PICF>_<code>.dxf. the    --
+		--    code is in the name because PICF does not move when     --
+		--    the sheet was not changed and saved since the previous  --
+		--    revision, and every revision keeps its own file (user   --
+		--    decision 2026-09-14). .Compare knows this naming and   --
+		--    the plain <PICF>.dxf the 2026-09-13 runs left behind    --
 		--------------------------------------------------------------
 		if (!ok) then
 			!step = 'DXF'
@@ -858,7 +1465,7 @@ define method .Apply()
 				!ok = false
 				!errtxt = 'cannot resolve ' & !picf
 			else
-				!dxf = !dxf & '.dxf'
+				!dxf = !dxf & '_' & !nxt & '.dxf'
 				$!ref
 				LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF '$!dxf'
 				handle any
@@ -866,6 +1473,28 @@ define method .Apply()
 					!errtxt = !!error.text
 				endhandle
 			endif
+		endif
+
+		--------------------------------------------------------------
+		-- 4b new clouds, after the snapshot AND the DXF so neither   --
+		--    carries them: both are the clean record, clouds are for --
+		--    the sheet and the plot (user decision 2026-09-14). drawn --
+		--    when this code is at or past the CLOUD line and the     --
+		--    comparison found something                              --
+		--------------------------------------------------------------
+		if (!ok) then
+			!step = 'clouds'
+			!errtxt = !this.DrawClouds(!ref, !box, !nxt, !wantcloud, !cmp)
+			if (!errtxt.neq('')) then
+				!ok = false
+			else
+				if (!wantcloud and !cmp.eq('diff')) then
+					!this.SaveCloudList(!dxf, !box, !nxt)
+				endif
+			endif
+			!!ce = !revi
+			handle any
+			endhandle
 		endif
 
 		--------------------------------------------------------------
@@ -894,10 +1523,28 @@ define method .Apply()
 	!!ce = !save
 	handle any
 	endhandle
-	!this.Log('---- Apply end: ' & !done & ' OK, ' & !fails.size() & ' failed')
+	!this.Log('---- Apply end: ' & !done & ' OK, ' & !skipped.size() & ' skipped (no change), ' & !fails.size() & ' failed')
 	!this.Refresh()
 
-	!msg = 'Revision finished: ' & !done & ' OK, ' & !fails.size() & ' failed.'
+	-- no dialog when every sheet went through: the Current column has
+	-- just moved to the new code, which says it already (user decision
+	-- 2026-09-14). a sheet that was skipped or failed is a different
+	-- matter -- left to the log alone it is exactly the one that gets
+	-- missed the morning after a batch run, so those are still shouted
+	if (!skipped.size().eq(0) and !fails.size().eq(0)) then
+		return
+	endif
+	!msg = 'Revision finished: ' & !done & ' OK, ' & !skipped.size() & ' skipped (no change), ' & !fails.size() & ' failed.'
+	if (!skipped.size().gt(0)) then
+		!msg = !msg & ' Skipped: '
+		do !k from 1 to !skipped.size()
+			if (!k.gt(1)) then
+				!msg = !msg & '; '
+			endif
+			!msg = !msg & !skipped[!k]
+		enddo
+		!msg = !msg & '.'
+	endif
 	if (!fails.size().gt(0)) then
 		!msg = !msg & ' Failed: '
 		do !k from 1 to !fails.size()
@@ -906,9 +1553,12 @@ define method .Apply()
 			endif
 			!msg = !msg & !fails[!k]
 		enddo
-		!msg = !msg & '. See ' & !this.projcode & '_REV.log in ' & !this.seqdir
+		!msg = !msg & '.'
+	endif
+	!msg = !msg & ' See ' & !this.projcode & '_REV.log in ' & !this.seqdir
+	if (!fails.size().gt(0)) then
 		!!alert.error(!msg)
 	else
-		!!alert.message(!msg & ' Revisions are NOT saved yet - SAVEWORK when you are happy with them.')
+		!!alert.message(!msg)
 	endif
 endmethod

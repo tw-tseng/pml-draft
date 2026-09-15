@@ -54,3 +54,21 @@ glabtext_*.txt
 # hand-made backups kept beside the real form while editing it
 draft/forms/DrawingPlan1 - Copy.pmlfrm
 draft/forms/DrawingPlan1 - 複製.pmlfrm
+
+# BlankPos.exe and RevCloud.exe, deployed into a bin folder under one of
+# the PMLLIB search path entries and found there at run time by the
+# DrawingPlan1 / DrawingPlan1Revision constructors. ~25MB of PyInstaller
+# onefile each, rebuilt every time the Python changes, so they are copied
+# to the share by hand rather than carried in the history. built from
+# Documents/Python/blankpos and Documents/Python/revcloud.
+bin/
+
+# DXF dropped here to be read while working out how DXFOUT lays a drawing
+# out. diagnostic only, and a megabyte a time.
+*.dxf
+
+# what the E3D machine drops here for a look at a revision run: the
+# project log, the RevCloud answer and its log, the vertex list. copies
+# of files that live in the project folder and AVEVA_DESIGN_USER.
+*_REV.log
+RevCloud_*
