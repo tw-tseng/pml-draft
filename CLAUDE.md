@@ -7,7 +7,7 @@
 - 設計文件與各主題的定案在 Notion 頁面「E3D-管線平面圖程式摘要」（page id `3c8dd89e-3acd-80a7-9a3d-cecae639393f`），每個主題一個 toggle。改 出圖／版次／標註／柱位線 的行為前先讀對應的 toggle。
 
 ## 查 API
-- 先 grep AVEVA 自己的 PMLLIB（這台在 `D:\AVEVA\Everything3D2.10\PMLLIB`），再猜 PML 指令或物件方法。EDGPACKET／pick 機制、REFGLN／GRIDPL、ORIENTATION 方法都在那裡有先例。
+- 先 grep AVEVA 自己的 PMLLIB（先找 `C:\AVEVA\Everything3D2.10\PMLLIB`，沒有再找 `D:\AVEVA\Everything3D2.10\PMLLIB`），再猜 PML 指令或物件方法。EDGPACKET／pick 機制、REFGLN／GRIDPL、ORIENTATION 方法都在那裡有先例。
 
 ## PML 的坑（都實際踩過）
 - 沒有 `do while`，用 `do !i from 1 to n` 加 `break if (...)`。
