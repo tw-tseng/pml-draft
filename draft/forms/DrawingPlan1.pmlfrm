@@ -260,8 +260,13 @@ exit
 -------------
 define method .DrawingPlan1()
   !this.frametext.val = |/TT/DRA/PRJ/BACKS/MET/BLACKA1_TEST|
-  !this.rrsftext.val = |/DRA/PRJ/REPR/GEN/BASIC/PIPE|
-  !this.hrsftext.val = |/TT/DRA/PRJ/HRUL/PIPE/Hatch-Gen|
+  ------------------------------------------------------------------------
+  -- the project's own representation and hatch libraries under /PA-LIBY --
+  -- (user, 2026-09-16). .Apply() imports PA-LIBY.txt when a DB does not  --
+  -- have them yet, so these defaults work in a fresh project too         --
+  ------------------------------------------------------------------------
+  !this.rrsftext.val = |/PA-LIBY/REPR/PIPE/GA|
+  !this.hrsftext.val = |/PA-LIBY/HRUL/GEN/Hatch-Gen|
 	----------------------------------------------------------------------
 	-- the scales a job normally draws at, auto first for the fit the    --
 	-- program used to make on its own, Other last for anything not in   --
@@ -378,36 +383,9 @@ define method .DrawingPlan1()
 	--------------------------------------------------------------------
 	-- BlankPos.exe lives in a bin folder beside a PML library, so that --
 	-- anyone who can load this form can also reach it -- the old hard  --
-	-- coded D: path did not exist on every machine (user, 2026-09-09). --
-	-- PMLLIB is a ';' separated search path, e.g.                      --
-	--   L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1;C:\AVEVA\EVERYT~1.10\pmllib\;...  --
-	-- so it is walked in that order and the first bin\BlankPos.exe    --
-	-- that exists wins. entries arrive both with and without a         --
-	-- trailing backslash, hence the normalising below                  --
+	-- coded D: path did not exist on every machine (user, 2026-09-09)  --
 	--------------------------------------------------------------------
-	!this.blankexe = ''
-	!pmllib = !!evar('PMLLIB')
-	handle any
-		!pmllib = ''
-	endhandle
-	!pmldirs = !pmllib.split(';')
-	do !pmldir values !pmldirs
-		!pd = !pmldir.trim()
-		if (!pd.eq('')) then
-			skip
-		endif
-		!npd    = !pd.length()
-		!pdlast = !pd.substring(!npd, 1)
-		if (not(!pdlast.eq('\'))) then
-			!pd = !pd & '\'
-		endif
-		!bpcand = !pd & 'bin\BlankPos.exe'
-		!bpfile = object file(!bpcand)
-		if (!bpfile.exists()) then
-			!this.blankexe = !bpcand
-			break
-		endif
-	enddo
+	!this.blankexe = !this.FindOnPmllib('bin\BlankPos.exe')
 	!this.dest.active = false
 	------------------------------------------
 	-- select the first REGI as destination --
@@ -464,6 +442,41 @@ define method .DrawingPlan1()
 	!this.AllBoxes()
 	
 --	!this.sketch.addPixmap(!!pml.getPathname('grid.png'))
+endmethod
+
+--------------------------------------------------------------------------
+-- full path of a file that sits beside a PML library, '' when none does. --
+-- PMLLIB is a ';' separated search path, e.g.                            --
+--   L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1;C:\AVEVA\EVERYT~1.10\pmllib\;...  --
+-- so it is walked in that order and the first <entry>\<rel> that exists  --
+-- wins. entries arrive both with and without a trailing backslash, hence --
+-- the normalising. !!pml.getPathName() would do the same through         --
+-- pml.index, but that only knows a file after a pml rehash -- this does  --
+-- not, so a freshly copied exe or data file is found straight away       --
+--------------------------------------------------------------------------
+define method .FindOnPmllib(!rel is string) is string
+	!pmllib = !!evar('PMLLIB')
+	handle any
+		!pmllib = ''
+	endhandle
+	!pmldirs = !pmllib.split(';')
+	do !pmldir values !pmldirs
+		!pd = !pmldir.trim()
+		if (!pd.eq('')) then
+			skip
+		endif
+		!npd    = !pd.length()
+		!pdlast = !pd.substring(!npd, 1)
+		if (not(!pdlast.eq('\'))) then
+			!pd = !pd & '\'
+		endif
+		!cand = !pd & !rel
+		!cfile = object file(!cand)
+		if (!cfile.exists()) then
+			return !cand
+		endif
+	enddo
+	return ''
 endmethod
 
 -----------------------------------
@@ -582,12 +595,66 @@ define method .removeall()
 	!this.apply.active = false
 endmethod
 
+--------------------------------------------------------------------------
+-- the View tab's default Representation Style and Hatching Style live    --
+-- under /PA-LIBY (user, 2026-09-16), a DEPT the project's own DRAFT DB   --
+-- does not have until somebody puts it there. PA-LIBY.txt beside this    --
+-- library is that DEPT written out by E3D's OUTPUT command, so a DB      --
+-- without it gets the file run in as a macro once, and the rrsf/hrsf    --
+-- lines further down .Apply() find what they name                        --
+--                                                                        --
+-- only done when a field actually points into /PA-LIBY: a user who has   --
+-- typed a project library of their own gets no DEPT they never asked for --
+--                                                                        --
+-- false means .Apply() should stop -- the run would otherwise die at the --
+-- rrsf line with a bare 'element does not exist' after the DRWG and      --
+-- drawing list were already made                                         --
+--------------------------------------------------------------------------
+define method .EnsurePaLiby() is boolean
+	!wantsr = !this.rrsftext.val.matchwild('/PA-LIBY/*')
+	!wantsh = !this.hrsftext.val.matchwild('/PA-LIBY/*')
+	if (not(!wantsr or !wantsh)) then
+		return true
+	endif
+	!have = true
+	/PA-LIBY
+	handle any
+		!have = false
+	endhandle
+	if (!have) then
+		return true
+	endif
+	!file = !this.FindOnPmllib('PA-LIBY.txt')
+	if (!file.eq('')) then
+		!!alert.error('PA-LIBY.txt not found beside any PMLLIB entry - /PA-LIBY representation library cannot be imported')
+		return false
+	endif
+	----------------------------------------------------------------------
+	-- the macro opens with NEW DEPT /PA-LIBY. standing on the DEPT that  --
+	-- owns the destination REGI files the new DEPT beside it, in the     --
+	-- same (writable) DB the drawings are going into                     --
+	----------------------------------------------------------------------
+	$!this.dest.val
+	owner
+	handle any
+	endhandle
+	$M "$!file"
+	handle any
+		!!alert.error('import of PA-LIBY.txt failed - see the command window, /PA-LIBY may be half built')
+		return false
+	endhandle
+	return true
+endmethod
+
 --------------------------------------
 -- main program of drawing creation --
 --------------------------------------
 define method .Apply()
 	if (not(!this.CheckCompanyNetwork())) then
 		!!alert.error('Cannot verify office network connection - Create Drawings is only available inside the company network')
+		return
+	endif
+	if (not(!this.EnsurePaLiby())) then
 		return
 	endif
 	$!this.dest.val
