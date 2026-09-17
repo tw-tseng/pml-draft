@@ -2520,6 +2520,58 @@ define method .PinnedLabelRecords(!name is string, !rcode is string) is array
 endmethod
 
 ------------------------------------------------------------------------
+-- 'cloud <n>' records for BlankPos, one per OUTL of the sheet's       --
+-- revision cloud NOTEs (name .../REVCLOUD or FUNC REVCLOUD, the same  --
+-- test DrawingPlan1Revision uses to find them): n is how many VRTX   --
+-- the OUTL has. the update path's DXF carries the clouds of the last --
+-- revision -- DXFOUT writes them as loose polylines on layer 0 with  --
+-- exactly that many vertices, and the revision triangle as a closed  --
+-- 3 vertex one with the code text inside -- and to BlankPos they     --
+-- were hard obstacles: a label a cloud outline crossed was 'hit',    --
+-- moved, clouded at its new place, hit again by that cloud at the    --
+-- next update... (user, 2026-09-17, 1 -> 2). the vertex count is the --
+-- one thing PML can read of a cloud (a VRTX has no position          --
+-- attribute), and it is enough for BlankPos to pick the outlines out --
+------------------------------------------------------------------------
+define method .CloudRecords(!name is string) is array
+	!out = object array()
+	!notes = object array()
+	var !notes coll all note for $!name/SS/S1
+	handle any
+		return !out
+	endhandle
+	do !n values !notes
+		!nname = ''
+		var !nname name of $!n
+		handle any
+			!nname = ''
+		endhandle
+		!nfunc = ''
+		var !nfunc func of $!n
+		handle any
+			!nfunc = ''
+		endhandle
+		skip if (not(!nname.trim().upcase().matchwild('*/REVCLOUD')) and !nfunc.trim().upcase().neq('REVCLOUD'))
+		!outls = object array()
+		var !outls coll all outl for $!n
+		handle any
+			skip
+		endhandle
+		do !o values !outls
+			!vs = object array()
+			var !vs coll all vrtx for $!o
+			handle any
+				skip
+			endhandle
+			!nv = !vs.size()
+			skip if (!nv.lt(3))
+			!out.append('cloud ' & !nv)
+		enddo
+	enddo
+	return !out
+endmethod
+
+------------------------------------------------------------------------
 -- the update path's label pass, see the call in .Apply(): every      --
 -- component label on the sheet goes to BlankPos as 'pinned' and only  --
 -- the ones it answers 'moved' for are placed again -- switched to     --
@@ -2550,6 +2602,14 @@ define method .PinnedLabelPass(!name is string, !rcode is string)
 		return
 	endif
 	do !r values !recs
+		!pf.writerecord(!r)
+	enddo
+	!crecs = object array()
+	!crecs = !this.CloudRecords(!name)
+	handle any
+		!crecs = object array()
+	endhandle
+	do !r values !crecs
 		!pf.writerecord(!r)
 	enddo
 	!pf.close()
