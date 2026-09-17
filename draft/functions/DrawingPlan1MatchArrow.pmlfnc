@@ -1,0 +1,271 @@
+-------------------------------------------------------------------
+-- arrow from a match line text that had to move out, back to    --
+-- its match line                                                 --
+-- Date     : 2026-09-17                                          --
+--                                                                --
+-- DrawingPlan1MatchRow moves a text out, row by row, when the   --
+-- row beside the border is taken. a text standing two rows or   --
+-- more away -- often on the far side of the dimension chain --   --
+-- no longer reads as belonging to any particular border, so the --
+-- user asked for an arrow from the text to the match line       --
+-- (picture, 2026-09-17): from the text's inner edge, straight   --
+-- across to the border, head on the border                      --
+--                                                                --
+-- CE is the text, just placed by DrawingPlan1MatchRow; !posx/   --
+-- !posy is where row 1 would have put it, so the text's origin  --
+-- against that is how far out it went. the arrow is a straight  --
+-- (shaft) and a closed, filled 3 vertex outline (head), both     --
+-- children of the text's NOTE and both NAMED:                    --
+--     /<drawing>/SS/S1/V1/MLARR_<side>_<k>_S  and  ..._H          --
+-- k counting the texts of that side in the order they are made. --
+-- named, so an update can find last run's arrow without the     --
+-- geometry claim the straights and texts go through: the arrow  --
+-- is derived entirely from where the text stands now, so it is  --
+-- simply deleted and drawn again every run -- identical geometry --
+-- is no change to the picture diff (RevCloud), and a text back  --
+-- on row 1 gets its arrow deleted and none drawn. strays with a --
+-- k beyond this run's count are removed at the end of          --
+-- DrawingPlan1MatchLine1                                          --
+--                                                                --
+-- the shaft's box goes onto DrawingPlan1MatchObst, so the texts --
+-- placed after this one keep off the arrow the way they keep    --
+-- off the dimension chain                                        --
+--                                                                --
+-- CE is the text again on return, the caller reads its extent   --
+-------------------------------------------------------------------
+define function !!DrawingPlan1MatchArrow(!dir is string, !equistr is string, !posx is real, !posy is real)
+	var !tref ref
+	!k = 0
+	!k = !!DrawingPlan1MatchArrowN + 1
+	handle any
+		!k = 1
+	endhandle
+	!!DrawingPlan1MatchArrowN = !k
+	!base  = '/' & !equistr & '/SS/S1/V1/MLARR_' & !dir & '_' & !k.string()
+	!sname = !base & '_S'
+	!hname = !base & '_H'
+	-------------------------------------------------------------
+	-- last run's arrow for this text goes first, whatever this --
+	-- run decides -- see the header                             --
+	-------------------------------------------------------------
+	!gone = true
+	$!sname
+	handle any
+		!gone = false
+	endhandle
+	if (!gone) then
+		delete stra
+		handle any
+		endhandle
+	endif
+	!gone = true
+	$!hname
+	handle any
+		!gone = false
+	endhandle
+	if (!gone) then
+		delete outl
+		handle any
+		endhandle
+	endif
+	$!tref
+	handle any
+		return
+	endhandle
+	-------------------------------------------------------------
+	-- how far out the text went, along the side's out axis     --
+	-------------------------------------------------------------
+	!o = ''
+	var !o origin
+	handle any
+		!o = ''
+	endhandle
+	!oxy = !!DrawingPlan1MatchXY(!o)
+	!op = !oxy.split('~')
+	if (!op.size().lt(2)) then
+		return
+	endif
+	if (!op[1].eq('') or !op[2].eq('')) then
+		return
+	endif
+	!ox = !op[1].real()
+	!oy = !op[2].real()
+	!out = 0
+	if (!dir.eq('left')) then
+		!out = !posx - !ox
+	elseif (!dir.eq('right')) then
+		!out = !ox - !posx
+	elseif (!dir.eq('down')) then
+		!out = !posy - !oy
+	else
+		!out = !oy - !posy
+	endif
+	if (!out.lt(0.5)) then
+		return
+	endif
+	-------------------------------------------------------------
+	-- the text as a box on the sheet, and the border it belongs --
+	-- to (the box corners, sheet mm, as the match line uses)    --
+	-------------------------------------------------------------
+	!ext = ''
+	var !ext extent btext
+	handle any
+		return
+	endhandle
+	!ep = object array()
+	!ep = !ext.split()
+	handle any
+		return
+	endhandle
+	if (!ep.size().lt(16)) then
+		return
+	endif
+	!x1 = !ep[2].replace('mm', '').real()
+	!x2 = !x1
+	!y1 = !ep[4].replace('mm', '').real()
+	!y2 = !y1
+	do !ci from 2 to 4
+		!cix = !ci * 4 - 2
+		!ciy = !ci * 4
+		!vx = !ep[!cix].replace('mm', '').real()
+		!vy = !ep[!ciy].replace('mm', '').real()
+		!x1 = min(!x1, !vx)
+		!x2 = max(!x2, !vx)
+		!y1 = min(!y1, !vy)
+		!y2 = max(!y2, !vy)
+	enddo
+	!hei = 3.5
+	!hei = !!DrawingPlan1.matchhei.val.real()
+	handle any
+		!hei = 3.5
+	endhandle
+	if (!hei.leq(0)) then
+		!hei = 3.5
+	endif
+	!gap = 1.0            $( between the text and the shaft's start        $)
+	!hl  = !hei           $( head length, one text height                  $)
+	!hw  = !hei * 0.35    $( head half width                               $)
+	-- shaft from (sx,sy) towards the tip (tx,ty); (dx,dy) unit, (px,py) perpendicular
+	if (!dir.eq('left')) then
+		!sx = !x2 + !gap
+		!sy = (!y1 + !y2) * 0.5
+		!tx = !!DrawingPlan1.boxULsh.part(2).real()
+		!ty = !sy
+		!dx = 1
+		!dy = 0
+	elseif (!dir.eq('right')) then
+		!sx = !x1 - !gap
+		!sy = (!y1 + !y2) * 0.5
+		!tx = !!DrawingPlan1.boxURsh.part(2).real()
+		!ty = !sy
+		!dx = -1
+		!dy = 0
+	elseif (!dir.eq('down')) then
+		!sx = (!x1 + !x2) * 0.5
+		!sy = !y2 + !gap
+		!tx = !sx
+		!ty = !!DrawingPlan1.boxLLsh.part(4).real()
+		!dx = 0
+		!dy = 1
+	else
+		!sx = (!x1 + !x2) * 0.5
+		!sy = !y1 - !gap
+		!tx = !sx
+		!ty = !!DrawingPlan1.boxULsh.part(4).real()
+		!dx = 0
+		!dy = -1
+	endif
+	!px = !dy * -1
+	!py = !dx
+	-- the shaft stops at the base of the head
+	!bx = !tx - !dx * !hl
+	!by = !ty - !dy * !hl
+	!len = (!bx - !sx) * !dx + (!by - !sy) * !dy
+	if (!len.lt(1.0)) then
+		return
+	endif
+	!b1x = !bx + !px * !hw
+	!b1y = !by + !py * !hw
+	!b2x = !bx - !px * !hw
+	!b2y = !by - !py * !hw
+	!sxs  = !sx.string('D3')
+	!sys  = !sy.string('D3')
+	!bxs  = !bx.string('D3')
+	!bys  = !by.string('D3')
+	!txs  = !tx.string('D3')
+	!tys  = !ty.string('D3')
+	!b1xs = !b1x.string('D3')
+	!b1ys = !b1y.string('D3')
+	!b2xs = !b2x.string('D3')
+	!b2ys = !b2y.string('D3')
+	-------------------------------------------------------------
+	-- drawn under the text's NOTE, the text's colour            --
+	-------------------------------------------------------------
+	owner
+	handle any
+		$!tref
+		return
+	endhandle
+	var !noteref ref
+	new stra $!sname
+	handle any
+		$!tref
+		return
+	endhandle
+	FPT X $!sxs Y $!sys
+	handle any
+	endhandle
+	TPT X $!bxs Y $!bys
+	handle any
+	endhandle
+	NLSTYLE Solid
+	handle any
+	endhandle
+	NLCOLOUR Yellow
+	handle any
+	endhandle
+	$!noteref
+	new outl $!hname
+	handle any
+		$!tref
+		return
+	endhandle
+	NLCOLOUR Yellow
+	handle any
+	endhandle
+	FSTYLE Solid
+	handle any
+	endhandle
+	FCOLOUR Yellow
+	handle any
+	endhandle
+	LCLOSED true
+	handle any
+	endhandle
+	new vrtx
+	XYPO $!txs $!tys
+	handle any
+	endhandle
+	new vrtx
+	XYPO $!b1xs $!b1ys
+	handle any
+	endhandle
+	new vrtx
+	XYPO $!b2xs $!b2ys
+	handle any
+	endhandle
+	-------------------------------------------------------------
+	-- and the shaft as something the later texts keep off, 1mm --
+	-- round it like the texts already placed                    --
+	-------------------------------------------------------------
+	!ax1 = min(!sx, !tx) - 1
+	!ax2 = max(!sx, !tx) + 1
+	!ay1 = min(!sy, !ty) - 1
+	!ay2 = max(!sy, !ty) + 1
+	!!DrawingPlan1MatchObst.append(!ax1.string() & '~' & !ay1.string() & '~' & !ax2.string() & '~' & !ay2.string())
+	handle any
+	endhandle
+	$!tref
+	handle any
+	endhandle
+endfunction

@@ -18,6 +18,8 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 	--------------------------------------------------------------------
 	!sortedtypes = !!DrawingPlan1MatchSorted(!dir, !projid, !equistr)
 	note 1
+	-- the arrows of this side are numbered in text order, see DrawingPlan1MatchArrow --
+	!!DrawingPlan1MatchArrowN = 0
 	--------------------------------------------------------------------
 	-- the short ticks marking where a neighbouring box meets this     --
 	-- border. where they go was decided by DrawingPlan1MatchTicks     --
@@ -305,6 +307,10 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					!!DrawingPlan1MatchRow(!dir, !posx, !posy)
 					handle any
 					endhandle
+					-- and an arrow back to the border when it did move out (user, 2026-09-17) --
+					!!DrawingPlan1MatchArrow(!dir, !equistr, !posx, !posy)
+					handle any
+					endhandle
 					var !mgext extent btext
 					handle any
 						!mgext = ''
@@ -374,6 +380,10 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 					-- the texts after this one see where it ended up        --
 					---------------------------------------------------------
 					!!DrawingPlan1MatchRow(!dir, !posx, !posy)
+					handle any
+					endhandle
+					-- and an arrow back to the border when it did move out (user, 2026-09-17) --
+					!!DrawingPlan1MatchArrow(!dir, !equistr, !posx, !posy)
 					handle any
 					endhandle
 					var !mgext extent btext
@@ -540,6 +550,10 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 			!!DrawingPlan1MatchRow(!dir, !posx, !posy)
 			handle any
 			endhandle
+			-- and an arrow back to the border when it did move out (user, 2026-09-17) --
+			!!DrawingPlan1MatchArrow(!dir, !equistr, !posx, !posy)
+			handle any
+			endhandle
 			var !mgext extent btext
 			handle any
 				!mgext = ''
@@ -551,4 +565,40 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 			endif
 		endif
 	endif
+	--------------------------------------------------------------------
+	-- arrows of this side numbered past this run's texts are last     --
+	-- run's, for texts that are no longer there: gone. twenty is far  --
+	-- more texts than a side ever carries                             --
+	--------------------------------------------------------------------
+	!arrn = 0
+	!arrn = !!DrawingPlan1MatchArrowN
+	handle any
+		!arrn = 0
+	endhandle
+	!arrk1 = !arrn + 1
+	do !arrk from !arrk1 to 20
+		!arrbase = '/' & !equistr & '/SS/S1/V1/MLARR_' & !dir & '_' & !arrk.string()
+		!arrs = !arrbase & '_S'
+		!arrh = !arrbase & '_H'
+		!arrok = true
+		$!arrs
+		handle any
+			!arrok = false
+		endhandle
+		if (!arrok) then
+			delete stra
+			handle any
+			endhandle
+		endif
+		!arrok = true
+		$!arrh
+		handle any
+			!arrok = false
+		endhandle
+		if (!arrok) then
+			delete outl
+			handle any
+			endhandle
+		endif
+	enddo
 endfunction

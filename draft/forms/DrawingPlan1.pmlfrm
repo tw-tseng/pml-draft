@@ -2567,6 +2567,30 @@ define method .CloudRecords(!name is string) is array
 			skip if (!nv.lt(3))
 			!out.append('cloud ' & !nv)
 		enddo
+		----------------------------------------------------------------
+		-- and where the revision code texts stand (TEXP origin, the   --
+		-- one thing of a cloud NOTE that CAN be read): a 3 vertex     --
+		-- outline is only a revision triangle when one of these sits  --
+		-- inside it -- the match line arrow heads (DrawingPlan1Match- --
+		-- Arrow) are 3 vertex outlines too and must stay obstacles    --
+		----------------------------------------------------------------
+		!ctexts = object array()
+		var !ctexts coll all texp for $!n
+		handle any
+			skip
+		endhandle
+		do !t values !ctexts
+			!torg = ''
+			var !torg origin of $!t
+			handle any
+				skip
+			endhandle
+			!txy = !!DrawingPlan1MatchXY(!torg)
+			!tp = !txy.split('~')
+			skip if (!tp.size().lt(2))
+			skip if (!tp[1].eq('') or !tp[2].eq(''))
+			!out.append('cloudtext ' & !tp[1] & ' ' & !tp[2])
+		enddo
 	enddo
 	return !out
 endmethod
