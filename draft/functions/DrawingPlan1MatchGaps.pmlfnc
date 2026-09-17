@@ -635,6 +635,20 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 		if (not(!gslabs.findFirst(!lb).unset())) then
 			skip
 		endif
+		------------------------------------------------------------
+		-- nor the match line arrows (DrawingPlan1MatchArrow): a    --
+		-- GLAB with no text, whose leader IS the thing on the      --
+		-- sheet. it runs parallel to the projection lines and     --
+		-- carries its own break where it crosses the chain         --
+		------------------------------------------------------------
+		!lbnm = ''
+		var !lbnm name
+		handle any
+			!lbnm = ''
+		endhandle
+		if (!lbnm.upcase().matchwild('*/MLARR_*')) then
+			skip
+		endif
 		!lbext = ''
 		var !lbext extent btex
 		handle any

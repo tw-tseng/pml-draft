@@ -35,6 +35,93 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	-- (user, 2026-09-11): the dimension chains and the grid bubbles,  --
 	-- listed once here, read by DrawingPlan1MatchRow for every text   --
 	--------------------------------------------------------------------
+	--------------------------------------------------------------------
+	-- the arrows from the texts that had to move out (see             --
+	-- DrawingPlan1MatchArrow) start from nothing every run: an arrow  --
+	-- is derived entirely from where its text stands now, so last     --
+	-- run's are deleted here and the sides below draw this run's. gone --
+	-- BEFORE the obstacles are collected -- an old arrow standing in   --
+	-- row 1 would otherwise keep its own text out of the row it may   --
+	-- now fit back into. the STRA/OUTL pairs are the first, short     --
+	-- lived form of the arrow (MLARR_<side>_<k>_S and _H), swept the  --
+	-- same way for the drawings made with it                          --
+	--------------------------------------------------------------------
+	$!name/SS/S1/V1
+	!arrold = object array()
+	var !arrold coll all (glab stra outl) for ce
+	handle any
+		!arrold = object array()
+	endhandle
+	do !ao values !arrold
+		!aoname = ''
+		var !aoname name of $!ao
+		handle any
+			!aoname = ''
+		endhandle
+		skip if (not(!aoname.upcase().matchwild('*/MLARR_*')))
+		$!ao
+		handle any
+			skip
+		endhandle
+		!aotype = ''
+		var !aotype type
+		handle any
+			skip
+		endhandle
+		delete $!aotype
+		handle any
+		endhandle
+	enddo
+	--------------------------------------------------------------------
+	-- and the layer they go on. a GLAB cannot live under the NOTE the --
+	-- texts are in, and the layers already there are swept by their   --
+	-- own annotation (ateLINE reuses and removes GLABs it did not     --
+	-- make). the attributes the arrows inherit are written here every --
+	-- run, as DrawingPlan1GridAnnotation does for ateGRID: the head   --
+	-- size is Tsiztx, the one number to tune                          --
+	--------------------------------------------------------------------
+	!mlok = true
+	$!name/SS/S1/V1/ateMATCH
+	handle any
+		$!name/SS/S1/V1
+		NEW LAYE $!name/SS/S1/V1/ateMATCH
+		handle any
+			!mlok = false
+		endhandle
+	endhandle
+	if (!mlok) then
+		Lvisibility true
+		handle any
+		endhandle
+		Lleader true
+		handle any
+		endhandle
+		Lframe false
+		handle any
+		endhandle
+		Lshape Straight
+		handle any
+		endhandle
+		Tsiztx '5mm'
+		handle any
+		endhandle
+		Llcltx '0mm'
+		handle any
+		endhandle
+		Txcolour Cyan
+		handle any
+		endhandle
+		LLStyle Solid
+		handle any
+		endhandle
+		LLColour Cyan
+		handle any
+		endhandle
+		Blnk false
+		handle any
+		endhandle
+	endif
+	$!name/SS/S1/V1
 	!!DrawingPlan1MatchObst = object array()
 	!!DrawingPlan1MatchObstacles(!name)
 	handle any

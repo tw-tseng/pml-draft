@@ -113,6 +113,20 @@ define function !!DrawingPlan1MatchObstacles(!name is string)
 		handle any
 			skip
 		endhandle
+		------------------------------------------------------------
+		-- not the match line arrows (DrawingPlan1MatchArrow):      --
+		-- DrawingPlan1MatchLine has already deleted last run's     --
+		-- before this runs, and this run's are appended by the    --
+		-- arrow itself as it is drawn                              --
+		------------------------------------------------------------
+		!lbnm = ''
+		var !lbnm name
+		handle any
+			!lbnm = ''
+		endhandle
+		if (!lbnm.upcase().matchwild('*/MLARR_*')) then
+			skip
+		endif
 		!ext = ''
 		var !ext extent btex
 		handle any

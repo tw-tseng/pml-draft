@@ -11,67 +11,76 @@
 -- (picture, 2026-09-17): from the text's inner edge, straight   --
 -- across to the border, head on the border                      --
 --                                                                --
--- CE is the text, just placed by DrawingPlan1MatchRow; !posx/   --
--- !posy is where row 1 would have put it, so the text's origin  --
--- against that is how far out it went. the arrow is a straight  --
--- (shaft) and a closed, filled 3 vertex outline (head), both     --
--- children of the text's NOTE and both NAMED:                    --
---     /<drawing>/SS/S1/V1/MLARR_<side>_<k>_S  and  ..._H          --
+-- the arrow is a GLAB with no text: its leader is the shaft and --
+-- terminator symbol 8101 is the head (user, 2026-09-17, in place --
+-- of a STRA plus a filled OUTL). the reason is GAP: a label's   --
+-- leader can be broken, by this code and by hand in AVEVA's Gap --
+-- Manager, which picks only SLAB GLAB and dimensions -- never a  --
+-- straight. a GLAB has to name a design element, and this one   --
+-- always names                                                   --
+--     =15207/9678   BOX 1 of the equipment template /STD/AIRC002  --
+-- which every project carries (user). the element is never      --
+-- drawn or read. where the leader ENDS is APOF, the attach point --
+-- offset, which counts from the element's design point in the   --
+-- same frame XYPO does -- so the tip is put on the border the    --
+-- way AVEVA's assembly/functions/assypospart.pmlfnc does it:     --
+-- with OSET TRUE the label is placed AT the tip, XYPO then reads --
+-- as the offset from the design point, and that offset is       --
+-- written to APOF. then OSET FALSE and the label itself goes AT  --
+-- the tail, CPOF 0 0 so the leader starts on the origin exactly --
+--                                                                --
+-- one GLAB per pushed out text, on the ateMATCH layer, NAMED    --
+--     /<drawing>/SS/S1/V1/MLARR_<side>_<k>                       --
 -- k counting the texts of that side in the order they are made. --
--- named, so an update can find last run's arrow without the     --
--- geometry claim the straights and texts go through: the arrow  --
--- is derived entirely from where the text stands now, so it is  --
--- simply deleted and drawn again every run -- identical geometry --
--- is no change to the picture diff (RevCloud), and a text back  --
--- on row 1 gets its arrow deleted and none drawn. strays with a --
--- k beyond this run's count are removed at the end of          --
--- DrawingPlan1MatchLine1                                          --
+-- DrawingPlan1MatchLine deletes every MLARR_* of the drawing    --
+-- before the sides run (and makes the layer), so this only ever --
+-- creates: an arrow is derived entirely from where its text     --
+-- stands now, a text back on row 1 simply gets none, and        --
+-- identical geometry is no change to the picture diff           --
+--                                                                --
+-- where the shaft crosses the side's dimension line it runs     --
+-- through the figure standing there -- usually: the text sits   --
+-- between its two ticks, and so does the figure of the chain    --
+-- segment between those same two points. the leader is broken   --
+-- there with GAP, over the line and the figure beside it; the   --
+-- user's own hand made arrow carried exactly that break (Gaps X --
+-- 310 Y 111 length 7, on a line at y 109.2). the figure is not  --
+-- read back. DXFOUT of 2026-09-17 shows every figure centred    --
+-- 2.7mm off its line at DTCH 3 -- on the +y side of a          --
+-- horizontal line, the -x side of a vertical one, whichever way --
+-- the border lies -- and one that does not fit its segment      --
+-- pushed another half height out. so the break runs from 1mm   --
+-- before the line to a height and a half plus clearance past   --
+-- it. whether a figure is under the shaft at all comes from the --
+-- chain's points either side of the shaft (DrawingPlan1DimLines --
+-- lists them): the figure is centred between them, as wide as  --
+-- its digits, and the digits are the segment's length in the   --
+-- model                                                          --
 --                                                                --
 -- the shaft's box goes onto DrawingPlan1MatchObst, so the texts --
 -- placed after this one keep off the arrow the way they keep    --
 -- off the dimension chain                                        --
 --                                                                --
--- CE is the text again on return, the caller reads its extent   --
+-- CE is the text again on return, the caller reads its extent.  --
+-- one MARR line per text goes to DrawingPlan1MatchRowLog, which  --
+-- DrawingPlan1MatchGaps writes out to check_gap.txt             --
 -------------------------------------------------------------------
 define function !!DrawingPlan1MatchArrow(!dir is string, !equistr is string, !posx is real, !posy is real)
 	var !tref ref
+	!tmplref = '=15207/9678'
 	!k = 0
 	!k = !!DrawingPlan1MatchArrowN + 1
 	handle any
 		!k = 1
 	endhandle
 	!!DrawingPlan1MatchArrowN = !k
-	!base  = '/' & !equistr & '/SS/S1/V1/MLARR_' & !dir & '_' & !k.string()
-	!sname = !base & '_S'
-	!hname = !base & '_H'
-	-------------------------------------------------------------
-	-- last run's arrow for this text goes first, whatever this --
-	-- run decides -- see the header                             --
-	-------------------------------------------------------------
-	!gone = true
-	$!sname
-	handle any
-		!gone = false
-	endhandle
-	if (!gone) then
-		delete stra
-		handle any
-		endhandle
+	!name  = '/' & !equistr
+	!aname = !name & '/SS/S1/V1/MLARR_' & !dir & '_' & !k.string()
+	!lname = !name & '/SS/S1/V1/ateMATCH'
+	!isvert = false
+	if (!dir.eq('left') or !dir.eq('right')) then
+		!isvert = true
 	endif
-	!gone = true
-	$!hname
-	handle any
-		!gone = false
-	endhandle
-	if (!gone) then
-		delete outl
-		handle any
-		endhandle
-	endif
-	$!tref
-	handle any
-		return
-	endhandle
 	-------------------------------------------------------------
 	-- how far out the text went, along the side's out axis     --
 	-------------------------------------------------------------
@@ -134,124 +143,342 @@ define function !!DrawingPlan1MatchArrow(!dir is string, !equistr is string, !po
 		!y1 = min(!y1, !vy)
 		!y2 = max(!y2, !vy)
 	enddo
-	!hei = 3.5
-	!hei = !!DrawingPlan1.matchhei.val.real()
-	handle any
-		!hei = 3.5
-	endhandle
-	if (!hei.leq(0)) then
-		!hei = 3.5
-	endif
-	!gap = 1.0            $( between the text and the shaft's start        $)
-	!hl  = !hei           $( head length, one text height                  $)
-	!hw  = !hei * 0.35    $( head half width                               $)
-	-- shaft from (sx,sy) towards the tip (tx,ty); (dx,dy) unit, (px,py) perpendicular
+	!gap    = 1.0     $( between the text and the tail of the shaft          $)
+	!minlen = 5.0     $( shorter than the head itself is not worth drawing   $)
+	-- the shaft: tail (sx,sy) at the text, tip (tx,ty) on the border
 	if (!dir.eq('left')) then
 		!sx = !x2 + !gap
 		!sy = (!y1 + !y2) * 0.5
 		!tx = !!DrawingPlan1.boxULsh.part(2).real()
 		!ty = !sy
-		!dx = 1
-		!dy = 0
+		!len = !tx - !sx
 	elseif (!dir.eq('right')) then
 		!sx = !x1 - !gap
 		!sy = (!y1 + !y2) * 0.5
 		!tx = !!DrawingPlan1.boxURsh.part(2).real()
 		!ty = !sy
-		!dx = -1
-		!dy = 0
+		!len = !sx - !tx
 	elseif (!dir.eq('down')) then
 		!sx = (!x1 + !x2) * 0.5
 		!sy = !y2 + !gap
 		!tx = !sx
 		!ty = !!DrawingPlan1.boxLLsh.part(4).real()
-		!dx = 0
-		!dy = 1
+		!len = !ty - !sy
 	else
 		!sx = (!x1 + !x2) * 0.5
 		!sy = !y1 - !gap
 		!tx = !sx
 		!ty = !!DrawingPlan1.boxULsh.part(4).real()
-		!dx = 0
-		!dy = -1
+		!len = !sy - !ty
 	endif
-	!px = !dy * -1
-	!py = !dx
-	-- the shaft stops at the base of the head
-	!bx = !tx - !dx * !hl
-	!by = !ty - !dy * !hl
-	!len = (!bx - !sx) * !dx + (!by - !sy) * !dy
-	if (!len.lt(1.0)) then
+	if (!len.lt(!minlen)) then
 		return
 	endif
-	!b1x = !bx + !px * !hw
-	!b1y = !by + !py * !hw
-	!b2x = !bx - !px * !hw
-	!b2y = !by - !py * !hw
-	!sxs  = !sx.string('D3')
-	!sys  = !sy.string('D3')
-	!bxs  = !bx.string('D3')
-	!bys  = !by.string('D3')
-	!txs  = !tx.string('D3')
-	!tys  = !ty.string('D3')
-	!b1xs = !b1x.string('D3')
-	!b1ys = !b1y.string('D3')
-	!b2xs = !b2x.string('D3')
-	!b2ys = !b2y.string('D3')
+	-- the shaft's coordinate ALONG the border, and its two ends ACROSS it
+	if (!isvert) then
+		!along = !sy
+		!sd = !sx
+		!td = !tx
+	else
+		!along = !sx
+		!sd = !sy
+		!td = !ty
+	endif
+	!dlo = min(!sd, !td)
+	!dhi = max(!sd, !td)
 	-------------------------------------------------------------
-	-- drawn under the text's NOTE, the text's colour            --
+	-- the break where the shaft crosses the side's dimension   --
+	-- line (see the header). worked out before the label is    --
+	-- made: DrawingPlan1DimLines walks the chain and moves CE  --
 	-------------------------------------------------------------
-	owner
+	!dtch = 3
+	!dtch = !!DrawingPlan1.dimheitx.val
 	handle any
+		!dtch = 3
+	endhandle
+	if (!dtch.leq(0)) then
+		!dtch = 3
+	endif
+	!vsca = 0
+	!vsca = !!DrawingPlan1.vsca
+	handle any
+		!vsca = 0
+	endhandle
+	!dlsegs = object array()
+	!dlsegs = !!DrawingPlan1DimLines(!name)
+	handle any
+		!dlsegs = object array()
+	endhandle
+	!hasline = false
+	!ldepth  = 0
+	!lofound = false
+	!hifound = false
+	!lo = 0
+	!hi = 0
+	do !ds values !dlsegs
+		!dsp = object array()
+		!dsp = !ds.split()
+		handle any
+			skip
+		endhandle
+		if (!dsp.size().lt(6)) then
+			skip
+		endif
+		if (not(!dsp[2].eq(!dir))) then
+			skip
+		endif
+		if (!isvert) then
+			!pa = !dsp[4].real()
+			!pd = !dsp[5].real()
+		else
+			!pa = !dsp[3].real()
+			!pd = !dsp[6].real()
+		endif
+		!ldepth  = !pd
+		!hasline = true
+		if (!pa.lt(!along - 0.05)) then
+			if (not(!lofound) or !pa.gt(!lo)) then
+				!lo = !pa
+				!lofound = true
+			endif
+		elseif (!pa.gt(!along + 0.05)) then
+			if (not(!hifound) or !pa.lt(!hi)) then
+				!hi = !pa
+				!hifound = true
+			endif
+		endif
+	enddo
+	!gapon = false
+	!gtxt  = 'none'
+	if (!hasline and !lofound and !hifound and !vsca.gt(0)) then
+		!fc  = (!lo + !hi) * 0.5
+		!fv  = (!hi - !lo) / !vsca
+		!fvi = !fv.nint()
+		!fvs = !fvi.string()
+		!fw  = !fvs.length() * !dtch * 0.8 + 2
+		!fd  = !along - !fc
+		!fda = abs(!fd)
+		!fwh = !fw * 0.5
+		!gtxt = 'figure ' & !fvs & ' at ' & !fc.string('D1') & ' w=' & !fw.string('D1') & ' off=' & !fd.string('D1')
+		if (!fda.leq(!fwh) and !ldepth.gt(!dlo) and !ldepth.lt(!dhi)) then
+			!gapon = true
+		endif
+	endif
+	if (!gapon) then
+		!gm   = 1.0                          $( clearance either end of the break        $)
+		!tclr = 1.2                          $( line to the bottom of the figure         $)
+		!far  = !tclr + !dtch * 1.5 + !gm    $( past the line, on the figure's side      $)
+		if (!isvert) then
+			!g1 = !ldepth - !far
+			!g2 = !ldepth + !gm
+		else
+			!g1 = !ldepth - !gm
+			!g2 = !ldepth + !far
+		endif
+		-- never into the head at the tip or the tail's clearance
+		!g1 = max(!g1, !dlo + 0.5)
+		!g2 = min(!g2, !dhi - 0.5)
+		!gl = !g2 - !g1
+		if (!gl.lt(1.0)) then
+			!gapon = false
+		endif
+	endif
+	if (!gapon) then
+		!gc   = (!g1 + !g2) * 0.5
+		!glen = !g2 - !g1
+		if (!isvert) then
+			!gx = !gc
+			!gy = !sy
+		else
+			!gx = !sx
+			!gy = !gc
+		endif
+		!gxs   = !gx.string('D3')
+		!gys   = !gy.string('D3')
+		!glens = !glen.string('D3')
+		!gtxt  = !gtxt & ' break=' & !gxs & ',' & !gys & ' len=' & !glens
+	endif
+	-------------------------------------------------------------
+	-- the label, on the ateMATCH layer                          --
+	-------------------------------------------------------------
+	!errs = ''
+	!made = true
+	$!lname
+	handle any
+		!made = false
+		!errs = 'no ateMATCH layer: ' & !!error.text
+	endhandle
+	if (not(!made)) then
+		!!DrawingPlan1MatchRowLog.append('MARR ' & !dir & ' k=' & !k.string() & ' ' & !errs)
+		handle any
+		endhandle
 		$!tref
+		handle any
+		endhandle
 		return
-	endhandle
-	var !noteref ref
-	new stra $!sname
+	endif
+	NEW GLAB $!aname
 	handle any
+		!made = false
+		!errs = 'NEW GLAB refused: ' & !!error.text
+	endhandle
+	if (not(!made)) then
+		!!DrawingPlan1MatchRowLog.append('MARR ' & !dir & ' k=' & !k.string() & ' ' & !errs)
+		handle any
+		endhandle
 		$!tref
+		handle any
+		endhandle
 		return
-	endhandle
-	FPT X $!sxs Y $!sys
+	endif
+	DDNAME $!tmplref
 	handle any
+		!made = false
+		!errs = !!error.text
 	endhandle
-	TPT X $!bxs Y $!bys
-	handle any
-	endhandle
-	NLSTYLE Solid
-	handle any
-	endhandle
-	NLCOLOUR Yellow
-	handle any
-	endhandle
-	$!noteref
-	new outl $!hname
-	handle any
+	if (not(!made)) then
+		delete glab
+		handle any
+		endhandle
+		!!DrawingPlan1MatchRowLog.append('MARR ' & !dir & ' k=' & !k.string() & ' template ' & !tmplref & ' refused: ' & !errs)
+		handle any
+		endhandle
 		$!tref
+		handle any
+		endhandle
 		return
-	endhandle
-	NLCOLOUR Yellow
+	endif
+	LFRAME false
 	handle any
 	endhandle
-	FSTYLE Solid
+	LLEADER true
 	handle any
 	endhandle
-	FCOLOUR Yellow
+	LSHAPE Straight
 	handle any
 	endhandle
-	LCLOSED true
+	LLSTYLE Solid
 	handle any
 	endhandle
-	new vrtx
-	XYPO $!txs $!tys
+	LLCOLOUR Cyan
 	handle any
 	endhandle
-	new vrtx
-	XYPO $!b1xs $!b1ys
+	TXCOLOUR Cyan
 	handle any
 	endhandle
-	new vrtx
-	XYPO $!b2xs $!b2ys
+	LTERID 8101
+	handle any
+		!errs = !errs & ' LTERID:' & !!error.text
+	endhandle
+	BLNK false
+	handle any
+	endhandle
+	-------------------------------------------------------------
+	-- the tip, twice over. a GLAB carries a POS of its own --  --
+	-- the user's hand made arrow shows it, on the border at    --
+	-- the box's elevation, with APOF unset -- and AVEVA's MDS  --
+	-- sets it (supports/draft/functions/MdsAbaAddNote.pmlfnc,  --
+	-- POSITION after APOFFSET). so the tip goes there first,   --
+	-- as the world point under it (ENUPOS OF, the inverse of   --
+	-- SHPOS), guarded: the build that refuses it loses nothing --
+	-------------------------------------------------------------
+	!tipenu = ''
+	!tipsh  = 'x ' & !tx.string('D3') & ' y ' & !ty.string('D3')
+	var !tipenu enupos of $!tipsh
+	handle any
+		!tipenu = ''
+	endhandle
+	if (!tipenu.neq('')) then
+		!tipenus = !tipenu.before(' WRT')
+		if (!tipenus.eq('')) then
+			!tipenus = !tipenu.before(' wrt')
+		endif
+		if (!tipenus.eq('')) then
+			!tipenus = !tipenu
+		endif
+		POSITION $!tipenus
+		handle any
+			!errs = !errs & ' POS:' & !!error.text
+		endhandle
+	endif
+	-------------------------------------------------------------
+	-- and then as APOF: placed AT the tip with OSET TRUE, XYPO --
+	-- reads back as the offset from the design point, and that --
+	-- offset is the attach point offset. where POS above took, --
+	-- this comes out as 0 0; where it did not, this is the tip --
+	-------------------------------------------------------------
+	!tipstr  = 'X ' & !tx.string('D3') & 'mm Y ' & !ty.string('D3') & 'mm'
+	!tailstr = 'X ' & !sx.string('D3') & 'mm Y ' & !sy.string('D3') & 'mm'
+	OSET TRUE
+	handle any
+		!errs = !errs & ' OSET:' & !!error.text
+	endhandle
+	AT $!tipstr
+	handle any
+		!errs = !errs & ' AT tip:' & !!error.text
+	endhandle
+	!apraw = ''
+	var !apraw xypo
+	handle any
+		!apraw = ''
+	endhandle
+	!apxy = !!DrawingPlan1MatchXY(!apraw)
+	!app  = !apxy.split('~')
+	if (!app.size().geq(2)) then
+		if (!app[1].neq('') and !app[2].neq('')) then
+			!apxs = !app[1]
+			!apys = !app[2]
+			APOF $!apxs $!apys
+			handle any
+				!errs = !errs & ' APOF:' & !!error.text
+			endhandle
+		else
+			!errs = !errs & ' xypo unreadable:' & !apraw
+		endif
+	endif
+	-------------------------------------------------------------
+	-- the tail: the label itself, pinned to the sheet           --
+	-------------------------------------------------------------
+	OSET FALSE
+	handle any
+		!errs = !errs & ' OSET FALSE:' & !!error.text
+	endhandle
+	AT $!tailstr
+	handle any
+		!errs = !errs & ' AT tail:' & !!error.text
+	endhandle
+	CPOF 0 0
+	handle any
+		!errs = !errs & ' CPOF:' & !!error.text
+	endhandle
+	-------------------------------------------------------------
+	-- the break across the dimension line and its figure        --
+	-------------------------------------------------------------
+	if (!gapon) then
+		GAP AT X $!gxs Y $!gys LENGTH $!glens
+		handle any
+			!errs = !errs & ' GAP:' & !!error.text
+		endhandle
+	endif
+	-------------------------------------------------------------
+	-- what E3D made of it, for the log                          --
+	-------------------------------------------------------------
+	!apchk = ''
+	var !apchk apof
+	handle any
+		!apchk = 'unreadable'
+	endhandle
+	!xychk = ''
+	var !xychk xypo
+	handle any
+		!xychk = 'unreadable'
+	endhandle
+	!poschk = ''
+	var !poschk pos
+	handle any
+		!poschk = 'unreadable'
+	endhandle
+	!!DrawingPlan1MatchRowLog.append('MARR ' & !dir & ' k=' & !k.string() & ' out=' & !out.string('D1') & ' tail=' & !sx.string('D1') & ',' & !sy.string('D1') & ' tip=' & !tx.string('D1') & ',' & !ty.string('D1') & ' xypo=' & !xychk & ' apof=' & !apchk & ' pos=' & !poschk & ' tipenu=' & !tipenu & ' ' & !gtxt & ' err=' & !errs)
 	handle any
 	endhandle
 	-------------------------------------------------------------
