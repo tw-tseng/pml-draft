@@ -858,6 +858,17 @@ define method .Compare(!i is REAL, !box is STRING, !nxt is STRING) is STRING
 		endhandle
 	endif
 
+	-- the projection lines of the sheet as it stands, for RevCloud to
+	-- leave alone (.WriteDimLines); the old sheet's list sits beside
+	-- its DXF when that revision was made after 2026-09-17
+	!dlnew = !this.workdir & 'RevCloud_new.dimlines.txt'
+	!ndl   = !this.WriteDimLines(!ref, !dlnew, !box, !nxt)
+	!dlold = !this.DimLinesPath(!prev)
+	!fo = object FILE(!dlold)
+	!hasold = !fo.exists()
+	handle any
+		!hasold = false
+	endhandle
 	$!ref
 	LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF '$!tmp'
 	handle any
@@ -923,6 +934,17 @@ define method .Compare(!i is REAL, !box is STRING, !nxt is STRING) is STRING
 	do !r values !this.nocloud
 		!opts = !opts & ' --exclude ' & !r
 	enddo
+	if (!ndl.geq(0)) then
+		!opts = !opts & ' --dimlines-new "' & !dlnew & '"'
+	endif
+	if (!hasold) then
+		!opts = !opts & ' --dimlines-old "' & !dlold & '"'
+	endif
+	!oldtxt = 'none'
+	if (!hasold) then
+		!oldtxt = !dlold
+	endif
+	!this.Log(!box & ' -> ' & !nxt & '  compare: projection lines left out of the diff: ' & !ndl & ' listed for this sheet, old list ' & !oldtxt)
 	!cmd = '""' & !this.cloudexe & '" --cloud-layer REVCLOUD' & !opts & ' "' & !prev & '" "' & !tmp & '" "' & !out & '""'
 	syscom |$!cmd|
 	handle any
@@ -1037,6 +1059,61 @@ define method .CloudListPath(!dxf is STRING) is STRING
 		return !dxf.substring(1, !dxf.length() - 4) & '.clouds.txt'
 	endif
 	return !dxf & '.clouds.txt'
+endmethod
+
+-- <PICF>_<code>.dimlines.txt beside <PICF>_<code>.dxf
+define method .DimLinesPath(!dxf is STRING) is STRING
+	if (!dxf.upcase().matchwild('*.DXF')) then
+		return !dxf.substring(1, !dxf.length() - 4) & '.dimlines.txt'
+	endif
+	return !dxf & '.dimlines.txt'
+endmethod
+
+----------------------------------------------------------------------
+-- the sheet's dimension projection lines, written as the 'dimline  --
+-- <dir> x1 y1 x2 y2' records DrawingPlan1DimLines makes for        --
+-- BlankPos, so RevCloud can leave them out of the diff: a pipe     --
+-- moved sideways takes its projection line along, and clouding     --
+-- that line drew a band from the dimension chain through the match --
+-- line text down to the pipe (user, 2026-09-17). the pipe and the  --
+-- changed figures are clouded on their own. kept beside every      --
+-- revision's DXF (like the cloud list) so the next comparison has  --
+-- the old sheet's lines too; the temporary one goes to .workdir.   --
+-- returns how many records were written, -1 when the list could   --
+-- not be made -- RevCloud then simply gets no list, as before.     --
+-- DrawingPlan1DimLines wants the DRWG name without /SS, which is   --
+-- read off the sheet name; leaves CE on an LDIM                     --
+----------------------------------------------------------------------
+define method .WriteDimLines(!ref is STRING, !path is STRING, !box is STRING, !nxt is STRING) is REAL
+	!shn = ''
+	var !shn name of $!ref
+	handle any
+		!shn = ''
+	endhandle
+	if (not !shn.matchwild('*/SS/S1')) then
+		!this.Log(!box & ' -> ' & !nxt & '  dimlines: sheet ' & !shn & ' is not named <drawing>/SS/S1, no projection line list')
+		return -1
+	endif
+	!name = !shn.substring(1, !shn.length() - 6)
+	!recs = object array()
+	!recs = !!DrawingPlan1DimLines(!name)
+	handle any
+		!this.Log(!box & ' -> ' & !nxt & '  dimlines: DrawingPlan1DimLines failed: ' & !!error.text)
+		return -1
+	endhandle
+	!f = object FILE(!path)
+	!f.open('overwrite')
+	handle any
+		!this.Log(!box & ' -> ' & !nxt & '  dimlines: cannot write ' & !path & ': ' & !!error.text)
+		return -1
+	endhandle
+	do !r values !recs
+		!f.writerecord(!r)
+	enddo
+	!f.close()
+	handle any
+	endhandle
+	return !recs.size()
 endmethod
 
 ----------------------------------------------------------------------
@@ -1752,6 +1829,15 @@ define method .Apply()
 					!ok = false
 					!errtxt = !!error.text
 				endhandle
+				-- and the sheet's projection lines beside it, for the
+				-- next comparison's old side (.WriteDimLines). not fatal
+				if (!ok) then
+					!dlp = !this.DimLinesPath(!dxf)
+					!ndl = !this.WriteDimLines(!ref, !dlp, !box, !nxt)
+					if (!ndl.geq(0)) then
+						!this.Log(!box & ' -> ' & !nxt & '  dimlines: ' & !ndl & ' projection line(s) kept in ' & !dlp)
+					endif
+				endif
 			endif
 		endif
 
