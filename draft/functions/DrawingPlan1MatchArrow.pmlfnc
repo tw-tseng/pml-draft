@@ -49,9 +49,11 @@
 -- 2.7mm off its line at DTCH 3 -- on the +y side of a          --
 -- horizontal line, the -x side of a vertical one, whichever way --
 -- the border lies -- and one that does not fit its segment      --
--- pushed another half height out. so the break runs from 1mm   --
--- before the line to a height and a half plus clearance past   --
--- it. whether a figure is under the shaft at all comes from the --
+-- pushed another half height out. so the break is centred on   --
+-- the figure and runs from 1mm before the line to as far past  --
+-- the figure's centre (user, 2026-09-18: the first cut left    --
+-- more paper above the 894 than below it). whether a figure is --
+-- under the shaft at all comes from the                         --
 -- chain's points either side of the shaft (DrawingPlan1DimLines --
 -- lists them): the figure is centred between them, as wide as  --
 -- its digits, and the digits are the segment's length in the   --
@@ -265,9 +267,23 @@ define function !!DrawingPlan1MatchArrow(!dir is string, !equistr is string, !po
 		endif
 	endif
 	if (!gapon) then
-		!gm   = 1.0                          $( clearance either end of the break        $)
-		!tclr = 1.2                          $( line to the bottom of the figure         $)
-		!far  = !tclr + !dtch * 1.5 + !gm    $( past the line, on the figure's side      $)
+		------------------------------------------------------------
+		-- centred on the figure, not on the line: the break runs  --
+		-- from !gm before the line to the same distance past the  --
+		-- figure's centre as that centre is from the line. the    --
+		-- first cut reached a height and a half past the line and --
+		-- left more paper above the 894 than below it (user,      --
+		-- 2026-09-18); the digits measured off that screen stand  --
+		-- 1.4mm off the line and 2.4mm tall, so the centre is put --
+		-- at 1.1 plus half a DTCH -- 2.6 at DTCH 3, the 2.7 the   --
+		-- DXF gives for the text box less the box's own margin    --
+		------------------------------------------------------------
+		-- !tclr is line to the foot of the digits: the DXF's 1.2 less
+		-- the text box's own margin under them
+		!gm   = 1.0                          $( clearance before the line and past the figure  $)
+		!tclr = 1.1                          $( line to the foot of the figure                 $)
+		!fcen = !tclr + !dtch * 0.5          $( line to the figure's centre                    $)
+		!far  = !fcen * 2 + !gm              $( past the line: mirror of !gm about the centre  $)
 		if (!isvert) then
 			!g1 = !ldepth - !far
 			!g2 = !ldepth + !gm
@@ -348,6 +364,18 @@ define function !!DrawingPlan1MatchArrow(!dir is string, !equistr is string, !po
 		endhandle
 		return
 	endif
+	-------------------------------------------------------------
+	-- no text. NOT the same as leaving BTEX alone: a GLAB whose --
+	-- BTEX was never set draws its own name (the first run put  --
+	-- /.../MLARR_down_2 on the sheet, user 2026-09-18); set to  --
+	-- the empty string -- what AVEVA's own label form writes    --
+	-- for an emptied text pane, dralabelsfast.pmlfrm:1224 --    --
+	-- it reads back as unset and draws nothing                  --
+	-------------------------------------------------------------
+	BTEXT ''
+	handle any
+		!errs = !errs & ' BTEX:' & !!error.text
+	endhandle
 	LFRAME false
 	handle any
 	endhandle
@@ -437,15 +465,20 @@ define function !!DrawingPlan1MatchArrow(!dir is string, !equistr is string, !po
 		endif
 	endif
 	-------------------------------------------------------------
-	-- the tail: the label itself, pinned to the sheet           --
+	-- the tail: the label itself, pinned to the sheet. OSET     --
+	-- FALSE comes AFTER the AT: a positioning command puts the  --
+	-- label back on a relative offset (the first run read XYPO  --
+	-- back as 0 -44.3 with no error, and AVEVA's own code       --
+	-- re-issues OSET FALSE after every AT / BY / XYPO --        --
+	-- MdsAbaAddNote.pmlfnc:234-237)                             --
 	-------------------------------------------------------------
-	OSET FALSE
-	handle any
-		!errs = !errs & ' OSET FALSE:' & !!error.text
-	endhandle
 	AT $!tailstr
 	handle any
 		!errs = !errs & ' AT tail:' & !!error.text
+	endhandle
+	OSET FALSE
+	handle any
+		!errs = !errs & ' OSET FALSE:' & !!error.text
 	endhandle
 	CPOF 0 0
 	handle any
