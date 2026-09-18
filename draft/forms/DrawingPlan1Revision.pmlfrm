@@ -998,8 +998,10 @@ endmethod
 -- on every GLAB/SLAB under a layer named ate<NOZZ|VALV|REDU|INST|   --
 -- SUPT>, so a later model change stretches the leader but leaves    --
 -- the text where BlankPos put it (see the header). other labels are --
--- left alone: line numbers and grid bubbles are re-placed by the    --
--- update path itself, flow arrows must ride on the pipe. '' =       --
+-- left alone: line numbers, grid bubbles and flow arrows are        --
+-- re-placed by the update path itself (a flow arrow does NOT ride   --
+-- on its pipe -- its POS is a fixed model point -- so FlowAnnotation --
+-- keeps or re-places each one on the update path, 2026-09-18). '' = --
 -- success (a label that refuses is counted and logged, the revision --
 -- still goes out), otherwise the error text                         --
 ----------------------------------------------------------------------

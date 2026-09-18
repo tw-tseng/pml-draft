@@ -4,7 +4,16 @@
 -- Date     : 2025/08/15            --
 --------------------------------------
 define function !!DrawingPlan1FlowAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateFLOW
+	--------------------------------------------------------------------
+	-- update path: this LAYE survives from a previous run, so reuse it --
+	-- instead of erroring on a duplicate name, the same as ateGRID and --
+	-- ateLINE do. the attribute lines below reapply either way         --
+	--------------------------------------------------------------------
+	$!name/SS/S1/V1/ateFLOW
+	handle any
+		NEW LAYE $!name/SS/S1/V1/ateFLOW
+	elsehandle none
+	endhandle
 	Purpose FLOW
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -59,7 +68,121 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	Grsystem Nulref
 	SpPurpose unset
 	Function unset
-	
+
+	------------------------------------------------------------------------
+	-- the arrows already on the layer, read before anything is drawn. a   --
+	-- rebuilt sheet has none; on the update path they are last run's      --
+	--                                                                     --
+	-- an arrow does not ride with its pipe. its POS is a point in the     --
+	-- model, written when the arrow was placed, and it stays there when   --
+	-- the tube under it is moved: after 40-B-10 was moved 100mm in the    --
+	-- model its arrow was left standing on the empty sheet beside the new --
+	-- run (user, 2026-09-18). XYPO is 0 0 and OSET makes no difference to --
+	-- that, the design point itself is what does not move                 --
+	--                                                                     --
+	-- so every arrow is measured against the tubes of this run, in the    --
+	-- branch loop below: one which still stands on a visible run of its   --
+	-- branch, points the way that run flows, and is clear of the arrows   --
+	-- placed before it, is kept exactly as it is -- not one attribute     --
+	-- written, so the DXF the revision compares comes out identical for   --
+	-- it, the same rule as the pinned component labels -- and whatever is --
+	-- left unclaimed at the bottom is deleted there                        --
+	--                                                                     --
+	-- where an arrow stands is shpos of its POS: with XYPO 0 0 the symbol --
+	-- is drawn on the design point itself. a SLAB does not answer shpos   --
+	-- of its own (see DrawingPlan1GridAnnotation)                         --
+	--                                                                     --
+	-- an arrow whose DDNA no longer resolves is never kept: a label whose --
+	-- design element is gone is not drawn, so keeping it would leave the  --
+	-- branch with no arrow on the paper while this code believed it had   --
+	-- one. it is deleted and the branch gets a fresh one. the read-back   --
+	-- goes to check_flow.txt, one FLOWEX line per arrow, so that a DDNA   --
+	-- which reads back in a shape 'type of' cannot take can be seen       --
+	------------------------------------------------------------------------
+	!dbgok = true
+	!dbgf = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_flow.txt')
+	!dbgf.open('overwrite')
+	handle any
+		!dbgok = false
+	endhandle
+	if (!dbgok) then
+		!dbgf.writerecord('FLOWRUN ' & !name)
+	endif
+	!exrefs = object array()
+	!exsx = object array()
+	!exsy = object array()
+	!exang = object array()
+	!exlives = object array()
+	!exclaim = object array()
+	!exslabs = object array()
+	var !exslabs coll all slab for ce
+	handle any
+		!exslabs = object array()
+	endhandle
+	do !exsl values !exslabs
+		!exok = true
+		$!exsl
+		handle any
+			!exok = false
+		endhandle
+		skip if (not(!exok))
+		var !exref ref
+		!exddna = ''
+		var !exddna ddna
+		handle any
+			!exddna = ''
+		endhandle
+		!expos = ''
+		var !expos pos
+		handle any
+			!expos = ''
+		endhandle
+		!exadeg = '0'
+		var !exadeg adeg
+		handle any
+			!exadeg = '0'
+		endhandle
+		!exlive = true
+		!exdt = ''
+		var !exdt type of $!exddna
+		handle any
+			!exlive = false
+		endhandle
+		!exsh = ''
+		var !exsh shpos of $!expos
+		handle any
+			!exlive = false
+		endhandle
+		!exshx = 0
+		!exshy = 0
+		!exshx = !exsh.part(2).replace('mm', '').real()
+		handle any
+			!exlive = false
+		endhandle
+		!exshy = !exsh.part(4).replace('mm', '').real()
+		handle any
+			!exlive = false
+		endhandle
+		!exadegv = 0
+		!exadegv = !exadeg.real()
+		handle any
+			!exlive = false
+		endhandle
+		!exrefs.append(!exref)
+		!exsx.append(!exshx)
+		!exsy.append(!exshy)
+		!exang.append(!exadegv)
+		!exlives.append(!exlive)
+		!exclaim.append(false)
+		if (!dbgok) then
+			!dbgf.writerecord('FLOWEX ' & !exref & ' ddna=' & !exddna & ' type=' & !exdt & ' pos=' & !expos & ' sh=' & !exsh & ' adeg=' & !exadeg & ' live=' & string(!exlive))
+		endif
+	enddo
+	--------------------------------------------------------------------
+	-- back on the layer, where NEW SLAB below has to be made           --
+	--------------------------------------------------------------------
+	$!name/SS/S1/V1/ateFLOW
+
 	------------------------------------------------
 	-- sort !tubiss by how much of the tube shows --
 	------------------------------------------------
@@ -367,7 +490,9 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	------------------------------------------------------------------------
 	-- turn !dbg on to have every branch report where its arrow went, in   --
 	-- the command window. that is the quickest way to tell a pair which   --
-	-- really is too close from a pair which only looks it                 --
+	-- really is too close from a pair which only looks it. the same lines --
+	-- go to check_flow.txt whatever !dbg says, with KEPT / PLACED on each  --
+	-- so that an update can be checked without the command window         --
 	------------------------------------------------------------------------
 	!dbg = false
 	!usedx = object array()
@@ -384,9 +509,27 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	!fracs.append(0.95)
 	!tubiss = object array()
 	--------------------------------------------------------------------------
-	-- backwards, because the sort puts the lowest elevation first and the   --
-	-- highest pipe is the one which has to be placed first                  --
+	-- the two directions every arrow angle is measured against. they are   --
+	-- the view's, not the tube's, so they are read once here (CE is on the --
+	-- layer, inside the view) instead of once per arrow                    --
 	--------------------------------------------------------------------------
+	var !viewdirup viewdir up
+	var !viewdirri viewdir right
+	!viewdirupa = object direction(!viewdirup)
+	!viewdirria = object direction(!viewdirri)
+	--------------------------------------------------------------------------
+	-- how far off a tube's visible run an arrow may stand and still count  --
+	-- as riding on it, in mm of the sheet, and how far off the angle. the  --
+	-- run is worked out again from the model on every call, and the box    --
+	-- corners it is cut against come down a different chain of arithmetic  --
+	-- on the update path than on the rebuild path, so an arrow on a pipe   --
+	-- that never moved can still come out a hair off where it was put. a   --
+	-- pipe moved by less than 0.2mm of the sheet (6mm of the model at      --
+	-- 1:30) keeps its arrow, which is nowhere near visible on a pipe drawn --
+	-- over a millimetre wide                                                --
+	--------------------------------------------------------------------------
+	!ontol2 = 0.2 * 0.2
+	!angtol = 0.5
 	--------------------------------------------------------------------------
 	-- forwards, because !ord is already highest first                       --
 	--------------------------------------------------------------------------
@@ -453,7 +596,148 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 				-- the tubes of this branch, longest visible run first           --
 				------------------------------------------------------------------
 				!sorted = !obj.method('y', !tubiss)
+				------------------------------------------------------------------
+				-- where each tube shows on the sheet and which way its arrow   --
+				-- has to point, worked out once here and read twice below: by  --
+				-- the keeping test and by the placing. the angle used to be    --
+				-- worked out after the tube was chosen; the keeping test needs --
+				-- it before, for every tube it tries                           --
+				--                                                               --
+				-- angle() only ever hands back 0 to 180, so the angle to the   --
+				-- top of the sheet says how far the pipe leans over but not    --
+				-- which way it leans. which way is settled by the angle to the --
+				-- right of the sheet: under 90 the pipe points to the right    --
+				-- and the symbol has to turn clockwise, which is the negative  --
+				-- way round for ADEGREES                                       --
+				--                                                               --
+				-- the test used to be against 40 rather than 90. that came out --
+				-- right for the four square directions, which is most of the   --
+				-- piping and is why it went unnoticed, but a sloping pipe      --
+				-- leaning to the left came out mirrored, and one running       --
+				-- downwards to either side came out turned right round, with   --
+				-- the arrow against the flow                                   --
+				--                                                               --
+				-- the angle so far is the angle the arrow has to lie at on the --
+				-- sheet. viewdir up and viewdir right are the model directions --
+				-- which appear to point up and right on the sheet, so they     --
+				-- already follow the rcode, and the angle between them and the --
+				-- pipe is a sheet angle                                        --
+				--                                                               --
+				-- ADEGREES of the symbol is not read on the sheet though, it   --
+				-- is read in the view. Portrait to Landscape puts RCODE LEFT   --
+				-- on the view, which turns the view 90 degrees anticlockwise   --
+				-- on the sheet, and the two differ by that much. the same 90   --
+				-- degrees is taken off the grid symbols in .CreateGridSymbol(), --
+				-- which is where this was first met                            --
+				--                                                               --
+				-- XYPO stays 0 0 and needs no turning, unlike the XYPO and     --
+				-- APOF of the grid symbols, and POS is not touched either      --
+				------------------------------------------------------------------
+				!seens = object array()
+				!tangs = object array()
+				do !ii from 1 to !sorted.size()
+					!trytubi = !sorted[!ii].split('~').getindexed(2)
+					!seen = !!DrawingPlan1.VisibleSheetRunOfTube(!trytubi, !vwx1, !vwy1, !vwx2, !vwy2)
+					!seens[!ii] = !seen
+					!mtbe = !trytubi.after('of ')
+					var !type type of $!mtbe
+					if (!type.eqnocase('BRAN')) then
+						var !pldir hdir of $!mtbe
+					else
+						var !pldir pl dir of $!mtbe
+					endif
+					!pldira = object direction(!pldir)
+					!tang = !viewdirupa.angle(!pldira)
+					if (!viewdirria.angle(!pldira).lt(90)) then
+						!tang = !tang * -1
+					endif
+					if (!!DrawingPlan1.rcode.eqnocase('left')) then
+						!tang = !tang - 90
+						if (!tang lt -180) then
+							!tang = !tang + 360
+						endif
+					endif
+					!tangs[!ii] = !tang
+				enddo
+				------------------------------------------------------------------
+				-- first, is one of last run's arrows still riding on this      --
+				-- branch? one which stands on a visible run of one of its      --
+				-- tubes (its foot on the run within !ontol2, between the two    --
+				-- ends), points the way that run flows, and is still !hardmin  --
+				-- clear of the arrows placed before it this run, is kept       --
+				-- exactly as it is. it is not moved back to the middle of the  --
+				-- longest run either: an arrow that was slid along its pipe to --
+				-- make room last time stays slid, and a pipe that was only     --
+				-- stretched keeps its arrow where it was. either would be a    --
+				-- cloud on the next revision for nothing -- the pipe is where  --
+				-- the arrow says it is                                          --
+				--                                                               --
+				-- !hardmin rather than !mindist: an arrow that far from the    --
+				-- others is one the placing below would have settled for      --
+				-- itself, so it is left alone. only when it is closer than     --
+				-- that -- an arrow of a higher pipe has landed on it this run  --
+				-- -- does the branch go through the placing again              --
+				------------------------------------------------------------------
 				!gotpos = false
+				!kept = false
+				!keptref = ''
+				!tubi = ''
+				!posx = 0
+				!posy = 0
+				!ang = 0
+				do !ii from !sorted.size() to 1 by -1
+					!seen = !seens[!ii]
+					skip if (!seen.empty())
+					!rx = !seen[6] - !seen[4]
+					!ry = !seen[7] - !seen[5]
+					!rl2 = !rx * !rx + !ry * !ry
+					skip if (!rl2 le 0)
+					!tang = !tangs[!ii]
+					do !ci from 1 to !exrefs.size()
+						skip if (!exclaim[!ci])
+						skip if (not(!exlives[!ci]))
+						!ax = !exsx[!ci]
+						!ay = !exsy[!ci]
+						!t = ((!ax - !seen[4]) * !rx + (!ay - !seen[5]) * !ry) / !rl2
+						skip if (!t lt 0 or !t gt 1)
+						!qx = !seen[4] + !t * !rx
+						!qy = !seen[5] + !t * !ry
+						!d2 = (!ax - !qx) * (!ax - !qx) + (!ay - !qy) * (!ay - !qy)
+						skip if (!d2 gt !ontol2)
+						--------------------------------------------------------
+						-- the two angles can be on either side of the wrap:  --
+						-- ADEGREES reads back in whichever range E3D keeps   --
+						-- it, and !tang runs -180 to 180. one step of 360    --
+						-- brings the difference into -180 to 180 either way  --
+						--------------------------------------------------------
+						!da = !exang[!ci] - !tang
+						if (!da gt 180) then
+							!da = !da - 360
+						elseif (!da lt -180) then
+							!da = !da + 360
+						endif
+						!ada = abs(!da)
+						skip if (!ada gt !angtol)
+						!near2 = 999999999
+						do !uu from 1 to !usedx.size()
+							!dd2 = (!ax - !usedx[!uu]) * (!ax - !usedx[!uu]) + (!ay - !usedy[!uu]) * (!ay - !usedy[!uu])
+							if (!dd2 lt !near2) then
+								!near2 = !dd2
+							endif
+						enddo
+						skip if (!near2 lt !hardmin2)
+						!exclaim[!ci] = true
+						!kept = true
+						!gotpos = true
+						!keptref = !exrefs[!ci]
+						!tubi = !sorted[!ii].split('~').getindexed(2)
+						!posx = !ax
+						!posy = !ay
+						!ang = !tang
+						break
+					enddo
+					break if (!kept)
+				enddo
 				!tookbest = false
 				!dropped = false
 				!bestset = false
@@ -461,201 +745,166 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 				!bestx = 0
 				!besty = 0
 				!besttubi = ''
-				do !ii from !sorted.size() to 1 by -1
-					!trytubi = !sorted[!ii].split('~').getindexed(2)
-					!seen = !!DrawingPlan1.VisibleSheetRunOfTube(!trytubi, !vwx1, !vwy1, !vwx2, !vwy2)
-					if (not(!seen.empty())) then
-						do !ff from 1 to !fracs.size()
-							!px = !seen[4] + !fracs[!ff] * (!seen[6] - !seen[4])
-							!py = !seen[5] + !fracs[!ff] * (!seen[7] - !seen[5])
-							----------------------------------------------------
-							-- how far this spot is from the nearest arrow    --
-							-- already down, squared to keep clear of sqrt.   --
-							-- nothing down yet leaves it at the large value, --
-							-- so the first arrow of the drawing takes the    --
-							-- middle of its longest run                      --
-							----------------------------------------------------
-							!near2 = 999999999
-							do !uu from 1 to !usedx.size()
-								!d2 = (!px - !usedx[!uu]) * (!px - !usedx[!uu]) + (!py - !usedy[!uu]) * (!py - !usedy[!uu])
-								if (!d2 lt !near2) then
-									!near2 = !d2
+				!bestang = 0
+				if (not(!kept)) then
+					do !ii from !sorted.size() to 1 by -1
+						!trytubi = !sorted[!ii].split('~').getindexed(2)
+						!seen = !seens[!ii]
+						if (not(!seen.empty())) then
+							do !ff from 1 to !fracs.size()
+								!px = !seen[4] + !fracs[!ff] * (!seen[6] - !seen[4])
+								!py = !seen[5] + !fracs[!ff] * (!seen[7] - !seen[5])
+								----------------------------------------------------
+								-- how far this spot is from the nearest arrow    --
+								-- already down, squared to keep clear of sqrt.   --
+								-- nothing down yet leaves it at the large value, --
+								-- so the first arrow of the drawing takes the    --
+								-- middle of its longest run                      --
+								----------------------------------------------------
+								!near2 = 999999999
+								do !uu from 1 to !usedx.size()
+									!d2 = (!px - !usedx[!uu]) * (!px - !usedx[!uu]) + (!py - !usedy[!uu]) * (!py - !usedy[!uu])
+									if (!d2 lt !near2) then
+										!near2 = !d2
+									endif
+								enddo
+								if (!near2 geq !mindist2) then
+									--------------------------------------------
+									-- far enough from everything, take it     --
+									--------------------------------------------
+									!tubi = !trytubi
+									!posx = !px
+									!posy = !py
+									!ang = !tangs[!ii]
+									!gotpos = true
+									break
+								elseif (!near2 gt !bestd) then
+									--------------------------------------------
+									-- not clear, but the roomiest place found --
+									-- so far. kept in case nothing on this    --
+									-- branch comes out clear                  --
+									--------------------------------------------
+									!bestd = !near2
+									!bestx = !px
+									!besty = !py
+									!besttubi = !trytubi
+									!bestang = !tangs[!ii]
+									!bestset = true
 								endif
 							enddo
-							if (!near2 geq !mindist2) then
-								--------------------------------------------
-								-- far enough from everything, take it     --
-								--------------------------------------------
-								!tubi = !trytubi
-								!posx = !px
-								!posy = !py
-								!gotpos = true
-								break
-							elseif (!near2 gt !bestd) then
-								--------------------------------------------
-								-- not clear, but the roomiest place found --
-								-- so far. kept in case nothing on this    --
-								-- branch comes out clear                  --
-								--------------------------------------------
-								!bestd = !near2
-								!bestx = !px
-								!besty = !py
-								!besttubi = !trytubi
-								!bestset = true
-							endif
-						enddo
-					endif
-					break if (!gotpos)
-				enddo
-				if (not(!gotpos) and !bestset) then
-					if (!bestd geq !hardmin2) then
-						--------------------------------------------------------
-						-- nowhere on this branch is a full !mindist clear of  --
-						-- the arrows already down, which is what happens round --
-						-- a set of nozzles where short stubs run side by side. --
-						-- the roomiest of the places tried is taken, so the    --
-						-- arrow is pushed as far off the others as this branch --
-						-- allows                                               --
-						--                                                      --
-						-- this used to fall back on the middle of the longest  --
-						-- run instead, which is the crowded spot itself, and   --
-						-- that is why the arrows came out touching             --
-						--                                                      --
-						-- the roomiest place can be on a shorter tube than the --
-						-- longest one. an arrow on a shorter run of the right  --
-						-- pipe reads better than two arrows on top of each     --
-						-- other                                                --
-						--------------------------------------------------------
-						!tubi = !besttubi
-						!posx = !bestx
-						!posy = !besty
-						!gotpos = true
-						!tookbest = true
-					else
-						--------------------------------------------------------
-						-- even the roomiest place on the branch is right on   --
-						-- top of an arrow already down. this is the pipe       --
-						-- underneath a pipe which runs the same line on the    --
-						-- plan, and it goes without. see !hardmin above        --
-						--------------------------------------------------------
-						!dropped = true
+						endif
+						break if (!gotpos)
+					enddo
+					if (not(!gotpos) and !bestset) then
+						if (!bestd geq !hardmin2) then
+							--------------------------------------------------------
+							-- nowhere on this branch is a full !mindist clear of  --
+							-- the arrows already down, which is what happens round --
+							-- a set of nozzles where short stubs run side by side. --
+							-- the roomiest of the places tried is taken, so the    --
+							-- arrow is pushed as far off the others as this branch --
+							-- allows                                               --
+							--                                                      --
+							-- this used to fall back on the middle of the longest  --
+							-- run instead, which is the crowded spot itself, and   --
+							-- that is why the arrows came out touching             --
+							--                                                      --
+							-- the roomiest place can be on a shorter tube than the --
+							-- longest one. an arrow on a shorter run of the right  --
+							-- pipe reads better than two arrows on top of each     --
+							-- other                                                --
+							--------------------------------------------------------
+							!tubi = !besttubi
+							!posx = !bestx
+							!posy = !besty
+							!ang = !bestang
+							!gotpos = true
+							!tookbest = true
+						else
+							--------------------------------------------------------
+							-- even the roomiest place on the branch is right on   --
+							-- top of an arrow already down. this is the pipe       --
+							-- underneath a pipe which runs the same line on the    --
+							-- plan, and it goes without. see !hardmin above        --
+							--------------------------------------------------------
+							!dropped = true
+						endif
 					endif
 				endif
-				if (!dbg) then
-					----------------------------------------------------------
-					-- elevation and run come straight out of the two arrays --
-					-- the order was worked out from, so what is reported is --
-					-- exactly what decided this branch's turn               --
-					--                                                        --
-					-- how far the arrow really ended up from its nearest     --
-					-- neighbour is worked out again on the place settled on, --
-					-- so the number reported is the one on the sheet         --
-					----------------------------------------------------------
-					!branudbg = !bU[!bb]
-					!brandbg = !bR[!bb]
-					!bestlabel = 'no'
-					if (!tookbest) then
-						!bestlabel = 'yes'
-					endif
-					!dbgnear = 999999999
-					if (!gotpos) then
-						do !uu from 1 to !usedx.size()
-							!d2 = (!posx - !usedx[!uu]) * (!posx - !usedx[!uu]) + (!posy - !usedy[!uu]) * (!posy - !usedy[!uu])
-							if (!d2 lt !dbgnear) then
-								!dbgnear = !d2
-							endif
-						enddo
-						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' x ' & string(!posx) & ' y ' & string(!posy) & ' near2 ' & string(!dbgnear) & ' roomiest ' & !bestlabel
-					elseif (!dropped) then
-						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' DROPPED, best near2 ' & string(!bestd)
+				----------------------------------------------------------
+				-- elevation and run come straight out of the two arrays --
+				-- the order was worked out from, so what is reported is --
+				-- exactly what decided this branch's turn               --
+				--                                                        --
+				-- how far the arrow really ended up from its nearest     --
+				-- neighbour is worked out again on the place settled on, --
+				-- so the number reported is the one on the sheet         --
+				--                                                        --
+				-- to check_flow.txt always, to the command window only   --
+				-- with !dbg. the file is what tells a kept arrow from a  --
+				-- placed one after an update                             --
+				----------------------------------------------------------
+				!branudbg = !bU[!bb]
+				!brandbg = !bR[!bb]
+				!bestlabel = 'no'
+				if (!tookbest) then
+					!bestlabel = 'yes'
+				endif
+				!dbgnear = 999999999
+				if (!gotpos) then
+					do !uu from 1 to !usedx.size()
+						!d2 = (!posx - !usedx[!uu]) * (!posx - !usedx[!uu]) + (!posy - !usedy[!uu]) * (!posy - !usedy[!uu])
+						if (!d2 lt !dbgnear) then
+							!dbgnear = !d2
+						endif
+					enddo
+					if (!kept) then
+						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' x ' & string(!posx) & ' y ' & string(!posy) & ' near2 ' & string(!dbgnear) & ' KEPT ' & !keptref & ' on ' & !tubi
 					else
-						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' NO PLACE'
+						!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' x ' & string(!posx) & ' y ' & string(!posy) & ' near2 ' & string(!dbgnear) & ' roomiest ' & !bestlabel & ' PLACED on ' & !tubi
 					endif
+				elseif (!dropped) then
+					!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' DROPPED, best near2 ' & string(!bestd)
+				else
+					!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!branudbg) & ' run2 ' & string(!brandbg) & ' NO PLACE'
+				endif
+				if (!dbgok) then
+					!dbgf.writerecord(!dbgline)
+				endif
+				if (!dbg) then
 					$p $!dbgline
 				endif
 				if (!gotpos) then
 					!usedx.append(!posx)
 					!usedy.append(!posy)
-					------------------------------------------------------------------
-					-- the arrow goes on the visible run and not in the middle of    --
-					-- the whole tube, so it is always inside the view and never out --
-					-- on the border. the place comes back in sheet mm and is handed --
-					-- to enupos the same way the line number annotation does it,    --
-					-- which also takes the E / N / W / S of a position string out   --
-					-- of the way                                                    --
-					------------------------------------------------------------------
-					!midsh = 'x ' & string(!posx) & ' y ' & string(!posy)
-					var !mid1 enupos of $!midsh
-					!mtbe = !tubi.after('of ')
-					var !type type of $!mtbe
-					if (!type.eqnocase('BRAN')) then
-						var !pldir hdir of $!mtbe
-					else
-						var !pldir pl dir of $!mtbe
+					if (not(!kept)) then
+						------------------------------------------------------------------
+						-- the arrow goes on the visible run and not in the middle of    --
+						-- the whole tube, so it is always inside the view and never out --
+						-- on the border. the place comes back in sheet mm and is handed --
+						-- to enupos the same way the line number annotation does it,    --
+						-- which also takes the E / N / W / S of a position string out   --
+						-- of the way                                                    --
+						------------------------------------------------------------------
+						!midsh = 'x ' & string(!posx) & ' y ' & string(!posy)
+						var !mid1 enupos of $!midsh
+						NEW SLAB
+						DDNA $!tubi
+						tmrf $!flowsytm
+						Font 1
+						Blnk false
+						Bmargin 0mm
+						Xyscale $!flowsca $!flowsca
+						Cheitx '2mm'
+						Lvisibility true
+						Txcolour Yellow
+						LLColour Cyan
+						LFColour Cyan
+						Alignment Hbody
+						POS $!mid1
+						XYPO 0 0
+						Adegrees $!ang
 					endif
-
-					var !viewdirup viewdir up
-					var !viewdirri viewdir right
-					!pldira = object direction(!pldir)
-					!viewdirupa = object direction(!viewdirup)
-					!viewdirria = object direction(!viewdirri)
-					--------------------------------------------------------------------
-					-- angle() only ever hands back 0 to 180, so the angle to the top  --
-					-- of the sheet says how far the pipe leans over but not which way --
-					-- it leans. which way is settled by the angle to the right of the --
-					-- sheet: under 90 the pipe points to the right and the symbol has --
-					-- to turn clockwise, which is the negative way round for ADEGREES --
-					--                                                                 --
-					-- the test used to be against 40 rather than 90. that came out    --
-					-- right for the four square directions, which is most of the      --
-					-- piping and is why it went unnoticed, but a sloping pipe leaning --
-					-- to the left came out mirrored, and one running downwards to     --
-					-- either side came out turned right round, with the arrow against --
-					-- the flow                                                        --
-					--------------------------------------------------------------------
-					!ang = !viewdirupa.angle(!pldira)
-					if (!viewdirria.angle(!pldira).lt(90)) then
-						!ang = !ang * -1
-					endif
-					--------------------------------------------------------------------
-					-- !ang so far is the angle the arrow has to lie at on the sheet.  --
-					-- viewdir up and viewdir right are the model directions which     --
-					-- appear to point up and right on the sheet, so they already      --
-					-- follow the rcode, and the angle between them and the pipe is    --
-					-- a sheet angle                                                   --
-					--                                                                 --
-					-- ADEGREES of the symbol is not read on the sheet though, it is   --
-					-- read in the view. Portrait to Landscape puts RCODE LEFT on the  --
-					-- view, which turns the view 90 degrees anticlockwise on the      --
-					-- sheet, and the two differ by that much. the same 90 degrees is  --
-					-- taken off the grid symbols in .CreateGridSymbol(), which is     --
-					-- where this was first met                                        --
-					--                                                                 --
-					-- XYPO stays 0 0 and needs no turning, unlike the XYPO and APOF   --
-					-- of the grid symbols, and POS is not touched either              --
-					--------------------------------------------------------------------
-					if (!!DrawingPlan1.rcode.eqnocase('left')) then
-						!ang = !ang - 90
-						if (!ang lt -180) then
-							!ang = !ang + 360
-						endif
-					endif
-					NEW SLAB
-					DDNA $!tubi
-					tmrf $!flowsytm
-					Font 1
-					Blnk false
-					Bmargin 0mm
-					Xyscale $!flowsca $!flowsca
-					Cheitx '2mm'
-					Lvisibility true
-					Txcolour Yellow
-					LLColour Cyan
-					LFColour Cyan
-					Alignment Hbody
-					POS $!mid1
-					XYPO 0 0
-					Adegrees $!ang
 				endif
 			else
 				----------------------------------------------------------------
@@ -665,11 +914,51 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 				-- too short can be told apart from one left out for being     --
 				-- crowded                                                     --
 				----------------------------------------------------------------
+				!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!bU[!bb]) & ' run2 ' & string(!bR[!bb]) & ' NO RUN reaches minrun'
+				if (!dbgok) then
+					!dbgf.writerecord(!dbgline)
+				endif
 				if (!dbg) then
-					!dbgline = 'FLOWDBG ' & !bran & ' u ' & string(!bU[!bb]) & ' run2 ' & string(!bR[!bb]) & ' NO RUN reaches minrun'
 					$p $!dbgline
 				endif
 			endif
 		endif
 	enddo
+	------------------------------------------------------------------------
+	-- last run's arrows that no branch kept this time: the pipe moved out --
+	-- from under them, turned round, left the view, or was cut back below --
+	-- !minrun -- and the ones whose design element is gone. deleted only  --
+	-- now, after every branch has had its turn, so that no arrow is in    --
+	-- !usedx while it is on its way out and no branch is kept off a spot  --
+	-- that is about to be empty. on a rebuilt sheet there is nothing here --
+	------------------------------------------------------------------------
+	!gone = 0
+	do !ci from 1 to !exrefs.size()
+		if (not(!exclaim[!ci])) then
+			----------------------------------------------------------
+			-- copied into a plain variable before the navigation,   --
+			-- the way DrawingPlan1MatchCleanup does it              --
+			----------------------------------------------------------
+			!cref = !exrefs[!ci]
+			$!cref
+			handle any
+				skip
+			endhandle
+			delete slab
+			handle any
+				if (!dbgok) then
+					!dbgf.writerecord('FLOWGONE ' & !cref & ' refused delete: ' & !!error.text)
+				endif
+			elsehandle none
+				!gone = !gone + 1
+				if (!dbgok) then
+					!dbgf.writerecord('FLOWGONE ' & !cref & ' deleted')
+				endif
+			endhandle
+		endif
+	enddo
+	if (!dbgok) then
+		!dbgf.writerecord('FLOWEND existing ' & string(!exrefs.size()) & ' deleted ' & string(!gone) & ' arrows now ' & string(!usedx.size()))
+		!dbgf.close()
+	endif
 endfunction

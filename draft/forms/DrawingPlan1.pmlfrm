@@ -1665,12 +1665,13 @@ define method .Apply()
 				-- DRAWLIST/LIMITS/CDLIMITS redo every run; VSEC/FPLA redo only if --
 				-- the box actually changed; SIZE is recalculated symmetric around --
 				-- the frozen sheet centre (see the blocks below). Grid/MatchTicks/ --
-				-- LineNo/Equi/MatchLine/MatchGaps run below with per-element      --
+				-- LineNo/Equi/MatchLine/MatchGaps/Flow run below with per-element --
 				-- reuse. NOT run on this path (user decision 2026-09-14, to be    --
 				-- revisited once drawings are issued in volume): the five BlankPos --
 				-- SLAB passes (Redu/Nozzle/Valve/Inst/Supt, with DimLines and the --
-				-- DXF export) and FlowAnnotation -- those labels stay exactly as  --
-				-- the last rebuild left them. also by decision: no confirmation   --
+				-- DXF export) -- those labels stay exactly as the last rebuild    --
+				-- left them, except the ones a model change runs into (see        --
+				-- .PinnedLabelPass). also by decision: no confirmation            --
 				-- prompt before updating a revised sheet, a REVI simply means     --
 				-- update, never rebuild                                           --
 				--------------------------------------------------------------------
@@ -2174,8 +2175,8 @@ define method .Apply()
 				-- part of it -- leaving it out was why the match line stayed on --
 				-- the OLD border after the first box-grew test (2026-08-28)     --
 				--                                                               --
-				-- Flow and the five BlankPos SLAB passes are still left out --  --
-				-- deferred, see the note at the top of this branch              --
+				-- the five BlankPos SLAB passes are still left out -- deferred, --
+				-- see the note at the top of this branch. Flow runs last, below --
 				------------------------------------------------------------------
 				$!name/SS/S1/V1
 				!!DrawingPlan1MatchLine(!name, !equistr)
@@ -2213,6 +2214,23 @@ define method .Apply()
 				$!name/SS/S1/V1
 				handle any
 				endhandle
+				------------------------------------------------------------------
+				-- flow arrows, added to this path 2026-09-18. they were left   --
+				-- out on the belief that an arrow rides on its pipe -- it does  --
+				-- not: its POS is a point in the model, written when the arrow  --
+				-- was placed, and a pipe moved 100mm left its arrow standing on --
+				-- the empty sheet (reported live). FlowAnnotation now reads the --
+				-- arrows already on ateFLOW and keeps every one that still     --
+				-- stands on a visible run of its branch, untouched, so an       --
+				-- unchanged pipe is not clouded for its arrow; the rest are     --
+				-- deleted and placed again. same place in the order as on the   --
+				-- rebuild path: last, after MatchGaps, so the arrows are not    --
+				-- offered as obstacles to anything                              --
+				------------------------------------------------------------------
+				$!name/SS/S1/V1
+				1
+				last
+				!!DrawingPlan1FlowAnnotation(!name)
 				------------------------------------------------------------------
 				-- update deliberately does NOT call .RecenterView() (2026-09-01, --
 				-- reverted same day it was added): once a REVI exists the view   --
