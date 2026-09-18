@@ -1241,7 +1241,13 @@ endmethod
 -- frame sends a second record for the band's inner edge (user      --
 -- sketch 2026-09-14: not a box round everything) -- red line, no   --
 -- fill, vertices straight from the 'v x y' records (sheet mm ==    --
--- DXF mm). then one revision triangle per outer ring, the code     --
+-- DXF mm). BrightRed, not Red: DRAFT's Red is RGB 189,0,0 and      --
+-- DXFOUT only writes a plain ACI index when the RGB sits within 4  --
+-- of its own palette entry (ACI 12 there is 166,0,0), so Red goes  --
+-- out as true colour 420=189,0,0 and a monochrome CTB keyed on     --
+-- ACI 1 still plots it red. BrightRed is 255,0,0 = ACI 1 exactly,  --
+-- so the DXF gets '62 1' and nothing else (2026-09-18).            --
+-- then one revision triangle per outer ring, the code              --
 -- from a 'revision <code>' line when the lines come from a kept    --
 -- list, otherwise the code being issued.                           --
 -- the next comparison takes them off the sheet first (see          --
@@ -1323,8 +1329,11 @@ define method .DrawClouds(!ref is STRING, !box is STRING, !nxt is STRING, !wantc
 			handle any
 				return 'NEW OUTL failed: ' & !!error.text
 			endhandle
-			NLCOLOUR Red
+			NLCOLOUR BrightRed
 			handle any
+				NLCOLOUR Red
+				handle any
+				endhandle
 			endhandle
 			FSTYLE OFF
 			handle any
@@ -1403,8 +1412,11 @@ define method .DrawClouds(!ref is STRING, !box is STRING, !nxt is STRING, !wantc
 		handle any
 			return 'NEW OUTL (triangle) failed: ' & !!error.text
 		endhandle
-		NLCOLOUR Red
+		NLCOLOUR BrightRed
 		handle any
+			NLCOLOUR Red
+			handle any
+			endhandle
 		endhandle
 		FSTYLE OFF
 		handle any
@@ -1460,8 +1472,11 @@ define method .DrawClouds(!ref is STRING, !box is STRING, !nxt is STRING, !wantc
 		ALIGN Hbody
 		handle any
 		endhandle
-		TXCOLOUR Red
+		TXCOLOUR BrightRed
 		handle any
+			TXCOLOUR Red
+			handle any
+			endhandle
 		endhandle
 		FONT 1
 		handle any
