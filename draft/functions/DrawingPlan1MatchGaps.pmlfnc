@@ -619,6 +619,26 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 			!lbrefs = object array()
 		endhandle
 	endif
+	----------------------------------------------------------------------
+	-- every label this loop can read is also kept for the leader pass   --
+	-- at the bottom: its box bare and padded, which layer it is on, if  --
+	-- it carries a leader, and where its design point falls on the      --
+	-- sheet. gathered here because CE is on the label anyway            --
+	----------------------------------------------------------------------
+	!ldrefs = object array()
+	!ldkind = object array()
+	!ldlead = object array()
+	!ldhasa = object array()
+	!ldax = object array()
+	!lday = object array()
+	!ldrx1 = object array()
+	!ldry1 = object array()
+	!ldrx2 = object array()
+	!ldry2 = object array()
+	!ldx1 = object array()
+	!ldy1 = object array()
+	!ldx2 = object array()
+	!ldy2 = object array()
 	!lbn = 0
 	do !lb values !lbrefs
 		$!lb
@@ -680,11 +700,72 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 			!ly1 = min(!ly1, !lys[!ci])
 			!ly2 = max(!ly2, !lys[!ci])
 		enddo
+		!ldrx1.append(!lx1)
+		!ldry1.append(!ly1)
+		!ldrx2.append(!lx2)
+		!ldry2.append(!ly2)
 		!lx1 = !lx1 - !lbmarg
 		!lx2 = !lx2 + !lbmarg
 		!ly1 = !ly1 - !lbmarg
 		!ly2 = !ly2 + !lbmarg
 		!lbn = !lbn + 1
+		!ldrefs.append(!lb)
+		!ldx1.append(!lx1)
+		!ldy1.append(!ly1)
+		!ldx2.append(!lx2)
+		!ldy2.append(!ly2)
+		------------------------------------------------------------
+		-- '/X/SS/S1/V1/ateSUPT' -> 'SUPT', as .PinnedLabelRecords --
+		-- reads it. a label on any other layer gives ''            --
+		------------------------------------------------------------
+		!lbown = ''
+		var !lbown name of owner
+		handle any
+			!lbown = ''
+		endhandle
+		!ldkind.append(!lbown.after('/ate').upcase())
+		!lbll = 'false'
+		var !lbll lleader
+		handle any
+			!lbll = 'false'
+		endhandle
+		!ldlead.append(!lbll.upcase().eq('TRUE'))
+		------------------------------------------------------------
+		-- the design point on the sheet, the same two queries     --
+		-- .PinnedLabelRecords and .PlaceLabelFromSpace use. a     --
+		-- label with no readable design point still lends its box --
+		-- to the pass, it just gets no leader of its own          --
+		------------------------------------------------------------
+		!lbha = true
+		!lbap = ''
+		var !lbap ( pos of ddna of $!lb wrt worl )
+		handle any
+			!lbha = false
+		endhandle
+		!lbash = ''
+		if (!lbha) then
+			var !lbash shpos of $!lbap
+			handle any
+				!lbha = false
+			endhandle
+		endif
+		!lbax = 0
+		!lbay = 0
+		if (!lbha) then
+			!lbax = !lbash.part(2).replace('mm', '').real()
+			handle any
+				!lbha = false
+			endhandle
+		endif
+		if (!lbha) then
+			!lbay = !lbash.part(4).replace('mm', '').real()
+			handle any
+				!lbha = false
+			endhandle
+		endif
+		!ldhasa.append(!lbha)
+		!ldax.append(!lbax)
+		!lday.append(!lbay)
 		do !ds values !dlsegs
 			!dsp = object array()
 			!dsp = !ds.split()
@@ -767,6 +848,226 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 		enddo
 	enddo
 	----------------------------------------------------------------------
+	-- and the leaders of the component labels themselves. a leader     --
+	-- running through another label's text is a wrong drawing, and the --
+	-- answer is a break in the leader, not a move of either label -- a  --
+	-- pinned label stays where it is (user, 2026-09-18)                 --
+	--                                                                    --
+	-- the leader is rebuilt the way .PlaceLabelFromSpace defined it:    --
+	-- from the design point (shpos of pos of ddna) straight at the      --
+	-- middle of the text, ending where that ray meets the label's own   --
+	-- text box. cpoftx was written from exactly that construction, so   --
+	-- this is the line E3D draws, give or take the frame a support      --
+	-- label carries outside its text. only the five component layers:  --
+	-- those are the labels whose cpoftx this form wrote, so their       --
+	-- leader is known. a line number or an equipment name leaves its    --
+	-- connection point to E3D, and where that leader really runs is    --
+	-- not known well enough to put a break on it                        --
+	--                                                                    --
+	-- tested against the text of every other label in the view (line   --
+	-- numbers, bubbles and equipment names included: a leader through  --
+	-- any text is the same fault). the leader has to cross the TEXT    --
+	-- itself, the bare box -- merely passing through the 2mm padding   --
+	-- is not a crossing, or a leader ending beside its neighbour would  --
+	-- be cut short for nothing. once it does cross, the break covers    --
+	-- the padded box, the same margin the projection lines get above.  --
+	-- its own box is not a crossing, and neither is any label hanging  --
+	-- off the same design point (the rows of a support stack, a second --
+	-- label on one component): the leader ends at the block those      --
+	-- share, it does not run through them                               --
+	--                                                                    --
+	-- the break goes on the GLAB or SLAB the leader belongs to, the     --
+	-- same command the grid bubbles take above, centred on the piece    --
+	-- inside the padded box and as long as it plus !mgmarg. every run   --
+	-- clears the label's breaks first and writes the set it wants now, --
+	-- so a break left from a label that has since moved does not stay  --
+	-- behind as a hole in the leader. a label that is not touched here --
+	-- (no leader, nothing crossed) is not cleared either                --
+	--                                                                    --
+	-- on a revised sheet the far piece of a broken leader no longer    --
+	-- touches the design point. RevCloud takes a piece collinear with   --
+	-- the leader as leader all the same (2026-09-18), so a break that   --
+	-- rides along with its element is not a change to cloud            --
+	----------------------------------------------------------------------
+	!ldkinds = ' NOZZ VALV REDU INST SUPT '
+	!ldn = 0
+	!ldgaps = 0
+	!ps = object array()
+	!qs = object array()
+	do !li from 1 to !ldrefs.size()
+		skip if (not(!ldlead[!li]))
+		skip if (not(!ldhasa[!li]))
+		skip if (not(!ldkinds.matchwild('* ' & !ldkind[!li] & ' *')))
+		!ax = !ldax[!li]
+		!ay = !lday[!li]
+		!cx = (!ldrx1[!li] + !ldrx2[!li]) * 0.5
+		!cy = (!ldry1[!li] + !ldry2[!li]) * 0.5
+		!dx = !cx - !ax
+		!dy = !cy - !ay
+		------------------------------------------------------------------
+		-- where the ray into the middle of the text enters the label's  --
+		-- own bare box: the leader ends there. the same cut as           --
+		-- .VisibleSheetRunOfTube makes against the view, one side at a  --
+		-- time along the parameter of the ray, and the sign of !p is    --
+		-- tested first for the same reason -- a leader square with the  --
+		-- sheet makes !p exactly nought on two sides                     --
+		------------------------------------------------------------------
+		!t0 = 0.0
+		!t1 = 1.0
+		!ps.clear()
+		!qs.clear()
+		!ps.append(!dx * -1)
+		!qs.append(!ax - !ldrx1[!li])
+		!ps.append(!dx)
+		!qs.append(!ldrx2[!li] - !ax)
+		!ps.append(!dy * -1)
+		!qs.append(!ay - !ldry1[!li])
+		!ps.append(!dy)
+		!qs.append(!ldry2[!li] - !ay)
+		!miss = false
+		do !k from 1 to 4
+			!p = !ps[!k]
+			!q = !qs[!k]
+			if (!p lt 0) then
+				!t = !q / !p
+				if (!t gt !t1) then
+					!miss = true
+				elseif (!t gt !t0) then
+					!t0 = !t
+				endif
+			elseif (!p gt 0) then
+				!t = !q / !p
+				if (!t lt !t0) then
+					!miss = true
+				elseif (!t lt !t1) then
+					!t1 = !t
+				endif
+			else
+				if (!q lt 0) then
+					!miss = true
+				endif
+			endif
+		enddo
+		------------------------------------------------------------------
+		-- the ray always reaches its own middle, so a miss is not       --
+		-- expected. !t0 left at nought means the design point already   --
+		-- lies inside the text, and then there is no leader to break    --
+		------------------------------------------------------------------
+		skip if (!miss)
+		skip if (!t0 le 0.001)
+		!ex = !ax + !t0 * !dx
+		!ey = !ay + !t0 * !dy
+		!ldx = !ex - !ax
+		!ldy = !ey - !ay
+		!ll2 = !ldx * !ldx + !ldy * !ldy
+		!llen = !ll2.sqrt()
+		skip if (!llen lt 0.5)
+		!ldn = !ldn + 1
+		!lref = !ldrefs[!li]
+		$!lref
+		handle any
+			skip
+		endhandle
+		GAP DELETE ALL
+		handle any
+			!clrn = !clrn + 1
+			!clrerr = !lref & ': ' & !!error.text
+		endhandle
+		do !bi from 1 to !ldrefs.size()
+			skip if (!bi eq !li)
+			if (!ldhasa[!bi]) then
+				!adx = !ldax[!bi] - !ax
+				!ady = !lday[!bi] - !ay
+				!aadx = abs(!adx)
+				!aady = abs(!ady)
+				skip if ((!aadx le 0.5) and (!aady le 0.5))
+			endif
+			------------------------------------------------------------
+			-- pass 1 cuts the leader against the bare box: no piece    --
+			-- inside, no crossing. pass 2 cuts it against the padded  --
+			-- box, and that piece is what the break covers            --
+			------------------------------------------------------------
+			!hit = false
+			!gt0 = 0.0
+			!gt1 = 1.0
+			do !pass from 1 to 2
+				if (!pass eq 1) then
+					!cbx1 = !ldrx1[!bi]
+					!cby1 = !ldry1[!bi]
+					!cbx2 = !ldrx2[!bi]
+					!cby2 = !ldry2[!bi]
+				else
+					!cbx1 = !ldx1[!bi]
+					!cby1 = !ldy1[!bi]
+					!cbx2 = !ldx2[!bi]
+					!cby2 = !ldy2[!bi]
+				endif
+				!t0 = 0.0
+				!t1 = 1.0
+				!ps.clear()
+				!qs.clear()
+				!ps.append(!ldx * -1)
+				!qs.append(!ax - !cbx1)
+				!ps.append(!ldx)
+				!qs.append(!cbx2 - !ax)
+				!ps.append(!ldy * -1)
+				!qs.append(!ay - !cby1)
+				!ps.append(!ldy)
+				!qs.append(!cby2 - !ay)
+				!miss = false
+				do !k from 1 to 4
+					!p = !ps[!k]
+					!q = !qs[!k]
+					if (!p lt 0) then
+						!t = !q / !p
+						if (!t gt !t1) then
+							!miss = true
+						elseif (!t gt !t0) then
+							!t0 = !t
+						endif
+					elseif (!p gt 0) then
+						!t = !q / !p
+						if (!t lt !t0) then
+							!miss = true
+						elseif (!t lt !t1) then
+							!t1 = !t
+						endif
+					else
+						if (!q lt 0) then
+							!miss = true
+						endif
+					endif
+				enddo
+				if (!miss or (!t1 le !t0)) then
+					!hit = false
+					break
+				endif
+				!hit = true
+				!gt0 = !t0
+				!gt1 = !t1
+			enddo
+			skip if (not(!hit))
+			!gx = !ax + (!gt0 + !gt1) * 0.5 * !ldx
+			!gy = !ay + (!gt0 + !gt1) * 0.5 * !ldy
+			!glen = (!gt1 - !gt0) * !llen + !mgmarg
+			if (!glen lt !mgmarg) then
+				!glen = !mgmarg
+			endif
+			!gxs = !gx.string('D3').replace('mm', '')
+			!gys = !gy.string('D3').replace('mm', '')
+			!gds = !glen.string('D3').replace('mm', '')
+			!gerr = ''
+			GAP AT X $!gxs Y $!gys LENGTH $!gds
+			handle any
+				!gerr = !!error.text
+				!mgdbg.append('LDGAPFAIL x=' & !gxs & ' y=' & !gys & ' d=' & !gds & ' leader=' & !lref & ' through=' & !ldrefs[!bi] & ' err=' & !gerr)
+			elsehandle none
+				!ldgaps = !ldgaps + 1
+				!mgdbg.append('LDGAP x=' & !gxs & ' y=' & !gys & ' d=' & !gds & ' leader=' & !lref & ' from=' & !ax.string('D2') & ',' & !ay.string('D2') & ' to=' & !ex.string('D2') & ',' & !ey.string('D2') & ' through=' & !ldrefs[!bi])
+			endhandle
+		enddo
+	enddo
+	----------------------------------------------------------------------
 	-- one line per break attempted, so a run which drew none can be     --
 	-- told apart from one whose GAPs were refused. remove with the rest --
 	-- of the diagnostics (see the checklist's step 7)                   --
@@ -776,7 +1077,7 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	handle any
 		return
 	endhandle
-	!mgf.writerecord('GAPRUN ticks=' & !mgticks.size().string() & ' texts=' & !mgtexts.size().string() & ' bubbles=' & !gbrefs.size().string() & ' labels=' & !lbn.string() & ' segs=' & !dlsegs.size().string() & ' clearfails=' & !clrn.string() & ' lastclearerr=' & !clrerr)
+	!mgf.writerecord('GAPRUN ticks=' & !mgticks.size().string() & ' texts=' & !mgtexts.size().string() & ' bubbles=' & !gbrefs.size().string() & ' labels=' & !lbn.string() & ' segs=' & !dlsegs.size().string() & ' leaders=' & !ldn.string() & ' ldgaps=' & !ldgaps.string() & ' clearfails=' & !clrn.string() & ' lastclearerr=' & !clrerr)
 	!mcl = object array()
 	!mcl = !!DrawingPlan1MatchRowLog
 	handle any
