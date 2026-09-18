@@ -889,7 +889,11 @@ define method .Compare(!i is REAL, !box is STRING, !nxt is STRING) is STRING
 	if (!hei.leq(0)) then
 		!hei = 3.5
 	endif
-	!trisize = !hei * 2.8
+	-- 2.5, not 2.8 (user, 2026-09-18: the triangle read a little big
+	-- next to a 3.5mm code). kept the same in .DrawClouds() below --
+	-- RevCloud has to know the size actually drawn or it avoids the
+	-- wrong box
+	!trisize = !hei * 2.5
 	!opts = ' --tri-size ' & !trisize.string('D2')
 	-- the canvas and DrawingPlan1's own border texts, from the DRWG's
 	-- NTEXT ('CV x1 y1 x2 y2;W x1 y1 x2 y2', a DRWG has no DESC); the
@@ -1343,7 +1347,7 @@ define method .DrawClouds(!ref is STRING, !box is STRING, !nxt is STRING, !wantc
 	enddo
 
 	-- the revision triangle at the top right of every outer cloud: an
-	-- upright equilateral triangle, side 2.8 x the text height, corner
+	-- upright equilateral triangle, side 2.5 x the text height, corner
 	-- just off the cloud's box, the code centred a third of the way up
 	!hei = !this.revhei.val
 	handle any
@@ -1352,7 +1356,8 @@ define method .DrawClouds(!ref is STRING, !box is STRING, !nxt is STRING, !wantc
 	if (!hei.leq(0)) then
 		!hei = 3.5
 	endif
-	!side = !hei * 2.8
+	-- 2.5, matching .Compare()'s --tri-size above -- keep the two in step
+	!side = !hei * 2.5
 	!ntri = 0
 	!nfree = 0
 	do !ib from 1 to !boxes.size()
