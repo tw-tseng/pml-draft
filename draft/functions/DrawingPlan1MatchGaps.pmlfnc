@@ -621,9 +621,9 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	endif
 	----------------------------------------------------------------------
 	-- every label this loop can read is also kept for the leader pass   --
-	-- at the bottom: its box bare and padded, which layer it is on, if  --
-	-- it carries a leader, and where its design point falls on the      --
-	-- sheet. gathered here because CE is on the label anyway            --
+	-- at the bottom: its bare box, which layer it is on, if it carries  --
+	-- a leader, and where its design point falls on the sheet. gathered --
+	-- here because CE is on the label anyway                            --
 	----------------------------------------------------------------------
 	!ldrefs = object array()
 	!ldkind = object array()
@@ -635,10 +635,6 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	!ldry1 = object array()
 	!ldrx2 = object array()
 	!ldry2 = object array()
-	!ldx1 = object array()
-	!ldy1 = object array()
-	!ldx2 = object array()
-	!ldy2 = object array()
 	!lbn = 0
 	do !lb values !lbrefs
 		$!lb
@@ -710,10 +706,6 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 		!ly2 = !ly2 + !lbmarg
 		!lbn = !lbn + 1
 		!ldrefs.append(!lb)
-		!ldx1.append(!lx1)
-		!ldy1.append(!ly1)
-		!ldx2.append(!lx2)
-		!ldy2.append(!ly2)
 		------------------------------------------------------------
 		-- '/X/SS/S1/V1/ateSUPT' -> 'SUPT', as .PinnedLabelRecords --
 		-- reads it. a label on any other layer gives ''            --
@@ -867,10 +859,19 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	-- tested against the text of every other label in the view (line   --
 	-- numbers, bubbles and equipment names included: a leader through  --
 	-- any text is the same fault). the leader has to cross the TEXT    --
-	-- itself, the bare box -- merely passing through the 2mm padding   --
-	-- is not a crossing, or a leader ending beside its neighbour would  --
-	-- be cut short for nothing. once it does cross, the break covers    --
-	-- the padded box, the same margin the projection lines get above.  --
+	-- itself, the bare box -- merely passing near it is not a crossing, --
+	-- or a leader ending beside its neighbour would be cut short for   --
+	-- nothing. once it does cross, the break covers the box padded by  --
+	-- !ldpad, NOT the !lbmarg the projection lines get: that 2mm is    --
+	-- for a frame the text extent leaves out, but a support label's    --
+	-- flat oval reaches only 0.1 of a character beyond its text, and   --
+	-- with 2mm and !mgmarg on top a 9mm leader that crossed one oval   --
+	-- on its way to the next lost 8.8mm of itself -- a stub by the     --
+	-- pipe and nothing arriving at the label (user, 2026-09-18). 1mm    --
+	-- beyond the text is about 0.7mm beyond the oval, which is what    --
+	-- the user drew. and whatever the box says, !ldkeep of the leader  --
+	-- is always left standing at each end, so the line can be seen to  --
+	-- leave the pipe and to arrive at its label                        --
 	-- its own box is not a crossing, and neither is any label hanging  --
 	-- off the same design point (the rows of a support stack, a second --
 	-- label on one component): the leader ends at the block those      --
@@ -878,7 +879,7 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	--                                                                    --
 	-- the break goes on the GLAB or SLAB the leader belongs to, the     --
 	-- same command the grid bubbles take above, centred on the piece    --
-	-- inside the padded box and as long as it plus !mgmarg. every run   --
+	-- inside the padded box and exactly as long as it. every run        --
 	-- clears the label's breaks first and writes the set it wants now, --
 	-- so a break left from a label that has since moved does not stay  --
 	-- behind as a hole in the leader. a label that is not touched here --
@@ -890,6 +891,8 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	-- rides along with its element is not a change to cloud            --
 	----------------------------------------------------------------------
 	!ldkinds = ' NOZZ VALV REDU INST SUPT '
+	!ldpad = 1
+	!ldkeep = 1
 	!ldn = 0
 	!ldgaps = 0
 	!ps = object array()
@@ -984,8 +987,9 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 			endif
 			------------------------------------------------------------
 			-- pass 1 cuts the leader against the bare box: no piece    --
-			-- inside, no crossing. pass 2 cuts it against the padded  --
-			-- box, and that piece is what the break covers            --
+			-- inside, no crossing. pass 2 cuts it against the box     --
+			-- padded by !ldpad, and that piece is what the break      --
+			-- covers                                                  --
 			------------------------------------------------------------
 			!hit = false
 			!gt0 = 0.0
@@ -997,10 +1001,10 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 					!cbx2 = !ldrx2[!bi]
 					!cby2 = !ldry2[!bi]
 				else
-					!cbx1 = !ldx1[!bi]
-					!cby1 = !ldy1[!bi]
-					!cbx2 = !ldx2[!bi]
-					!cby2 = !ldy2[!bi]
+					!cbx1 = !ldrx1[!bi] - !ldpad
+					!cby1 = !ldry1[!bi] - !ldpad
+					!cbx2 = !ldrx2[!bi] + !ldpad
+					!cby2 = !ldry2[!bi] + !ldpad
 				endif
 				!t0 = 0.0
 				!t1 = 1.0
@@ -1047,11 +1051,26 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 				!gt1 = !t1
 			enddo
 			skip if (not(!hit))
+			------------------------------------------------------------
+			-- !ldkeep of leader stays at each end whatever the box    --
+			-- asks for. a crossed label right up against the pipe or --
+			-- against this label's own frame would otherwise take the --
+			-- end of the leader with it                               --
+			------------------------------------------------------------
+			!tkeep = !ldkeep / !llen
+			if (!gt0 lt !tkeep) then
+				!gt0 = !tkeep
+			endif
+			!tfar = 1 - !tkeep
+			if (!gt1 gt !tfar) then
+				!gt1 = !tfar
+			endif
+			skip if (!gt1 le !gt0)
 			!gx = !ax + (!gt0 + !gt1) * 0.5 * !ldx
 			!gy = !ay + (!gt0 + !gt1) * 0.5 * !ldy
-			!glen = (!gt1 - !gt0) * !llen + !mgmarg
-			if (!glen lt !mgmarg) then
-				!glen = !mgmarg
+			!glen = (!gt1 - !gt0) * !llen
+			if (!glen lt 0.5) then
+				skip
 			endif
 			!gxs = !gx.string('D3').replace('mm', '')
 			!gys = !gy.string('D3').replace('mm', '')
