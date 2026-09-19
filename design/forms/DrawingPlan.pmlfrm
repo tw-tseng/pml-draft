@@ -17,6 +17,11 @@
 -- The Import tab has no picks, so it takes the    --
 -- two levels off the file or off its own Bottom   --
 -- U / Top U boxes instead.                        --
+-- The Grid tab picks grid lines rather than       --
+-- points - plan lines in one round, level lines   --
+-- in the next - and makes a box for every bay on  --
+-- every storey they enclose (it was a form of its --
+-- own, DrawingPlanGrid, until 2026-09-19).        --
 -- Every tab only has to end up with three plan    --
 -- points and two levels and hand them to          --
 -- .MakeBox(), so a new way of setting out         --
@@ -31,6 +36,33 @@ layout form !!DrawingPlan dialog dock
 
 	member .userevar is STRING
 	member .edgdesc  is STRING
+
+	------------------------------------------------------------------
+	-- Grid tab - which round its picks belong to: 'plan', 'level'  --
+	-- or '' when nothing is being picked                            --
+	------------------------------------------------------------------
+	member .gridphase is STRING
+
+	------------------------------------------------------------------
+	-- the plan lines picked so far. one entry per line in each      --
+	-- array: the refno (to spot the same line picked twice), the    --
+	-- label for the list, the two ends in plan and the level the    --
+	-- line sits on (only for drawing the aid on it)                 --
+	------------------------------------------------------------------
+	member .planrefs is ARRAY
+	member .planlbls is ARRAY
+	member .plane1   is ARRAY
+	member .plann1   is ARRAY
+	member .plane2   is ARRAY
+	member .plann2   is ARRAY
+	member .planu    is ARRAY
+
+	------------------------------------------------------------------
+	-- the level lines picked in this round                          --
+	------------------------------------------------------------------
+	member .levrefs  is ARRAY
+	member .levlbls  is ARRAY
+	member .levus    is ARRAY
 
 	------------------------------------------------------------------
 	-- Split tab - the box being split is looked up and its geometry --
@@ -94,6 +126,46 @@ layout form !!DrawingPlan dialog dock
 			button .create 'Create Box'   at xmin.pa4     ymax.pa4+0.4 width 12 call |!This.CreateBox()|
 			button .clearp 'Clear Points' at xmax.create+1 ymin.create  width 12 call |!This.ClearPoints()|
 			button .delete 'Delete Box'   at xmax.clearp+1 ymin.create  width 12 call |!This.DeleteBox()|
+		exit
+
+		----------------------------------------------------------------
+		-- the frame edges are grid lines picked in the 3D view, in   --
+		-- two rounds: plan lines first (any number, two directions),  --
+		-- then level lines. Esc ends a round. every neighbouring     --
+		-- pair of plan lines in one direction crossed with every      --
+		-- neighbouring pair in the other is one bay, every            --
+		-- neighbouring pair of levels one storey, and a box is made   --
+		-- for every bay on every storey in one go                     --
+		----------------------------------------------------------------
+		frame .gridfr 'Grid' width 66
+			button .gplanbt  'Pick Plan Lines'  width 16 call |!This.GridPickPlan()|
+			button .glevbt   'Pick Level Lines' at xmax.gplanbt+1 ymin.gplanbt width 16 call |!This.GridPickLevels()|
+			button .gstopbt  'Stop'  at xmax.glevbt+1  ymin.gplanbt width 8 call |!This.GridStop()|
+			button .gclearbt 'Clear' at xmax.gstopbt+1 ymin.gplanbt width 8 call |!This.GridClear()|
+
+			para .gstatus at xmin.gplanbt ymax.gplanbt+0.3 text '' width 62
+
+			list .glines 'Picked grid lines' at xmin.gplanbt ymax.gstatus+0.2 width 62 height 8
+
+			------------------------------------------------------------
+			-- typed levels, for a grid that has no elevation planes:  --
+			-- one storey, used only when fewer than two level lines   --
+			-- have been picked. the offsets go on every box whichever --
+			-- way the levels came, added as they are: + is up, - is   --
+			-- down. they are kept from one batch to the next          --
+			------------------------------------------------------------
+			frame .glevfr 'Levels' at xmin.gplanbt ymax.glines+0.3 width 62
+				para .glevpa text 'typed levels are used only when no level lines are picked. offset: + up, - down' width 58
+
+				text .gubot  'Bottom U' at xmin.glevpa  ymax.glevpa+0.3 tagwidth 10 width 12 is STRING
+				text .guboto 'offset'   at xmax.gubot+1 ymin.gubot      tagwidth 7  width 10 is STRING
+
+				text .gutop  'Top U'    at xmin.gubot   ymax.gubot+0.2  tagwidth 10 width 12 is STRING
+				text .gutopo 'offset'   at xmax.gutop+1 ymin.gutop      tagwidth 7  width 10 is STRING
+			exit
+
+			button .gcreate 'Create Boxes' at xmin.glevfr ymax.glevfr+0.3 width 14 call |!This.GridCreateBoxes()|
+			para .gresult at xmax.gcreate+1 ymin.gcreate text '' width 46
 		exit
 
 		----------------------------------------------------------------
@@ -194,6 +266,15 @@ define method .DrawingPlan()
 	!this.log.clear()
 	!this.splitresult.val = ''
 	!this.splitequi = ''
+
+	------------------------------------------------------------------
+	-- Grid tab starts with nothing picked and no offset. the        --
+	-- offsets are only defaulted here - GridClear leaves them alone --
+	------------------------------------------------------------------
+	!this.gridphase = ''
+	!this.guboto.val = '0'
+	!this.gutopo.val = '0'
+	!this.GridClear()
 
 	------------------------------------------------------------------
 	-- most drawing plan boxes are cut into storeys, so Z is the     --
@@ -1325,6 +1406,630 @@ define method .DeleteBox()
 	$!ownernav
 	AID CLEAR ALL
 endmethod
+
+--------------------------------------------------------------------
+-- Grid tab - the frame edges are grid lines picked in the 3D view --
+-- in two rounds: plan lines, then level lines. the round decides   --
+-- what a pick means, not the line itself: in an E3D grid the same  --
+-- edge is drawn twice, once as a child of the elevation plane and  --
+-- once as a child of the column plane, and which one the cursor    --
+-- lands on is chance. a first cut that read the plane off the      --
+-- element took two lines along the top of the grid for levels      --
+-- (user, 2026-09-15). the boxes go through .MakeBox() like every   --
+-- other tab's, so they land in the same site, unnamed, and are     --
+-- numbered and labelled on the Info tab afterwards                 --
+--------------------------------------------------------------------
+
+------------------------------------------------------------------
+-- back to nothing picked. the offsets are left alone - they are --
+-- a project convention, not part of any one batch              --
+------------------------------------------------------------------
+define method .GridClear()
+	!this.DropPicking()
+	!this.gridphase = ''
+	!this.planrefs = object ARRAY()
+	!this.planlbls = object ARRAY()
+	!this.plane1 = object ARRAY()
+	!this.plann1 = object ARRAY()
+	!this.plane2 = object ARRAY()
+	!this.plann2 = object ARRAY()
+	!this.planu = object ARRAY()
+	!this.levrefs = object ARRAY()
+	!this.levlbls = object ARRAY()
+	!this.levus = object ARRAY()
+	!this.glines.clear()
+	!this.gubot.val = ''
+	!this.gutop.val = ''
+	!this.gstatus.val = ''
+	!this.gresult.val = ''
+	AID CLEAR ALL
+endmethod
+
+---------------------------------------------------------------------
+-- picking. the same one-packet-at-a-time chain as the Pick tab's   --
+-- .PickPoints(), and for the same reason (see the comment there):  --
+-- every packet carries the same description and is taken out by   --
+-- it before the next one goes in. the description is the one the  --
+-- Pick tab uses too, so starting a round here drops a four-point  --
+-- pick left half done and the other way round.                    --
+-- the one difference is the pick packet itself: an element pick    --
+-- rather than a position pick. a position pick answers a          --
+-- position and, in some snap modes, nothing else - the grid line  --
+-- it was on is gone. an element pick answers the element          --
+-- (EDGPICKDATA.item), which is all that is wanted here             --
+---------------------------------------------------------------------
+
+------------------------------------------------------------------
+-- first round. the plan lines already picked carry on - Clear   --
+-- is the way to start over                                      --
+------------------------------------------------------------------
+define method .GridPickPlan()
+	!this.gridphase = 'plan'
+	!this.gstatus.val = 'pick the plan lines. Esc (or Pick Level Lines) when they are all in'
+	!this.GridPickNext()
+endmethod
+
+------------------------------------------------------------------
+-- second round. a fresh set of levels every time - a half-done  --
+-- set from an earlier round is worth less than the confusion   --
+-- of adding to it                                               --
+------------------------------------------------------------------
+define method .GridPickLevels()
+	!this.levrefs = object ARRAY()
+	!this.levlbls = object ARRAY()
+	!this.levus = object ARRAY()
+	!this.GridRefreshList()
+	!this.gridphase = 'level'
+	!this.gstatus.val = !this.planrefs.size().string() & ' plan lines. now the level lines, in any order. Esc (or Create Boxes) when they are all in'
+	!this.GridPickNext()
+endmethod
+
+define method .GridPickNext()
+	if (!this.gridphase.eq('plan')) then
+		!next = !this.planrefs.size() + 1
+		!prompt = 'Plan grid line ' & !next.string() & ' (Esc when they are all in)'
+	else
+		!next = !this.levus.size() + 1
+		!prompt = 'Level line ' & !next.string() & ' (Esc when they are all in)'
+	endif
+
+	!this.DropPicking()
+
+	!packet = object EDGPACKET()
+	!packet.definePosition(!prompt)
+	!packet.pickPacket.stdElement(!prompt)
+	!packet.type = ''
+	!packet.description = !this.edgdesc
+	!packet.action = |!!DrawingPlan.GridPicked(!this.return[1])|
+	!packet.escape = |!!DrawingPlan.GridPickEscaped()|
+	!packet.remove = false
+	if (!!edgCntrl.add(!packet)) then
+	endif
+endmethod
+
+define method .GridStop()
+	!this.DropPicking()
+	!this.gridphase = ''
+	!this.gstatus.val = 'picking stopped - ' & !this.planrefs.size().string() & ' plan lines kept. Pick Plan Lines carries on, Clear starts over'
+endmethod
+
+------------------------------------------------------------------
+-- Esc in the 3D view. in the first round it is the way to say   --
+-- the plan lines are all in, and the second round starts; in    --
+-- the second it says the levels are all in, and the boxes are   --
+-- made. the framework has already taken the packet out by the   --
+-- time this runs                                                --
+------------------------------------------------------------------
+define method .GridPickEscaped()
+	if (!this.gridphase.eq('plan')) then
+		!this.GridPickLevels()
+	elseif (!this.gridphase.eq('level')) then
+		!this.gridphase = ''
+		!this.GridCreateBoxes()
+	else
+		!this.GridStop()
+	endif
+endmethod
+
+------------------------------------------------------------------
+-- something that is not usable was picked. say why and ask for --
+-- the next one                                                  --
+------------------------------------------------------------------
+define method .GridReject(!why is STRING)
+	!this.gstatus.val = !why
+	!this.GridPickNext()
+endmethod
+
+---------------------------------------------------------------------
+-- one pick in. !data is the EDGPICKDATA of an element pick; its   --
+-- .item is the element under the cursor. a grid line is a REFGLN  --
+-- and its P1/P2 are the ends of the line, the same pair            --
+-- DrawingPlan1GridAnnotation reads. the round says what to do     --
+-- with it                                                          --
+---------------------------------------------------------------------
+define method .GridPicked(!data is ANY)
+	!item = !data.item
+	handle any
+		!this.GridReject('nothing was picked - skipped')
+		return
+	endhandle
+	if (not(!item.set())) then
+		!this.GridReject('nothing was picked - skipped')
+		return
+	endif
+
+	!type = '?'
+	!type = !item.type
+	handle any
+	endhandle
+	if (!type.neq('REFGLN')) then
+		!this.GridReject('that is a ' & !type & ', not a grid line - skipped')
+		return
+	endif
+	!refstr = !item.string()
+
+	var !p1str p1 pos of $!refstr wrt worl
+	handle any
+		!this.GridReject('cannot read the ends of ' & !refstr & ' - skipped')
+		return
+	endhandle
+	var !p2str p2 pos of $!refstr wrt worl
+	handle any
+		!this.GridReject('cannot read the ends of ' & !refstr & ' - skipped')
+		return
+	endhandle
+	!p1 = object POSITION(!p1str)
+	!p2 = object POSITION(!p2str)
+
+	if (!this.gridphase.eq('plan')) then
+		!this.PlanLinePicked(!item, !refstr, !p1, !p2)
+	else
+		!this.LevelLinePicked(!item, !refstr, !p1, !p2)
+	endif
+endmethod
+
+---------------------------------------------------------------------
+-- the number the line's bubble prints. a REFGLN is the trace of   --
+-- one grid plane (its GRDREF) on another (its owner), and the     --
+-- IDPLANE of a plane is what the bubble prints                    --
+-- (DrawingPlan1GridAnnotation, 2026-09-07). which of the two      --
+-- planes is wanted depends on the round: the column plane for a   --
+-- plan line, the elevation plane for a level - and which of owner --
+-- and GRDREF that is depends on which one the cursor happened to  --
+-- land on. the horizontal one of the two is the elevation plane.  --
+-- this is only for the list, so anything unreadable falls back   --
+-- to the refno                                                    --
+---------------------------------------------------------------------
+define method .LabelOf(!item is DBREF, !refstr is STRING, !wantlevel is BOOLEAN) is STRING
+	!ownerhoriz = !this.OwnerIsHorizontal(!item)
+	!plref = ''
+	!plref = !item.owner.string()
+	handle any
+		!plref = ''
+	endhandle
+
+	!useowner = false
+	if (!ownerhoriz.eq('yes') and !wantlevel) then
+		!useowner = true
+	elseif (!ownerhoriz.eq('no') and not(!wantlevel)) then
+		!useowner = true
+	endif
+
+	!lbl = ''
+	if (!useowner and !plref.neq('')) then
+		var !lbl idplane of $!plref
+		handle any
+			!lbl = ''
+		endhandle
+	else
+		var !lbl idplane of grdref of $!refstr
+		handle any
+			!lbl = ''
+		endhandle
+	endif
+	if (!lbl.trim().eq('')) then
+		!lbl = !refstr
+	endif
+	return !lbl
+endmethod
+
+------------------------------------------------------------------
+-- 'yes' when the plane the line is drawn on is horizontal, 'no' --
+-- when it is not, '?' when it cannot be read. Z up or down is   --
+-- horizontal                                                    --
+------------------------------------------------------------------
+define method .OwnerIsHorizontal(!item is DBREF) is STRING
+	!plref = !item.owner.string()
+	handle any
+		return '?'
+	endhandle
+	var !oristr ori of $!plref wrt worl
+	handle any
+		return '?'
+	endhandle
+	!zdir = !oristr.orientation().zdir()
+	handle any
+		return '?'
+	endhandle
+	!angu = !zdir.angle(object DIRECTION('U'))
+	if (!angu lt 1 or !angu gt 179) then
+		return 'yes'
+	endif
+	return 'no'
+endmethod
+
+------------------------------------------------------------------
+-- first round. any grid line with a length in plan will do,     --
+-- whichever plane it is drawn on - only its plan geometry is    --
+-- used. a vertical line has no direction in plan and is skipped --
+------------------------------------------------------------------
+define method .PlanLinePicked(!item is DBREF, !refstr is STRING, !p1 is POSITION, !p2 is POSITION)
+	!lbl = !this.LabelOf(!item, !refstr, false)
+	do !i from 1 to !this.planrefs.size()
+		if (!this.planrefs[!i].eq(!refstr)) then
+			!this.GridReject('plan line ' & !lbl & ' is already picked - skipped')
+			return
+		endif
+	enddo
+
+	!dx = !p2.east - !p1.east
+	!dy = !p2.north - !p1.north
+	!len2 = !dx * !dx + !dy * !dy
+	if (!len2 lt 1) then
+		!this.GridReject(!lbl & ' is a vertical line - it has no direction in plan, skipped')
+		return
+	endif
+
+	!this.planrefs.append(!refstr)
+	!this.planlbls.append(!lbl)
+	!this.plane1.append(!p1.east)
+	!this.plann1.append(!p1.north)
+	!this.plane2.append(!p2.east)
+	!this.plann2.append(!p2.north)
+	!this.planu.append(!p1.up)
+
+	!this.MarkLine(!p1.east, !p1.north, !p2.east, !p2.north, !p1.up, !lbl)
+	!this.GridRefreshList()
+	!this.gstatus.val = 'plan line ' & !lbl & ' - ' & !this.planrefs.size().string() & ' so far. Esc (or Pick Level Lines) when they are all in'
+	!this.GridPickNext()
+endmethod
+
+------------------------------------------------------------------
+-- second round. the level is the U of the line, so it has to be --
+-- horizontal - a vertical one says nothing about height. the    --
+-- same level twice (the same edge on two faces) is dropped when --
+-- the storeys are worked out, not here                          --
+------------------------------------------------------------------
+define method .LevelLinePicked(!item is DBREF, !refstr is STRING, !p1 is POSITION, !p2 is POSITION)
+	!lbl = !this.LabelOf(!item, !refstr, true)
+	!du = !p2.up - !p1.up
+	if (!du.abs() gt 1) then
+		!this.GridReject(!lbl & ' is a vertical line - a level line runs horizontally, skipped')
+		return
+	endif
+	do !i from 1 to !this.levrefs.size()
+		if (!this.levrefs[!i].eq(!refstr)) then
+			!this.GridReject('level ' & !lbl & ' is already picked - skipped')
+			return
+		endif
+	enddo
+
+	!this.levrefs.append(!refstr)
+	!this.levlbls.append(!lbl)
+	!this.levus.append(!p1.up)
+	!this.MarkLine(!p1.east, !p1.north, !p2.east, !p2.north, !p1.up, 'EL ' & !lbl)
+	!this.GridRefreshList()
+	!this.gstatus.val = 'level ' & !lbl & ' - ' & !this.levus.size().string() & ' so far. Esc (or Create Boxes) when they are all in'
+	!this.GridPickNext()
+endmethod
+
+---------------------------------------------------------------------
+-- the boxes. the plan lines are sorted into two directions, each  --
+-- direction is ordered across itself, and every neighbouring pair --
+-- in one crossed with every neighbouring pair in the other is one --
+-- bay. the three corners MakeBox wants are the crossings of the   --
+-- two pairs: P1 and P2 along the first line of the pair in A, P3  --
+-- on the next line of A. the levels are sorted the same way and   --
+-- every neighbouring pair is one storey; every bay is made once   --
+-- per storey                                                      --
+---------------------------------------------------------------------
+define method .GridCreateBoxes()
+	!this.gresult.val = ''
+	!this.DropPicking()
+	!this.gridphase = ''
+	!n = !this.planrefs.size()
+	if (!n lt 4) then
+		!!alert.error('at least four plan lines are needed - two in each direction')
+		return
+	endif
+
+	------------------------------------------------------------------
+	-- the storeys: the picked levels when there are two or more,   --
+	-- otherwise the one storey typed on the form                   --
+	------------------------------------------------------------------
+	!levels = !this.SortedLevels()
+	if (!levels.size() lt 2) then
+		if (!this.gubot.val.trim().eq('') or !this.gutop.val.trim().eq('')) then
+			!!alert.error('at least two level lines are needed, or Bottom U and Top U typed in')
+			return
+		endif
+		!lo = !this.NumOf(!this.gubot.val)
+		!hi = !this.NumOf(!this.gutop.val)
+		if (!hi lt !lo) then
+			!lo = !this.NumOf(!this.gutop.val)
+			!hi = !this.NumOf(!this.gubot.val)
+		endif
+		!levels = object ARRAY()
+		!levels.append(!lo)
+		!levels.append(!hi)
+	endif
+	!boff = !this.OffOf(!this.guboto.val)
+	!toff = !this.OffOf(!this.gutopo.val)
+
+	------------------------------------------------------------------
+	-- unit direction of every line in plan, with the sign settled  --
+	-- so that a line and the same line the other way round compare --
+	-- equal                                                        --
+	------------------------------------------------------------------
+	!dxs = object ARRAY()
+	!dys = object ARRAY()
+	do !i from 1 to !n
+		!dx = !this.plane2[!i] - !this.plane1[!i]
+		!dy = !this.plann2[!i] - !this.plann1[!i]
+		!len2 = !dx * !dx + !dy * !dy
+		!len = !len2.sqrt()
+		!dx = !dx / !len
+		!dy = !dy / !len
+		if (!dy lt 0 or (!dy eq 0 and !dx lt 0)) then
+			!dx = 0 - !dx
+			!dy = 0 - !dy
+		endif
+		!dxs.append(!dx)
+		!dys.append(!dy)
+	enddo
+
+	------------------------------------------------------------------
+	-- two groups: A is whatever the first line runs along, B the   --
+	-- first direction that is not A. parallel means the cross      --
+	-- product of the unit directions is under sin(0.5 degrees)    --
+	------------------------------------------------------------------
+	!ax = !dxs[1]
+	!ay = !dys[1]
+	!bx = 0
+	!by = 0
+	!bset = false
+	!grp = object ARRAY()
+	do !i from 1 to !n
+		!cr = !ax * !dys[!i] - !ay * !dxs[!i]
+		if (!cr.abs() lt 0.0087) then
+			!grp.append('A')
+		elseif (not(!bset)) then
+			!bx = !dxs[!i]
+			!by = !dys[!i]
+			!bset = true
+			!grp.append('B')
+		else
+			!crb = !bx * !dys[!i] - !by * !dxs[!i]
+			if (!crb.abs() lt 0.0087) then
+				!grp.append('B')
+			else
+				!!alert.error('the plan lines run in three directions - a box has only two')
+				return
+			endif
+		endif
+	enddo
+	if (not(!bset)) then
+		!!alert.error('all the plan lines are parallel - lines across them are needed too')
+		return
+	endif
+
+	!ia = !this.SortedGroup(!grp, 'A', !ax, !ay)
+	!ib = !this.SortedGroup(!grp, 'B', !bx, !by)
+	if (!ia.size() lt 2 or !ib.size() lt 2) then
+		!!alert.error('two different lines are needed in each direction')
+		return
+	endif
+
+	!made = 0
+	!firsterr = ''
+	!na = !ia.size() - 1
+	!nb = !ib.size() - 1
+	!ns = !levels.size() - 1
+	do !s from 1 to !ns
+		!s2 = !s + 1
+		!ubot = !levels[!s] + !boff
+		!utop = !levels[!s2] + !toff
+		!dz = !utop - !ubot
+		if (!dz.abs() lt 1) then
+			if (!firsterr.eq('')) then
+				!firsterr = 'a storey comes out with no height once the offsets are on'
+			endif
+		else
+			do !i from 1 to !na
+				do !j from 1 to !nb
+					!i2 = !i + 1
+					!j2 = !j + 1
+					!p1 = !this.Cross(!ia[!i], !ib[!j])
+					!p2 = !this.Cross(!ia[!i], !ib[!j2])
+					!p3 = !this.Cross(!ia[!i2], !ib[!j])
+					!err = !this.MakeBox(!p1, !p2, !p3, !ubot, !utop, '', '', '', '', '')
+					if (!err.eq('')) then
+						!made = !made + 1
+					elseif (!firsterr.eq('')) then
+						!firsterr = !err
+					endif
+				enddo
+			enddo
+		endif
+	enddo
+
+	!this.gresult.val = !made.string() & ' box(es) made - ' & !na.string() & ' x ' & !nb.string() & ' bays, ' & !ns.string() & ' storey(s)'
+	if (!firsterr.neq('')) then
+		!!alert.error(!made.string() & ' box(es) made, the rest failed: ' & !firsterr)
+	endif
+
+	------------------------------------------------------------------
+	-- done with these lines. the typed levels and the offsets stay --
+	-- for the next batch, the picked lines and their aids go       --
+	------------------------------------------------------------------
+	if (!made gt 0) then
+		!this.planrefs = object ARRAY()
+		!this.planlbls = object ARRAY()
+		!this.plane1 = object ARRAY()
+		!this.plann1 = object ARRAY()
+		!this.plane2 = object ARRAY()
+		!this.plann2 = object ARRAY()
+		!this.planu = object ARRAY()
+		!this.levrefs = object ARRAY()
+		!this.levlbls = object ARRAY()
+		!this.levus = object ARRAY()
+		!this.GridRefreshList()
+		AID CLEAR ALL
+	endif
+endmethod
+
+---------------------------------------------------------------------
+-- the picked levels from low to high, with the same level twice   --
+-- (the same edge picked on two faces, or two grid systems) kept   --
+-- once. anything under 1mm apart is the same level                --
+---------------------------------------------------------------------
+define method .SortedLevels() is ARRAY
+	!res = object ARRAY()
+	if (!this.levus.size() eq 0) then
+		return !res
+	endif
+	!order = !this.levus.sortedIndices()
+	!last = 0
+	!first = true
+	do !k from 1 to !order.size()
+		!oi = !order[!k]
+		!u = !this.levus[!oi]
+		!keep = true
+		if (not(!first)) then
+			!d = !u - !last
+			if (!d.abs() lt 1) then
+				!keep = false
+			endif
+		endif
+		if (!keep) then
+			!res.append(!u)
+			!last = !u
+			!first = false
+		endif
+	enddo
+	return !res
+endmethod
+
+---------------------------------------------------------------------
+-- the lines of one group in order across the group, as indices    --
+-- into the plan arrays. 'across' is along the normal of the       --
+-- group's direction, and a line under 1mm from the one before it  --
+-- is the same grid line again (picked on another plane, or from   --
+-- another grid system) and is dropped                             --
+---------------------------------------------------------------------
+define method .SortedGroup(!grp is ARRAY, !which is STRING, !dx is REAL, !dy is REAL) is ARRAY
+	!idx = object ARRAY()
+	!off = object ARRAY()
+	do !i from 1 to !grp.size()
+		if (!grp[!i].eq(!which)) then
+			!o = !this.plann1[!i] * !dx - !this.plane1[!i] * !dy
+			!idx.append(!i)
+			!off.append(!o)
+		endif
+	enddo
+
+	!order = !off.sortedIndices()
+	!res = object ARRAY()
+	!last = 0
+	!first = true
+	do !k from 1 to !order.size()
+		!oi = !order[!k]
+		!o = !off[!oi]
+		!keep = true
+		if (not(!first)) then
+			!d = !o - !last
+			if (!d.abs() lt 1) then
+				!keep = false
+			endif
+		endif
+		if (!keep) then
+			!res.append(!idx[!oi])
+			!last = !o
+			!first = false
+		endif
+	enddo
+	return !res
+endmethod
+
+---------------------------------------------------------------------
+-- where plan line !i crosses plan line !j, as a position on level --
+-- 0 in the shape MakeBox takes. the two are never parallel here   --
+-- - they come from different groups                               --
+---------------------------------------------------------------------
+define method .Cross(!i is REAL, !j is REAL) is POSITION
+	!px = !this.plane1[!i]
+	!py = !this.plann1[!i]
+	!dx = !this.plane2[!i] - !px
+	!dy = !this.plann2[!i] - !py
+	!qx = !this.plane1[!j]
+	!qy = !this.plann1[!j]
+	!ex = !this.plane2[!j] - !qx
+	!ey = !this.plann2[!j] - !qy
+	!cr = !dx * !ey - !dy * !ex
+	!t = ((!qx - !px) * !ey - (!qy - !py) * !ex) / !cr
+	!x = !px + !dx * !t
+	!y = !py + !dy * !t
+	return !this.PosOf(!x, !y, 0)
+endmethod
+
+------------------------------------------------------------------
+-- an offset field: blank is 0, otherwise a number in mm         --
+------------------------------------------------------------------
+define method .OffOf(!str is STRING) is REAL
+	if (!str.trim().eq('')) then
+		return 0
+	endif
+	return !this.NumOf(!str)
+endmethod
+
+define method .GridRefreshList()
+	!rows = object ARRAY()
+	do !i from 1 to !this.planlbls.size()
+		!rows.append('plan   ' & !this.planlbls[!i])
+	enddo
+	do !i from 1 to !this.levlbls.size()
+		!rows.append('level  ' & !this.levlbls[!i] & '   U ' & !this.levus[!i].string('D1').replace('mm', ''))
+	enddo
+	if (!rows.size() eq 0) then
+		!this.glines.clear()
+	else
+		!this.glines.dtext = !rows
+	endif
+endmethod
+
+------------------------------------------------------------------
+-- an aid along the picked line with its label at the middle.    --
+-- coordinates go out one by one, not as a POSITION - a POSITION --
+-- expands with a WRT tail that AID will not take (the same trap --
+-- noted on .MarkOne()). the aids are only feedback, so a        --
+-- failure here is swallowed                                     --
+------------------------------------------------------------------
+define method .MarkLine(!e1 is REAL, !n1 is REAL, !e2 is REAL, !n2 is REAL, !u is REAL, !lbl is STRING)
+	!s1 = 'E ' & !e1.string().replace('mm', '') & ' N ' & !n1.string().replace('mm', '') & ' U ' & !u.string().replace('mm', '')
+	!s2 = 'E ' & !e2.string().replace('mm', '') & ' N ' & !n2.string().replace('mm', '') & ' U ' & !u.string().replace('mm', '')
+	AID LINE $!s1 TO $!s2
+	handle any
+	endhandle
+	!em = (!e1 + !e2) * 0.5
+	!nm = (!n1 + !n2) * 0.5
+	!emstr = !em.string().replace('mm', '')
+	!nmstr = !nm.string().replace('mm', '')
+	!ustr = !u.string().replace('mm', '')
+	AID TEXT |$!lbl| AT E $!emstr N $!nmstr U $!ustr
+	handle any
+	endhandle
+endmethod
+
 
 ----------------------------------------------
 -- Split tab - cut an existing box in two   --
