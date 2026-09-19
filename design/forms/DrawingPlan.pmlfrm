@@ -130,8 +130,11 @@ layout form !!DrawingPlan dialog dock
 
 		----------------------------------------------------------------
 		-- the frame edges are grid lines picked in the 3D view, in   --
-		-- two rounds: plan lines first (any number, two directions),  --
-		-- then level lines. Esc ends a round. every neighbouring     --
+		-- two rounds: plan lines (any number, two directions) and    --
+		-- level lines. each round is started by its own button and   --
+		-- ended by Esc, and nothing follows on by itself - the       --
+		-- levels can just as well be typed or picked as points, and  --
+		-- the boxes are only made by Create Boxes. every neighbouring --
 		-- pair of plan lines in one direction crossed with every      --
 		-- neighbouring pair in the other is one bay, every            --
 		-- neighbouring pair of levels one storey, and a box is made   --
@@ -148,20 +151,23 @@ layout form !!DrawingPlan dialog dock
 			list .glines 'Picked grid lines' at xmin.gplanbt ymax.gstatus+0.2 width 62 height 8
 
 			------------------------------------------------------------
-			-- typed levels, for a grid that has no elevation planes:  --
-			-- one storey, used only when fewer than two level lines   --
-			-- have been picked. the offsets go on every box whichever --
-			-- way the levels came, added as they are: + is up, - is   --
-			-- down. they are kept from one batch to the next          --
+			-- one storey typed or picked, for a grid that has no      --
+			-- elevation planes: used only when fewer than two level   --
+			-- lines have been picked. Pick takes the U of a point in  --
+			-- the 3D view. the offsets go on every box whichever way  --
+			-- the levels came, added as they are: + is up, - is down. --
+			-- they are kept from one batch to the next                --
 			------------------------------------------------------------
 			frame .glevfr 'Levels' at xmin.gplanbt ymax.glines+0.3 width 62
-				para .glevpa text 'typed levels are used only when no level lines are picked. offset: + up, - down' width 58
+				para .glevpa text 'Bottom / Top U are used only when no level lines are picked. offset: + up, - down' width 58
 
-				text .gubot  'Bottom U' at xmin.glevpa  ymax.glevpa+0.3 tagwidth 10 width 12 is STRING
-				text .guboto 'offset'   at xmax.gubot+1 ymin.gubot      tagwidth 7  width 10 is STRING
+				text   .gubot   'Bottom U' at xmin.glevpa    ymax.glevpa+0.3 tagwidth 10 width 12 is STRING
+				button .gubotpk 'Pick'     at xmax.gubot+0.5  ymin.gubot      width 6 call |!This.GridPickLevel('bot')|
+				text   .guboto  'offset'   at xmax.gubotpk+1 ymin.gubot      tagwidth 7  width 10 is STRING
 
-				text .gutop  'Top U'    at xmin.gubot   ymax.gubot+0.2  tagwidth 10 width 12 is STRING
-				text .gutopo 'offset'   at xmax.gutop+1 ymin.gutop      tagwidth 7  width 10 is STRING
+				text   .gutop   'Top U'    at xmin.gubot     ymax.gubot+0.2  tagwidth 10 width 12 is STRING
+				button .gutoppk 'Pick'     at xmax.gutop+0.5  ymin.gutop      width 6 call |!This.GridPickLevel('top')|
+				text   .gutopo  'offset'   at xmax.gutoppk+1 ymin.gutop      tagwidth 7  width 10 is STRING
 			exit
 
 			button .gcreate 'Create Boxes' at xmin.glevfr ymax.glevfr+0.3 width 14 call |!This.GridCreateBoxes()|
@@ -1465,7 +1471,7 @@ endmethod
 ------------------------------------------------------------------
 define method .GridPickPlan()
 	!this.gridphase = 'plan'
-	!this.gstatus.val = 'pick the plan lines. Esc (or Pick Level Lines) when they are all in'
+	!this.gstatus.val = 'pick the plan lines. Esc when they are all in'
 	!this.GridPickNext()
 endmethod
 
@@ -1480,7 +1486,7 @@ define method .GridPickLevels()
 	!this.levus = object ARRAY()
 	!this.GridRefreshList()
 	!this.gridphase = 'level'
-	!this.gstatus.val = !this.planrefs.size().string() & ' plan lines. now the level lines, in any order. Esc (or Create Boxes) when they are all in'
+	!this.gstatus.val = !this.planrefs.size().string() & ' plan lines. now the level lines, in any order. Esc when they are all in'
 	!this.GridPickNext()
 endmethod
 
@@ -1514,21 +1520,70 @@ define method .GridStop()
 endmethod
 
 ------------------------------------------------------------------
--- Esc in the 3D view. in the first round it is the way to say   --
--- the plan lines are all in, and the second round starts; in    --
--- the second it says the levels are all in, and the boxes are   --
--- made. the framework has already taken the packet out by the   --
--- time this runs                                                --
+-- Bottom U / Top U off a point in the 3D view. a position pick  --
+-- like the Pick tab's, one packet, and only the U of the answer --
+-- is kept. it ends any grid line round in progress - one pick   --
+-- at a time is all the packet chain allows. !which is 'bot' or  --
+-- 'top'                                                         --
+------------------------------------------------------------------
+define method .GridPickLevel(!which is STRING)
+	!this.DropPicking()
+	!this.gridphase = ''
+	!prompt = 'Bottom U - any point on the lower level'
+	if (!which.eq('top')) then
+		!prompt = 'Top U - any point on the upper level'
+	endif
+	!this.gstatus.val = 'pick a point for ' & !which & ' U'
+
+	!packet = object EDGPACKET()
+	!packet.definePosition(!prompt)
+	!packet.description = !this.edgdesc
+	!packet.action = |!!DrawingPlan.GridLevelPicked(!this.return[1].position, '$!which')|
+	!packet.remove = false
+	if (!!edgCntrl.add(!packet)) then
+	endif
+endmethod
+
+------------------------------------------------------------------
+-- the point is in. its U goes into the field, and a mark at the --
+-- point itself shows which level was taken. the mark is added   --
+-- to the grid line aids, not put in their place                 --
+------------------------------------------------------------------
+define method .GridLevelPicked(!pos is POSITION, !which is STRING)
+	!!DrawingPlan.DropPicking()
+	!posw = !pos.wrt(WORL)
+	!ustr = !posw.up.string('D1').replace('mm', '')
+	!tag = 'TOP U'
+	if (!which.eq('bot')) then
+		!!DrawingPlan.gubot.val = !ustr
+		!tag = 'BOT U'
+	else
+		!!DrawingPlan.gutop.val = !ustr
+	endif
+	!estr = !posw.east.string('D1').replace('mm', '')
+	!nstr = !posw.north.string('D1').replace('mm', '')
+	!!DrawingPlan.MarkOne(!estr, !nstr, !ustr, !tag)
+	!!DrawingPlan.gstatus.val = !which & ' U = ' & !ustr
+endmethod
+
+------------------------------------------------------------------
+-- Esc in the 3D view: the lines of this round are all in. it    --
+-- only ends the round - it used to start the level round after  --
+-- the plan one and make the boxes after the level one, but the  --
+-- levels are as often typed or picked as points, and the boxes  --
+-- should not appear before the user has looked at the list and  --
+-- pressed Create Boxes (user, 2026-09-19). the framework has     --
+-- already taken the packet out by the time this runs            --
 ------------------------------------------------------------------
 define method .GridPickEscaped()
 	if (!this.gridphase.eq('plan')) then
-		!this.GridPickLevels()
+		!this.gstatus.val = !this.planrefs.size().string() & ' plan lines in. now the levels - Pick Level Lines, or Bottom U / Top U - then Create Boxes'
 	elseif (!this.gridphase.eq('level')) then
-		!this.gridphase = ''
-		!this.GridCreateBoxes()
+		!this.gstatus.val = !this.levus.size().string() & ' level lines in. Create Boxes when ready'
 	else
-		!this.GridStop()
+		!this.gstatus.val = 'picking stopped'
 	endif
+	!this.gridphase = ''
 endmethod
 
 ------------------------------------------------------------------
@@ -1690,7 +1745,7 @@ define method .PlanLinePicked(!item is DBREF, !refstr is STRING, !p1 is POSITION
 
 	!this.MarkLine(!p1.east, !p1.north, !p2.east, !p2.north, !p1.up, !lbl)
 	!this.GridRefreshList()
-	!this.gstatus.val = 'plan line ' & !lbl & ' - ' & !this.planrefs.size().string() & ' so far. Esc (or Pick Level Lines) when they are all in'
+	!this.gstatus.val = 'plan line ' & !lbl & ' - ' & !this.planrefs.size().string() & ' so far. Esc when they are all in'
 	!this.GridPickNext()
 endmethod
 
@@ -1719,7 +1774,7 @@ define method .LevelLinePicked(!item is DBREF, !refstr is STRING, !p1 is POSITIO
 	!this.levus.append(!p1.up)
 	!this.MarkLine(!p1.east, !p1.north, !p2.east, !p2.north, !p1.up, 'EL ' & !lbl)
 	!this.GridRefreshList()
-	!this.gstatus.val = 'level ' & !lbl & ' - ' & !this.levus.size().string() & ' so far. Esc (or Create Boxes) when they are all in'
+	!this.gstatus.val = 'level ' & !lbl & ' - ' & !this.levus.size().string() & ' so far. Esc when they are all in'
 	!this.GridPickNext()
 endmethod
 
