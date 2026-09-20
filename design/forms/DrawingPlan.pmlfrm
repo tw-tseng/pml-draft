@@ -1547,12 +1547,22 @@ endmethod
 ------------------------------------------------------------------
 -- the point is in. its U goes into the field, and a mark at the --
 -- point itself shows which level was taken. the mark is added   --
--- to the grid line aids, not put in their place                 --
+-- to the grid line aids, not put in their place.                --
+-- the coordinates are read off !pos BEFORE the packet is        --
+-- dropped: PML passes arguments by reference, so !pos is the    --
+-- packet's own return[1].position, and edgCntrl.remove() ->     --
+-- retrieve() replaces the whole EDGSTATE, after which !pos is   --
+-- 'non-existent' and .wrt() aborts with (2,750) (user,           --
+-- 2026-09-20). .SetPoint() reads first and drops later too, and --
+-- .SplitPointPicked() copies into a member first - same rule    --
 ------------------------------------------------------------------
 define method .GridLevelPicked(!pos is POSITION, !which is STRING)
-	!!DrawingPlan.DropPicking()
 	!posw = !pos.wrt(WORL)
+	!estr = !posw.east.string('D1').replace('mm', '')
+	!nstr = !posw.north.string('D1').replace('mm', '')
 	!ustr = !posw.up.string('D1').replace('mm', '')
+	!!DrawingPlan.DropPicking()
+
 	!tag = 'TOP U'
 	if (!which.eq('bot')) then
 		!!DrawingPlan.gubot.val = !ustr
@@ -1560,8 +1570,6 @@ define method .GridLevelPicked(!pos is POSITION, !which is STRING)
 	else
 		!!DrawingPlan.gutop.val = !ustr
 	endif
-	!estr = !posw.east.string('D1').replace('mm', '')
-	!nstr = !posw.north.string('D1').replace('mm', '')
 	!!DrawingPlan.MarkOne(!estr, !nstr, !ustr, !tag)
 	!!DrawingPlan.gstatus.val = !which & ' U = ' & !ustr
 endmethod
@@ -2288,14 +2296,14 @@ endmethod
 -- parameter into a SECOND method as that method's only argument --
 -- failed in the field with 'Method DOSPLITAT(<UNTYPED>) not     --
 -- found' - .DoSplitAt(!pos) is not found even though it is      --
--- declared to take exactly that. .PickDone()/.SetPoint() pass a --
--- POSITION on to a second method too and that works, so the     --
--- difference is not the hop count - it is that .SetPoint() also --
--- takes a REAL alongside it and, more importantly, is a sink     --
--- (writes into members, calls nothing further with the position) --
--- while nothing here relies on guessing why; the position is    --
--- written into a member instead and .DoSplitAt() reads it back, --
--- avoiding the failing call shape entirely                       --
+-- declared to take exactly that. the position is written into a --
+-- member instead and .DoSplitAt() reads it back.                --
+-- the cause turned up later on the Grid tab (2026-09-20): !pos  --
+-- is a reference into the packet's return array, and            --
+-- .DropPicking() in between replaces the packet's EDGSTATE, so  --
+-- by the time .DoSplitAt(!pos) was called !pos no longer         --
+-- existed - hence <UNTYPED>. the member copy is taken before the --
+-- drop, which is why it works. see .GridLevelPicked()            --
 ------------------------------------------------------------------
 define method .SplitPointPicked(!pos is POSITION)
 	!!DrawingPlan.splitpickpos = !pos
