@@ -19,6 +19,7 @@
 - `executecommand` 要給 Command key，不是 Button 名；打錯不報錯、只是沒反應。
 - 用 `object POSITION()` 逐欄填的 POSITION 沒有座標系，`.distance()`/`.direction()` 會炸；用 `DrawingPlan.PosOf()` 那種帶 `WRT /*` 的字串建。POSITION 直接展開給 AID 會帶 `WRT /*` 尾巴，AID 不吃，座標要一個一個寫。
 - LDIM 的斷口：CE 在 LDIM，`gap at x <X> y <Y> length <L>`。
+- EDGPACKET 的 action 傳進方法的 `!pos` 是 packet 自己 `return[1].position` 的參考（方法參數傳參考）。`!!edgCntrl.remove()` → `retrieve()` 會把整個 EDGSTATE 換掉，先 `DropPicking()` 再用 `!pos` 就炸 `(2,750) Cannot invoke method WRT on non-existent object`，再往下傳會變 `Method X(<UNTYPED>) not found`。先把 E/N/U 取出來（或複製進 member）再 drop。
 
 ## E3D 格線（REFGRD → GRIDEL → GRIDPL → REFGLN）
 - 平面柱位線在 Z 軸的 GRIDEL（專案裡叫 `Elev`）底下的水平 GRIDPL 裡，不是頂層。
@@ -33,9 +34,20 @@
 - PML 寫到 `L:`，對應這台的 `D:`；使用者說「請看 check」是指 `D:\...\CHECK.TXT`（check*.txt 都是除錯 dump，已 gitignore）。
 - Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。
 
+## 進行中（2026-09-20，分支 `feature/drawingplan-grid-merge`，從 master `bd8079f` 開）
+- 做了什麼（8 個 commit，都只動 `design/forms/DrawingPlan.pmlfrm`）：
+  - `DrawingPlanGrid.pmlfrm` 併進 `DrawingPlan` 成 **Grid** 分頁，獨立表單刪掉。方法加 `Grid` 前綴，gadget 撞名的加 `g`（`.gubot/.gutop/.gcreate/.glines/.gstatus/.gresult`），`edgdesc`／`DropPicking`／`Close` 共用一份——兩種 pick 用同一個 packet description，在 Grid 開始點線會把 Pick 分頁做一半的 4 點丟掉。
+  - Grid：Esc 只結束該輪，BOX 只有按 Create Boxes 才建；Top U／Bottom U 各有 Pick 鈕（點一個點取 U）；Top/Bottom U 跟點到的高程線一起排序去重分層（`SortedLevels`）。
+  - Split/Merge 分頁改名 **Modify**，新增 **Move Face**：一個面推出去／拉進來、對面不動，BOX 就地改 POS＋該軸長度（不建新 BOX）。面用 BOX 自己的軸命名（+X/−X/+Y/−Y/Top/Bottom）。兩種給法：`by offset`＋Move、`to coordinate` 的 Pick（點完直接移、欄位顯示移完的座標）；欄位手打＋Enter 也會移（text CALLBACK，用 `facetolast` 擋重複觸發）。
+  - Modify 分頁重排：頂端三步驟提示、Show Box 旁顯示目前 BOX 名稱／XYZ／U 底..頂、三個功能各自一個子框；Show Box 不再是 toggle。
+- **還沒在 E3D 實測**：Move Face 全部（`XLEN $!newlen` 展開帶不帶 mm；Enter callback 是按 Enter 才觸發還是離開欄位也觸發——若是後者改回顯式按鈕）；Modify 分頁版面（Move Face 右側按鈕用固定 `xmin.faceoff+46` 對齊）；Grid 分頁 Top/Bottom U 併入分層後的結果。已實測 OK：Grid 分頁合併後能建 BOX、Bottom U 的 Pick（修過 DropPicking 順序後）。
+- 測完 OK 才併回 master。工作樹上另外有兩個舊備份的刪除（`DrawingPlan1MatchLine(20260122)/(20260311).pmlfnc`）沒進任何 commit，使用者說不要進 master。
+- 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層、圍住選取物建 BOX、BOX 總覽清單。
+- 舊的 `develop` 分支是 7 月練 git 的孤兒分支，已刪。
+
 ## 換電腦
 1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
-2. 設使用者環境變數 `NOTION_TOKEN`（值在舊機器的使用者環境變數裡，不在 repo）。
+2. 設使用者環境變數 `NOTION_TOKEN`。舊 token 已失效（2026-09-20 起 MCP 與 REST 都回 401 `API token is invalid`），到 notion.so/my-integrations 重新產一個，並確認 integration 有連到「E3D-管線平面圖程式摘要」那頁。
 3. 重建 `.mcp.json`：
    ```json
    {"mcpServers":{"notion":{"type":"http","url":"https://mcp.notion.com/mcp","headers":{"Authorization":"Bearer ${NOTION_TOKEN}"}}}}
