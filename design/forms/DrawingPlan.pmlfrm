@@ -164,7 +164,7 @@ layout form !!DrawingPlan dialog dock
 			-- to the next                                             --
 			------------------------------------------------------------
 			frame .glevfr 'Levels' at xmin.gplanbt ymax.glines+0.3 width 62
-				para .glevpa text 'Top / Bottom U count as levels along with the level lines. offset: + up, - down' width 58
+				para .glevpa text 'Top / Bottom U count as levels too. offset: + up, - down' width 58
 
 				text   .gutop   'Top U'    at xmin.glevpa    ymax.glevpa+0.3 tagwidth 10 width 12 is STRING
 				button .gutoppk 'Pick'     at xmax.gutop+0.5  ymin.gutop      width 6 call |!This.GridPickLevel('top')|
@@ -239,46 +239,74 @@ layout form !!DrawingPlan dialog dock
 		-- the target                                                  --
 		----------------------------------------------------------------
 		frame .splitfr 'Modify' width 66
-			button .showbox 'Show Box' width 16 call |!This.ShowBox()|
+			------------------------------------------------------------
+			-- the three steps in one line at the top, then the box    --
+			-- that is about to be changed, by name and size, so it is --
+			-- never a guess which one an action will hit               --
+			------------------------------------------------------------
+			para .modhint text '1. select a box in the model   2. Show Box   3. one action below' width 62
 
-			para .splitax at xmin.showbox ymax.showbox+0.3 text 'Split along          Offset'
-
-			toggle .splitx at xmin.splitax ymax.splitax+0.2 'X'
-			text .splitxoff at xmax.splitx+3.3 ymin.splitx width 10 is REAL
-			para .splitxmm at xmax.splitxoff+0.2 ymin.splitx text 'mm'
-
-			toggle .splity at xmin.splitx ymax.splitx+0.1 'Y'
-			text .splityoff at xmax.splity+3.3 ymin.splity width 10 is REAL
-			para .splitymm at xmax.splityoff+0.2 ymin.splity text 'mm'
-
-			toggle .splitz at xmin.splity ymax.splity+0.1 'Z'
-			text .splitzoff at xmax.splitz+3.3 ymin.splitz width 10 is REAL
-			para .splitzmm at xmax.splitzoff+0.2 ymin.splitz text 'mm'
-
-			button .splitpick 'Pick Split Point' at xmin.splitax ymax.splitz+0.3 width 16 call |!This.PickSplitPoint()|
+			button .showbox 'Show Box' at xmin.modhint ymax.modhint+0.2 width 12 call |!This.ShowBox()|
+			para .boxinfo at xmax.showbox+1 ymin.showbox text '(no box yet)' width 48
 
 			------------------------------------------------------------
-			-- one face, named along the box's own axes as Show Box    --
-			-- draws them, and three ways to say where it goes: an     --
+			-- Split: the box is cut at a picked point along the ticked --
+			-- axes. Offset shifts the cut from the point actually     --
+			-- picked (snap to a beam, cut 50 below it)                 --
+			------------------------------------------------------------
+			frame .splitsub 'Split' at xmin.modhint ymax.showbox+0.4 width 62
+				para .splithint text 'cut at a picked point, along the ticked axes. offset (mm) shifts the cut' width 58
+
+				toggle .splitx at xmin.splithint ymax.splithint+0.2 'X'
+				text .splitxoff 'offset' at xmax.splitx+1 ymin.splitx tagwidth 7 width 9 is REAL
+				para .splitxmm at xmax.splitxoff+0.2 ymin.splitx text 'mm'
+
+				toggle .splity at xmin.splitx ymax.splitx+0.1 'Y'
+				text .splityoff 'offset' at xmax.splity+1 ymin.splity tagwidth 7 width 9 is REAL
+				para .splitymm at xmax.splityoff+0.2 ymin.splity text 'mm'
+
+				toggle .splitz at xmin.splity ymax.splity+0.1 'Z'
+				text .splitzoff 'offset' at xmax.splitz+1 ymin.splitz tagwidth 7 width 9 is REAL
+				para .splitzmm at xmax.splitzoff+0.2 ymin.splitz text 'mm'
+
+				button .splitpick 'Pick Split Point' at xmin.splitx ymax.splitz+0.3 width 16 call |!This.PickSplitPoint()|
+			exit
+
+			------------------------------------------------------------
+			-- Move Face: one face, named along the box's own axes as  --
+			-- Show Box draws them, and three ways to say where it     --
+			-- goes, one per row with its button on the right: an      --
 			-- offset (+ out, - in), a world coordinate (for a face    --
-			-- square to E/N/U), or a picked point the face is moved   --
-			-- to                                                      --
+			-- square to E/N/U), or a picked point                     --
 			------------------------------------------------------------
-			para .facesep at xmin.splitpick ymax.splitpick+0.4 text 'Move Face (the opposite face stays)'
-			option .faceopt 'Face' at xmin.facesep ymax.facesep+0.1 tagwidth 5 width 12
-			text .faceoff 'by' at xmax.faceopt+1 ymin.faceopt tagwidth 3 width 9 is REAL
-			para .facemm at xmax.faceoff+0.2 ymin.faceopt text 'mm (+ out, - in)'
-			button .facebybt 'Move by' at xmax.facemm+0.6 ymin.faceopt width 9 call |!This.MoveFaceBy()|
+			frame .facesub 'Move Face' at xmin.splitsub ymax.splitsub+0.3 width 62
+				para .facehint1 text 'one face goes out or in, the opposite face stays put' width 58
+				para .facehint2 at xmin.facehint1 ymax.facehint1+0.05 text 'X / Y / Z are the axes Show Box draws in the 3D view' width 58
 
-			text .faceto 'to' at xmin.faceopt ymax.faceopt+0.2 tagwidth 3 width 9 is REAL
-			para .facetomm at xmax.faceto+0.2 ymin.faceto text 'E / N / U'
-			button .facetobt 'Move to' at xmax.facetomm+0.6 ymin.faceto width 9 call |!This.MoveFaceTo()|
-			button .facepkbt 'Move to Picked Point' at xmax.facetobt+1 ymin.faceto width 20 call |!This.PickFacePoint()|
+				option .faceopt 'Face' at xmin.facehint2 ymax.facehint2+0.3 tagwidth 15 width 12
 
-			para .mergesep at xmin.facesep ymax.faceto+0.4 text 'Merge'
-			button .mergebt 'Merge Selected' at xmin.mergesep ymax.mergesep+0.1 width 16 call |!This.MergeBoxes()|
+				text .faceoff 'by offset' at xmin.faceopt ymax.faceopt+0.2 tagwidth 15 width 9 is REAL
+				para .facemm at xmax.faceoff+0.2 ymin.faceoff text 'mm  (+ out, - in)'
+				button .facebybt 'Move' at xmin.faceoff+44 ymin.faceoff width 8 call |!This.MoveFaceBy()|
 
-			para .splitresult at xmin.mergebt ymax.mergebt+0.3 text '' width 62
+				text .faceto 'to coordinate' at xmin.faceoff ymax.faceoff+0.1 tagwidth 15 width 9 is REAL
+				para .facetomm at xmax.faceto+0.2 ymin.faceto text 'E / N / U (world)'
+				button .facetobt 'Move' at xmin.faceoff+44 ymin.faceto width 8 call |!This.MoveFaceTo()|
+
+				para .facepklbl at xmin.faceto ymax.faceto+0.25 text 'to a picked point' width 15
+				button .facepkbt 'Pick' at xmin.faceoff+44 ymin.facepklbl width 8 call |!This.PickFacePoint()|
+			exit
+
+			------------------------------------------------------------
+			-- Merge works on the model selection, not on Show Box's   --
+			-- one box                                                  --
+			------------------------------------------------------------
+			frame .mergesub 'Merge' at xmin.facesub ymax.facesub+0.3 width 62
+				para .mergehint text 'select several boxes in the model (ctrl-click), then' width 40
+				button .mergebt 'Merge Selected' at xmax.mergehint+1 ymin.mergehint width 16 call |!This.MergeBoxes()|
+			exit
+
+			para .splitresult at xmin.mergesub ymax.mergesub+0.3 text '' width 62
 		exit
 
 	exit
@@ -2208,12 +2236,15 @@ endmethod
 -- always ends up showing whatever CE is right now rather than     --
 -- toggling off something that happened to be shown already        --
 ------------------------------------------------------------------
+------------------------------------------------------------------
+-- Show Box always re-reads the box under CE and redraws its     --
+-- axes. it used to toggle - a second press cleared the aids -   --
+-- but on a tab a first-time user reads top to bottom, a button  --
+-- that sometimes does nothing visible is one more thing to      --
+-- puzzle over (user, 2026-09-20). the aids go with Close, or    --
+-- with the next Show Box                                        --
+------------------------------------------------------------------
 define method .ShowBox()
-	if (!this.splitequi.neq('')) then
-		AID CLEAR ALL
-		!this.splitequi = ''
-		return
-	endif
 	!this.RefreshBox()
 endmethod
 
@@ -2227,6 +2258,7 @@ endmethod
 define method .RefreshBox()
 	AID CLEAR ALL
 	!this.splitequi = ''
+	!this.boxinfo.val = '(no box yet)'
 	!equi = !this.CurrentSplitBox()
 	if (!equi.eq('')) then
 		return
@@ -2255,6 +2287,17 @@ define method .RefreshBox()
 	!this.splittitle1 = !this.TagValue(!equinav, 'title1')
 	!this.splittitle2 = !this.TagValue(!equinav, 'title2')
 	!this.splittitle3 = !this.TagValue(!equinav, 'title3')
+
+	------------------------------------------------------------------
+	-- the box line: name, the three lengths, and where it sits in   --
+	-- U - the numbers a face move is about to change                --
+	------------------------------------------------------------------
+	!halfz = !this.splitzlen * 0.5
+	!ubot = !this.splitcen.up - !halfz
+	!utop = !this.splitcen.up + !halfz
+	!txt = !equi & '   X ' & !this.splitxlen.string('D0') & '  Y ' & !this.splitylen.string('D0') & '  Z ' & !this.splitzlen.string('D0')
+	!txt = !txt & '   U ' & !ubot.string('D0').replace('mm', '') & ' .. ' & !utop.string('D0').replace('mm', '')
+	!this.boxinfo.val = !txt
 
 	!this.DrawBoxAxes()
 endmethod
