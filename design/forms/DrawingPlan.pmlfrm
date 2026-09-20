@@ -151,23 +151,27 @@ layout form !!DrawingPlan dialog dock
 			list .glines 'Picked grid lines' at xmin.gplanbt ymax.gstatus+0.2 width 62 height 8
 
 			------------------------------------------------------------
-			-- one storey typed or picked, for a grid that has no      --
-			-- elevation planes: used only when fewer than two level   --
-			-- lines have been picked. Pick takes the U of a point in  --
-			-- the 3D view. the offsets go on every box whichever way  --
-			-- the levels came, added as they are: + is up, - is down. --
-			-- they are kept from one batch to the next                --
+			-- two more levels, typed or picked as points (Pick takes  --
+			-- the U of a point in the 3D view). they go into the same --
+			-- sorted set as the level lines, so on their own they are --
+			-- one storey (a grid with no elevation planes) and with   --
+			-- lines picked as well they add the storeys above and    --
+			-- below (user, 2026-09-20). Top is on the upper row, the   --
+			-- way the levels sit in the model. the offsets go on      --
+			-- every box whichever way the levels came, added as they  --
+			-- are: + is up, - is down. they are kept from one batch   --
+			-- to the next                                             --
 			------------------------------------------------------------
 			frame .glevfr 'Levels' at xmin.gplanbt ymax.glines+0.3 width 62
-				para .glevpa text 'Bottom / Top U are used only when no level lines are picked. offset: + up, - down' width 58
+				para .glevpa text 'Top / Bottom U count as levels along with the level lines. offset: + up, - down' width 58
 
-				text   .gubot   'Bottom U' at xmin.glevpa    ymax.glevpa+0.3 tagwidth 10 width 12 is STRING
-				button .gubotpk 'Pick'     at xmax.gubot+0.5  ymin.gubot      width 6 call |!This.GridPickLevel('bot')|
-				text   .guboto  'offset'   at xmax.gubotpk+1 ymin.gubot      tagwidth 7  width 10 is STRING
-
-				text   .gutop   'Top U'    at xmin.gubot     ymax.gubot+0.2  tagwidth 10 width 12 is STRING
+				text   .gutop   'Top U'    at xmin.glevpa    ymax.glevpa+0.3 tagwidth 10 width 12 is STRING
 				button .gutoppk 'Pick'     at xmax.gutop+0.5  ymin.gutop      width 6 call |!This.GridPickLevel('top')|
 				text   .gutopo  'offset'   at xmax.gutoppk+1 ymin.gutop      tagwidth 7  width 10 is STRING
+
+				text   .gubot   'Bottom U' at xmin.gutop     ymax.gutop+0.2  tagwidth 10 width 12 is STRING
+				button .gubotpk 'Pick'     at xmax.gubot+0.5  ymin.gubot      width 6 call |!This.GridPickLevel('bot')|
+				text   .guboto  'offset'   at xmax.gubotpk+1 ymin.gubot      tagwidth 7  width 10 is STRING
 			exit
 
 			button .gcreate 'Create Boxes' at xmin.glevfr ymax.glevfr+0.3 width 14 call |!This.GridCreateBoxes()|
@@ -1585,7 +1589,7 @@ endmethod
 ------------------------------------------------------------------
 define method .GridPickEscaped()
 	if (!this.gridphase.eq('plan')) then
-		!this.gstatus.val = !this.planrefs.size().string() & ' plan lines in. now the levels - Pick Level Lines, or Bottom U / Top U - then Create Boxes'
+		!this.gstatus.val = !this.planrefs.size().string() & ' plan lines in. now the levels - Pick Level Lines and/or Top U / Bottom U - then Create Boxes'
 	elseif (!this.gridphase.eq('level')) then
 		!this.gstatus.val = !this.levus.size().string() & ' level lines in. Create Boxes when ready'
 	else
@@ -1807,24 +1811,14 @@ define method .GridCreateBoxes()
 	endif
 
 	------------------------------------------------------------------
-	-- the storeys: the picked levels when there are two or more,   --
-	-- otherwise the one storey typed on the form                   --
+	-- the storeys: every level there is - the picked level lines   --
+	-- and Top U / Bottom U - in one sorted set, neighbour to       --
+	-- neighbour                                                     --
 	------------------------------------------------------------------
 	!levels = !this.SortedLevels()
 	if (!levels.size() lt 2) then
-		if (!this.gubot.val.trim().eq('') or !this.gutop.val.trim().eq('')) then
-			!!alert.error('at least two level lines are needed, or Bottom U and Top U typed in')
-			return
-		endif
-		!lo = !this.NumOf(!this.gubot.val)
-		!hi = !this.NumOf(!this.gutop.val)
-		if (!hi lt !lo) then
-			!lo = !this.NumOf(!this.gutop.val)
-			!hi = !this.NumOf(!this.gubot.val)
-		endif
-		!levels = object ARRAY()
-		!levels.append(!lo)
-		!levels.append(!hi)
+		!!alert.error('at least two levels are needed - level lines, Top U / Bottom U, or both')
+		return
 	endif
 	!boff = !this.OffOf(!this.guboto.val)
 	!toff = !this.OffOf(!this.gutopo.val)
@@ -1952,21 +1946,33 @@ define method .GridCreateBoxes()
 endmethod
 
 ---------------------------------------------------------------------
--- the picked levels from low to high, with the same level twice   --
--- (the same edge picked on two faces, or two grid systems) kept   --
--- once. anything under 1mm apart is the same level                --
+-- every level from low to high: the picked level lines plus Top U --
+-- and Bottom U when they are filled in, with the same level twice --
+-- (the same edge picked on two faces, two grid systems, or a      --
+-- typed U that lands on a line) kept once. anything under 1mm     --
+-- apart is the same level                                         --
 ---------------------------------------------------------------------
 define method .SortedLevels() is ARRAY
 	!res = object ARRAY()
-	if (!this.levus.size() eq 0) then
+	!all = object ARRAY()
+	do !i from 1 to !this.levus.size()
+		!all.append(!this.levus[!i])
+	enddo
+	if (!this.gutop.val.trim().neq('')) then
+		!all.append(!this.NumOf(!this.gutop.val))
+	endif
+	if (!this.gubot.val.trim().neq('')) then
+		!all.append(!this.NumOf(!this.gubot.val))
+	endif
+	if (!all.size() eq 0) then
 		return !res
 	endif
-	!order = !this.levus.sortedIndices()
+	!order = !all.sortedIndices()
 	!last = 0
 	!first = true
 	do !k from 1 to !order.size()
 		!oi = !order[!k]
-		!u = !this.levus[!oi]
+		!u = !all[!oi]
 		!keep = true
 		if (not(!first)) then
 			!d = !u - !last
