@@ -2845,10 +2845,10 @@ define method .ShowFaceCoord()
 endmethod
 
 ------------------------------------------------------------------
--- Move to Picked Point: the face is moved to pass through the   --
--- point, i.e. by however far the point is outside (or inside)   --
--- the face along its normal. the box is looked up before the    --
--- pick and the geometry cached, the same as Pick Split Point    --
+-- Pick on the coordinate row: the face is moved to pass through --
+-- the point, i.e. by however far the point is outside (or       --
+-- inside) the face along its normal. the box is looked up before --
+-- the pick and the geometry cached, the same as Pick Split Point --
 ------------------------------------------------------------------
 define method .PickFacePoint()
 	!this.RefreshBox()
