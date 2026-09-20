@@ -83,6 +83,7 @@ layout form !!DrawingPlan dialog dock
 	member .splittitle2   is STRING
 	member .splittitle3   is STRING
 	member .facepickpos   is POSITION
+	member .facetolast    is STRING
 
 	!this.formTitle = 'Create Drawing Plan Box'
 
@@ -274,10 +275,13 @@ layout form !!DrawingPlan dialog dock
 
 			------------------------------------------------------------
 			-- Move Face: one face, named along the box's own axes as  --
-			-- Show Box draws them, and three ways to say where it     --
-			-- goes, one per row with its button on the right: an      --
-			-- offset (+ out, - in), a world coordinate (for a face    --
-			-- square to E/N/U), or a picked point                     --
+			-- Show Box draws them, and two ways to say where it goes, --
+			-- one per row with its button on the right: an offset    --
+			-- (+ out, - in) with Move, or a coordinate with Pick -    --
+			-- pick a point and the face moves to it there and then,  --
+			-- the field then showing where it ended up (user,         --
+			-- 2026-09-20). typing into that field and pressing Enter  --
+			-- moves the face too, for a face square to E/N/U         --
 			------------------------------------------------------------
 			frame .facesub 'Move Face' at xmin.splitsub ymax.splitsub+0.3 width 62
 				para .facehint1 text 'one face goes out or in, the opposite face stays put' width 58
@@ -287,14 +291,11 @@ layout form !!DrawingPlan dialog dock
 
 				text .faceoff 'by offset' at xmin.faceopt ymax.faceopt+0.2 tagwidth 15 width 9 is REAL
 				para .facemm at xmax.faceoff+0.2 ymin.faceoff text 'mm  (+ out, - in)'
-				button .facebybt 'Move' at xmin.faceoff+44 ymin.faceoff width 8 call |!This.MoveFaceBy()|
+				button .facebybt 'Move' at xmin.faceoff+46 ymin.faceoff width 8 call |!This.MoveFaceBy()|
 
 				text .faceto 'to coordinate' at xmin.faceoff ymax.faceoff+0.1 tagwidth 15 width 9 is REAL
-				para .facetomm at xmax.faceto+0.2 ymin.faceto text 'E / N / U (world)'
-				button .facetobt 'Move' at xmin.faceoff+44 ymin.faceto width 8 call |!This.MoveFaceTo()|
-
-				para .facepklbl at xmin.faceto ymax.faceto+0.25 text 'to a picked point' width 15
-				button .facepkbt 'Pick' at xmin.faceoff+44 ymin.facepklbl width 8 call |!This.PickFacePoint()|
+				para .facetomm at xmax.faceto+0.2 ymin.faceto text 'E/N/U, or type+Enter'
+				button .facepkbt 'Pick' at xmin.faceoff+46 ymin.faceto width 8 call |!This.PickFacePoint()|
 			exit
 
 			------------------------------------------------------------
@@ -356,6 +357,8 @@ define method .DrawingPlan()
 	!faces.append('Bottom (-Z)')
 	!this.faceopt.dtext = !faces
 	!this.faceopt.val = 5
+	!this.facetolast = ''
+	!this.faceto.CALLBACK = |!this.FaceToTyped()|
 
 	------------------------------------------------------------------
 	-- Batch's Order By choices, 1st and 2nd share the same list.   --
@@ -2724,15 +2727,34 @@ define method .MoveFaceBy()
 endmethod
 
 ------------------------------------------------------------------
--- Move to: a world coordinate for the face. only a face square  --
--- to the world axes has one - Top/Bottom always (U), +X..-Y     --
--- only when the box is not turned. the outward distance is how  --
--- far the face's present coordinate is from the one typed,      --
--- signed by which way outward points along that axis            --
+-- Enter in the coordinate field. the field is also written by   --
+-- .ShowFaceCoord() after a pick, and a callback that then fired  --
+-- on the same value would move the face a second time (by       --
+-- nothing, but with a lookup and a message), so a value equal   --
+-- to the last one written or applied is ignored                 --
+------------------------------------------------------------------
+define method .FaceToTyped()
+	if (!this.faceto.val.unset()) then
+		return
+	endif
+	!now = !this.faceto.val.string()
+	if (!now.eq(!this.facetolast)) then
+		return
+	endif
+	!this.facetolast = !now
+	!this.MoveFaceTo()
+endmethod
+
+------------------------------------------------------------------
+-- a world coordinate for the face, typed. only a face square to --
+-- the world axes has one - Top/Bottom always (U), +X..-Y only   --
+-- when the box is not turned. the outward distance is how far   --
+-- the face's present coordinate is from the one typed, signed   --
+-- by which way outward points along that axis                   --
 ------------------------------------------------------------------
 define method .MoveFaceTo()
 	if (!this.faceto.val.unset()) then
-		!!alert.error('Type the coordinate to move the face to')
+		!!alert.error('Type the coordinate to move the face to, or Pick a point')
 		return
 	endif
 	!this.RefreshBox()
@@ -2775,13 +2797,51 @@ define method .MoveFaceTo()
 		!cencoord = !cen.north
 		!axisname = 'N'
 	else
-		!!alert.error('face ' & !info[6] & ' is not square to E/N/U - the box is turned. use Move by or Move to Picked Point')
+		!!alert.error('face ' & !info[6] & ' is not square to E/N/U - the box is turned. use the offset, or Pick a point')
 		return
 	endif
 
 	!facecoord = !cencoord + !sign * !half
 	!d = (!this.faceto.val - !facecoord) * !sign
 	!this.MoveFace(!d)
+	!this.ShowFaceCoord()
+endmethod
+
+------------------------------------------------------------------
+-- after a move: the face's world coordinate into the field, for --
+-- a face square to E/N/U; a turned box's X/Y face has no single --
+-- one, so the field is blanked. reads the cache .MoveFace() has  --
+-- just refreshed. the value is remembered so the field's own    --
+-- callback does not act on it                                   --
+------------------------------------------------------------------
+define method .ShowFaceCoord()
+	if (!this.splitequi.eq('')) then
+		return
+	endif
+	!info = !this.FaceInfo()
+	!cen = !this.splitcen
+	!coord = 0
+	!found = false
+	if (!info[3].abs() gt 0.9998) then
+		!coord = !cen.up + !info[3] * !info[4]
+		!found = true
+	elseif (!info[1].abs() gt 0.9998) then
+		!coord = !cen.east + !info[1] * !info[4]
+		!found = true
+	elseif (!info[2].abs() gt 0.9998) then
+		!coord = !cen.north + !info[2] * !info[4]
+		!found = true
+	endif
+	if (!found) then
+		!str = !coord.string('D1').replace('mm', '')
+		!this.faceto.val = !str.real()
+		!this.facetolast = !this.faceto.val.string()
+	else
+		!this.faceto.clear()
+		handle any
+		endhandle
+		!this.facetolast = ''
+	endif
 endmethod
 
 ------------------------------------------------------------------
@@ -2799,7 +2859,7 @@ define method .PickFacePoint()
 
 	!this.DropPicking()
 	!packet = object EDGPACKET()
-	!packet.definePosition('Point to move face ' & !info[6] & ' to')
+	!packet.definePosition('Point to move face ' & !info[6] & ' to - it moves as soon as you pick')
 	!packet.description = !this.edgdesc
 	!packet.action = |!!DrawingPlan.FacePointPicked(!this.return[1].position)|
 	!packet.remove = false
@@ -2827,6 +2887,7 @@ define method .MoveFaceToPoint()
 	!along = !dE * !info[1] + !dN * !info[2] + !dU * !info[3]
 	!d = !along - !info[4]
 	!this.MoveFace(!d)
+	!this.ShowFaceCoord()
 endmethod
 
 ---------------------------------------------------------------------
