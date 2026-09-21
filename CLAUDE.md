@@ -40,18 +40,23 @@
   - `DrawingPlanGrid.pmlfrm` 併進 `DrawingPlan` 成 **Grid** 分頁，獨立表單刪掉。方法加 `Grid` 前綴，gadget 撞名的加 `g`（`.gubot/.gutop/.gcreate/.glines/.gstatus/.gresult`），`edgdesc`／`DropPicking`／`Close` 共用一份——兩種 pick 用同一個 packet description，在 Grid 開始點線會把 Pick 分頁做一半的 4 點丟掉。
   - Grid：Esc 只結束該輪，BOX 只有按 Create Boxes 才建；Top U／Bottom U 各有 Pick 鈕（點一個點取 U）；Top/Bottom U 跟點到的高程線一起排序去重分層（`SortedLevels`）。
   - Split/Merge 分頁改名 **Modify**，新增 **Move Face**：一個面推出去／拉進來、對面不動，BOX 就地改 POS＋該軸長度（不建新 BOX）。面用 BOX 自己的軸命名（+X/−X/+Y/−Y/Top/Bottom）。兩種給法：`by offset`＋Move、`to coordinate` 的 Pick（點完直接移、欄位顯示移完的座標）；欄位手打＋Enter 也會移（text CALLBACK，用 `facetolast` 擋重複觸發）。
-  - Modify 分頁重排：頂端三步驟提示、Show Box 旁顯示目前 BOX 名稱／XYZ／U 底..頂、三個功能各自一個子框；Show Box 不再是 toggle。
+  - Modify 分頁重排：頂端三步驟提示、Show Box 旁顯示目前 BOX 名稱／XYZ／U 底..頂、三個功能各自一個子框；Show Box 不再是 toggle（`feature/moveface-multi` 又改回開關，見下）。
 - **還沒在 E3D 實測**：Grid 分頁 Top/Bottom U 併入分層後的結果。已實測 OK：Grid 分頁合併後能建 BOX、Bottom U 的 Pick（修過 DropPicking 順序後）；Move Face 單 BOX（2026-09-21 使用者實測，含 Enter callback 與版面）。
 - 工作樹上另外有兩個舊備份的刪除（`DrawingPlan1MatchLine(20260122)/(20260311).pmlfnc`）沒進任何 commit，使用者說不要進 master。
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層、圍住選取物建 BOX、BOX 總覽清單。
 - 舊的 `develop` 分支是 7 月練 git 的孤兒分支，可以刪（2026-09-21 查本機還在）。
 
 ## Move Face 多選（分支 `feature/moveface-multi`，2026-09-21，**未在 E3D 實測**，主線沒動）
+- 4 個 commit `3c50023`..`16410c8`，只動 `DrawingPlan.pmlfrm` 跟本檔。**分支只在本機**，換電腦前要 `git push -u origin feature/moveface-multi`；到了新機器 `git checkout feature/moveface-multi`、E3D 裡 `pml rehash all`。實測 OK 再併回 master。
 - 面改用 North/South/East/West/Top/Bottom 命名，每個 BOX 自己取「法線最接近該方向的側面」；原因是現場同一批 BOX 的 Y 有 `N 12.523 E` 也有 `S 12.523 W`（Merge 那段註解），`+Y` 在隔壁 BOX 是反的，多選時各推各的。轉到接近 45°（內積 < cos 40°）的 BOX 分不出 N/E，跳過並回報。
 - Show Box 讀 `object selection()`：選 2 個以上 DrawingPlanBox 就一起鎖定，否則退回 CE（單選不信選取——命令列導覽不會更新選取，會拿到十分鐘前點的那個）。Split 維持單 BOX，多選按 Pick Split Point 會擋。
 - Show Box 在每個側面中心印 `+X = N` 標籤；boxinfo 多選時列數量與名稱。
 - 三種輸入逐 BOX 算距離：offset 同距、coordinate 各自對齊到同一座標、Pick 各自移到過該點的平面（同向一排 BOX 就是整條 match line 平移）。這個廠格線轉 12.5°，N/S/E/W 面的 coordinate 輸入會被「不與 E/N/U 平行」擋掉，改用 Pick；Top/Bottom 不受影響。
-- 要測：多選 Show Box 的標籤方向對不對、`AID TEXT |$!lbl|` 帶空格與 `=` 能不能印、多選 Pick 後 ShowFaceCoord 是否只在座標一致時填欄位、有 BOX 出問題時 alert 訊息是否一次列完。
+- 使用者看過第一版截圖後又改了三件事（`2034e99`、`16410c8`）：
+  - Show Box 改回開關：按一下畫、再按一下清（推翻前一天「不要 toggle」的決定），用按鈕標籤解決「按了沒反應」——畫著時按鈕字變 `Hide Box`（`!this.showbox.tag = '...'`，AVEVA 先例 `aba/Forms/abaeditusertask.pmlfrm:61`）。所有 `AID CLEAR ALL` 收進 `ClearAids()`，任何分頁清畫面都會把開關歸零。隱藏不清快取、不清 boxinfo。
+  - Split 的 X/Y/Z 勾選改成 E/W、N/S、U/D（gadget 改名 `splitew/splitns/splitud`），`DoSplitAt` 用 `SideNormal`+`NearestWorld` 看 BOX 的 +X 朝 E 還是 W 來對回 X/Y；offset 的 + 一律朝 E/N/U，+X 朝 W 的 BOX 會把 E/W offset 反號。
+  - 最下面的 `splitresult` 結果行整個拿掉。Move Face 的結果由 Show Box 旁那行（移完 `ReadBoxes` 重讀）顯示，完全沒動到才 `!!alert.message`；Split/Merge 做完 BOX 已不在，「N box(es) created／Merged N into 1」寫到同一行。
+- 要測：單選 Show Box 側面標籤方向對不對、`AID TEXT |$!lbl|` 帶空格與 `=` 能不能印（不行就退成純 `N`）、按鈕 `.tag` 改字有沒有生效、Split 改名後預設勾 U/D 有沒有生效、多選 Pick 後 ShowFaceCoord 是否只在座標一致時填欄位、有 BOX 出問題時 alert 是否一次列完。
 - Batch／Merge 各自還有一份讀選取的迴圈，新的 `SelectedBoxEquis()` 沒去動它們（怕動到已實測的東西），之後可以收成一份。
 
 ## 設備尺寸的標註點（2026-09-21，`8c69f54`＋`1c99bc6`，已在 master，**未在 E3D 實測**）
@@ -62,7 +67,7 @@
 - 還沒決定：中心線本身要不要也畫到 matchline，讓中心線＋投影線變成連續一條；捨入／貼齊要不要收緊（目前只有 `!esh` 那層 `.string('D3')`）。
 
 ## 換電腦
-1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
+1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。進行中的分支（目前 `feature/moveface-multi`）要先從舊機器 push 上去，新機器 `git checkout` 它。
 2. 設使用者環境變數 `NOTION_TOKEN`。舊 token 已失效（2026-09-20 起 MCP 與 REST 都回 401 `API token is invalid`），到 notion.so/my-integrations 重新產一個，並確認 integration 有連到「E3D-管線平面圖程式摘要」那頁。
 3. 重建 `.mcp.json`：
    ```json
