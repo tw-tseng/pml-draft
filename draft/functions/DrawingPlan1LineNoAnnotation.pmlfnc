@@ -1619,18 +1619,122 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				--------------------------------------------------------------------
 				if (!type.eqnocase('EQUI')) then
 					var !ewvol wvol of $!mem
-					!elim = !!DrawingPlan1.SheetLimitsOfVolume(!ewvol, !trans)
 					!ecenlover = 2
 					!ex = !mempossh.part(2).replace('mm', '').real()
 					!ey = !mempossh.part(4).replace('mm', '').real()
+					------------------------------------------------------------
+					-- the point sits on the equipment CENTRE LINE, at the end  --
+					-- EquiAnnotation draws that line to. it used to be taken   --
+					-- off SheetLimitsOfVolume(), which turns the four world    --
+					-- corners of WVOL into sheet points and keeps their        --
+					-- min/max -- on a turned view that is the box which        --
+					-- CIRCUMSCRIBES the equipment, so its edge is a corner     --
+					-- artefact standing further out than the equipment ever    --
+					-- reaches. for P1501B it came out 13mm past the top border --
+					-- of the drawing box and the projection line ran out of    --
+					-- the box into the label band (user, 2026-09-21)           --
+					--                                                          --
+					-- the centre lines run through the equipment ORIGIN and    --
+					-- out to the WVOL face plus OFFSET along the world axis    --
+					-- (DrawingPlan1EquiAnnotation.pmlfnc:282-295, where OFFSET --
+					-- is 2 / VSCA -- the same 2mm of sheet as !ecenlover), so  --
+					-- their four ends are exact points on lines which are      --
+					-- really drawn. all four are turned onto the sheet and the --
+					-- one reaching furthest into !dir wins: that picks the     --
+					-- right centre line AND the right end of it at any view    --
+					-- angle with no angle test, because the two centre lines   --
+					-- are square to each other -- one of them is always within --
+					-- 45 degrees of square to any border, so the end never     --
+					-- runs away the way an intersection with a near parallel   --
+					-- line would (user sketch, 2026-09-21)                     --
+					--                                                          --
+					-- BOTH sheet coordinates come from the winning end. on a   --
+					-- turned view the centre line is slanted, so moving along  --
+					-- it moves across the dimension as well: the old code held --
+					-- the across coordinate at the equipment position, which   --
+					-- left the point off its own centre line. on a square view --
+					-- the across coordinate comes back unchanged and the whole --
+					-- block answers what it always did                         --
+					------------------------------------------------------------
+					!eoff = !ecenlover / !!DrawingPlan1.vsca
+					----------------------------------------------------------------
+					-- WORPOS prints the dominant letter with a positive magnitude, --
+					-- so W 314490 is E -314490. WVOL is six bare numbers, already  --
+					-- signed the way !trans expects (see SheetLimitsOfVolume)      --
+					----------------------------------------------------------------
+					!eoe = !mempos.part(2).replace('mm', '').real()
+					if (!mempos.part(1).eqnocase('W')) then
+						!eoe = !eoe * -1
+					endif
+					!eon = !mempos.part(4).replace('mm', '').real()
+					if (!mempos.part(3).eqnocase('S')) then
+						!eon = !eon * -1
+					endif
+					----------------------------------------------------------------
+					-- which centre line serves this side, by the same reading as   --
+					-- the EQUISIDE block above: the one lying more along the sheet --
+					-- axis the dimension runs on takes the pair of borders square  --
+					-- to it. picking by reach alone looked simpler but handed the  --
+					-- up/down chain the E centre line whenever the equipment was   --
+					-- between 1.7 and 3 times wider than it is long on a turned    --
+					-- view -- the chain would then dimension a line the other      --
+					-- chain is already dimensioning                                --
+					----------------------------------------------------------------
+					!eaxsx = abs(!trans[5])
+					!eaxsy = abs(!trans[6])
+					!eusee = false
+					if (!dir.eq('right') or !dir.eq('left')) then
+						if (!eaxsx geq !eaxsy) then
+							!eusee = true
+						endif
+					else
+						if (!eaxsx lt !eaxsy) then
+							!eusee = true
+						endif
+					endif
+					----------------------------------------------------------------
+					-- the two ends of that centre line, as an offset in world mm   --
+					-- from the equipment origin the line runs through              --
+					----------------------------------------------------------------
+					!ede1 = 0
+					!edn1 = 0
+					!ede2 = 0
+					!edn2 = 0
+					if (!eusee) then
+						!ede1 = !ewvol.part(4).replace('mm', '').real() + !eoff - !eoe
+						!ede2 = !ewvol.part(1).replace('mm', '').real() - !eoff - !eoe
+					else
+						!edn1 = !ewvol.part(5).replace('mm', '').real() + !eoff - !eon
+						!edn2 = !ewvol.part(2).replace('mm', '').real() - !eoff - !eon
+					endif
+					----------------------------------------------------------------
+					-- a difference cancels the affine part of the transform, so    --
+					-- only the 2x2 of !trans is wanted and the equipment sheet     --
+					-- position can be stepped from directly                       --
+					----------------------------------------------------------------
+					!ex1 = !ex + !ede1 * !trans[5] + !edn1 * !trans[7]
+					!ey1 = !ey + !ede1 * !trans[6] + !edn1 * !trans[8]
+					!ex2 = !ex + !ede2 * !trans[5] + !edn2 * !trans[7]
+					!ey2 = !ey + !ede2 * !trans[6] + !edn2 * !trans[8]
+					-- and of its two ends, the one reaching further into !dir --
+					!ereach1 = !ey1
+					!ereach2 = !ey2
 					if (!dir.eq('right')) then
-						!ex = !elim[3] + !ecenlover
+						!ereach1 = !ex1
+						!ereach2 = !ex2
 					elseif (!dir.eq('left')) then
-						!ex = !elim[1] - !ecenlover
-					elseif (!dir.eq('up')) then
-						!ey = !elim[4] + !ecenlover
+						!ereach1 = !ex1 * -1
+						!ereach2 = !ex2 * -1
 					elseif (!dir.eq('down')) then
-						!ey = !elim[2] - !ecenlover
+						!ereach1 = !ey1 * -1
+						!ereach2 = !ey2 * -1
+					endif
+					if (!ereach2 gt !ereach1) then
+						!ex = !ex2
+						!ey = !ey2
+					else
+						!ex = !ex1
+						!ey = !ey1
 					endif
 					------------------------------------------------------------
 					-- the unit is stripped off both before it is put back on.  --
