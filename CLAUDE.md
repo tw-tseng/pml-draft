@@ -34,16 +34,24 @@
 - PML 寫到 `L:`，對應這台的 `D:`；使用者說「請看 check」是指 `D:\...\CHECK.TXT`（check*.txt 都是除錯 dump，已 gitignore）。
 - Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。
 
-## 進行中（2026-09-20，分支 `feature/drawingplan-grid-merge`，從 master `bd8079f` 開）
-- 做了什麼（8 個 commit，都只動 `design/forms/DrawingPlan.pmlfrm`）：
+## 待實測（2026-09-21 已併回 master，`bd8079f`..`1c99bc6`）
+- 原本在 `feature/drawingplan-grid-merge`。2026-09-21 使用者決定連同尚未實測的部份一起併進 master（我有先提醒下面那條「還沒在 E3D 實測」）。分支本身還在，內容已全部包含在 master 裏。
+- 做了什麼（9 個 commit，都只動 `design/forms/DrawingPlan.pmlfrm`）：
   - `DrawingPlanGrid.pmlfrm` 併進 `DrawingPlan` 成 **Grid** 分頁，獨立表單刪掉。方法加 `Grid` 前綴，gadget 撞名的加 `g`（`.gubot/.gutop/.gcreate/.glines/.gstatus/.gresult`），`edgdesc`／`DropPicking`／`Close` 共用一份——兩種 pick 用同一個 packet description，在 Grid 開始點線會把 Pick 分頁做一半的 4 點丟掉。
   - Grid：Esc 只結束該輪，BOX 只有按 Create Boxes 才建；Top U／Bottom U 各有 Pick 鈕（點一個點取 U）；Top/Bottom U 跟點到的高程線一起排序去重分層（`SortedLevels`）。
   - Split/Merge 分頁改名 **Modify**，新增 **Move Face**：一個面推出去／拉進來、對面不動，BOX 就地改 POS＋該軸長度（不建新 BOX）。面用 BOX 自己的軸命名（+X/−X/+Y/−Y/Top/Bottom）。兩種給法：`by offset`＋Move、`to coordinate` 的 Pick（點完直接移、欄位顯示移完的座標）；欄位手打＋Enter 也會移（text CALLBACK，用 `facetolast` 擋重複觸發）。
   - Modify 分頁重排：頂端三步驟提示、Show Box 旁顯示目前 BOX 名稱／XYZ／U 底..頂、三個功能各自一個子框；Show Box 不再是 toggle。
 - **還沒在 E3D 實測**：Move Face 全部（`XLEN $!newlen` 展開帶不帶 mm；Enter callback 是按 Enter 才觸發還是離開欄位也觸發——若是後者改回顯式按鈕）；Modify 分頁版面（Move Face 右側按鈕用固定 `xmin.faceoff+46` 對齊）；Grid 分頁 Top/Bottom U 併入分層後的結果。已實測 OK：Grid 分頁合併後能建 BOX、Bottom U 的 Pick（修過 DropPicking 順序後）。
-- 測完 OK 才併回 master。工作樹上另外有兩個舊備份的刪除（`DrawingPlan1MatchLine(20260122)/(20260311).pmlfnc`）沒進任何 commit，使用者說不要進 master。
+- 工作樹上另外有兩個舊備份的刪除（`DrawingPlan1MatchLine(20260122)/(20260311).pmlfnc`）沒進任何 commit，使用者說不要進 master。
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層、圍住選取物建 BOX、BOX 總覽清單。
-- 舊的 `develop` 分支是 7 月練 git 的孤兒分支，已刪。
+- 舊的 `develop` 分支是 7 月練 git 的孤兒分支，可以刪（2026-09-21 查本機還在）。
+
+## 設備尺寸的標註點（2026-09-21，`8c69f54`＋`1c99bc6`，已在 master，**未在 E3D 實測**）
+- 尺寸鏈上設備那一點，從「`SheetLimitsOfVolume()` 的紙面外接框邊緣＋2mm」改成「設備中心線的端點，落在 BOX 外就沿線夾回邊界」＝ 中心線與 matchline 的交點。
+- 為什麼要夾：P1501A/B 兩台泵跨在 match line 上，WVOL 往北伸出上邊界 942mm，端點落到紙面 y=529.343，比 up 尺寸線（510.942）還高 18.4mm，投影線整條畫在尺寸線上方、伸進標籤區。
+- 端點本來就在 BOX 內的不動——管線自己的位置在 BOX 內時也是就地標，設備不該被特別推到邊界。
+- 除錯行 `EQUIDIM`（origin／中心線端點／有沒有夾／夾完的點）會寫進 `check_rebuild.txt`。
+- 還沒決定：中心線本身要不要也畫到 matchline，讓中心線＋投影線變成連續一條；捨入／貼齊要不要收緊（目前只有 `!esh` 那層 `.string('D3')`）。
 
 ## 換電腦
 1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
@@ -52,5 +60,5 @@
    ```json
    {"mcpServers":{"notion":{"type":"http","url":"https://mcp.notion.com/mcp","headers":{"Authorization":"Bearer ${NOTION_TOKEN}"}}}}
    ```
-4. `bin/` 裡的 BlankPos.exe、RevCloud.exe 不在 repo（各 25MB），從舊機器或 `Documents\Python\blankpos`、`revcloud` 重建後手動放到 PMLLIB 搜尋路徑下的 bin。
+4. `bin/` 裡的 BlankPos.exe、RevCloud.exe 不在 repo（各 25MB），從舊機器或 `Documents\Python\blankpos`、`revcloud` 重建後手動放到 PMLLIB 搜尋路徑下的 bin。**PyInstaller 產出的是 `dist\start-完整版06.exe`，要改名複製成 `bin\BlankPos.exe`**——2026-09-21 就是 build 完沒部署，出圖一整天都在吃舊 exe，表現得跟「改了沒用」一模一樣。改完 exe 先 `ls -la bin/` 對時間戳。
 5. Claude Code 的 memory 在 `%USERPROFILE%\.claude\projects\<repo路徑編碼>\memory\`，整個資料夾複製過去就接得上；沒複製的話，本檔加 Notion 也夠開工。
