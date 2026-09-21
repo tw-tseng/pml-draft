@@ -328,8 +328,6 @@ layout form !!DrawingPlan dialog dock
 				para .mergehint text 'select several boxes in the model (ctrl-click), then' width 40
 				button .mergebt 'Merge Selected' at xmax.mergehint+1 ymin.mergehint width 16 call |!This.MergeBoxes()|
 			exit
-
-			para .splitresult at xmin.mergesub ymax.mergesub+0.3 text '' width 62
 		exit
 
 	exit
@@ -347,7 +345,6 @@ define method .DrawingPlan()
 	!this.ClearPoints()
 	!this.ClearInfo()
 	!this.log.clear()
-	!this.splitresult.val = ''
 	!this.splitequi = ''
 	!this.mfnames = object ARRAY()
 
@@ -2463,8 +2460,11 @@ define method .ReadBoxes()
 	------------------------------------------------------------------
 	-- the box line: one box gets its name, the three lengths and   --
 	-- where it sits in U - the numbers a face move is about to     --
-	-- change. several get the count and their names, so it is      --
-	-- never a guess which boxes an action will hit                  --
+	-- change, and after the move, the numbers it did change to.    --
+	-- several get the count and their names, so it is never a      --
+	-- guess which boxes an action will hit. Split and Merge, whose --
+	-- box is gone afterwards, write their outcome here instead;    --
+	-- there is no separate result line any more (user, 2026-09-21) --
 	------------------------------------------------------------------
 	if (!n.eq(1)) then
 		!halfz = !this.splitzlen * 0.5
@@ -2819,7 +2819,7 @@ define method .DoSplitAt()
 	-- line the cut up (an elbow, a beam) is not itself inside the   --
 	-- box on every axis - is not an error any more. that axis is    --
 	-- just left uncut, the same as if it had not been checked, and  --
-	-- .splitresult says so afterwards. only every checked axis      --
+	-- the box line says so afterwards. only every checked axis      --
 	-- being unusable at once is an error, since then there would be --
 	-- nothing left to split                                         --
 	------------------------------------------------------------------
@@ -2970,7 +2970,7 @@ define method .DoSplitAt()
 		enddo
 		!msg = !msg & ' (' & !skipstr & ' skipped - point too close/outside)'
 	endif
-	!this.splitresult.val = !msg
+	!this.boxinfo.val = !msg
 	!this.splitequi = ''
 endmethod
 
@@ -3336,15 +3336,8 @@ endmethod
 ---------------------------------------------------------------------
 define method .MoveFaces(!mode is STRING)
 	!n = !this.mfnames.size()
-	!firstname = !this.mfnames[1]
 	!moved = 0
-	!same = 0
 	!probs = object ARRAY()
-	!lastname = ''
-	!lastd = 0
-	!lastold = 0
-	!lastnew = 0
-	!lastaxis = ''
 
 	do !i from 1 to !n
 		!r = !this.FaceDistance(!i, !mode)
@@ -3354,53 +3347,27 @@ define method .MoveFaces(!mode is STRING)
 		endif
 		!d = !r[2]
 		if (!d.abs() lt 0.5) then
-			!same = !same + 1
 			skip
 		endif
-		!info = !this.FaceInfo(!i)
 		!err = !this.MoveOneFace(!i, !d)
 		if (!err.neq('')) then
 			!probs.append(!this.mfnames[!i] & ': ' & !err)
 			skip
 		endif
 		!moved = !moved + 1
-		!lastname = !info[6]
-		!lastaxis = !info[5]
-		!lastold = !info[4] * 2
-		!lastnew = !lastold + !d
-		!lastd = !d
 	enddo
 
+	------------------------------------------------------------------
+	-- the box line, re-read, is the report: the new lengths and U  --
+	-- (one box) or the same names (several). the one thing it     --
+	-- cannot show is that nothing happened at all, so that case    --
+	-- says so; a box with a problem gets its own alert below       --
+	------------------------------------------------------------------
 	!this.ReadBoxes()
 	!this.ShowFaceCoord()
-
-	------------------------------------------------------------------
-	-- one box: the same line as always. several: the count, with   --
-	-- the last box's numbers as a sample when the distance was the --
-	-- same for all (offset), and just the count otherwise           --
-	------------------------------------------------------------------
-	!facelbl = !this.faceopt.dtext[!this.faceopt.val]
-	if (!n.eq(1)) then
-		if (!moved.eq(1)) then
-			!msg = 'face ' & !lastname & ' of ' & !firstname & ' moved ' & !lastd.string('D0') & ' out - ' & !lastaxis & ' length ' & !lastold.string('D0') & ' -> ' & !lastnew.string('D0')
-		elseif (!same.eq(1)) then
-			!msg = 'face is already there - nothing moved'
-		else
-			!msg = 'face ' & !facelbl & ' not moved'
-		endif
-	else
-		!msg = 'face ' & !facelbl & ': ' & !moved.string() & ' of ' & !n.string() & ' boxes moved'
-		if (!mode.eq('off') and !moved.gt(0)) then
-			!msg = !msg & ' ' & !lastd.string('D0') & ' out'
-		endif
-		if (!same.gt(0)) then
-			!msg = !msg & ', ' & !same.string() & ' already there'
-		endif
-		if (!probs.size().gt(0)) then
-			!msg = !msg & ', ' & !probs.size().string() & ' with problems'
-		endif
+	if (!moved.eq(0) and !probs.size().eq(0)) then
+		!!alert.message('face is already there - nothing moved')
 	endif
-	!this.splitresult.val = !msg
 
 	if (!probs.size().gt(0)) then
 		!txt = ''
@@ -3742,7 +3709,7 @@ define method .MergeBoxes()
 		!nleft = !names.size() - !ndel
 		!!alert.error(!nleft.string() & ' of the merged box(es) could not be deleted - please delete them by hand')
 	endif
-	!this.splitresult.val = 'Merged ' & !ndel.string() & ' box(es) into 1'
+	!this.boxinfo.val = 'Merged ' & !ndel.string() & ' box(es) into 1'
 endmethod
 
 ----------------------------------------------
