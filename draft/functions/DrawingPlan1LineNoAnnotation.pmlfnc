@@ -1716,6 +1716,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!ey1 = !ey + !ede1 * !trans[6] + !edn1 * !trans[8]
 					!ex2 = !ex + !ede2 * !trans[5] + !edn2 * !trans[7]
 					!ey2 = !ey + !ede2 * !trans[6] + !edn2 * !trans[8]
+					-- the equipment position is wanted again below, and the winner --
+					-- is about to be written over !ex / !ey                         --
+					!eox = !ex
+					!eoy = !ey
 					-- and of its two ends, the one reaching further into !dir --
 					!ereach1 = !ey1
 					!ereach2 = !ey2
@@ -1735,6 +1739,89 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					else
 						!ex = !ex1
 						!ey = !ey1
+					endif
+					----------------------------------------------------------------
+					-- and back to the border if that end falls outside the view.  --
+					-- the BOX clips the drawing, so a centre line running past    --
+					-- the border stops being drawn there -- but the point went on --
+					-- to the end of the line WVOL gives, wherever that was. the   --
+					-- pumps P1501A/B stand across the match line: their WVOL      --
+					-- reaches 942mm of model past the top border, so the up point --
+					-- landed 36mm above the border and 18mm above the dimension   --
+					-- LINE, and its projection line was drawn hanging over the    --
+					-- dimension into the label band (real drawing, 2026-09-21).   --
+					-- this is what the user set out to begin with: the point is   --
+					-- where the centre line meets the MATCH LINE                  --
+					--                                                             --
+					-- a centre line which ends inside the view is left alone:     --
+					-- that is the point as before, and a pipe whose own position  --
+					-- is inside the view is dimensioned where it stands too, so   --
+					-- equipment is not singled out and pushed to the border       --
+					--                                                             --
+					-- both coordinates move together along the line, so on a      --
+					-- turned view the point stays ON the centre line instead of   --
+					-- sliding off it. !vwx1 / !vwy2 are the sheet corners of the  --
+					-- BOX read at the top of this function; the view is square in --
+					-- sheet coordination whatever ADEGREES did to it              --
+					----------------------------------------------------------------
+					!erawx = !ex
+					!erawy = !ey
+					!eover = false
+					!elimv = !vwy2
+					!eatv = !ey
+					!eato = !eoy
+					if (!dir.eq('right')) then
+						!elimv = !vwx2
+						!eatv = !ex
+						!eato = !eox
+						if (!ex gt !elimv) then
+							!eover = true
+						endif
+					elseif (!dir.eq('left')) then
+						!elimv = !vwx1
+						!eatv = !ex
+						!eato = !eox
+						if (!ex lt !elimv) then
+							!eover = true
+						endif
+					elseif (!dir.eq('down')) then
+						!elimv = !vwy1
+						if (!ey lt !elimv) then
+							!eover = true
+						endif
+					else
+						if (!ey gt !elimv) then
+							!eover = true
+						endif
+					endif
+					if (!eover) then
+						------------------------------------------------------------
+						-- how far along the line the border sits. an equipment    --
+						-- whose own position is already outside gives a negative  --
+						-- fraction and one sitting on the border gives no span at --
+						-- all: neither can be walked along, so the coordinate is  --
+						-- simply put on the border and the other one left         --
+						------------------------------------------------------------
+						!espan = !eatv - !eato
+						!eabs = abs(!espan)
+						if (!eabs gt 0.000001) then
+							!et = (!elimv - !eato) / !espan
+							if (!et lt 0) then
+								!et = 0
+							endif
+							if (!et gt 1) then
+								!et = 1
+							endif
+							!ex = !eox + !et * (!erawx - !eox)
+							!ey = !eoy + !et * (!erawy - !eoy)
+						elseif (!dir.eq('right') or !dir.eq('left')) then
+							!ex = !elimv
+						else
+							!ey = !elimv
+						endif
+					endif
+					if (!dbgln) then
+						!dbgf.writerecord('EQUIDIM dir=' & !dir & ' equi=' & !dbgpipe & ' usee=' & !eusee.string() & ' origin=' & !eox.string() & ',' & !eoy.string() & ' cenend=' & !erawx.string() & ',' & !erawy.string() & ' over=' & !eover.string() & ' lim=' & !elimv.string() & ' point=' & !ex.string() & ',' & !ey.string())
 					endif
 					------------------------------------------------------------
 					-- the unit is stripped off both before it is put back on.  --
