@@ -4679,14 +4679,19 @@ define method .CheckBoxes()
 			!dbgok = false
 		endhandle
 	endif
-	if (!dbgok) then
-		!out.append('（每一對的數字已寫到 check_box.txt）')
-	else
+	------------------------------------------------------------------
+	-- only the failure is worth a row. the file being written is    --
+	-- what happens every time, and a findings list is not the place --
+	-- to say so once a run (user, 2026-09-23) - but a check whose   --
+	-- working went nowhere is worth knowing about, because that is  --
+	-- the file a finding that looks wrong gets read from             --
+	------------------------------------------------------------------
+	if (not(!dbgok)) then
 		!out.append('（寫不出 check_box.txt）')
+		!this.chkkind.append('note')
+		!this.chkia.append(0)
+		!this.chkib.append(0)
 	endif
-	!this.chkkind.append('note')
-	!this.chkia.append(0)
-	!this.chkib.append(0)
 
 	!this.chkrows = !out
 	!this.chklist.dtext = !out
