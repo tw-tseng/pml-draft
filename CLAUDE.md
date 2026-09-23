@@ -59,26 +59,27 @@
 - 除錯行 `EQUIDIM`（origin／中心線端點／有沒有夾／夾完的點）會寫進 `check_rebuild.txt`。
 - 還沒決定：中心線本身要不要也畫到 matchline，讓中心線＋投影線變成連續一條；捨入／貼齊要不要收緊（目前只有 `!esh` 那層 `.string('D3')`）。
 
-## Check 分頁：框與框之間的縫／重疊（分支 `feature/box-neighbour-check`，2026-09-23，**未在 E3D 實測**）
-- 1 個 commit `0b959c3`，從 master 開出來，只動 `design/forms/DrawingPlan.pmlfrm`（+938 行，五處純插入，沒刪任何東西）。**分支只在本機**，換電腦前要 `git push -u origin feature/box-neighbour-check`。跟 `feature/moveface-multi` 互不相干（那支改的是 Modify 分頁的方法，這支加新分頁＋新方法，之後併回應該只在 tabset 尾端與方法區塊有小衝突）。
+## Check 分頁：框與框之間的縫／重疊／高程不一致（2026-09-23 已併回 master，`0b959c3`..`5f645cd`，**已在 E3D 實測**）
+- 18 個 commit，從 master 開出來後 fast-forward 併回（分支 `feature/box-neighbour-check` 還在，只在本機）。只動 `design/forms/DrawingPlan.pmlfrm`（+1541 行）與本檔。跟 `feature/moveface-multi` 之後合併只有 **2 個衝突點**，都是「兩邊在同一位置各加了幾行」：本檔換電腦第 1 點、`.pmlfrm` 的 member 區塊（一邊 `chk*` 一邊 `mf*`，兩邊都留即可）。
 - 為什麼做：DRAFT 的 `DrawingPlan1MatchSorted` 只在框線外 50mm 的薄片裡收鄰框（`MatchSorted.pmlfnc:47-68`），縫大於 50 就沒有鄰框，`MatchLine1.pmlfnc:94` 整段標籤被跳過——沒有 tick、沒有 `MATCH LINE Exxxxx`、也沒有 `SEE <鄰圖號>`。縫上的廠房兩張圖都沒有；重疊則是同一段畫兩次。都要等出圖才發現。
-- 分類：每一對 BOX 在**第一個 BOX 自己的座標系**比三個區間（格線轉 12.5 度，用世界 E/N 比會把對齊的兩框讀成兩軸都重疊）。看幾個軸分開：≥2 軸＝對角或不相鄰；1 軸＝有縫；0 軸但有一軸在容差內＝正常貼齊；0 軸＝重疊（取最小貫入）。貼齊且是平面相鄰的再比 ubot/utop，差了就報高程不一致。
+- 分類：每一對 BOX 在**第一個 BOX 自己的座標系**比三個區間（格線轉 12.5 度，用世界 E/N 比會把對齊的兩框讀成兩軸都重疊）。看幾個軸分開：≥2 軸＝對角或不相鄰；1 軸＝有縫；0 軸但有一軸在容差內＝正常貼齊；0 軸＝重疊（取最小貫入）。（高程不再從這裡報，見下一條。）
 - **高程是以「高程面」為單位報，不是一對一對**（`90f5652`，使用者指出同一個問題被報兩次）：一個框的某個面放錯高程，會跟上下的鄰框報一次縫、跟左右的鄰框報一次高程差；實測那個模型 3 個缺陷產生 5 列，而且其中一個被 `max(dbot,dtop)` 蓋掉。改成：先把框分成「站在同一塊地上」的群組（footprint 相接或重疊，可遞移，不同區可以有自己的樓層高度），群組內收集所有頂／底面高程排序後切成高程面（距該面**第一個**面超過 Max gap 就另起一個，用第一個而不是前一個量，免得一串各差一點的面被串成同一個），每個面取眾數當「應該是多少」（平手取低的，由低往高走訪），差超過容差的就是要改的框。**一列一個面**（`高程面 104880  =23718/1687 頂 低 100mm`），不是一列一個高程面——高程面的「差多少」是那個面上最大的偏差，不是任何一個框要移動的量，寫在「N 個框要改」旁邊會被讀成每個都差那麼多（使用者指出，2026-09-23）。一個面仍然只報一次，不管它跟幾個鄰框對不上。U 向的縫／U 向的重疊／高程差三種列全部收掉；U 向重疊只有在一個框的 U 範圍整個包住另一個時才留（那才是真的畫兩次）。
 - 排序（rank 乘數 1e8，不是 1e6——高程要放進鍵裡，間距不夠寬會讓列跑出自己的區塊）：
   `4` >50 的平面縫 ＞ `3` 重疊 ＞ `2` 高程面 ＞ `1` ≤50 的平面縫。平面的列同級照數字大的在前；**高程面自成一區、依高程由低往高**（使用者要求，2026-09-23，跟樓層走向與 Batch 預設的 Bottom→Top 一致），同一面內用 `偏差*0.001` 破平手（偏差大的在前），那個量對「兩個高程面至少相隔 Max gap」來說小到不可能跨面。
 - **只碰到一條邊不算相鄰**（`6e69aac`，使用者實測誤報）：先數有幾個軸在容差內（`!ntouch`），兩個以上就是共用一條邊或一個角、不是一個面。沒有面就沒有 match line，高程差不報（`axis` 給 `'EDGE'`，`ChkWhat` 只認 `'X'`／`'Y'`）；縫也一樣，另外兩軸有一個是邊緣共線的話那條縫沒有厚度，裡面沒東西會漏。沒修之前，一個框疊在另一個上面、側面又剛好共平面，會報出「高程差 = 較高那個框的高度」。
 - U 方向的縫不要寫成「DRAFT 找不到鄰框」：`MatchSorted` 只往 view 的左右上下（平面四邊）收鄰框，從不看 U，50mm 那條規則對上下相鄰的框不適用。真正的代價是兩層之間那一段兩張圖都沒有（BOX 在 U 上也裁自己的 view）。
 - 兩個欄位：Tolerance（預設 1mm，差這麼多以內算貼齊）、Max gap（預設 2000mm，比這寬就不是鄰居——一樓到三樓差一整層、中間夾著二樓，圖框不可能比一層窄）。Max gap 同時是外接球預篩的門檻，調大會一路放寬到全部都比（用來驗證預篩沒漏東西）。
-- 點清單一列：畫兩個框的平面外框＋中間那條縫／重疊（都在兩框共用的 U 中點），CE 移到第一個框，接著直接按 Modify 分頁的 Show Box。
+- 點清單一列：平面的縫／重疊 → 畫兩個框的平面外框＋中間那條縫／重疊（都在兩框共用的 U 中點）；高程面 → 把那個面上所有框各自畫在**它自己那個面的高度**（對齊的疊在一起，偏掉的標 `top-100`／`bot-10`）。兩種都把 CE 移到**該列的那個框**，接著用 Modify 分頁的 Show Box／Move Face。
 - 只讀不改。補縫還是走 Move Face——哪一個框該讓是製圖決定，已發出去的圖框自己長大比縫更糟。
 - 順手改了 `MarkLine`：標籤空字串就只畫線不寫字（一個矩形四條線只有一條帶標籤）。Grid 那邊一律傳非空標籤，行為不變。
 - 整個分頁是中文（說明、欄位、按鈕、清單）。先試 Big5 失敗（`ee63e50`，使用者實測是亂碼），改成 UTF-8 with BOM（`152be11`）。顯示用的字詞在 `ChkWordZh()`／`ChkSideZh()`，`ChkWhat()`／`ChkCompass()` 仍回 `GAP`／`N` 那組 ASCII 代碼給分支比較與 AID TEXT 用。清單每列控制在 62 格內（CJK 算兩格）。
 - **每次按檢查都會把過程寫到 `check_box.txt`**（`23c2987`，L: 對應這台的 D:，已 gitignore）：`CHECKBOX` 設定／`BOX` 每個框的 E N U、XYZ、U 底..頂、兩個平面軸、外接球半徑／`PAIR` 每一對的 `o=`（B 心在 A 座標系）`g=`（三軸相距，負的是重疊）`npos= ntouch=` 與判定結果／`SKIP` 被預篩擋掉的（中心距與門檻）／`ROW` 真的進清單的。`PAIR` 那行是 `ChkPair` 在分類的當下寫的，用的就是分支讀到的同一組變數——對不起來的 dump 比沒有 dump 更糟。**有 finding 看起來不對，先看這個檔，不要看截圖。**
-- 要測：`coll all box for /<proj>_DrawingPlanBox` 在沒導覽到該 SITE 時收不收得到；`list` 的 `callback` ＋ `.selection()` 回傳的是不是列文字；大 SITE 跑起來多久（n² 對，預篩過濾掉約七成）；AID 畫的矩形位置對不對；實際專案上報出來的 finding 是不是真的。
+- **已實測 OK**（2026-09-23，使用者）：`coll all box for /<proj>_DrawingPlanBox` 不導覽就收得到、比對、清單、中文顯示、`list` 的 `callback` ＋ `.selection()`（回傳列文字）、點列畫 AID ＋ CE 導覽、高程面那一路（分群／分面／一列一個面／依高程排序）、`check_box.txt` 寫檔。
+- **還沒試過**：大 SITE 跑多久（n² 對，預篩過濾掉約七成；`SKIP` 行也是 n² 級，太慢就先把它拿掉）；實際專案上報出來的 finding 是不是真的；**樓高小於 Max gap 的區域會不會把兩個真實高程面併成一個**（這次模型樓高都 2840 以上所以沒遇到，遇到就把 Max gap 調小）。
 - 還沒做：Move Face 加第四種給法 `to neighbour`（貼到鄰框的面）。要改 `FaceDistance()`，而那個方法在 `feature/moveface-multi` 上被大改過，等那支實測完併回 master 再做。
 
 ## 換電腦
-1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。進行中的分支只在本機（`feature/moveface-multi`、`feature/box-neighbour-check`），要先從舊機器 `git push -u origin <branch>`，新機器再 `git checkout` 它。
+1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。進行中的分支 `feature/moveface-multi` 只在本機，要先從舊機器 `git push -u origin feature/moveface-multi`，新機器再 `git checkout` 它。
 2. 設使用者環境變數 `NOTION_TOKEN`。舊 token 已失效（2026-09-20 起 MCP 與 REST 都回 401 `API token is invalid`），到 notion.so/my-integrations 重新產一個，並確認 integration 有連到「E3D-管線平面圖程式摘要」那頁。
 3. 重建 `.mcp.json`：
    ```json
