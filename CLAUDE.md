@@ -15,7 +15,9 @@
 - 方法不能接在括號運算式或全域函式的回傳值上：`(a+b).sqrt()`、`abs(!x).gt(1)`、`string(!x).real()` 都是 syntax error，而且只在執行到那行才炸。拆成一步一個變數。
 - `!!Form.Method()` 不會自動載入表單（函式和物件會）。跨表單借方法前：`if (undefined(!!X)) then loadform !!X endif`。
 - 表單物件會快取：改了 `.pmlfrm` 要 `kill !!X`、`pml reload form X`、再 `show !!X`，否則看不到修改。回覆使用者時要提醒這件事。
-- E3D 讀 PML 是 Big5：`!!alert` 等對話框字串保持 ASCII，表單標籤可以用中文。
+- E3D 用系統預設 ANSI 編碼讀 PML，這台是 Big5（zh-TW）。中文要顯示得出來，**檔案裡的位元組本身必須是 Big5**。repo 裡原有的中文全部在註解而且是 UTF-8，那不算先例——2026-08-21 `!!alert.warning('已儲存的…')` 顯示成 `å·²å„²å­˜çš„` 就是 UTF-8 位元組被當 ANSI 讀。`!!alert` 的字串一律留 ASCII。2026-09-23 Check 分頁的清單字串改成真正的 Big5 位元組（`ee63e50`），**還沒驗證過會不會正常顯示**。
+- Big5 第二個位元組的合法範圍含 `0x40..0x7E`，所以可能是 `|`（`疊` = C5 7C）或 `\`（`蓋` = BB 5C），而 PML 拿 `|` 當字串界定符。「重疊」因此改用「重複」。寫中文進 `.pmlfrm` 前，先檢查每個字的第二位元組不是 `' " \ | $ -` 或 CR/LF。
+- `.pmlfrm` 一旦含 Big5 位元組，被編輯器用 UTF-8 存回去就會整批壞掉，而且沒有任何錯誤訊息。動那幾行之前先確認編輯器的編碼。
 - `executecommand` 要給 Command key，不是 Button 名；打錯不報錯、只是沒反應。
 - 用 `object POSITION()` 逐欄填的 POSITION 沒有座標系，`.distance()`/`.direction()` 會炸；用 `DrawingPlan.PosOf()` 那種帶 `WRT /*` 的字串建。POSITION 直接展開給 AID 會帶 `WRT /*` 尾巴，AID 不吃，座標要一個一個寫。
 - LDIM 的斷口：CE 在 LDIM，`gap at x <X> y <Y> length <L>`。
@@ -62,7 +64,8 @@
 - 點清單一列：畫兩個框的平面外框＋中間那條縫／重疊（都在兩框共用的 U 中點），CE 移到第一個框，接著直接按 Modify 分頁的 Show Box。
 - 只讀不改。補縫還是走 Move Face——哪一個框該讓是製圖決定，已發出去的圖框自己長大比縫更糟。
 - 順手改了 `MarkLine`：標籤空字串就只畫線不寫字（一個矩形四條線只有一條帶標籤）。Grid 那邊一律傳非空標籤，行為不變。
-- 要測：`coll all box for /<proj>_DrawingPlanBox` 在沒導覽到該 SITE 時收不收得到；`list` 的 `callback` ＋ `.selection()` 回傳的是不是列文字；大 SITE 跑起來多久（n² 對，預篩過濾掉約七成）；AID 畫的矩形位置對不對；實際專案上報出來的 finding 是不是真的。
+- 清單內容、註記、狀態列是中文（`ee63e50`，Big5 位元組）；版面的標籤與說明還是英文，**刻意分兩步**：版面是載入表單時解析的，中文若讓解析失敗壞的是整個表單，不只 Check 分頁。顯示沒問題再改標籤。顯示用的字詞在 `ChkWordZh()`／`ChkSideZh()`，`ChkWhat()`／`ChkCompass()` 仍回 ASCII 代碼給分支比較與 AID TEXT 用。
+- 要測：**中文顯示得出來嗎**（這是這次最不確定的一件）；`coll all box for /<proj>_DrawingPlanBox` 在沒導覽到該 SITE 時收不收得到；`list` 的 `callback` ＋ `.selection()` 回傳的是不是列文字；大 SITE 跑起來多久（n² 對，預篩過濾掉約七成）；AID 畫的矩形位置對不對；實際專案上報出來的 finding 是不是真的。
 - 還沒做：Move Face 加第四種給法 `to neighbour`（貼到鄰框的面）。要改 `FaceDistance()`，而那個方法在 `feature/moveface-multi` 上被大改過，等那支實測完併回 master 再做。
 
 ## 換電腦
