@@ -127,15 +127,26 @@ layout form !!DrawingPlan dialog dock
 	member .chkdbg   is ARRAY
 
 	------------------------------------------------------------------
-	-- what the Findings list is showing: the row text, and the two  --
-	-- boxes each row is about. the row text is kept because a list  --
-	-- gadget hands back what is written in the row and not which    --
-	-- row it was, so the click has to look its own row up again.    --
-	-- a row that is a note rather than a finding carries 0          --
+	-- what the Findings list is showing: the row text, what kind of --
+	-- row it is ('pair', 'level' or 'note'), and what it is about - --
+	-- two boxes for a pair, one entry of the two arrays below for a --
+	-- level, nothing for a note. the row text is kept because a     --
+	-- list gadget hands back what is written in the row and not     --
+	-- which row it was, so a click has to look its own row up again --
 	------------------------------------------------------------------
 	member .chkrows  is ARRAY
+	member .chkkind  is ARRAY
 	member .chkia    is ARRAY
 	member .chkib    is ARRAY
+
+	------------------------------------------------------------------
+	-- one entry per height the boxes standing on the same ground    --
+	-- failed to agree on: the height they mostly are at, and every  --
+	-- face that meets there as 'box:bot|top:its own height', joined --
+	-- with ~ the way the DRAFT side joins a record                   --
+	------------------------------------------------------------------
+	member .chklvu   is ARRAY
+	member .chklvd   is ARRAY
 
 	!this.formTitle = 'Create Drawing Plan Box'
 
@@ -3486,8 +3497,11 @@ define method .ChkClear()
 	!this.chkrads  = object ARRAY()
 	!this.chkdbg   = object ARRAY()
 	!this.chkrows  = object ARRAY()
+	!this.chkkind  = object ARRAY()
 	!this.chkia    = object ARRAY()
 	!this.chkib    = object ARRAY()
+	!this.chklvu   = object ARRAY()
+	!this.chklvd   = object ARRAY()
 	!this.chklist.clear()
 	!this.chkstatus.val = ''
 endmethod
@@ -3773,6 +3787,9 @@ endmethod
 -- [9] the U to draw that strip at                                  --
 -- [10] [11] how far apart the two bottom levels are, and the two   --
 --       top levels                                                 --
+-- [12] [13] how far apart the two are on the two plan axes, which  --
+--       is what says whether they stand over the same ground - the --
+--       level check groups boxes by that and nothing else          --
 ---------------------------------------------------------------------
 define method .ChkPair(!ia is REAL, !ib is REAL, !tol is REAL) is ARRAY
 	!r = object ARRAY()
@@ -3818,7 +3835,7 @@ define method .ChkPair(!ia is REAL, !ib is REAL, !tol is REAL) is ARRAY
 	if (!sqx lt 0.9998 or !sqy lt 0.9998) then
 		!this.chkdbg.append('PAIR ' & !this.chknames[!ia] & ' / ' & !this.chknames[!ib] & '   ori - axes not square to each other, not compared')
 		!r.append('ori')
-		do !z from 2 to 11
+		do !z from 2 to 13
 			!r.append(0)
 		enddo
 		!r[3] = ''
@@ -4042,6 +4059,8 @@ define method .ChkPair(!ia is REAL, !ib is REAL, !tol is REAL) is ARRAY
 	!r.append(!umid)
 	!r.append(!adbot)
 	!r.append(!adtop)
+	!r.append(!gx)
+	!r.append(!gy)
 	return !r
 endmethod
 
@@ -4069,26 +4088,18 @@ define method .ChkWhat(!p is ARRAY, !tol is REAL) is ARRAY
 		!r.append(!p[2])
 		return !r
 	endif
-	if (!kind.eq('touch')) then
-		--------------------------------------------------------------
-		-- only a shared plan face has a match line on it, so only   --
-		-- 'X' or 'Y' can disagree about a level. 'U' is one frame   --
-		-- stacked on the next, and 'EDGE' is a pair that only meets --
-		-- along a line                                              --
-		--------------------------------------------------------------
-		!axis = !p[3]
-		if (!axis.eq('X') or !axis.eq('Y')) then
-			!worst = !p[10]
-			if (!p[11] gt !worst) then
-				!worst = !p[11]
-			endif
-			if (!worst gt !tol) then
-				!r.append('LEVELS')
-				!r.append(!worst)
-				return !r
-			endif
-		endif
-	endif
+	--------------------------------------------------------------------
+	-- a pair that touches has nothing wrong with it. two frames that  --
+	-- meet in plan but are cut at different heights used to be        --
+	-- reported here, one row per pair - but one box face at the wrong --
+	-- U disagrees with every neighbour it has, so the same mistake    --
+	-- came back once as a gap against the box above it and again as a --
+	-- level difference against the box beside it, and the smaller of  --
+	-- two disagreements on the same pair was lost behind the larger   --
+	-- (user, 2026-09-23). levels are now checked per level instead,   --
+	-- in .CheckBoxes(), where every box meeting at one height is      --
+	-- looked at together                                              --
+	--------------------------------------------------------------------
 	!r.append('')
 	!r.append(0)
 	return !r
@@ -4176,8 +4187,11 @@ define method .CheckBoxes()
 	endif
 
 	!this.chkrows = object ARRAY()
+	!this.chkkind = object ARRAY()
 	!this.chkia   = object ARRAY()
 	!this.chkib   = object ARRAY()
+	!this.chklvu  = object ARRAY()
+	!this.chklvd  = object ARRAY()
 	!this.chklist.clear()
 	!this.chkstatus.val = '讀取框中...'
 
@@ -4219,9 +4233,26 @@ define method .CheckBoxes()
 
 	!rows = object ARRAY()
 	!keys = object ARRAY()
+	!kinds = object ARRAY()
 	!ias  = object ARRAY()
 	!ibs  = object ARRAY()
 	!nori = 0
+
+	------------------------------------------------------------------
+	-- which boxes stand on the same ground. two frames whose        --
+	-- footprints meet or overlap are on it together, and so is      --
+	-- anything either of them reaches through another frame, so     --
+	-- the groups are grown by merging as the pairs go by. only      --
+	-- boxes in one group are expected to agree about a height:      --
+	-- another part of the plant is free to have its storeys         --
+	-- somewhere else entirely. each box starts in a group of its    --
+	-- own, named by its own number, and a merge relabels the        --
+	-- higher-numbered group to the lower                             --
+	------------------------------------------------------------------
+	!grp = object ARRAY()
+	do !gi from 1 to !n
+		!grp.append(!gi)
+	enddo
 
 	do !ia from 1 to !n
 		!ja = !ia + 1
@@ -4265,6 +4296,28 @@ define method .CheckBoxes()
 					endif
 					!gaxis = !p[3]
 					!side = !p[4]
+
+					----------------------------------------------------
+					-- footprints meeting or overlapping on both plan  --
+					-- axes puts the two on the same ground            --
+					----------------------------------------------------
+					if (!p[12] leq !tol and !p[13] leq !tol) then
+						!ga = !grp[!ia]
+						!gb = !grp[!ib]
+						if (!ga neq !gb) then
+							!glo = !ga
+							!ghi = !gb
+							if (!gb lt !ga) then
+								!glo = !gb
+								!ghi = !ga
+							endif
+							do !gk from 1 to !n
+								if (!grp[!gk] eq !ghi) then
+									!grp[!gk] = !glo
+								endif
+							enddo
+						endif
+					endif
 					!w = !this.ChkWhat(!p, !tol)
 					!word = !w[1]
 					!mag = !w[2]
@@ -4279,25 +4332,17 @@ define method .CheckBoxes()
 					-- storey 2 sitting in it, and a frame is never    --
 					-- narrower than that, so the width alone tells    --
 					-- the two apart without hunting for what is in    --
-					-- between                                         --
+					-- between.                                        --
+					--                                                 --
+					-- a gap in U is left to the level check below: it --
+					-- is two frames disagreeing about where a storey  --
+					-- boundary is, and saying that once per boundary  --
+					-- beats saying it once per pair of frames that    --
+					-- happen to meet there                             --
 					----------------------------------------------------
-					if (!mag leq !maxgap) then
-						!rank = 2
-						if (!gaxis.eq('U')) then
-							--------------------------------------------
-							-- a gap in U is one storey's frame not    --
-							-- reaching the next one's. the 50mm rule  --
-							-- has nothing to say about it: DRAFT      --
-							-- looks for a neighbour to the left,      --
-							-- right, up and down of the view, which   --
-							-- on a plan is sideways, never above or   --
-							-- below. what it costs is the band of     --
-							-- plant between the two, which is on      --
-							-- neither sheet because a box clips its   --
-							-- own view in U as well                    --
-							--------------------------------------------
-							!note = '上下兩層之間漏一段'
-						else
+					if (!gaxis.neq('U')) then
+						if (!mag leq !maxgap) then
+							!rank = 2
 							!note = '兩張圖都沒有這一條'
 							if (!mag gt 50) then
 								!rank = 4
@@ -4308,9 +4353,39 @@ define method .CheckBoxes()
 				elseif (!word.eq('OVERLAP')) then
 					!rank = 3
 					!note = '兩張圖都畫了'
-				elseif (!word.eq('LEVELS')) then
-					!rank = 1
-					!note = '切在不同高程'
+					if (!gaxis.eq('U')) then
+						------------------------------------------------
+						-- two frames overlapping in U are either one  --
+						-- sitting inside the other, which really is    --
+						-- the same plant drawn twice, or one reaching  --
+						-- a little past a storey boundary, which is    --
+						-- the level check's business. the two are      --
+						-- told apart by whether either U range is      --
+						-- wholly within the other                      --
+						------------------------------------------------
+						!pa = !this.chkcens[!ia]
+						!pb = !this.chkcens[!ib]
+						!ha = !this.chkzlens[!ia] * 0.5
+						!hb = !this.chkzlens[!ib] * 0.5
+						!aub = !pa.up - !ha
+						!aut = !pa.up + !ha
+						!bub = !pb.up - !hb
+						!but = !pb.up + !hb
+						!aubt = !aub - !tol
+						!autt = !aut + !tol
+						!bubt = !bub - !tol
+						!butt = !but + !tol
+						!inside = false
+						if (!bub geq !aubt and !but leq !autt) then
+							!inside = true
+						endif
+						if (!aub geq !bubt and !aut leq !butt) then
+							!inside = true
+						endif
+						if (not(!inside)) then
+							!rank = 0
+						endif
+					endif
 				endif
 
 				if (!rank gt 0) then
@@ -4324,8 +4399,166 @@ define method .CheckBoxes()
 					!this.chkdbg.append('ROW rank=' & !rank.string() & ' ' & !word & ' ' & !this.ChkN3(!mag) & '   ' & !this.chknames[!ia] & ' ' & !side & ' ' & !this.chknames[!ib])
 					!rows.append(!txt)
 					!keys.append(!key)
+					!kinds.append('pair')
 					!ias.append(!ia)
 					!ibs.append(!ib)
+				endif
+			enddo
+		endif
+	enddo
+
+
+	---------------------------------------------------------------------
+	-- the levels. a storey boundary is one height that every box       --
+	-- meeting there is meant to share: the frame below stops at it,    --
+	-- the frame above starts at it, and the frames beside them are cut --
+	-- at it too. one box face left at the wrong height therefore       --
+	-- disagrees with every neighbour it has, which is why reporting it --
+	-- pair by pair said the same mistake twice - once as a gap against --
+	-- the box above and once as a level difference against the box     --
+	-- beside (user, 2026-09-23). counted per height instead, it is one --
+	-- finding naming every face that meets there.                      --
+	--                                                                  --
+	-- the faces are gathered per group of boxes standing on the same   --
+	-- ground, sorted, and cut into heights: a face further than Max    --
+	-- gap above the first face of the height being built starts the    --
+	-- next one. measuring from the first rather than from the previous --
+	-- face is what keeps a height from creeping - a run of faces a     --
+	-- little apart each time would otherwise all join one height       --
+	---------------------------------------------------------------------
+	do !gi from 1 to !n
+		if (!grp[!gi] eq !gi) then
+			!lvv = object ARRAY()
+			!lvb = object ARRAY()
+			!lvf = object ARRAY()
+			do !bi from 1 to !n
+				if (!grp[!bi] eq !gi) then
+					!lc = !this.chkcens[!bi]
+					!lh = !this.chkzlens[!bi] * 0.5
+					!lbot = !lc.up - !lh
+					!ltop = !lc.up + !lh
+					!lvv.append(!lbot)
+					!lvb.append(!bi)
+					!lvf.append('bot')
+					!lvv.append(!ltop)
+					!lvb.append(!bi)
+					!lvf.append('top')
+				endif
+			enddo
+
+			!lvorder = !lvv.sortedIndices()
+			!lvn = !lvorder.size()
+			!cidx = object ARRAY()
+			!cstart = 0
+			!cfirst = true
+			------------------------------------------------------------
+			-- one pass past the end, so that the last height is       --
+			-- closed by the same code as all the others               --
+			------------------------------------------------------------
+			!lvstop = !lvn + 1
+			do !lk from 1 to !lvstop
+				!lvnew = false
+				!lvcur = 0
+				!lvoi = 0
+				if (!lk gt !lvn) then
+					!lvnew = true
+				else
+					!lvoi = !lvorder[!lk]
+					!lvcur = !lvv[!lvoi]
+					if (!cfirst) then
+						!lvnew = true
+					else
+						!lvup = !lvcur - !cstart
+						if (!lvup gt !maxgap) then
+							!lvnew = true
+						endif
+					endif
+				endif
+
+				if (!lvnew) then
+					if (not(!cfirst)) then
+						--------------------------------------------------
+						-- close the height just finished: how far its   --
+						-- faces spread, and the one height most of them --
+						-- agree on, which is the one the odd ones out   --
+						-- have to be brought to                          --
+						--------------------------------------------------
+						!cn = !cidx.size()
+						!clo = !lvv[!cidx[1]]
+						!chi = !clo
+						do !cj from 1 to !cn
+							!cv = !lvv[!cidx[!cj]]
+							if (!cv lt !clo) then
+								!clo = !cv
+							endif
+							if (!cv gt !chi) then
+								!chi = !cv
+							endif
+						enddo
+						!cspread = !chi - !clo
+
+						if (!cspread gt !tol) then
+							!cbest = !clo
+							!cbestn = 0
+							do !cj from 1 to !cn
+								!cv = !lvv[!cidx[!cj]]
+								!csame = 0
+								do !ck from 1 to !cn
+									!cw = !lvv[!cidx[!ck]]
+									!cd = !cw - !cv
+									!cad = !cd.abs()
+									if (!cad leq !tol) then
+										!csame = !csame + 1
+									endif
+								enddo
+								if (!csame gt !cbestn) then
+									!cbestn = !csame
+									!cbest = !cv
+								endif
+							enddo
+
+							!cdet = ''
+							!coff = 0
+							!cdbg = ''
+							do !cj from 1 to !cn
+								!ci = !cidx[!cj]
+								!cv = !lvv[!ci]
+								!cd = !cv - !cbest
+								!cad = !cd.abs()
+								if (!cdet.neq('')) then
+									!cdet = !cdet & '~'
+								endif
+								!cdet = !cdet & !lvb[!ci].string() & ':' & !lvf[!ci] & ':' & !this.ChkN3(!cv)
+								!cdbg = !cdbg & ' ' & !this.chknames[!lvb[!ci]] & ':' & !lvf[!ci] & ':' & !this.ChkN3(!cv)
+								if (!cad gt !tol) then
+									!coff = !coff + 1
+								endif
+							enddo
+
+							!this.chklvu.append(!cbest)
+							!this.chklvd.append(!cdet)
+							!clvk = !this.chklvu.size()
+							!ctxt = '高程面 ' & !this.ChkNum(!cbest) & '  差 ' & !this.ChkNum(!cspread) & 'mm  ' & !coff.string() & ' 個框要改'
+							!ckey = 2 * 1000000 + !cspread
+							!ckey = 0 - !ckey
+							!this.chkdbg.append('LEVEL ' & !this.ChkN3(!cbest) & ' spread=' & !this.ChkN3(!cspread) & ' off=' & !coff.string() & '  ' & !cdbg)
+							!rows.append(!ctxt)
+							!keys.append(!ckey)
+							!kinds.append('level')
+							!ias.append(!clvk)
+							!ibs.append(0)
+						endif
+					endif
+
+					if (!lk leq !lvn) then
+						!cidx = object ARRAY()
+						!cstart = !lvcur
+						!cfirst = false
+					endif
+				endif
+
+				if (!lk leq !lvn) then
+					!cidx.append(!lvoi)
 				endif
 			enddo
 		endif
@@ -4338,11 +4571,13 @@ define method .CheckBoxes()
 		do !k from 1 to !order.size()
 			!oi = !order[!k]
 			!out.append(!rows[!oi])
+			!this.chkkind.append(!kinds[!oi])
 			!this.chkia.append(!ias[!oi])
 			!this.chkib.append(!ibs[!oi])
 		enddo
 	else
-		!out.append('沒有問題：所有框彼此貼齊，沒有縫也沒有重疊')
+		!out.append('沒有問題：框彼此貼齊，高程也一致')
+		!this.chkkind.append('note')
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
@@ -4356,11 +4591,13 @@ define method .CheckBoxes()
 	------------------------------------------------------------------
 	if (!nori gt 0) then
 		!out.append('(' & !nori.string() & ' 對框設在不同格線上，未比對)')
+		!this.chkkind.append('note')
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
 	if (!ntilt gt 0) then
 		!out.append('(' & !ntilt.string() & ' 個框不是水平的，已略過)')
+		!this.chkkind.append('note')
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
@@ -4388,6 +4625,7 @@ define method .CheckBoxes()
 	else
 		!out.append('（寫不出 check_box.txt）')
 	endif
+	!this.chkkind.append('note')
 	!this.chkia.append(0)
 	!this.chkib.append(0)
 
@@ -4437,6 +4675,65 @@ define method .ChkPlan(!i is REAL, !u is REAL, !lbl is STRING)
 endmethod
 
 ---------------------------------------------------------------------
+-- a level finding, drawn: every box that meets at that height gets --
+-- its plan outline at the height its own face is actually at, and  --
+-- the ones that are not where the rest of them are get a label     --
+-- saying which face and by how much. drawn flat and one on top of  --
+-- another, which is the point - the labels are the only thing that --
+-- moves, and by exactly the amount that has to be corrected.       --
+--                                                                  --
+-- CE ends on the first box that has to change, so Move Face on the --
+-- Modify tab can take it straight on                               --
+---------------------------------------------------------------------
+define method .ChkShowLevel(!lk is REAL, !tol is REAL)
+	!want = !this.chklvu[!lk]
+	!parts = !this.chklvd[!lk].split('~')
+
+	AID CLEAR ALL
+	handle any
+	endhandle
+
+	!firstoff = 0
+	!noff = 0
+	do !pj from 1 to !parts.size()
+		!f = !parts[!pj].split(':')
+		!bi = !f[1].real()
+		!fc = !f[2]
+		!fv = !f[3].real()
+		!fd = !fv - !want
+		!fad = !fd.abs()
+		!lbl = ''
+		if (!fad gt !tol) then
+			!ds = !this.ChkNum(!fd)
+			if (!fd gt 0) then
+				!ds = '+' & !ds
+			endif
+			!lbl = !fc & !ds
+			!noff = !noff + 1
+			if (!firstoff eq 0) then
+				!firstoff = !bi
+			endif
+		endif
+		!this.ChkPlan(!bi, !fv, !lbl)
+	enddo
+
+	!lvtxt = '高程面 ' & !this.ChkNum(!want) & '   ' & !noff.string() & ' 個框要改'
+	if (!firstoff gt 0) then
+		!na = !this.chknames[!firstoff]
+		!equinav = !this.NavName(!na)
+		!ok = true
+		$!equinav
+		handle any
+			!ok = false
+		endhandle
+		if (!ok) then
+			!lvtxt = '高程面 ' & !this.ChkNum(!want) & '   CE → ' & !na
+		endif
+	endif
+	!this.chkstatus.val = !lvtxt
+endmethod
+
+---------------------------------------------------------------------
 -- clicking a finding draws it: the two frames in plan and, between --
 -- them, what the finding is about - the gap that is on no sheet,   --
 -- or the overlap that is on two. all three at one level, the       --
@@ -4468,15 +4765,29 @@ define method .CheckPicked()
 		return
 	endif
 	!k = !hits[1]
-	!ia = !this.chkia[!k]
-	!ib = !this.chkib[!k]
-	if (!ia.eq(0)) then
+	!rkind = !this.chkkind[!k]
+	if (!rkind.eq('note')) then
 		return
 	endif
 
 	!tol = 1
 	if (not(!this.chktol.val.unset())) then
 		!tol = !this.chktol.val
+	endif
+
+	------------------------------------------------------------------
+	-- a level finding is about a height and everything that meets   --
+	-- it, not about two boxes, so it is drawn by its own method     --
+	------------------------------------------------------------------
+	if (!rkind.eq('level')) then
+		!this.ChkShowLevel(!this.chkia[!k], !tol)
+		return
+	endif
+
+	!ia = !this.chkia[!k]
+	!ib = !this.chkib[!k]
+	if (!ia.eq(0)) then
+		return
 	endif
 	------------------------------------------------------------------
 	-- .ChkPair() adds a line to the dump each time it runs, so this --
