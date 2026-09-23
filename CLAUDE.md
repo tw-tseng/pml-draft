@@ -15,7 +15,9 @@
 - 方法不能接在括號運算式或全域函式的回傳值上：`(a+b).sqrt()`、`abs(!x).gt(1)`、`string(!x).real()` 都是 syntax error，而且只在執行到那行才炸。拆成一步一個變數。
 - `!!Form.Method()` 不會自動載入表單（函式和物件會）。跨表單借方法前：`if (undefined(!!X)) then loadform !!X endif`。
 - 表單物件會快取：改了 `.pmlfrm` 要 `kill !!X`、`pml reload form X`、再 `show !!X`，否則看不到修改。回覆使用者時要提醒這件事。
-- **PML 檔要放中文，存成 UTF-8 with BOM。** E3D 的 PML 讀取器沒有 BOM 就退回 Latin-1（一個位元組一個字元），所以沒 BOM 的 UTF-8 或 Big5 都會變亂碼。依據是 AVEVA 自己的 `common/functions/charactersymbol.pmlfnc`——PMLLIB 裡唯一刻意把非 ASCII 放進回傳字串的檔，檔頭寫著 `THIS FILE MUST BE SAVED AS UNICODE UTF-8 WITH BOM`，而且真的以 `EF BB BF` 開頭。
+- **PML 檔要放中文，存成 UTF-8 with BOM。** E3D 的 PML 讀取器**有 BOM 就讀 UTF-8，沒有就退回 Latin-1**（一個位元組一個字元），所以沒 BOM 的 UTF-8 或 Big5 都會變亂碼。AVEVA 自己的 PMLLIB 同時示範了兩半，用的還是同一個 `°`：`common/functions/charactersymbol.pmlfnc` 有 BOM、字是 UTF-8 的 `C2 B0`，檔頭寫著 `THIS FILE MUST BE SAVED AS UNICODE UTF-8 WITH BOM`；`common/forms/gphanglemeasure.pmlfrm` 和 `psi-r2/forms/pceRtwoSettings.pmlfrm`（gadget 標籤 `'Design Temperature (°C):'`）沒有 BOM，字是 Latin-1 的單一位元組 `B0`。
+- 推論：`°`、`¬` 這種落在 Latin-1 範圍內的字元，不加 BOM、直接寫單一位元組也會對（AVEVA 就是這樣用）；CJK 沒有這條路，只能靠 BOM。
+- 注意 PMLLIB 裡有一百多個檔帶 BOM 但內容全是 ASCII（整個 `sai` 模組），所以「有沒有 BOM」不能拿來反推那個檔有沒有非 ASCII。
 - 兩次亂碼都是同一個原因：2026-08-21 `!!alert.warning('已儲存的…')` → `å·²å„²å­˜çš„`（UTF-8 位元組被當 Latin-1）；2026-09-23 先試 Big5 也一樣（`重疊` = AD AB BD C6 → `­«½Æ`）。**判斷方式**：把畫面上的亂碼 `.encode('latin-1')` 再用原編碼 decode，解得回來就表示位元組是對的、只是讀取端用錯編碼。
 - repo 裡其他檔（`Inspection.pmlfrm` 等）的中文全在註解而且沒有 BOM，等於是壞的，只是沒人看得出來——不要拿它們當先例。
 - `!!alert` 的字串跟 `AID TEXT` 的標籤仍然留 ASCII：那兩條走的是對話框／命令列，不是表單顯示，還沒驗證過。
