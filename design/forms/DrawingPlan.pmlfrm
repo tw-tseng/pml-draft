@@ -4342,7 +4342,7 @@ define method .CheckBoxes()
 					----------------------------------------------------
 					if (!gaxis.neq('U')) then
 						if (!mag leq !maxgap) then
-							!rank = 2
+							!rank = 1
 							!note = '兩張圖都沒有這一條'
 							if (!mag gt 50) then
 								!rank = 4
@@ -4394,7 +4394,14 @@ define method .CheckBoxes()
 					!zhword = !this.ChkWordZh(!word)
 					!zhside = !this.ChkSideZh(!side)
 					!txt = !zhword & ' ' & !this.ChkNum(!mag) & 'mm  ' & !na & ' -' & !zhside & '- ' & !nb & '  ' & !note
-					!key = !rank * 1000000 + !mag
+					--------------------------------------------------
+					-- the list is worst first, so the key is negated  --
+					-- and sorted the ordinary way up. a rank is worth --
+					-- more than anything inside it, and the step      --
+					-- between two ranks is wide enough that no size   --
+					-- or height can carry a row out of its own band   --
+					--------------------------------------------------
+					!key = !rank * 100000000 + !mag
 					!key = 0 - !key
 					!this.chkdbg.append('ROW rank=' & !rank.string() & ' ' & !word & ' ' & !this.ChkN3(!mag) & '   ' & !this.chknames[!ia] & ' ' & !side & ' ' & !this.chknames[!ib])
 					!rows.append(!txt)
@@ -4573,7 +4580,24 @@ define method .CheckBoxes()
 										!cdir = '高'
 									endif
 									!ctxt = '高程面 ' & !this.ChkNum(!cbest) & '  ' & !this.chknames[!lvb[!ci]] & ' ' & !cfa & ' ' & !cdir & ' ' & !this.ChkNum(!cad) & 'mm'
-									!ckey = 2 * 1000000 + !cad
+									--------------------------------------
+									-- level findings are read from the  --
+									-- ground up, the way the storeys go --
+									-- and the way Batch numbers them,   --
+									-- so the height carries the order   --
+									-- and the whole of one height stays --
+									-- together (user, 2026-09-23). the  --
+									-- key is negated with the rest, so  --
+									-- the height goes in negated too    --
+									-- and a bigger face error breaks a  --
+									-- tie within the one height. the    --
+									-- thousandth is small against the   --
+									-- Max gap two heights are at least  --
+									-- apart, so it can never reach the  --
+									-- next height                        --
+									--------------------------------------
+									!ctie = !cad * 0.001
+									!ckey = 2 * 100000000 + !ctie - !cbest
 									!ckey = 0 - !ckey
 									!rows.append(!ctxt)
 									!keys.append(!ckey)
