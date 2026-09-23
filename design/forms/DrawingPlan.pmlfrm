@@ -1,4 +1,4 @@
------------------------------------------------------
+ï»¿-----------------------------------------------------
 -- Copyright ATOMTECH Ltd 2024                     --
 --                                                 --
 -- Function : Create Volumn for Drawings in Design --
@@ -367,20 +367,20 @@ layout form !!DrawingPlan dialog dock
 		-- give way is a drawing decision and not arithmetic           --
 		----------------------------------------------------------------
 		frame .checkfr 'Check' width 66
-			para .chkhint1 text 'gaps, overlaps and level mismatches between the boxes of this project' width 62
-			para .chkhint2 at xmin.chkhint1 ymax.chkhint1+0.05 text 'DRAFT only finds a neighbour within 50mm of the border - past that the' width 62
-			para .chkhint3 at xmin.chkhint2 ymax.chkhint2+0.05 text 'match line loses its ticks and its SEE reference. nothing here moves a box' width 62
+			para .chkhint1 text 'æª¢æŸ¥åœ–æ¡†ä¹‹é–“æœ‰æ²’æœ‰ç¸«ã€é‡ç–Šæˆ–é«˜ç¨‹ä¸ä¸€è‡´' width 62
+			para .chkhint2 at xmin.chkhint1 ymax.chkhint1+0.05 text 'DRAFT åªåœ¨æ¡†ç·šå¤– 50mm å…§æ‰¾é„°æ¡†ï¼Œç¸«æ¯”é€™å¯¬å°±æ‰¾ä¸åˆ°ï¼Œ' width 62
+			para .chkhint3 at xmin.chkhint2 ymax.chkhint2+0.05 text 'match line æœƒæ²’æœ‰åˆ»åº¦ä¹Ÿæ²’æœ‰ SEEã€‚æœ¬åˆ†é åªæª¢æŸ¥ï¼Œä¸å‹•ä»»ä½•æ¡†' width 62
 
-			text .chktol 'Tolerance' at xmin.chkhint3 ymax.chkhint3+0.3 tagwidth 12 width 9 is REAL
-			para .chktolmm at xmax.chktol+0.2 ymin.chktol text 'mm   closer than this counts as touching'
+			text .chktol 'å®¹å·®' at xmin.chkhint3 ymax.chkhint3+0.3 tagwidth 12 width 9 is REAL
+			para .chktolmm at xmax.chktol+0.2 ymin.chktol text 'mm   å·®é€™éº¼å¤šä»¥å…§ç®—è²¼é½Š'
 
-			text .chkmax 'Max gap' at xmin.chktol ymax.chktol+0.1 tagwidth 12 width 9 is REAL
-			para .chkmaxmm at xmax.chkmax+0.2 ymin.chkmax text 'mm   further apart than this and they are not neighbours'
+			text .chkmax 'æœ€å¤§ç¸«å¯¬' at xmin.chktol ymax.chktol+0.1 tagwidth 12 width 9 is REAL
+			para .chkmaxmm at xmax.chkmax+0.2 ymin.chkmax text 'mm   æ¯”é€™æ›´é å°±ä¸ç®—é„°æ¡†'
 
-			button .chkgo 'Check Boxes' at xmin.chkmax ymax.chkmax+0.3 width 14 call |!This.CheckBoxes()|
+			button .chkgo 'é–‹å§‹æª¢æŸ¥' at xmin.chkmax ymax.chkmax+0.3 width 14 call |!This.CheckBoxes()|
 			para .chkstatus at xmax.chkgo+1 ymin.chkgo text '' width 46
 
-			list .chklist 'Findings - worst first, click one to see it' at xmin.chkgo ymax.chkgo+0.3 callback |!This.CheckPicked()| single width 62 height 12
+			list .chklist 'æª¢æŸ¥çµæœï¼ˆæœ€åš´é‡çš„åœ¨æœ€ä¸Šé¢ï¼Œé»ä¸€åˆ—çœ‹ä½ç½®ï¼‰' at xmin.chkgo ymax.chkgo+0.3 callback |!This.CheckPicked()| single width 62 height 12
 		exit
 
 	exit
@@ -4036,20 +4036,23 @@ endmethod
 -- into an AID TEXT label, and neither of those is a place to put a  --
 -- character that has to survive an encoding                         --
 --                                                                   --
--- !! the text below is Big5, because that is what E3D reads PML     --
--- !! source as on a Traditional Chinese Windows. an editor that     --
--- !! saves this file as UTF-8 turns every one of them into rubbish, --
--- !! so check the encoding before saving if you touch these lines   --
+-- !! THIS FILE MUST BE SAVED AS UTF-8 WITH BOM. E3D's PML reader    --
+-- !! falls back to Latin-1 and reads one byte as one character, so  --
+-- !! without the BOM every Chinese character below comes out as     --
+-- !! mojibake - the BOM is what makes it read the file as UTF-8.    --
+-- !! AVEVA's own common/functions/charactersymbol.pmlfnc carries    --
+-- !! the same warning, and is the only file in their PMLLIB that    --
+-- !! puts a non-ASCII character into a returned string              --
 ---------------------------------------------------------------------
 define method .ChkWordZh(!code is STRING) is STRING
 	if (!code.eq('GAP')) then
-		return 'Á_'
+		return 'ç¸«'
 	endif
 	if (!code.eq('OVERLAP')) then
-		return '­«½Æ'
+		return 'é‡ç–Š'
 	endif
 	if (!code.eq('LEVELS')) then
-		return '°ªµ{®t'
+		return 'é«˜ç¨‹å·®'
 	endif
 	return !code
 endmethod
@@ -4059,22 +4062,22 @@ endmethod
 ---------------------------------------------------------------------
 define method .ChkSideZh(!s is STRING) is STRING
 	if (!s.eq('N')) then
-		return '¥_°¼'
+		return 'åŒ—'
 	endif
 	if (!s.eq('S')) then
-		return '«n°¼'
+		return 'å—'
 	endif
 	if (!s.eq('E')) then
-		return 'ªF°¼'
+		return 'æ±'
 	endif
 	if (!s.eq('W')) then
-		return '¦è°¼'
+		return 'è¥¿'
 	endif
 	if (!s.eq('above')) then
-		return '¤W¤è'
+		return 'ä¸Š'
 	endif
 	if (!s.eq('below')) then
-		return '¤U¤è'
+		return 'ä¸‹'
 	endif
 	return !s
 endmethod
@@ -4096,7 +4099,7 @@ define method .CheckBoxes()
 	!this.chkia   = object ARRAY()
 	!this.chkib   = object ARRAY()
 	!this.chklist.clear()
-	!this.chkstatus.val = 'Åª¨ú®Ø¤¤...'
+	!this.chkstatus.val = 'è®€å–æ¡†ä¸­...'
 
 	!rd = !this.ChkReadAll()
 	!err = !rd[1]
@@ -4170,18 +4173,18 @@ define method .CheckBoxes()
 					----------------------------------------------------
 					if (!mag leq !maxgap) then
 						!rank = 2
-						!note = '³o±øÁ_¤Wªº¼t©Ğ¨â±i¹Ï³£¨S¦³'
+						!note = 'å…©å¼µåœ–éƒ½æ²’æœ‰é€™ä¸€æ¢'
 						if (!mag gt 50) then
 							!rank = 4
-							!note = '¶W¹L 50mm¡ADRAFT §ä¤£¨ì¾F®Ø¡Amatch line ¨S¦³¨è«×¤]¨S¦³ SEE'
+							!note = 'DRAFT æ‰¾ä¸åˆ°é„°æ¡†'
 						endif
 					endif
 				elseif (!word.eq('OVERLAP')) then
 					!rank = 3
-					!note = '¦P¤@¬q¼t©Ğµe¦b¨â±i¹Ï¤W'
+					!note = 'å…©å¼µåœ–éƒ½ç•«äº†'
 				elseif (!word.eq('LEVELS')) then
 					!rank = 1
-					!note = '¨â®Ø¬Û¾F¡A¦ı¤W¤U½t¤Á¦b¤£¦P°ªµ{'
+					!note = 'åˆ‡åœ¨ä¸åŒé«˜ç¨‹'
 				endif
 
 				if (!rank gt 0) then
@@ -4189,7 +4192,7 @@ define method .CheckBoxes()
 					!nb = !this.chknames[!ib]
 					!zhword = !this.ChkWordZh(!word)
 					!zhside = !this.ChkSideZh(!side)
-					!txt = !zhword & ' ' & !this.ChkNum(!mag) & 'mm | ' & !na & ' -' & !zhside & '- ' & !nb & ' | ' & !note
+					!txt = !zhword & ' ' & !this.ChkNum(!mag) & 'mm  ' & !na & ' -' & !zhside & '- ' & !nb & '  ' & !note
 					!key = !rank * 1000000 + !mag
 					!key = 0 - !key
 					!rows.append(!txt)
@@ -4212,7 +4215,7 @@ define method .CheckBoxes()
 			!this.chkib.append(!ibs[!oi])
 		enddo
 	else
-		!out.append('¨S¦³°İÃD¡G©Ò¦³®Ø©¼¦¹¶K»ô¡A¨S¦³Á_¤]¨S¦³­«½Æ')
+		!out.append('æ²’æœ‰å•é¡Œï¼šæ‰€æœ‰æ¡†å½¼æ­¤è²¼é½Šï¼Œæ²’æœ‰ç¸«ä¹Ÿæ²’æœ‰é‡ç–Š')
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
@@ -4225,19 +4228,19 @@ define method .CheckBoxes()
 	-- nothing                                                       --
 	------------------------------------------------------------------
 	if (!nori gt 0) then
-		!out.append('(' & !nori.string() & ' ¹ï®Ø³]¦b¤£¦P®æ½u¤W¡A¥¼¤ñ¹ï)')
+		!out.append('(' & !nori.string() & ' å°æ¡†è¨­åœ¨ä¸åŒæ ¼ç·šä¸Šï¼Œæœªæ¯”å°)')
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
 	if (!ntilt gt 0) then
-		!out.append('(' & !ntilt.string() & ' ­Ó®Ø¤£¬O¤ô¥­ªº¡A¤w²¤¹L)')
+		!out.append('(' & !ntilt.string() & ' å€‹æ¡†ä¸æ˜¯æ°´å¹³çš„ï¼Œå·²ç•¥é)')
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
 
 	!this.chkrows = !out
 	!this.chklist.dtext = !out
-	!this.chkstatus.val = 'ÀË¬d¤F ' & !n.string() & ' ­Ó®Ø¡A' & !nf.string() & ' ¶µ°İÃD'
+	!this.chkstatus.val = 'æª¢æŸ¥äº† ' & !n.string() & ' å€‹æ¡†ï¼Œ' & !nf.string() & ' é …å•é¡Œ'
 endmethod
 
 ---------------------------------------------------------------------
@@ -4343,9 +4346,9 @@ define method .CheckPicked()
 		!ok = false
 	endhandle
 	if (!ok) then
-		!this.chkstatus.val = 'CE ¤w²¾¨ì ' & !na & '¡A¥i¨ì Modify ¤À­¶«ö Show Box'
+		!this.chkstatus.val = 'CE â†’ ' & !na & 'ï¼ˆModify åˆ†é  Show Boxï¼‰'
 	else
-		!this.chkstatus.val = '¤wµe¥X¡A¦ıµLªk¾ÉÄı¨ì ' & !na
+		!this.chkstatus.val = 'å·²ç•«å‡ºï¼Œä½†ç„¡æ³•å°è¦½åˆ° ' & !na
 	endif
 endmethod
 
