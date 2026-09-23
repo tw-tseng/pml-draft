@@ -53,8 +53,20 @@
 - 除錯行 `EQUIDIM`（origin／中心線端點／有沒有夾／夾完的點）會寫進 `check_rebuild.txt`。
 - 還沒決定：中心線本身要不要也畫到 matchline，讓中心線＋投影線變成連續一條；捨入／貼齊要不要收緊（目前只有 `!esh` 那層 `.string('D3')`）。
 
+## Check 分頁：框與框之間的縫／重疊（分支 `feature/box-neighbour-check`，2026-09-23，**未在 E3D 實測**）
+- 1 個 commit `0b959c3`，從 master 開出來，只動 `design/forms/DrawingPlan.pmlfrm`（+938 行，五處純插入，沒刪任何東西）。**分支只在本機**，換電腦前要 `git push -u origin feature/box-neighbour-check`。跟 `feature/moveface-multi` 互不相干（那支改的是 Modify 分頁的方法，這支加新分頁＋新方法，之後併回應該只在 tabset 尾端與方法區塊有小衝突）。
+- 為什麼做：DRAFT 的 `DrawingPlan1MatchSorted` 只在框線外 50mm 的薄片裡收鄰框（`MatchSorted.pmlfnc:47-68`），縫大於 50 就沒有鄰框，`MatchLine1.pmlfnc:94` 整段標籤被跳過——沒有 tick、沒有 `MATCH LINE Exxxxx`、也沒有 `SEE <鄰圖號>`。縫上的廠房兩張圖都沒有；重疊則是同一段畫兩次。都要等出圖才發現。
+- 分類：每一對 BOX 在**第一個 BOX 自己的座標系**比三個區間（格線轉 12.5 度，用世界 E/N 比會把對齊的兩框讀成兩軸都重疊）。看幾個軸分開：≥2 軸＝對角或不相鄰；1 軸＝有縫；0 軸但有一軸在容差內＝正常貼齊；0 軸＝重疊（取最小貫入）。貼齊且是平面相鄰的再比 ubot/utop，差了就報高程不一致。
+- 排序：>50 的縫 ＞ 重疊 ＞ ≤50 的縫 ＞ 高程不一致，同級數字大的在前。
+- 兩個欄位：Tolerance（預設 1mm，差這麼多以內算貼齊）、Max gap（預設 2000mm，比這寬就不是鄰居——一樓到三樓差一整層、中間夾著二樓，圖框不可能比一層窄）。Max gap 同時是外接球預篩的門檻，調大會一路放寬到全部都比（用來驗證預篩沒漏東西）。
+- 點清單一列：畫兩個框的平面外框＋中間那條縫／重疊（都在兩框共用的 U 中點），CE 移到第一個框，接著直接按 Modify 分頁的 Show Box。
+- 只讀不改。補縫還是走 Move Face——哪一個框該讓是製圖決定，已發出去的圖框自己長大比縫更糟。
+- 順手改了 `MarkLine`：標籤空字串就只畫線不寫字（一個矩形四條線只有一條帶標籤）。Grid 那邊一律傳非空標籤，行為不變。
+- 要測：`coll all box for /<proj>_DrawingPlanBox` 在沒導覽到該 SITE 時收不收得到；`list` 的 `callback` ＋ `.selection()` 回傳的是不是列文字；大 SITE 跑起來多久（n² 對，預篩過濾掉約七成）；AID 畫的矩形位置對不對；實際專案上報出來的 finding 是不是真的。
+- 還沒做：Move Face 加第四種給法 `to neighbour`（貼到鄰框的面）。要改 `FaceDistance()`，而那個方法在 `feature/moveface-multi` 上被大改過，等那支實測完併回 master 再做。
+
 ## 換電腦
-1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
+1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。進行中的分支只在本機（`feature/moveface-multi`、`feature/box-neighbour-check`），要先從舊機器 `git push -u origin <branch>`，新機器再 `git checkout` 它。
 2. 設使用者環境變數 `NOTION_TOKEN`。舊 token 已失效（2026-09-20 起 MCP 與 REST 都回 401 `API token is invalid`），到 notion.so/my-integrations 重新產一個，並確認 integration 有連到「E3D-管線平面圖程式摘要」那頁。
 3. 重建 `.mcp.json`：
    ```json
