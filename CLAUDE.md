@@ -71,6 +71,7 @@
 - 只讀不改。補縫還是走 Move Face——哪一個框該讓是製圖決定，已發出去的圖框自己長大比縫更糟。
 - 順手改了 `MarkLine`：標籤空字串就只畫線不寫字（一個矩形四條線只有一條帶標籤）。Grid 那邊一律傳非空標籤，行為不變。
 - 整個分頁是中文（說明、欄位、按鈕、清單）。先試 Big5 失敗（`ee63e50`，使用者實測是亂碼），改成 UTF-8 with BOM（`152be11`）。顯示用的字詞在 `ChkWordZh()`／`ChkSideZh()`，`ChkWhat()`／`ChkCompass()` 仍回 `GAP`／`N` 那組 ASCII 代碼給分支比較與 AID TEXT 用。清單每列控制在 62 格內（CJK 算兩格）。
+- **每次按檢查都會把過程寫到 `check_box.txt`**（`23c2987`，L: 對應這台的 D:，已 gitignore）：`CHECKBOX` 設定／`BOX` 每個框的 E N U、XYZ、U 底..頂、兩個平面軸、外接球半徑／`PAIR` 每一對的 `o=`（B 心在 A 座標系）`g=`（三軸相距，負的是重疊）`npos= ntouch=` 與判定結果／`SKIP` 被預篩擋掉的（中心距與門檻）／`ROW` 真的進清單的。`PAIR` 那行是 `ChkPair` 在分類的當下寫的，用的就是分支讀到的同一組變數——對不起來的 dump 比沒有 dump 更糟。**有 finding 看起來不對，先看這個檔，不要看截圖。**
 - 要測：`coll all box for /<proj>_DrawingPlanBox` 在沒導覽到該 SITE 時收不收得到；`list` 的 `callback` ＋ `.selection()` 回傳的是不是列文字；大 SITE 跑起來多久（n² 對，預篩過濾掉約七成）；AID 畫的矩形位置對不對；實際專案上報出來的 finding 是不是真的。
 - 還沒做：Move Face 加第四種給法 `to neighbour`（貼到鄰框的面）。要改 `FaceDistance()`，而那個方法在 `feature/moveface-multi` 上被大改過，等那支實測完併回 master 再做。
 
