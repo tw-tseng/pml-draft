@@ -4029,6 +4029,56 @@ endmethod
 --   two frames that meet but are cut at different levels           --
 -- and within each, the biggest number first                        --
 ---------------------------------------------------------------------
+---------------------------------------------------------------------
+-- the words the Findings list is written in. they are kept apart    --
+-- from the codes .ChkWhat() and .ChkCompass() hand back, which stay --
+-- as they are: the codes are what the branches test and what goes   --
+-- into an AID TEXT label, and neither of those is a place to put a  --
+-- character that has to survive an encoding                         --
+--                                                                   --
+-- !! the text below is Big5, because that is what E3D reads PML     --
+-- !! source as on a Traditional Chinese Windows. an editor that     --
+-- !! saves this file as UTF-8 turns every one of them into rubbish, --
+-- !! so check the encoding before saving if you touch these lines   --
+---------------------------------------------------------------------
+define method .ChkWordZh(!code is STRING) is STRING
+	if (!code.eq('GAP')) then
+		return '縫'
+	endif
+	if (!code.eq('OVERLAP')) then
+		return '重複'
+	endif
+	if (!code.eq('LEVELS')) then
+		return '高程差'
+	endif
+	return !code
+endmethod
+
+---------------------------------------------------------------------
+-- which side of the first box the second one is on                  --
+---------------------------------------------------------------------
+define method .ChkSideZh(!s is STRING) is STRING
+	if (!s.eq('N')) then
+		return '北側'
+	endif
+	if (!s.eq('S')) then
+		return '南側'
+	endif
+	if (!s.eq('E')) then
+		return '東側'
+	endif
+	if (!s.eq('W')) then
+		return '西側'
+	endif
+	if (!s.eq('above')) then
+		return '上方'
+	endif
+	if (!s.eq('below')) then
+		return '下方'
+	endif
+	return !s
+endmethod
+
 define method .CheckBoxes()
 	!tol = 1
 	if (not(!this.chktol.val.unset())) then
@@ -4046,7 +4096,7 @@ define method .CheckBoxes()
 	!this.chkia   = object ARRAY()
 	!this.chkib   = object ARRAY()
 	!this.chklist.clear()
-	!this.chkstatus.val = 'reading the boxes...'
+	!this.chkstatus.val = '讀取框中...'
 
 	!rd = !this.ChkReadAll()
 	!err = !rd[1]
@@ -4120,24 +4170,26 @@ define method .CheckBoxes()
 					----------------------------------------------------
 					if (!mag leq !maxgap) then
 						!rank = 2
-						!note = 'strip of plant on no sheet'
+						!note = '這條縫上的廠房兩張圖都沒有'
 						if (!mag gt 50) then
 							!rank = 4
-							!note = 'over 50mm - DRAFT finds no neighbour, so no ticks and no SEE'
+							!note = '超過 50mm，DRAFT 找不到鄰框，match line 沒有刻度也沒有 SEE'
 						endif
 					endif
 				elseif (!word.eq('OVERLAP')) then
 					!rank = 3
-					!note = 'plant drawn on both sheets'
+					!note = '同一段廠房畫在兩張圖上'
 				elseif (!word.eq('LEVELS')) then
 					!rank = 1
-					!note = 'they meet, but are cut at different levels'
+					!note = '兩框相鄰，但上下緣切在不同高程'
 				endif
 
 				if (!rank gt 0) then
 					!na = !this.chknames[!ia]
 					!nb = !this.chknames[!ib]
-					!txt = !word & ' ' & !this.ChkNum(!mag) & 'mm | ' & !na & ' -' & !side & '- ' & !nb & ' | ' & !note
+					!zhword = !this.ChkWordZh(!word)
+					!zhside = !this.ChkSideZh(!side)
+					!txt = !zhword & ' ' & !this.ChkNum(!mag) & 'mm | ' & !na & ' -' & !zhside & '- ' & !nb & ' | ' & !note
 					!key = !rank * 1000000 + !mag
 					!key = 0 - !key
 					!rows.append(!txt)
@@ -4160,7 +4212,7 @@ define method .CheckBoxes()
 			!this.chkib.append(!ibs[!oi])
 		enddo
 	else
-		!out.append('nothing to report - the boxes tile with no gap and no overlap')
+		!out.append('沒有問題：所有框彼此貼齊，沒有縫也沒有重複')
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
@@ -4173,19 +4225,19 @@ define method .CheckBoxes()
 	-- nothing                                                       --
 	------------------------------------------------------------------
 	if (!nori gt 0) then
-		!out.append('(' & !nori.string() & ' pair(s) set out on a different grid - not compared)')
+		!out.append('(' & !nori.string() & ' 對框設在不同格線上，未比對)')
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
 	if (!ntilt gt 0) then
-		!out.append('(' & !ntilt.string() & ' box(es) are not level - left out)')
+		!out.append('(' & !ntilt.string() & ' 個框不是水平的，已略過)')
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
 
 	!this.chkrows = !out
 	!this.chklist.dtext = !out
-	!this.chkstatus.val = !n.string() & ' boxes checked, ' & !nf.string() & ' finding(s)'
+	!this.chkstatus.val = '檢查了 ' & !n.string() & ' 個框，' & !nf.string() & ' 項問題'
 endmethod
 
 ---------------------------------------------------------------------
@@ -4291,9 +4343,9 @@ define method .CheckPicked()
 		!ok = false
 	endhandle
 	if (!ok) then
-		!this.chkstatus.val = 'CE is on ' & !na & ' - Modify tab, Show Box'
+		!this.chkstatus.val = 'CE 已移到 ' & !na & '，可到 Modify 分頁按 Show Box'
 	else
-		!this.chkstatus.val = 'drawn, but cannot navigate to ' & !na
+		!this.chkstatus.val = '已畫出，但無法導覽到 ' & !na
 	endif
 endmethod
 
