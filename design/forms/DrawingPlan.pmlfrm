@@ -85,6 +85,48 @@ layout form !!DrawingPlan dialog dock
 	member .facepickpos   is POSITION
 	member .facetolast    is STRING
 
+	------------------------------------------------------------------
+	-- Check tab - every box in the site, read into these arrays on  --
+	-- each press of Check and never kept between presses: the       --
+	-- Modify tab moves boxes in between, and a stale reading would  --
+	-- report a gap that has already been closed.                    --
+	--                                                               --
+	-- the two plan axes are kept as unit vectors rather than as the --
+	-- direction strings the rest of the form caches, because every  --
+	-- pair of boxes needs them and turning a string into a vector   --
+	-- costs a POSITION offset every time. only E and N are kept -   --
+	-- a box this form builds is level ('Z is U', see .MakeBoxAt()), --
+	-- so its X and Y are horizontal and their U component is zero.  --
+	-- .ChkReadAll() checks that and leaves out any box that is not  --
+	------------------------------------------------------------------
+	member .chknames is ARRAY
+	member .chkcens  is ARRAY
+	member .chkuxe   is ARRAY
+	member .chkuxn   is ARRAY
+	member .chkuye   is ARRAY
+	member .chkuyn   is ARRAY
+	member .chkxlens is ARRAY
+	member .chkylens is ARRAY
+	member .chkzlens is ARRAY
+
+	------------------------------------------------------------------
+	-- how far the far corner of each box is from its own centre,   --
+	-- worked out once so that two boxes can be told to be too far  --
+	-- apart to be worth comparing without comparing them           --
+	------------------------------------------------------------------
+	member .chkrads  is ARRAY
+
+	------------------------------------------------------------------
+	-- what the Findings list is showing: the row text, and the two  --
+	-- boxes each row is about. the row text is kept because a list  --
+	-- gadget hands back what is written in the row and not which    --
+	-- row it was, so the click has to look its own row up again.    --
+	-- a row that is a note rather than a finding carries 0          --
+	------------------------------------------------------------------
+	member .chkrows  is ARRAY
+	member .chkia    is ARRAY
+	member .chkib    is ARRAY
+
 	!this.formTitle = 'Create Drawing Plan Box'
 
 	frame .tabset tabset
@@ -310,6 +352,37 @@ layout form !!DrawingPlan dialog dock
 			para .splitresult at xmin.mergesub ymax.mergesub+0.3 text '' width 62
 		exit
 
+		----------------------------------------------------------------
+		-- Check - the boxes are meant to cover the plant once each,   --
+		-- edge to edge. where they do not it is DRAFT that pays for   --
+		-- it: DrawingPlan1MatchSorted picks the neighbouring frame    --
+		-- out of a 50mm slab just outside the border, so a wider gap  --
+		-- than that leaves no neighbour to find, and                  --
+		-- DrawingPlan1MatchLine1 then draws the match line with no    --
+		-- ticks and no 'SEE <drawing>' on it. an overlap is the other --
+		-- way round - the same plant on two sheets. neither shows up  --
+		-- until the drawings are issued, which is what this tab is    --
+		-- for. it only reports; closing a gap is Move Face's job on   --
+		-- the Modify tab, because which of the two frames ought to    --
+		-- give way is a drawing decision and not arithmetic           --
+		----------------------------------------------------------------
+		frame .checkfr 'Check' width 66
+			para .chkhint1 text 'gaps, overlaps and level mismatches between the boxes of this project' width 62
+			para .chkhint2 at xmin.chkhint1 ymax.chkhint1+0.05 text 'DRAFT only finds a neighbour within 50mm of the border - past that the' width 62
+			para .chkhint3 at xmin.chkhint2 ymax.chkhint2+0.05 text 'match line loses its ticks and its SEE reference. nothing here moves a box' width 62
+
+			text .chktol 'Tolerance' at xmin.chkhint3 ymax.chkhint3+0.3 tagwidth 12 width 9 is REAL
+			para .chktolmm at xmax.chktol+0.2 ymin.chktol text 'mm   closer than this counts as touching'
+
+			text .chkmax 'Max gap' at xmin.chktol ymax.chktol+0.1 tagwidth 12 width 9 is REAL
+			para .chkmaxmm at xmax.chkmax+0.2 ymin.chkmax text 'mm   further apart than this and they are not neighbours'
+
+			button .chkgo 'Check Boxes' at xmin.chkmax ymax.chkmax+0.3 width 14 call |!This.CheckBoxes()|
+			para .chkstatus at xmax.chkgo+1 ymin.chkgo text '' width 46
+
+			list .chklist 'Findings - worst first, click one to see it' at xmin.chkgo ymax.chkgo+0.3 callback |!This.CheckPicked()| single width 62 height 12
+		exit
+
 	exit
 
 	button .Cancel 'Close' at xmin.tabset ymax.tabset+0.3 width 10 call '!This.Close()'
@@ -359,6 +432,19 @@ define method .DrawingPlan()
 	!this.faceopt.val = 5
 	!this.facetolast = ''
 	!this.faceto.CALLBACK = |!this.FaceToTyped()|
+
+	------------------------------------------------------------------
+	-- Check tab. 1mm of tolerance: boxes the Grid tab builds share  --
+	-- the grid line's own coordinate and come out exact, and 1mm    --
+	-- absorbs the rounding on one picked or imported instead. Max   --
+	-- gap keeps frames that are simply not neighbours off the list  --
+	-- - storey 1 and storey 3 are a whole storey apart in U with    --
+	-- storey 2 in between, and two buildings are further apart      --
+	-- again, neither of which is anybody's missed join              --
+	------------------------------------------------------------------
+	!this.chktol.val = 1
+	!this.chkmax.val = 2000
+	!this.ChkClear()
 
 	------------------------------------------------------------------
 	-- Batch's Order By choices, 1st and 2nd share the same list.   --
@@ -2162,6 +2248,14 @@ define method .MarkLine(!e1 is REAL, !n1 is REAL, !e2 is REAL, !n2 is REAL, !u i
 	!emstr = !em.string().replace('mm', '')
 	!nmstr = !nm.string().replace('mm', '')
 	!ustr = !u.string().replace('mm', '')
+	------------------------------------------------------------------
+	-- an empty label is a line with no text on it, not a text with  --
+	-- nothing in it: the Check tab draws rectangles four lines at a --
+	-- time and only one of the four carries the label               --
+	------------------------------------------------------------------
+	if (!lbl.eq('')) then
+		return
+	endif
 	AID TEXT |$!lbl| AT E $!emstr N $!nmstr U $!ustr
 	handle any
 	endhandle
@@ -3357,6 +3451,850 @@ define method .SplitKeep(!str is STRING, !sep is STRING) is ARRAY
 	enddo
 	!out.append(!rest)
 	return !out
+endmethod
+
+---------------------------------------------------------------------
+-- Check tab - do the boxes tile the plant?                         --
+--                                                                  --
+-- every pair of boxes is compared as three intervals, in the first --
+-- box's own axes and not in world E/N: this plant's grid is turned --
+-- 12.5 degrees, and two frames that meet exactly would read as     --
+-- overlapping on both world axes at once. the projection is the    --
+-- one .MergeBoxes() uses to wrap a single box round several, run   --
+-- once per pair instead of once per box                            --
+---------------------------------------------------------------------
+define method .ChkClear()
+	!this.chknames = object ARRAY()
+	!this.chkcens  = object ARRAY()
+	!this.chkuxe   = object ARRAY()
+	!this.chkuxn   = object ARRAY()
+	!this.chkuye   = object ARRAY()
+	!this.chkuyn   = object ARRAY()
+	!this.chkxlens = object ARRAY()
+	!this.chkylens = object ARRAY()
+	!this.chkzlens = object ARRAY()
+	!this.chkrads  = object ARRAY()
+	!this.chkrows  = object ARRAY()
+	!this.chkia    = object ARRAY()
+	!this.chkib    = object ARRAY()
+	!this.chklist.clear()
+	!this.chkstatus.val = ''
+endmethod
+
+---------------------------------------------------------------------
+-- a world direction as a unit vector in E/N/U. the direction is    --
+-- turned into a point 1000 away and divided back down by the       --
+-- distance actually travelled, the same way .DoSplitAt() and       --
+-- .MergeBoxes() do it - a DIRECTION has no components of its own   --
+-- that can be read off                                             --
+---------------------------------------------------------------------
+define method .ChkUnit(!cen is POSITION, !dirstr is STRING) is ARRAY
+	!dir = object direction(!dirstr)
+	!ref = !cen.offset(!dir, 1000)
+	!len = !cen.distance(!ref)
+	!nE = (!ref.east - !cen.east) / !len
+	!nN = (!ref.north - !cen.north) / !len
+	!nU = (!ref.up - !cen.up) / !len
+	!u = object ARRAY()
+	!u.append(!nE)
+	!u.append(!nN)
+	!u.append(!nU)
+	return !u
+endmethod
+
+---------------------------------------------------------------------
+-- which of N / S / E / W a horizontal direction is nearest to.     --
+-- only ever asked about the outward normal of the side of a box,   --
+-- and the four sides of a box are 90 degrees apart, so the nearest --
+-- is always within 45 of it. 0.766 is cos(40): a box turned to     --
+-- within 5 degrees of the 45 where two sides tie gets '?' rather   --
+-- than a coin toss. the finding still reports its number, it just  --
+-- cannot name a side                                               --
+---------------------------------------------------------------------
+define method .ChkCompass(!nE is REAL, !nN is REAL) is STRING
+	!best = 'N'
+	!bestdot = !nN
+	if (!nE gt !bestdot) then
+		!best = 'E'
+		!bestdot = !nE
+	endif
+	!negN = 0 - !nN
+	if (!negN gt !bestdot) then
+		!best = 'S'
+		!bestdot = !negN
+	endif
+	!negE = 0 - !nE
+	if (!negE gt !bestdot) then
+		!best = 'W'
+		!bestdot = !negE
+	endif
+	if (!bestdot lt 0.766) then
+		return '?'
+	endif
+	return !best
+endmethod
+
+---------------------------------------------------------------------
+-- a number for a list row: no decimals (a gap worth reporting is   --
+-- millimetres at least) and no 'mm' - a length that came off a     --
+-- POSITION brings its unit along into .string() and the row says   --
+-- mm once, in its own words                                        --
+---------------------------------------------------------------------
+define method .ChkNum(!v is REAL) is STRING
+	return !v.string('D0').replace('mm', '')
+endmethod
+
+---------------------------------------------------------------------
+-- every box in the project's box site, into the arrays above.      --
+-- the attributes are read off the collected refs rather than by    --
+-- navigating to each box in turn - a site of fifty frames is       --
+-- fifty navigations otherwise, and DRAFT reads its neighbours the  --
+-- same way (DrawingPlan1MatchSorted). a box that cannot be read,   --
+-- or that is not level, is left out rather than failing the whole  --
+-- check; [1] is '' when it worked, otherwise why not, and [2] is   --
+-- how many boxes were left out for not being level                 --
+---------------------------------------------------------------------
+define method .ChkReadAll() is ARRAY
+	!res = object ARRAY()
+	!this.chknames = object ARRAY()
+	!this.chkcens  = object ARRAY()
+	!this.chkuxe   = object ARRAY()
+	!this.chkuxn   = object ARRAY()
+	!this.chkuye   = object ARRAY()
+	!this.chkuyn   = object ARRAY()
+	!this.chkxlens = object ARRAY()
+	!this.chkylens = object ARRAY()
+	!this.chkzlens = object ARRAY()
+	!this.chkrads  = object ARRAY()
+	!ntilt = 0
+
+	var !projid proj id
+	!sitename = '/' & !projid & '_DrawingPlanBox'
+
+	!ok = true
+	var !boxes coll all box for $!sitename
+	handle any
+		!ok = false
+	endhandle
+	if (!ok) then
+		if (!boxes.unset()) then
+			!ok = false
+		endif
+	endif
+	if (not(!ok)) then
+		!res.append('cannot read ' & !sitename & ' - is it in your MDB?')
+		!res.append(0)
+		return !res
+	endif
+	if (!boxes.size().eq(0)) then
+		!res.append('no boxes under ' & !sitename & ' to check')
+		!res.append(0)
+		return !res
+	endif
+
+	do !box values !boxes
+		--------------------------------------------------------------
+		-- the EQUI name is the drawing, and the one thing a row has --
+		-- to be able to say. a box with no EQUI over it is not one  --
+		-- of ours; the same box twice (one EQUI, two BOXes) is      --
+		-- counted once, the first one winning, the same way         --
+		-- .BoxUnderEqui() always takes the first                    --
+		--------------------------------------------------------------
+		!nm = ''
+		var !nm (namn of equi of $!box)
+		handle any
+			!nm = ''
+		endhandle
+
+		!isnew = false
+		if (!nm.neq('')) then
+			if (!this.chknames.find(!nm).size().eq(0)) then
+				!isnew = true
+			endif
+		endif
+
+		if (!isnew) then
+			!good = true
+			var !bpos (worpos of $!box)
+			handle any
+				!good = false
+			endhandle
+			if (!good) then
+				var !bxl (xlength of $!box)
+				handle any
+					!good = false
+				endhandle
+			endif
+			if (!good) then
+				var !byl (ylength of $!box)
+				handle any
+					!good = false
+				endhandle
+			endif
+			if (!good) then
+				var !bzl (zlength of $!box)
+				handle any
+					!good = false
+				endhandle
+			endif
+			if (!good) then
+				var !bori (ori of $!box wrt worl)
+				handle any
+					!good = false
+				endhandle
+			endif
+
+			if (!good) then
+				!cen = !bpos.position()
+				!xstr = !bori.orientation().xdir().string().before('WRT')
+				!ystr = !bori.orientation().ydir().string().before('WRT')
+				!ux = !this.ChkUnit(!cen, !xstr)
+				!uy = !this.ChkUnit(!cen, !ystr)
+
+				------------------------------------------------------
+				-- only the plan axes are kept, so a box tilted out  --
+				-- of level would be compared as if it were flat.    --
+				-- rather than quietly get that wrong, leave it out  --
+				-- and say how many were left out. 0.001 is about a  --
+				-- twentieth of a degree - far below anything a      --
+				-- 'Z is U' box can pick up as rounding              --
+				------------------------------------------------------
+				!tiltx = !ux[3].abs()
+				!tilty = !uy[3].abs()
+				!level = true
+				if (!tiltx gt 0.001 or !tilty gt 0.001) then
+					!level = false
+					!ntilt = !ntilt + 1
+				endif
+
+				if (!level) then
+					!this.chknames.append(!nm)
+					!this.chkcens.append(!cen)
+					!this.chkuxe.append(!ux[1])
+					!this.chkuxn.append(!ux[2])
+					!this.chkuye.append(!uy[1])
+					!this.chkuyn.append(!uy[2])
+					!this.chkxlens.append(!bxl.real())
+					!this.chkylens.append(!byl.real())
+					!this.chkzlens.append(!bzl.real())
+					!hx = !bxl.real() * 0.5
+					!hy = !byl.real() * 0.5
+					!hz = !bzl.real() * 0.5
+					!sq = !hx * !hx + !hy * !hy + !hz * !hz
+					!this.chkrads.append(!sq.sqrt())
+				endif
+			endif
+		endif
+	enddo
+
+	if (!this.chknames.size().eq(0)) then
+		!res.append('no readable boxes under ' & !sitename)
+		!res.append(!ntilt)
+		return !res
+	endif
+	!res.append('')
+	!res.append(!ntilt)
+	return !res
+endmethod
+
+---------------------------------------------------------------------
+-- one axis of the comparison: where interval a and interval b sit  --
+-- against each other.                                              --
+--   [1] how far apart they are - positive when they are clear of   --
+--       each other, negative by how far they overlap when they     --
+--       are not                                                    --
+--   [2] [3] the piece of the axis between them: the gap itself     --
+--       when they are apart, what they share when they are not.    --
+--       the same two numbers either way round, which is what lets  --
+--       one rectangle draw a gap and an overlap alike              --
+---------------------------------------------------------------------
+define method .ChkSpan(!a1 is REAL, !a2 is REAL, !b1 is REAL, !b2 is REAL) is ARRAY
+	!lo = !a1
+	if (!b1 gt !lo) then
+		!lo = !b1
+	endif
+	!hi = !a2
+	if (!b2 lt !hi) then
+		!hi = !b2
+	endif
+	!s1 = !lo
+	!s2 = !hi
+	if (!s1 gt !s2) then
+		!s1 = !hi
+		!s2 = !lo
+	endif
+	!apart = !lo - !hi
+	!r = object ARRAY()
+	!r.append(!apart)
+	!r.append(!s1)
+	!r.append(!s2)
+	return !r
+endmethod
+
+---------------------------------------------------------------------
+-- how box !ib sits against box !ia, in !ia's own axes. each box is --
+-- three intervals, and the relationship is read off how many of    --
+-- the three are clear of each other:                               --
+--   two or three  they meet at an edge or a corner at most, or     --
+--                 they are nowhere near each other - 'far'         --
+--   one           face to face with a GAP of that much between     --
+--   none, with one of them inside the tolerance - they TOUCH,      --
+--                 which is what a tiled set of frames looks like   --
+--   none at all   they OVERLAP, and the smallest of the three      --
+--                 penetrations is how far one of them would have   --
+--                 to move to come clear                            --
+--                                                                  --
+-- [1] 'ori' | 'far' | 'gap' | 'touch' | 'over'                     --
+-- [2] the gap or the overlap, mm                                   --
+-- [3] which axis it is on, 'X' | 'Y' | 'U' in !ia's axes           --
+-- [4] which way !ib lies from !ia - N/S/E/W, or above/below        --
+-- [5..8] the strip between the two, x1 x2 y1 y2 in !ia's axes      --
+-- [9] the U to draw that strip at                                  --
+-- [10] [11] how far apart the two bottom levels are, and the two   --
+--       top levels                                                 --
+---------------------------------------------------------------------
+define method .ChkPair(!ia is REAL, !ib is REAL, !tol is REAL) is ARRAY
+	!r = object ARRAY()
+	!ca = !this.chkcens[!ia]
+	!cb = !this.chkcens[!ib]
+
+	!uxe = !this.chkuxe[!ia]
+	!uxn = !this.chkuxn[!ia]
+	!uye = !this.chkuye[!ia]
+	!uyn = !this.chkuyn[!ia]
+	!vxe = !this.chkuxe[!ib]
+	!vxn = !this.chkuxn[!ib]
+	!vye = !this.chkuye[!ib]
+	!vyn = !this.chkuyn[!ib]
+
+	------------------------------------------------------------------
+	-- how !ib's own axes lie against !ia's. a box is symmetric      --
+	-- about its axes, so a Y pointing the opposite way describes    --
+	-- the same box (the 'N 12.523 E' / 'S 12.523 W' pair            --
+	-- .MergeBoxes() ran into), and a box turned by 90 is the same   --
+	-- box with its two plan lengths swapped - taking these four     --
+	-- without their sign covers both at once. anything else is a    --
+	-- frame set out on another grid, where there is no honest way   --
+	-- to compare the two, and the pair is reported as such          --
+	------------------------------------------------------------------
+	!dxx = !vxe * !uxe + !vxn * !uxn
+	!dxy = !vxe * !uye + !vxn * !uyn
+	!dyx = !vye * !uxe + !vyn * !uxn
+	!dyy = !vye * !uye + !vyn * !uyn
+	!axx = !dxx.abs()
+	!axy = !dxy.abs()
+	!ayx = !dyx.abs()
+	!ayy = !dyy.abs()
+
+	!sqx = !axx
+	if (!axy gt !sqx) then
+		!sqx = !axy
+	endif
+	!sqy = !ayx
+	if (!ayy gt !sqy) then
+		!sqy = !ayy
+	endif
+	if (!sqx lt 0.9998 or !sqy lt 0.9998) then
+		!r.append('ori')
+		do !z from 2 to 11
+			!r.append(0)
+		enddo
+		!r[3] = ''
+		!r[4] = ''
+		return !r
+	endif
+
+	!hxa = !this.chkxlens[!ia] * 0.5
+	!hya = !this.chkylens[!ia] * 0.5
+	!hza = !this.chkzlens[!ia] * 0.5
+	!hxb = !this.chkxlens[!ib] * 0.5
+	!hyb = !this.chkylens[!ib] * 0.5
+	!hzb = !this.chkzlens[!ib] * 0.5
+
+	------------------------------------------------------------------
+	-- !ib's half width measured along !ia's axes. with the two      --
+	-- frames square to each other one of the two terms is the whole --
+	-- half length and the other is nothing, so this is just the     --
+	-- half length, picked up off whichever of !ib's axes runs that  --
+	-- way                                                           --
+	------------------------------------------------------------------
+	!exb = !hxb * !axx + !hyb * !ayx
+	!eyb = !hxb * !axy + !hyb * !ayy
+
+	!dE = !cb.east - !ca.east
+	!dN = !cb.north - !ca.north
+	!dU = !cb.up - !ca.up
+	!ox = !dE * !uxe + !dN * !uxn
+	!oy = !dE * !uye + !dN * !uyn
+	!oz = !dU
+
+	!ax1 = 0 - !hxa
+	!ax2 = !hxa
+	!ay1 = 0 - !hya
+	!ay2 = !hya
+	!az1 = 0 - !hza
+	!az2 = !hza
+	!bx1 = !ox - !exb
+	!bx2 = !ox + !exb
+	!by1 = !oy - !eyb
+	!by2 = !oy + !eyb
+	!bz1 = !oz - !hzb
+	!bz2 = !oz + !hzb
+
+	!sx = !this.ChkSpan(!ax1, !ax2, !bx1, !bx2)
+	!sy = !this.ChkSpan(!ay1, !ay2, !by1, !by2)
+	!sz = !this.ChkSpan(!az1, !az2, !bz1, !bz2)
+	!gx = !sx[1]
+	!gy = !sy[1]
+	!gz = !sz[1]
+
+	!npos = 0
+	if (!gx gt !tol) then
+		!npos = !npos + 1
+	endif
+	if (!gy gt !tol) then
+		!npos = !npos + 1
+	endif
+	if (!gz gt !tol) then
+		!npos = !npos + 1
+	endif
+
+	!kind = ''
+	!d = 0
+	!axis = ''
+	if (!npos gt 1) then
+		!kind = 'far'
+	elseif (!npos eq 1) then
+		!kind = 'gap'
+		if (!gx gt !tol) then
+			!d = !gx
+			!axis = 'X'
+		elseif (!gy gt !tol) then
+			!d = !gy
+			!axis = 'Y'
+		else
+			!d = !gz
+			!axis = 'U'
+		endif
+	else
+		--------------------------------------------------------------
+		-- nothing is clear of anything. an axis within tolerance of --
+		-- zero is the two frames meeting on that face, which is     --
+		-- what a tiled set looks like; without one they are inside  --
+		-- each other. a plan face is preferred over U when both     --
+		-- meet, since that is the match line the pair share         --
+		--------------------------------------------------------------
+		!tx = !gx.abs()
+		!ty = !gy.abs()
+		!tz = !gz.abs()
+		if (!tx leq !tol or !ty leq !tol or !tz leq !tol) then
+			!kind = 'touch'
+			!d = 0
+			if (!tx leq !tol) then
+				!axis = 'X'
+			elseif (!ty leq !tol) then
+				!axis = 'Y'
+			else
+				!axis = 'U'
+			endif
+		else
+			!kind = 'over'
+			!d = 0 - !gx
+			!axis = 'X'
+			!overy = 0 - !gy
+			if (!overy lt !d) then
+				!d = !overy
+				!axis = 'Y'
+			endif
+			!overz = 0 - !gz
+			if (!overz lt !d) then
+				!d = !overz
+				!axis = 'U'
+			endif
+		endif
+	endif
+
+	------------------------------------------------------------------
+	-- which way !ib lies, named the way the drawing is read. on a   --
+	-- plan axis that is the compass side of !ia the other frame is  --
+	-- on, which is also the face Move Face would push to close the  --
+	-- gap; in U it is simply above or below                         --
+	------------------------------------------------------------------
+	!way = ''
+	if (!axis.eq('U')) then
+		!way = 'above'
+		if (!oz lt 0) then
+			!way = 'below'
+		endif
+	elseif (!axis.eq('X')) then
+		!wE = !uxe
+		!wN = !uxn
+		if (!ox lt 0) then
+			!wE = 0 - !wE
+			!wN = 0 - !wN
+		endif
+		!way = !this.ChkCompass(!wE, !wN)
+	elseif (!axis.eq('Y')) then
+		!wE = !uye
+		!wN = !uyn
+		if (!oy lt 0) then
+			!wE = 0 - !wE
+			!wN = 0 - !wN
+		endif
+		!way = !this.ChkCompass(!wE, !wN)
+	endif
+
+	------------------------------------------------------------------
+	-- the strip to draw: on the axis the finding is about it is the --
+	-- gap (or the overlap) itself, on the other two it is as much   --
+	-- of them as the two frames have in common, so what gets drawn  --
+	-- is exactly the piece of plant that is on no sheet, or on two. --
+	-- it is drawn flat, at the middle of the U the two share, since --
+	-- every box here is level                                       --
+	------------------------------------------------------------------
+	!zmid = (!sz[2] + !sz[3]) * 0.5
+	!umid = !ca.up + !zmid
+	!dbot = !az1 - !bz1
+	!dtop = !az2 - !bz2
+
+	!r.append(!kind)
+	!r.append(!d)
+	!r.append(!axis)
+	!r.append(!way)
+	!r.append(!sx[2])
+	!r.append(!sx[3])
+	!r.append(!sy[2])
+	!r.append(!sy[3])
+	!r.append(!umid)
+	!r.append(!dbot.abs())
+	!r.append(!dtop.abs())
+	return !r
+endmethod
+
+---------------------------------------------------------------------
+-- what a pair is worth reporting as, in one place so that the row  --
+-- in the list and the label drawn in the 3D view cannot drift      --
+-- apart. [1] is '' for a pair with nothing wrong with it, [2] the  --
+-- number that goes with the word.                                  --
+--                                                                  --
+-- a pair that touches is the normal case and says nothing, unless  --
+-- the two frames meet in plan and are cut at different levels -    --
+-- then the same plan area is drawn to two different heights and a  --
+-- pipe on one sheet is missing from the other                      --
+---------------------------------------------------------------------
+define method .ChkWhat(!p is ARRAY, !tol is REAL) is ARRAY
+	!r = object ARRAY()
+	!kind = !p[1]
+	if (!kind.eq('gap')) then
+		!r.append('GAP')
+		!r.append(!p[2])
+		return !r
+	endif
+	if (!kind.eq('over')) then
+		!r.append('OVERLAP')
+		!r.append(!p[2])
+		return !r
+	endif
+	if (!kind.eq('touch')) then
+		!axis = !p[3]
+		if (!axis.neq('U')) then
+			!worst = !p[10]
+			if (!p[11] gt !worst) then
+				!worst = !p[11]
+			endif
+			if (!worst gt !tol) then
+				!r.append('LEVELS')
+				!r.append(!worst)
+				return !r
+			endif
+		endif
+	endif
+	!r.append('')
+	!r.append(0)
+	return !r
+endmethod
+
+---------------------------------------------------------------------
+-- Check Boxes - every pair of boxes in the site, worst first.      --
+--                                                                  --
+-- most of a site is boxes nowhere near each other, and those drop  --
+-- out on the cheap test of being clear of each other on two axes   --
+-- at once, so the pairs that reach a row are few. they are ranked  --
+-- by what they cost on the drawing:                                --
+--   a gap DRAFT cannot see across (over 50mm) - the match line     --
+--     comes out with no ticks and no SEE reference at all          --
+--   plant drawn twice                                             --
+--   a gap DRAFT can see across, which still leaves a strip of      --
+--     plant on no sheet                                           --
+--   two frames that meet but are cut at different levels           --
+-- and within each, the biggest number first                        --
+---------------------------------------------------------------------
+define method .CheckBoxes()
+	!tol = 1
+	if (not(!this.chktol.val.unset())) then
+		!tol = !this.chktol.val
+	endif
+	if (!tol lt 0) then
+		!tol = 0
+	endif
+	!maxgap = 2000
+	if (not(!this.chkmax.val.unset())) then
+		!maxgap = !this.chkmax.val
+	endif
+
+	!this.chkrows = object ARRAY()
+	!this.chkia   = object ARRAY()
+	!this.chkib   = object ARRAY()
+	!this.chklist.clear()
+	!this.chkstatus.val = 'reading the boxes...'
+
+	!rd = !this.ChkReadAll()
+	!err = !rd[1]
+	!ntilt = !rd[2]
+	if (!err.neq('')) then
+		!this.chkstatus.val = !err
+		!!alert.error(!err)
+		return
+	endif
+
+	!n = !this.chknames.size()
+	!rows = object ARRAY()
+	!keys = object ARRAY()
+	!ias  = object ARRAY()
+	!ibs  = object ARRAY()
+	!nori = 0
+
+	do !ia from 1 to !n
+		!ja = !ia + 1
+		if (!ja leq !n) then
+			do !ib from !ja to !n
+				----------------------------------------------------------
+				-- most of a site is pairs of frames with nothing to do  --
+				-- with each other, and comparing them properly costs    --
+				-- more than measuring between their centres. a finding  --
+				-- of any kind needs the two to be closer than their     --
+				-- two far corners plus Max gap: an overlap needs them   --
+				-- to reach each other at all, and a gap is only         --
+				-- reported up to Max gap. so a pair further apart than  --
+				-- that cannot produce a row, whatever it is - and if    --
+				-- that is ever in doubt, a big Max gap widens this      --
+				-- until it lets everything through                      --
+				----------------------------------------------------------
+				!pa = !this.chkcens[!ia]
+				!pb = !this.chkcens[!ib]
+				!sE = !pb.east - !pa.east
+				!sN = !pb.north - !pa.north
+				!sU = !pb.up - !pa.up
+				!far2 = !sE * !sE + !sN * !sN + !sU * !sU
+				!lim = !this.chkrads[!ia] + !this.chkrads[!ib] + !maxgap
+				!lim2 = !lim * !lim
+				!worth = true
+				if (!far2 gt !lim2) then
+					!worth = false
+				endif
+
+				!word = ''
+				!mag = 0
+				!side = ''
+				if (!worth) then
+					!p = !this.ChkPair(!ia, !ib, !tol)
+					if (!p[1].eq('ori')) then
+						!nori = !nori + 1
+					endif
+					!side = !p[4]
+					!w = !this.ChkWhat(!p, !tol)
+					!word = !w[1]
+					!mag = !w[2]
+				endif
+
+				!rank = 0
+				!note = ''
+				if (!word.eq('GAP')) then
+					----------------------------------------------------
+					-- a gap wider than Max gap is not a missed join.  --
+					-- storey 1 to storey 3 is a whole storey with     --
+					-- storey 2 sitting in it, and a frame is never    --
+					-- narrower than that, so the width alone tells    --
+					-- the two apart without hunting for what is in    --
+					-- between                                         --
+					----------------------------------------------------
+					if (!mag leq !maxgap) then
+						!rank = 2
+						!note = 'strip of plant on no sheet'
+						if (!mag gt 50) then
+							!rank = 4
+							!note = 'over 50mm - DRAFT finds no neighbour, so no ticks and no SEE'
+						endif
+					endif
+				elseif (!word.eq('OVERLAP')) then
+					!rank = 3
+					!note = 'plant drawn on both sheets'
+				elseif (!word.eq('LEVELS')) then
+					!rank = 1
+					!note = 'they meet, but are cut at different levels'
+				endif
+
+				if (!rank gt 0) then
+					!na = !this.chknames[!ia]
+					!nb = !this.chknames[!ib]
+					!txt = !word & ' ' & !this.ChkNum(!mag) & 'mm | ' & !na & ' -' & !side & '- ' & !nb & ' | ' & !note
+					!key = !rank * 1000000 + !mag
+					!key = 0 - !key
+					!rows.append(!txt)
+					!keys.append(!key)
+					!ias.append(!ia)
+					!ibs.append(!ib)
+				endif
+			enddo
+		endif
+	enddo
+
+	!out = object ARRAY()
+	!nf = !rows.size()
+	if (!nf gt 0) then
+		!order = !keys.sortedIndices()
+		do !k from 1 to !order.size()
+			!oi = !order[!k]
+			!out.append(!rows[!oi])
+			!this.chkia.append(!ias[!oi])
+			!this.chkib.append(!ibs[!oi])
+		enddo
+	else
+		!out.append('nothing to report - the boxes tile with no gap and no overlap')
+		!this.chkia.append(0)
+		!this.chkib.append(0)
+	endif
+
+	------------------------------------------------------------------
+	-- boxes that could not be compared are said out loud rather     --
+	-- than silently dropped: a clean list would otherwise mean      --
+	-- 'nothing wrong' when it really meant 'nothing looked at'.     --
+	-- these rows carry 0 for their boxes, so clicking one does      --
+	-- nothing                                                       --
+	------------------------------------------------------------------
+	if (!nori gt 0) then
+		!out.append('(' & !nori.string() & ' pair(s) set out on a different grid - not compared)')
+		!this.chkia.append(0)
+		!this.chkib.append(0)
+	endif
+	if (!ntilt gt 0) then
+		!out.append('(' & !ntilt.string() & ' box(es) are not level - left out)')
+		!this.chkia.append(0)
+		!this.chkib.append(0)
+	endif
+
+	!this.chkrows = !out
+	!this.chklist.dtext = !out
+	!this.chkstatus.val = !n.string() & ' boxes checked, ' & !nf.string() & ' finding(s)'
+endmethod
+
+---------------------------------------------------------------------
+-- a rectangle in box !i's own axes, drawn flat at world U !u.      --
+-- the corners are worked out by hand rather than with              --
+-- POSITION.offset() because only E and N of the axes are kept and  --
+-- the height is given outright - and because the aid wants its     --
+-- coordinates one at a time anyway (see .MarkLine())               --
+---------------------------------------------------------------------
+define method .ChkRect(!i is REAL, !x1 is REAL, !x2 is REAL, !y1 is REAL, !y2 is REAL, !u is REAL, !lbl is STRING)
+	!org = !this.chkcens[!i]
+	!uxe = !this.chkuxe[!i]
+	!uxn = !this.chkuxn[!i]
+	!uye = !this.chkuye[!i]
+	!uyn = !this.chkuyn[!i]
+
+	!e11 = !org.east  + !uxe * !x1 + !uye * !y1
+	!n11 = !org.north + !uxn * !x1 + !uyn * !y1
+	!e21 = !org.east  + !uxe * !x2 + !uye * !y1
+	!n21 = !org.north + !uxn * !x2 + !uyn * !y1
+	!e22 = !org.east  + !uxe * !x2 + !uye * !y2
+	!n22 = !org.north + !uxn * !x2 + !uyn * !y2
+	!e12 = !org.east  + !uxe * !x1 + !uye * !y2
+	!n12 = !org.north + !uxn * !x1 + !uyn * !y2
+
+	!this.MarkLine(!e11, !n11, !e21, !n21, !u, '')
+	!this.MarkLine(!e21, !n21, !e22, !n22, !u, '')
+	!this.MarkLine(!e22, !n22, !e12, !n12, !u, !lbl)
+	!this.MarkLine(!e12, !n12, !e11, !n11, !u, '')
+endmethod
+
+---------------------------------------------------------------------
+-- box !i in plan, at world U !u                                    --
+---------------------------------------------------------------------
+define method .ChkPlan(!i is REAL, !u is REAL, !lbl is STRING)
+	!hx = !this.chkxlens[!i] * 0.5
+	!hy = !this.chkylens[!i] * 0.5
+	!nx = 0 - !hx
+	!ny = 0 - !hy
+	!this.ChkRect(!i, !nx, !hx, !ny, !hy, !u, !lbl)
+endmethod
+
+---------------------------------------------------------------------
+-- clicking a finding draws it: the two frames in plan and, between --
+-- them, what the finding is about - the gap that is on no sheet,   --
+-- or the overlap that is on two. all three at one level, the       --
+-- middle of the U the two frames share, since every box here is    --
+-- level.                                                           --
+--                                                                  --
+-- CE is left on the first of the two boxes, so that the Modify     --
+-- tab's Show Box picks it up without having to find it in the      --
+-- model again - which is what closing the gap starts with. the     --
+-- label is kept to one word and a number with no spaces in it:     --
+-- AID TEXT takes the label as a command word, and a drawing        --
+-- number is not safe to put through it                             --
+---------------------------------------------------------------------
+define method .CheckPicked()
+	!sel = ''
+	!sel = !this.chklist.selection()
+	handle any
+		!sel = ''
+	endhandle
+	if (!sel.unset()) then
+		return
+	endif
+	if (!sel.eq('')) then
+		return
+	endif
+
+	!hits = !this.chkrows.find(!sel)
+	if (!hits.size().eq(0)) then
+		return
+	endif
+	!k = !hits[1]
+	!ia = !this.chkia[!k]
+	!ib = !this.chkib[!k]
+	if (!ia.eq(0)) then
+		return
+	endif
+
+	!tol = 1
+	if (not(!this.chktol.val.unset())) then
+		!tol = !this.chktol.val
+	endif
+	!p = !this.ChkPair(!ia, !ib, !tol)
+	!w = !this.ChkWhat(!p, !tol)
+	!u = !p[9]
+	!lbl = !w[1] & '-' & !this.ChkNum(!w[2])
+
+	AID CLEAR ALL
+	handle any
+	endhandle
+
+	!this.ChkPlan(!ia, !u, '')
+	!this.ChkPlan(!ib, !u, '')
+	!this.ChkRect(!ia, !p[5], !p[6], !p[7], !p[8], !u, !lbl)
+
+	!na = !this.chknames[!ia]
+	!equinav = !this.NavName(!na)
+	!ok = true
+	$!equinav
+	handle any
+		!ok = false
+	endhandle
+	if (!ok) then
+		!this.chkstatus.val = 'CE is on ' & !na & ' - Modify tab, Show Box'
+	else
+		!this.chkstatus.val = 'drawn, but cannot navigate to ' & !na
+	endif
 endmethod
 
 define method .Close()
