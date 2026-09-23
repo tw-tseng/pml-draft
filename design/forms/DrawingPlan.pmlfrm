@@ -3859,10 +3859,40 @@ define method .ChkPair(!ia is REAL, !ib is REAL, !tol is REAL) is ARRAY
 		!npos = !npos + 1
 	endif
 
+	------------------------------------------------------------------
+	-- and how many are within the tolerance of meeting exactly. one --
+	-- of those is two frames sharing a face, which is the whole     --
+	-- point; two or three of them at once is a pair that only meets --
+	-- along an edge or at a corner, and an edge has no area. that   --
+	-- matters twice below: there is no match line along an edge for --
+	-- two levels to disagree about, and a gap measured across one   --
+	-- holds no plant to be missing from a sheet                      --
+	------------------------------------------------------------------
+	!tx = !gx.abs()
+	!ty = !gy.abs()
+	!tz = !gz.abs()
+	!ntouch = 0
+	if (!tx leq !tol) then
+		!ntouch = !ntouch + 1
+	endif
+	if (!ty leq !tol) then
+		!ntouch = !ntouch + 1
+	endif
+	if (!tz leq !tol) then
+		!ntouch = !ntouch + 1
+	endif
+
 	!kind = ''
 	!d = 0
 	!axis = ''
 	if (!npos gt 1) then
+		!kind = 'far'
+	elseif (!npos eq 1 and !ntouch gt 0) then
+		----------------------------------------------------------
+		-- apart on one axis, but only meeting along an edge on  --
+		-- one of the other two: the strip between them is a     --
+		-- plane with no thickness, so nothing is in it          --
+		----------------------------------------------------------
 		!kind = 'far'
 	elseif (!npos eq 1) then
 		!kind = 'gap'
@@ -3878,16 +3908,22 @@ define method .ChkPair(!ia is REAL, !ib is REAL, !tol is REAL) is ARRAY
 		endif
 	else
 		--------------------------------------------------------------
-		-- nothing is clear of anything. an axis within tolerance of --
-		-- zero is the two frames meeting on that face, which is     --
-		-- what a tiled set looks like; without one they are inside  --
-		-- each other. a plan face is preferred over U when both     --
-		-- meet, since that is the match line the pair share         --
+		-- nothing is clear of anything. exactly one axis within the --
+		-- tolerance of zero is the two frames meeting on that face, --
+		-- which is what a tiled set looks like. more than one at    --
+		-- once is an edge or a corner: a box standing on top of     --
+		-- another one, with a side of the two happening to line up, --
+		-- meets it along a line and is not its neighbour in plan -   --
+		-- calling that a shared face made the pair report the whole --
+		-- height of the taller box as a level mismatch (user,       --
+		-- 2026-09-23). with none of them meeting, they are inside   --
+		-- each other                                                --
 		--------------------------------------------------------------
-		!tx = !gx.abs()
-		!ty = !gy.abs()
-		!tz = !gz.abs()
-		if (!tx leq !tol or !ty leq !tol or !tz leq !tol) then
+		if (!ntouch gt 1) then
+			!kind = 'touch'
+			!d = 0
+			!axis = 'EDGE'
+		elseif (!ntouch eq 1) then
 			!kind = 'touch'
 			!d = 0
 			if (!tx leq !tol) then
@@ -3996,8 +4032,14 @@ define method .ChkWhat(!p is ARRAY, !tol is REAL) is ARRAY
 		return !r
 	endif
 	if (!kind.eq('touch')) then
+		--------------------------------------------------------------
+		-- only a shared plan face has a match line on it, so only   --
+		-- 'X' or 'Y' can disagree about a level. 'U' is one frame   --
+		-- stacked on the next, and 'EDGE' is a pair that only meets --
+		-- along a line                                              --
+		--------------------------------------------------------------
 		!axis = !p[3]
-		if (!axis.neq('U')) then
+		if (!axis.eq('X') or !axis.eq('Y')) then
 			!worst = !p[10]
 			if (!p[11] gt !worst) then
 				!worst = !p[11]
@@ -4149,11 +4191,13 @@ define method .CheckBoxes()
 				!word = ''
 				!mag = 0
 				!side = ''
+				!gaxis = ''
 				if (!worth) then
 					!p = !this.ChkPair(!ia, !ib, !tol)
 					if (!p[1].eq('ori')) then
 						!nori = !nori + 1
 					endif
+					!gaxis = !p[3]
 					!side = !p[4]
 					!w = !this.ChkWhat(!p, !tol)
 					!word = !w[1]
@@ -4173,10 +4217,26 @@ define method .CheckBoxes()
 					----------------------------------------------------
 					if (!mag leq !maxgap) then
 						!rank = 2
-						!note = '兩張圖都沒有這一條'
-						if (!mag gt 50) then
-							!rank = 4
-							!note = 'DRAFT 找不到鄰框'
+						if (!gaxis.eq('U')) then
+							--------------------------------------------
+							-- a gap in U is one storey's frame not    --
+							-- reaching the next one's. the 50mm rule  --
+							-- has nothing to say about it: DRAFT      --
+							-- looks for a neighbour to the left,      --
+							-- right, up and down of the view, which   --
+							-- on a plan is sideways, never above or   --
+							-- below. what it costs is the band of     --
+							-- plant between the two, which is on      --
+							-- neither sheet because a box clips its   --
+							-- own view in U as well                    --
+							--------------------------------------------
+							!note = '上下兩層之間漏一段'
+						else
+							!note = '兩張圖都沒有這一條'
+							if (!mag gt 50) then
+								!rank = 4
+								!note = 'DRAFT 找不到鄰框'
+							endif
 						endif
 					endif
 				elseif (!word.eq('OVERLAP')) then
