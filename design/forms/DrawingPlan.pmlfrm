@@ -117,6 +117,16 @@ layout form !!DrawingPlan dialog dock
 	member .chkrads  is ARRAY
 
 	------------------------------------------------------------------
+	-- the working of the last check, written out to check_box.txt   --
+	-- at the end of .CheckBoxes(): one line per box, one per pair   --
+	-- compared and one per pair the distance test dropped. the      --
+	-- numbers are added by .ChkPair() itself as it classifies, not  --
+	-- worked out a second time afterwards - a dump that disagrees   --
+	-- with the code it is meant to explain is worse than no dump    --
+	------------------------------------------------------------------
+	member .chkdbg   is ARRAY
+
+	------------------------------------------------------------------
 	-- what the Findings list is showing: the row text, and the two  --
 	-- boxes each row is about. the row text is kept because a list  --
 	-- gadget hands back what is written in the row and not which    --
@@ -3474,6 +3484,7 @@ define method .ChkClear()
 	!this.chkylens = object ARRAY()
 	!this.chkzlens = object ARRAY()
 	!this.chkrads  = object ARRAY()
+	!this.chkdbg   = object ARRAY()
 	!this.chkrows  = object ARRAY()
 	!this.chkia    = object ARRAY()
 	!this.chkib    = object ARRAY()
@@ -3542,6 +3553,16 @@ endmethod
 ---------------------------------------------------------------------
 define method .ChkNum(!v is REAL) is STRING
 	return !v.string('D0').replace('mm', '')
+endmethod
+
+---------------------------------------------------------------------
+-- a number for the dump. three decimals, because the point of      --
+-- reading it is to see which side of the tolerance something fell  --
+-- on, and 'mm' off the end because a length that came from a       --
+-- POSITION brings its unit into .string() with it                  --
+---------------------------------------------------------------------
+define method .ChkN3(!v is REAL) is STRING
+	return !v.string('D3').replace('mm', '')
 endmethod
 
 ---------------------------------------------------------------------
@@ -3795,6 +3816,7 @@ define method .ChkPair(!ia is REAL, !ib is REAL, !tol is REAL) is ARRAY
 		!sqy = !ayy
 	endif
 	if (!sqx lt 0.9998 or !sqy lt 0.9998) then
+		!this.chkdbg.append('PAIR ' & !this.chknames[!ia] & ' / ' & !this.chknames[!ib] & '   ori - axes not square to each other, not compared')
 		!r.append('ori')
 		do !z from 2 to 11
 			!r.append(0)
@@ -3992,6 +4014,22 @@ define method .ChkPair(!ia is REAL, !ib is REAL, !tol is REAL) is ARRAY
 	!umid = !ca.up + !zmid
 	!dbot = !az1 - !bz1
 	!dtop = !az2 - !bz2
+	!adbot = !dbot.abs()
+	!adtop = !dtop.abs()
+
+	------------------------------------------------------------------
+	-- one line of the dump, written from the values the branches    --
+	-- above actually read. o = where !ib's centre sits in !ia's     --
+	-- axes; g = how far apart the two are on each axis, negative    --
+	-- when they overlap by that much                                --
+	------------------------------------------------------------------
+	!dbg = 'PAIR ' & !this.chknames[!ia] & ' / ' & !this.chknames[!ib]
+	!dbg = !dbg & '   o=' & !this.ChkN3(!ox) & ' ' & !this.ChkN3(!oy) & ' ' & !this.ChkN3(!oz)
+	!dbg = !dbg & '   g=' & !this.ChkN3(!gx) & ' ' & !this.ChkN3(!gy) & ' ' & !this.ChkN3(!gz)
+	!dbg = !dbg & '   npos=' & !npos.string() & ' ntouch=' & !ntouch.string()
+	!dbg = !dbg & '   ' & !kind & ' ' & !axis & ' ' & !way & ' d=' & !this.ChkN3(!d)
+	!dbg = !dbg & '   dbot=' & !this.ChkN3(!adbot) & ' dtop=' & !this.ChkN3(!adtop)
+	!this.chkdbg.append(!dbg)
 
 	!r.append(!kind)
 	!r.append(!d)
@@ -4002,8 +4040,8 @@ define method .ChkPair(!ia is REAL, !ib is REAL, !tol is REAL) is ARRAY
 	!r.append(!sy[2])
 	!r.append(!sy[3])
 	!r.append(!umid)
-	!r.append(!dbot.abs())
-	!r.append(!dtop.abs())
+	!r.append(!adbot)
+	!r.append(!adtop)
 	return !r
 endmethod
 
@@ -4153,6 +4191,32 @@ define method .CheckBoxes()
 	endif
 
 	!n = !this.chknames.size()
+
+	------------------------------------------------------------------
+	-- the dump starts with what was read, before any comparing:     --
+	-- a finding that looks wrong in the model is as often a box     --
+	-- that is not where it looks as it is a pair judged wrongly     --
+	------------------------------------------------------------------
+	!this.chkdbg = object ARRAY()
+	!this.chkdbg.append('CHECKBOX tol=' & !this.ChkN3(!tol) & ' maxgap=' & !this.ChkN3(!maxgap) & ' boxes=' & !n.string())
+	if (!ntilt gt 0) then
+		!this.chkdbg.append('  ' & !ntilt.string() & ' box(es) left out for not being level')
+	endif
+	do !bi from 1 to !n
+		!bc = !this.chkcens[!bi]
+		!bhz = !this.chkzlens[!bi] * 0.5
+		!bub = !bc.up - !bhz
+		!but = !bc.up + !bhz
+		!bl = 'BOX ' & !this.chknames[!bi]
+		!bl = !bl & '   E=' & !this.ChkN3(!bc.east) & ' N=' & !this.ChkN3(!bc.north) & ' U=' & !this.ChkN3(!bc.up)
+		!bl = !bl & '   X=' & !this.ChkN3(!this.chkxlens[!bi]) & ' Y=' & !this.ChkN3(!this.chkylens[!bi]) & ' Z=' & !this.ChkN3(!this.chkzlens[!bi])
+		!bl = !bl & '   U ' & !this.ChkN3(!bub) & ' .. ' & !this.ChkN3(!but)
+		!bl = !bl & '   xdir=' & !this.ChkN3(!this.chkuxe[!bi]) & ' ' & !this.ChkN3(!this.chkuxn[!bi])
+		!bl = !bl & '   ydir=' & !this.ChkN3(!this.chkuye[!bi]) & ' ' & !this.ChkN3(!this.chkuyn[!bi])
+		!bl = !bl & '   rad=' & !this.ChkN3(!this.chkrads[!bi])
+		!this.chkdbg.append(!bl)
+	enddo
+
 	!rows = object ARRAY()
 	!keys = object ARRAY()
 	!ias  = object ARRAY()
@@ -4186,6 +4250,8 @@ define method .CheckBoxes()
 				!worth = true
 				if (!far2 gt !lim2) then
 					!worth = false
+					!fard = !far2.sqrt()
+					!this.chkdbg.append('SKIP ' & !this.chknames[!ia] & ' / ' & !this.chknames[!ib] & '   centres ' & !this.ChkN3(!fard) & ' apart, past ' & !this.ChkN3(!lim))
 				endif
 
 				!word = ''
@@ -4255,6 +4321,7 @@ define method .CheckBoxes()
 					!txt = !zhword & ' ' & !this.ChkNum(!mag) & 'mm  ' & !na & ' -' & !zhside & '- ' & !nb & '  ' & !note
 					!key = !rank * 1000000 + !mag
 					!key = 0 - !key
+					!this.chkdbg.append('ROW rank=' & !rank.string() & ' ' & !word & ' ' & !this.ChkN3(!mag) & '   ' & !this.chknames[!ia] & ' ' & !side & ' ' & !this.chknames[!ib])
 					!rows.append(!txt)
 					!keys.append(!key)
 					!ias.append(!ia)
@@ -4297,6 +4364,32 @@ define method .CheckBoxes()
 		!this.chkia.append(0)
 		!this.chkib.append(0)
 	endif
+
+	------------------------------------------------------------------
+	-- out to check_box.txt, the same check*.txt convention the      --
+	-- DRAFT side uses, so it lands next to check_grid.txt and the   --
+	-- rest and is ignored by git. overwritten every run: the        --
+	-- question it answers is always about the check just made       --
+	------------------------------------------------------------------
+	!this.chkdbg.append('END ' & !nf.string() & ' finding(s)')
+	!dbgok = true
+	!dbgf = object FILE('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_box.txt')
+	handle any
+		!dbgok = false
+	endhandle
+	if (!dbgok) then
+		!dbgf.writeFile('OVERWRITE', !this.chkdbg)
+		handle any
+			!dbgok = false
+		endhandle
+	endif
+	if (!dbgok) then
+		!out.append('（每一對的數字已寫到 check_box.txt）')
+	else
+		!out.append('（寫不出 check_box.txt）')
+	endif
+	!this.chkia.append(0)
+	!this.chkib.append(0)
 
 	!this.chkrows = !out
 	!this.chklist.dtext = !out
@@ -4385,6 +4478,12 @@ define method .CheckPicked()
 	if (not(!this.chktol.val.unset())) then
 		!tol = !this.chktol.val
 	endif
+	------------------------------------------------------------------
+	-- .ChkPair() adds a line to the dump each time it runs, so this --
+	-- adds one for a pair already in the list. the file has been    --
+	-- written by now and the next check starts the array again, so  --
+	-- it goes nowhere                                                --
+	------------------------------------------------------------------
 	!p = !this.ChkPair(!ia, !ib, !tol)
 	!w = !this.ChkWhat(!p, !tol)
 	!u = !p[9]
