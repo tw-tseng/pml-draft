@@ -4498,6 +4498,12 @@ define method .CheckBoxes()
 						!cspread = !chi - !clo
 
 						if (!cspread gt !tol) then
+							--------------------------------------------------
+							-- the height most of the faces are already at   --
+							-- is taken as the one the rest have to come to.  --
+							-- the faces are walked lowest first, so an even  --
+							-- split between two heights settles on the lower --
+							--------------------------------------------------
 							!cbest = !clo
 							!cbestn = 0
 							do !cj from 1 to !cn
@@ -4538,15 +4544,44 @@ define method .CheckBoxes()
 							!this.chklvu.append(!cbest)
 							!this.chklvd.append(!cdet)
 							!clvk = !this.chklvu.size()
-							!ctxt = '高程面 ' & !this.ChkNum(!cbest) & '  差 ' & !this.ChkNum(!cspread) & 'mm  ' & !coff.string() & ' 個框要改'
-							!ckey = 2 * 1000000 + !cspread
-							!ckey = 0 - !ckey
 							!this.chkdbg.append('LEVEL ' & !this.ChkN3(!cbest) & ' spread=' & !this.ChkN3(!cspread) & ' off=' & !coff.string() & '  ' & !cdbg)
-							!rows.append(!ctxt)
-							!keys.append(!ckey)
-							!kinds.append('level')
-							!ias.append(!clvk)
-							!ibs.append(0)
+
+							--------------------------------------------------
+							-- one row per face that is off, not one per     --
+							-- height. how far a height spreads is not how   --
+							-- far any one box has to move: a height with a  --
+							-- box 100 out and another 10 out spreads 100,   --
+							-- and a row saying so beside '2 boxes to fix'   --
+							-- reads as though both are 100 out (user,       --
+							-- 2026-09-23). a face is still only ever        --
+							-- reported once however many neighbours it      --
+							-- disagrees with, which was the point of        --
+							-- counting by height in the first place          --
+							--------------------------------------------------
+							do !cj from 1 to !cn
+								!ci = !cidx[!cj]
+								!cv = !lvv[!ci]
+								!cd = !cv - !cbest
+								!cad = !cd.abs()
+								if (!cad gt !tol) then
+									!cfa = '頂'
+									if (!lvf[!ci].eq('bot')) then
+										!cfa = '底'
+									endif
+									!cdir = '低'
+									if (!cd gt 0) then
+										!cdir = '高'
+									endif
+									!ctxt = '高程面 ' & !this.ChkNum(!cbest) & '  ' & !this.chknames[!lvb[!ci]] & ' ' & !cfa & ' ' & !cdir & ' ' & !this.ChkNum(!cad) & 'mm'
+									!ckey = 2 * 1000000 + !cad
+									!ckey = 0 - !ckey
+									!rows.append(!ctxt)
+									!keys.append(!ckey)
+									!kinds.append('level')
+									!ias.append(!clvk)
+									!ibs.append(!cj)
+								endif
+							enddo
 						endif
 					endif
 
@@ -4685,7 +4720,7 @@ endmethod
 -- CE ends on the first box that has to change, so Move Face on the --
 -- Modify tab can take it straight on                               --
 ---------------------------------------------------------------------
-define method .ChkShowLevel(!lk is REAL, !tol is REAL)
+define method .ChkShowLevel(!lk is REAL, !cj is REAL, !tol is REAL)
 	!want = !this.chklvu[!lk]
 	!parts = !this.chklvd[!lk].split('~')
 
@@ -4693,8 +4728,13 @@ define method .ChkShowLevel(!lk is REAL, !tol is REAL)
 	handle any
 	endhandle
 
-	!firstoff = 0
-	!noff = 0
+	------------------------------------------------------------------
+	-- every face that meets here, each drawn at the height it is    --
+	-- actually at. the ones that are where they should be land on   --
+	-- one another; the odd ones out sit apart by exactly what has   --
+	-- to be corrected, and carry a label saying which face and how  --
+	-- much                                                           --
+	------------------------------------------------------------------
 	do !pj from 1 to !parts.size()
 		!f = !parts[!pj].split(':')
 		!bi = !f[1].real()
@@ -4709,26 +4749,33 @@ define method .ChkShowLevel(!lk is REAL, !tol is REAL)
 				!ds = '+' & !ds
 			endif
 			!lbl = !fc & !ds
-			!noff = !noff + 1
-			if (!firstoff eq 0) then
-				!firstoff = !bi
-			endif
 		endif
 		!this.ChkPlan(!bi, !fv, !lbl)
 	enddo
 
-	!lvtxt = '高程面 ' & !this.ChkNum(!want) & '   ' & !noff.string() & ' 個框要改'
-	if (!firstoff gt 0) then
-		!na = !this.chknames[!firstoff]
-		!equinav = !this.NavName(!na)
-		!ok = true
-		$!equinav
-		handle any
-			!ok = false
-		endhandle
-		if (!ok) then
-			!lvtxt = '高程面 ' & !this.ChkNum(!want) & '   CE → ' & !na
-		endif
+	------------------------------------------------------------------
+	-- CE goes to the box this row is about, not to the first one    --
+	-- that happens to be wrong - the row names one face and Move    --
+	-- Face on the Modify tab is what moves it                       --
+	------------------------------------------------------------------
+	!g = !parts[!cj].split(':')
+	!gbi = !g[1].real()
+	!gfc = !g[2]
+	!gfv = !g[3].real()
+	!gfa = '頂'
+	if (!gfc.eq('bot')) then
+		!gfa = '底'
+	endif
+	!na = !this.chknames[!gbi]
+	!lvtxt = !na & ' ' & !gfa & ' ' & !this.ChkNum(!gfv) & ' → ' & !this.ChkNum(!want)
+	!equinav = !this.NavName(!na)
+	!ok = true
+	$!equinav
+	handle any
+		!ok = false
+	endhandle
+	if (!ok) then
+		!lvtxt = 'CE → ' & !lvtxt
 	endif
 	!this.chkstatus.val = !lvtxt
 endmethod
@@ -4780,7 +4827,7 @@ define method .CheckPicked()
 	-- it, not about two boxes, so it is drawn by its own method     --
 	------------------------------------------------------------------
 	if (!rkind.eq('level')) then
-		!this.ChkShowLevel(!this.chkia[!k], !tol)
+		!this.ChkShowLevel(!this.chkia[!k], !this.chkib[!k], !tol)
 		return
 	endif
 
