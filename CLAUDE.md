@@ -89,7 +89,7 @@
 - **每次按檢查都會把過程寫到 `check_box.txt`**（`23c2987`，L: 對應這台的 D:，已 gitignore）：`CHECKBOX` 設定／`BOX` 每個框的 E N U、XYZ、U 底..頂、兩個平面軸、外接球半徑／`PAIR` 每一對的 `o=`（B 心在 A 座標系）`g=`（三軸相距，負的是重疊）`npos= ntouch=` 與判定結果／`SKIP` 被預篩擋掉的（中心距與門檻）／`ROW` 真的進清單的。`PAIR` 那行是 `ChkPair` 在分類的當下寫的，用的就是分支讀到的同一組變數——對不起來的 dump 比沒有 dump 更糟。**有 finding 看起來不對，先看這個檔，不要看截圖。**
 - **已實測 OK**（2026-09-23，使用者）：`coll all box for /<proj>_DrawingPlanBox` 不導覽就收得到、比對、清單、中文顯示、`list` 的 `callback` ＋ `.selection()`（回傳列文字）、點列畫 AID ＋ CE 導覽、高程面那一路（分群／分面／一列一個面／依高程排序）、`check_box.txt` 寫檔。
 - **還沒試過**：大 SITE 跑多久（n² 對，預篩過濾掉約七成；`SKIP` 行也是 n² 級，太慢就先把它拿掉）；實際專案上報出來的 finding 是不是真的；**樓高小於 Max gap 的區域會不會把兩個真實高程面併成一個**（這次模型樓高都 2840 以上所以沒遇到，遇到就把 Max gap 調小）。
-- 還沒做：Move Face 加第四種給法 `to neighbour`（貼到鄰框的面）。要改 `FaceDistance()`；moveface-multi 已經併回 master，可以開始做了。
+- Move Face 第四種給法 `to neighbour`（Snap 鈕）在分支 `feature/moveface-neighbour`（2026-09-24，**未在 E3D 實測**，只在本機）：沿用 Face 選單選的面，每個選到的 BOX 自己找「那個面正對的最近鄰框」貼過去——有縫往外長、有重疊往內縮。鄰框的條件在 `NbDistance()` 的註解：面要平行（1°）、中心在本框中心前方、在面的兩個軸上都共用超過 Check 的容差（面對面，不是只碰到邊）、距離不超過 Check 的 Max gap。好幾個符合時貼 |距離| 最小的（使用者決定，2026-09-24），跟其他鄰框剩下的縫／重疊交給 Check 分頁抓。讀全部框借 `ChkReadAll()`，讀完把 `chk*` 陣列還原——Check 清單的列用 index 指那些陣列，中間做過 Split／Merge 的話重讀會讓舊列指到別的框。要測：單框 N/S/E/W/Top 各一次、有縫與有重疊各一次、多選一排框一起貼、沒有鄰框時的 alert、做完回 Check 分頁點舊的列是否仍畫對。
 
 ## 換電腦
 1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。有只在本機的進行中分支的話，先從舊機器 `git push -u origin <分支>`，新機器再 `git checkout` 它（`git branch -vv` 沒有 `[origin/...]` 的就是只在本機）。
