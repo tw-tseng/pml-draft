@@ -207,6 +207,20 @@ layout form !!DrawingPlan dialog dock
 			button .create 'Create Box'   at xmin.pa4     ymax.pa4+0.4 width 12 call |!This.CreateBox()|
 			button .clearp 'Clear Points' at xmax.create+1 ymin.create  width 12 call |!This.ClearPoints()|
 			button .delete 'Delete Box'   at xmax.clearp+1 ymin.create  width 12 call |!This.DeleteBox()|
+
+			------------------------------------------------------------
+			-- a box around whatever is selected in the model, for a   --
+			-- local drawing that does not follow the grid - a pump    --
+			-- area, one piece of equipment (user, 2026-09-24). square --
+			-- to E/N/U, see .BoxAroundSelection()                      --
+			------------------------------------------------------------
+			frame .encsub 'Around the selection' at xmin.pa4 ymax.create+0.4 width 62
+				para .enchint text 'select pipes / equipment in the model (ctrl-click), then' width 58
+				text .encmargin 'Margin' at xmin.enchint ymax.enchint+0.2 tagwidth 8 width 9 is REAL
+				para .encmm at xmax.encmargin+0.2 ymin.encmargin text 'mm, on all six faces'
+				button .encbt 'Box Around Selection' at xmin.encmargin ymax.encmargin+0.3 width 20 call |!This.BoxAroundSelection()|
+				para .encresult at xmax.encbt+1 ymin.encbt text '' width 36
+			exit
 		exit
 
 		----------------------------------------------------------------
@@ -444,6 +458,8 @@ define method .DrawingPlan()
 	!this.edgdesc = 'Drawing Plan Box Picking'
 	!this.ClearPoints()
 	!this.dwgno.val = ''
+	!this.encmargin.val = 500
+	!this.encresult.val = ''
 	!this.log.clear()
 	!this.splitequi = ''
 	!this.mfnames = object ARRAY()
@@ -1774,6 +1790,204 @@ define method .CreateBox()
 	-- no dialog on success - picking is meant to run one frame      --
 	-- after another without anything to click away                 --
 	------------------------------------------------------------------
+	!this.ClearAids()
+endmethod
+
+---------------------------------------------------------------------
+-- Pick tab - one box around everything selected in the model,      --
+-- grown by Margin on all six faces. for a local drawing (a pump    --
+-- area, one vessel) whose frame follows the plant rather than the  --
+-- grid, so the box is square to E/N/U (user, 2026-09-24): WVOL is  --
+-- the world-aligned extent E3D keeps for every element, so the     --
+-- union of those is exact for a world-aligned box. a box turned to --
+-- a 12.5 degree grid could not use it - a run of pipe along the    --
+-- grid has a WVOL several metres wider than the pipe, which is why --
+-- that was left out.                                               --
+--                                                                  --
+-- anything in the selection that is one of our own drawing plan    --
+-- boxes is left out (a frame drawn around its old frame is not the --
+-- point), as is anything with no extent to read. the box comes out --
+-- unnamed like every other way of making one - Name tab after       --
+---------------------------------------------------------------------
+define method .BoxAroundSelection()
+	!this.encresult.val = ''
+	!margin = 0
+	if (not(!this.encmargin.val.unset())) then
+		!margin = !this.encmargin.val
+	endif
+	if (!margin lt 0) then
+		!!alert.error('Margin cannot be negative')
+		return
+	endif
+
+	var !projid proj id
+	!sitename = '/' & !projid & '_DrawingPlanBox'
+
+	!save = !!ce
+	!sele = object selection()
+	!sele.getcurrent()
+	!sels = !sele.getselection()
+	handle any
+		!!alert.error('Select the pipes / equipment to box in the model first')
+		return
+	endhandle
+	if (!sels.unset()) then
+		!!alert.error('Select the pipes / equipment to box in the model first')
+		return
+	endif
+
+	!found = false
+	!minE = 0
+	!minN = 0
+	!minU = 0
+	!maxE = 0
+	!maxN = 0
+	!maxU = 0
+	!nused = 0
+	!nskip = 0
+
+	do !sel values !sels
+		!ok = true
+		$!sel
+		handle any
+			!ok = false
+		endhandle
+
+		--------------------------------------------------------------
+		-- our own boxes are not what is being framed                --
+		--------------------------------------------------------------
+		if (!ok) then
+			!site = ''
+			var !site name of site of ce
+			handle any
+				!site = ''
+			endhandle
+			if (!site.eq(!sitename)) then
+				!ok = false
+			endif
+		endif
+
+		--------------------------------------------------------------
+		-- six numbers, min E N U then max E N U, read the way       --
+		-- DrawingPlan1 reads a box's WVOL                            --
+		--------------------------------------------------------------
+		if (!ok) then
+			!wvol = ''
+			var !wvol wvol
+			handle any
+				!ok = false
+			endhandle
+		endif
+		if (!ok) then
+			!last = !wvol.part(6)
+			if (!last.eq('')) then
+				!ok = false
+			endif
+		endif
+
+		if (!ok) then
+			!e1 = !wvol.part(1).replace('mm', '').real()
+			!n1 = !wvol.part(2).replace('mm', '').real()
+			!u1 = !wvol.part(3).replace('mm', '').real()
+			!e2 = !wvol.part(4).replace('mm', '').real()
+			!n2 = !wvol.part(5).replace('mm', '').real()
+			!u2 = !wvol.part(6).replace('mm', '').real()
+
+			----------------------------------------------------------
+			-- an element with nothing drawn has an all-zero volume, --
+			-- which would pull the box out to the origin            --
+			----------------------------------------------------------
+			!de = !e2 - !e1
+			!dn = !n2 - !n1
+			!du = !u2 - !u1
+			if (!de eq 0 and !dn eq 0 and !du eq 0) then
+				!ok = false
+			endif
+		endif
+
+		if (!ok) then
+			if (not(!found)) then
+				!minE = !e1
+				!minN = !n1
+				!minU = !u1
+				!maxE = !e2
+				!maxN = !n2
+				!maxU = !u2
+				!found = true
+			else
+				if (!e1 lt !minE) then
+					!minE = !e1
+				endif
+				if (!n1 lt !minN) then
+					!minN = !n1
+				endif
+				if (!u1 lt !minU) then
+					!minU = !u1
+				endif
+				if (!e2 gt !maxE) then
+					!maxE = !e2
+				endif
+				if (!n2 gt !maxN) then
+					!maxN = !n2
+				endif
+				if (!u2 gt !maxU) then
+					!maxU = !u2
+				endif
+			endif
+			!nused = !nused + 1
+		else
+			!nskip = !nskip + 1
+		endif
+	enddo
+
+	!!ce = !save
+	handle any
+	endhandle
+
+	if (not(!found)) then
+		!!alert.error('Nothing in the selection has a size to box - select pipes or equipment (drawing plan boxes are left out)')
+		return
+	endif
+
+	------------------------------------------------------------------
+	-- Y is N, so X is E: the box's own axes are the world's and the --
+	-- lengths go straight across. a flat item (a plate, a single    --
+	-- level of pipe) with no margin would give a zero length, which --
+	-- a BOX will not take - 1mm is the floor, the same as Split's   --
+	------------------------------------------------------------------
+	!xlen = !maxE - !minE + 2 * !margin
+	!ylen = !maxN - !minN + 2 * !margin
+	!zlen = !maxU - !minU + 2 * !margin
+	if (!xlen lt 1) then
+		!xlen = 1
+	endif
+	if (!ylen lt 1) then
+		!ylen = 1
+	endif
+	if (!zlen lt 1) then
+		!zlen = 1
+	endif
+	!cE = (!minE + !maxE) * 0.5
+	!cN = (!minN + !maxN) * 0.5
+	!cU = (!minU + !maxU) * 0.5
+	!pcen = !this.PosOf(!cE, !cN, !cU)
+
+	!err = !this.MakeBoxAt(!pcen, 'N', !xlen, !ylen, !zlen, '', '', '', '', '')
+	if (!err.neq('')) then
+		!!alert.error(!err)
+		return
+	endif
+
+	var !equi namn of ce
+	!ubot = !minU - !margin
+	!utop = !maxU + !margin
+	!txt = !equi & '  X ' & !xlen.string('D0') & '  Y ' & !ylen.string('D0') & '  U ' & !ubot.string('D0') & '..' & !utop.string('D0')
+	!txt = !txt & '  (' & !nused.string() & ' item(s)'
+	if (!nskip gt 0) then
+		!txt = !txt & ', ' & !nskip.string() & ' left out'
+	endif
+	!txt = !txt & ')'
+	!this.encresult.val = !txt.replace('mm', '')
 	!this.ClearAids()
 endmethod
 

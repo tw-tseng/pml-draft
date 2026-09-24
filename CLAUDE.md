@@ -49,7 +49,7 @@
   - Modify 分頁重排：頂端三步驟提示、Show Box 旁顯示目前 BOX 名稱／XYZ／U 底..頂、三個功能各自一個子框；Show Box 不再是 toggle（`feature/moveface-multi` 又改回開關，見下）。
 - **還沒在 E3D 實測**：Grid 分頁 Top/Bottom U 併入分層後的結果。已實測 OK：Grid 分頁合併後能建 BOX、Bottom U 的 Pick（修過 DropPicking 順序後）；Move Face 單 BOX（2026-09-21 使用者實測，含 Enter callback 與版面）。
 - 工作樹上另外有兩個舊備份的刪除（`DrawingPlan1MatchLine(20260122)/(20260311).pmlfnc`）沒進任何 commit，使用者說不要進 master。
-- 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。「在 3D 每個框中心 AID 印圖號」那半也不做：框一多標籤疊在一起反而看不清楚（使用者，2026-09-24）；要確認編號順序就看 `check_batch.txt`）。
+- 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX（2026-09-24 做了，見「Pick 分頁：圍住選取物」）、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。「在 3D 每個框中心 AID 印圖號」那半也不做：框一多標籤疊在一起反而看不清楚（使用者，2026-09-24）；要確認編號順序就看 `check_batch.txt`）。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
 
 ## Move Face 多選（2026-09-24 已併回 master，`3c50023`..`16410c8`＋merge commit，**已在 E3D 實測**）
@@ -81,6 +81,12 @@
 - Order by 的意思改了（使用者，2026-09-24，看 `check_batch.txt` 確認排序本身沒錯、是語意跟使用者直覺相反）：原本 1st＝先分組（主鍵），S->N＋Bottom->Top 會每一疊由下往上編；改成 1st＝**號碼連續時走的方向**（次鍵）、2nd＝下一排往哪走（主鍵）。標籤改 `Number along`／`Then`，gadget 名不變；程式只在收集前把兩組 axis/asc 對調。預設改成 along W->E、then Bottom->Top（同層由西往東、再往上一層）。每次按都把排序過程寫到 `check_batch.txt`（BATCH／KEYS／IN／ORDER／OUT）。第三個方向 `And then`（`.batchdir3`，使用者要求，預設 (none)）：三個選項由快到慢，排序鍵反過來由慢到快（key1＝最慢的那個有用的），(none) 直接略過；解讀選項收成 `BatchDir()`、取座標收成 `BatchKey()`，最後一個鍵不帶容差、前面的鍵差 1mm 內算平手。
 - 「跳號」其實是 Model Explorer 照建立順序列 ZONE 的成員、不照名字（check_batch 的 OUT 顯示 001～014 一個不缺）。Assign Numbers 編完號後，每個框 `REORDER` 到前一號後面（CE 在 owner，先例 `admin/forms/admmaturity.pmlfrm:425`），不同 ZONE 各自排、這批以外的框不動；dump 多一行 `ORDER n moved, m would not move`。
 - 已實測 OK（2026-09-24，使用者）：Read CE、Rename、重名被擋、空欄位的 alert、Assign Numbers 連按結果不變、兩個／三個方向的排序、Model Explorer 照號碼排。
+
+## Pick 分頁：圍住選取物建 BOX（2026-09-24，分支 `feature/box-around-selection`，**未在 E3D 實測**）
+- 給不照格線切的局部圖用（泵區、單台設備；使用者說有可能會出）。Pick 分頁下方子框「Around the selection」：Margin（預設 500mm，六個面同一個值，使用者選的）＋ Box Around Selection 鈕。
+- 框**照正東正北**（使用者選的）：範圍是每個選取物 `WVOL` 的聯集（讀法同 `DrawingPlan1.pmlfrm:728`，`part(1..6)`＝min E N U、max E N U）。不做跟格線轉 12.5° 的版本，因為 `WVOL` 永遠是世界軸，順著格線的一段管子換算到轉過的方向會寬出好幾公尺，要準就得逐一讀管件中心線點，程式量多好幾倍。
+- 選取裡的 DrawingPlanBox 自己的框、沒有範圍（WVOL 全 0 或讀不到）的元素都跳過並計數；建出來的框沒命名，走 Name 分頁。結果寫在鈕旁邊：名稱、X/Y、U 底..頂、用了幾個、跳過幾個。
+- 要測：選一台設備、選幾條管線＋設備、Margin 0 與 500、選取裡混一個圖框（要被跳過）、什麼都沒選的 alert、建出來的框在 DRAFT 出局部圖的範圍對不對。
 
 ## Check 分頁：框與框之間的縫／重疊／高程不一致（2026-09-23 已併回 master，`0b959c3`..`5f645cd`，**已在 E3D 實測**）
 - 18 個 commit，從 master 開出來後 fast-forward 併回，分支已刪——fast-forward 沒有 merge commit，master 的歷史就是那條分支的歷史，分支名留著只是個重複的標籤。只動 `design/forms/DrawingPlan.pmlfrm`（+1541 行）與本檔。跟 `feature/moveface-multi` 之後合併只有 **2 個衝突點**，都是「兩邊在同一位置各加了幾行」：本檔換電腦第 1 點、`.pmlfrm` 的 member 區塊（一邊 `chk*` 一邊 `mf*`，兩邊都留即可）。
