@@ -1111,6 +1111,20 @@ define method .AssignNumbers()
 	endif
 
 	------------------------------------------------------------------
+	-- the working goes out to check_batch.txt, the same way Check   --
+	-- writes check_box.txt: what the two options were read as, each --
+	-- box's two sort keys as gathered, then the order they came out  --
+	-- in with the number each one got. an order that looks wrong is  --
+	-- read from here, not from the model tree                         --
+	------------------------------------------------------------------
+	!dbg = ARRAY()
+	!dbg.append('BATCH 1st=' & !dir1 & ' axis=' & !axis1 & ' asc=' & !ascend1.string() & '   2nd=' & !dir2 & ' use=' & !use2.string() & ' axis=' & !axis2 & ' asc=' & !ascend2.string())
+	!ng = !names.size()
+	do !k from 1 to !ng
+		!dbg.append('IN   ' & !names[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]))
+	enddo
+
+	------------------------------------------------------------------
 	-- selection sort on the parallel !keys1/!keys2 arrays. these    --
 	-- lists are at most a few dozen boxes at a time, so the O(n^2)  --
 	-- cost does not matter and this avoids needing a sort-by-key    --
@@ -1265,6 +1279,17 @@ define method .AssignNumbers()
 			!failed.append(!nm)
 		endif
 	enddo
+
+	do !k from 1 to !n
+		!dbg.append('OUT  ' & !k.string() & '   ' & !names[!k] & ' -> ' & !targets[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]))
+	enddo
+	!dbgf = object FILE('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_batch.txt')
+	handle any
+	elsehandle none
+		!dbgf.writeFile('OVERWRITE', !dbg)
+		handle any
+		endhandle
+	endhandle
 
 	!msg = !assigned.string() & ' box(es) numbered'
 	if (!same gt 0) then
