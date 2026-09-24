@@ -953,10 +953,13 @@ endmethod
 -- renumber something that was already named on purpose. unticked,  --
 -- every box in the selection is renumbered regardless               --
 --                                                                  --
--- the sequence never overwrites an existing name - a collision     --
--- just moves on to the next number, so the same prefix can be run  --
--- again later to pick up where it left off, or two prefixes can    --
--- share the site without stepping on each other                    --
+-- the sequence never takes a name something else already has - a  --
+-- collision just moves on to the next number, so the same prefix   --
+-- can be run again later on new boxes to pick up where it left     --
+-- off, or two prefixes can share the site without stepping on each --
+-- other. 'something else' means outside this selection: the boxes  --
+-- being numbered give their own names up, so running it twice on   --
+-- the same boxes gives the same numbers both times                 --
 ---------------------------------------------------------------------
 define method .AssignNumbers()
 	!prefix = !this.batchprefix.val
@@ -1150,56 +1153,117 @@ define method .AssignNumbers()
 		endif
 	enddo
 
+	------------------------------------------------------------------
+	-- every box's number is worked out before any name is touched.  --
+	-- a name counts as taken only when something outside this       --
+	-- selection holds it - a box being numbered is about to give its --
+	-- name up. counting those as taken was why a second press found  --
+	-- 001..014 held by the very boxes it was renumbering and went on --
+	-- to 015..028, and a third came back to 001 (user, 2026-09-24)   --
+	------------------------------------------------------------------
 	!seq = !start
-	!assigned = 0
-	!failed = ARRAY()
-
+	!targets = ARRAY()
 	do !nm values !names
-		!avail = false
-		!fullname = ''
+		!target = ''
 		do !try from 1 to 10000
 			!candidate = !this.BatchName(!prefix, !seq, !digits)
 			!fullname = '/' & !candidate
+			!seq = !seq + 1
 			!taken = false
+			!holder = ''
 			$!fullname
 			handle any
 				!taken = false
 			elsehandle none
 				!taken = true
+				var !holder namn of ce
 			endhandle
 			if (!taken) then
-				!seq = !seq + 1
-			else
-				!avail = true
+				if (!names.find(!holder).size().gt(0)) then
+					!taken = false
+				endif
+			endif
+			if (not(!taken)) then
+				!target = !candidate
 				break
 			endif
 		enddo
+		!targets.append(!target)
+	enddo
 
-		if (not(!avail)) then
-			!failed.append(!nm)
+	------------------------------------------------------------------
+	-- two passes, because E3D refuses a name that is still in use:   --
+	-- box A cannot become 002 while box B, further down the list, is --
+	-- still called 002. so every box that is changing lets go of its --
+	-- name first (UNNAME), then each takes its new one. a box whose  --
+	-- name is already its number is left alone. boxes are found      --
+	-- again by ref, which does not change when the name does         --
+	------------------------------------------------------------------
+	!n = !names.size()
+	!refs = ARRAY()
+	!failed = ARRAY()
+	!same = 0
+	do !k from 1 to !n
+		!nm = !names[!k]
+		!target = !targets[!k]
+		!ref = ''
+		!equinav = !this.NavName(!nm)
+		!ok = true
+		$!equinav
+		handle any
+			!ok = false
+		endhandle
+		if (!ok) then
+			var !ref ref of ce
+		endif
+		if (!ok and !target.neq('') and !nm.neq(!target) and !nm.substring(1,1).neq('=')) then
+			UNNAME
+			handle any
+				!ok = false
+			endhandle
+		endif
+		if (not(!ok)) then
+			!ref = ''
+		endif
+		!refs.append(!ref)
+	enddo
+
+	!assigned = 0
+	do !k from 1 to !n
+		!nm = !names[!k]
+		!target = !targets[!k]
+		!ref = !refs[!k]
+		!ok = true
+		if (!target.eq('') or !ref.eq('')) then
+			!ok = false
+		elseif (!nm.eq(!target)) then
+			!same = !same + 1
+			skip
 		else
-			!equinav = !this.NavName(!nm)
-			!ok = true
-			$!equinav
+			$!ref
 			handle any
 				!ok = false
 			endhandle
 			if (!ok) then
+				!fullname = '/' & !target
 				NAME $!fullname
 				handle any
 					!ok = false
 				endhandle
 			endif
-			if (!ok) then
-				!assigned = !assigned + 1
-				!seq = !seq + 1
-			else
-				!failed.append(!nm)
-			endif
+		endif
+		if (!ok) then
+			!assigned = !assigned + 1
+		else
+			!failed.append(!nm)
 		endif
 	enddo
 
-	!this.batchresult.val = !assigned.string() & ' box(es) numbered'
+	!msg = !assigned.string() & ' box(es) numbered'
+	if (!same gt 0) then
+		!msg = !msg & ', ' & !same.string() & ' already had their number'
+	endif
+	!this.batchresult.val = !msg
 	if (!failed.size().gt(0)) then
 		!!alert.error(!failed.size().string() & ' box(es) could not be named - check the model for what changed underneath')
 	endif

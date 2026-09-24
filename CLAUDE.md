@@ -76,7 +76,8 @@
 - rev／title 改由 DRAFT 處理（使用者）。查證：`DrawingPlan1.pmlfrm:667-669` 每張圖把 `!title1..3` 設成空字串後再也沒給值，DESIGN 端 EQUI 上的 rev/title TEXT 從來沒被讀過——Info 分頁填了等於沒填，還會讓人以為改了圖上的版次。
 - Info 分頁刪掉；Batch 分頁改名 **Name**（gadget 仍叫 `.batchfr`），上面「One box (CE)」：Drawing No.＋Read CE（`ReadBoxName()`）＋Rename（`RenameBox()`，沿用原本的重名檢查）；下面原本的批次編號原封不動包進子框。
 - 建框／Split／Merge／Import 寫 rev/title 的程式**刻意不動**（使用者決定）：沒有輸入的地方，不會再有新值；碰那幾條要全部重測。`SetTagText`／`TagValue` 因此還在。
-- 要測：Read CE（有名字／沒名字的框）、Rename、重名被擋、空欄位按 Rename 的 alert、批次編號照常、版面。
+- Assign Numbers 的舊 bug（不是這次改出來的）：同一批框重按，第 2 次變 015～028、第 3 次回 001～014——查重名時把「這批框自己的名字」也算成被佔用。改成先算好每框號碼、只有這批以外的東西佔用才跳號，再兩段式：要換號的先 `UNNAME`（AVEVA 先例 `admin/forms/admdisciplines.pmlfrm:189`），再逐一 `NAME`，用 ref 找回框。號碼已經對的不動，結果列多一句「N already had their number」。
+- 要測：Read CE（有名字／沒名字的框）、Rename、重名被擋、空欄位按 Rename 的 alert、版面；Assign Numbers 同一批連按三次結果都一樣、換排序方向重按會真的重排、跟這批以外的框撞名時會跳號。
 
 ## Check 分頁：框與框之間的縫／重疊／高程不一致（2026-09-23 已併回 master，`0b959c3`..`5f645cd`，**已在 E3D 實測**）
 - 18 個 commit，從 master 開出來後 fast-forward 併回，分支已刪——fast-forward 沒有 merge commit，master 的歷史就是那條分支的歷史，分支名留著只是個重複的標籤。只動 `design/forms/DrawingPlan.pmlfrm`（+1541 行）與本檔。跟 `feature/moveface-multi` 之後合併只有 **2 個衝突點**，都是「兩邊在同一位置各加了幾行」：本檔換電腦第 1 點、`.pmlfrm` 的 member 區塊（一邊 `chk*` 一邊 `mf*`，兩邊都留即可）。
