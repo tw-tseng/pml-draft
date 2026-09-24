@@ -78,9 +78,9 @@
 - 建框／Split／Merge／Import 寫 rev/title 的程式**刻意不動**（使用者決定）：沒有輸入的地方，不會再有新值；碰那幾條要全部重測。`SetTagText`／`TagValue` 因此還在。
 - Assign Numbers 的舊 bug（不是這次改出來的）：同一批框重按，第 2 次變 015～028、第 3 次回 001～014——查重名時把「這批框自己的名字」也算成被佔用。改成先算好每框號碼、只有這批以外的東西佔用才跳號，再兩段式：要換號的先 `UNNAME`（AVEVA 先例 `admin/forms/admdisciplines.pmlfrm:189`），再逐一 `NAME`，用 ref 找回框。號碼已經對的不動，結果列多一句「N already had their number」。
 - Assign Numbers 另一個舊 bug：Order by 兩個 option 只設了 dtext，`.selection()` 不帶參數回的是 rtext，跟程式裡比對的字串都對不上，全部掉進最後的 else（North -> South），選什麼都一樣。改成 `.selection('DTEXT')`（AVEVA 先例 `admin/objects/admstamp.pmlobj:2477`）。**option 只有 dtext 時一律用 `.selection('DTEXT')` 或 `.dtext[.val]`**。
-- Order by 的意思改了（使用者，2026-09-24，看 `check_batch.txt` 確認排序本身沒錯、是語意跟使用者直覺相反）：原本 1st＝先分組（主鍵），S->N＋Bottom->Top 會每一疊由下往上編；改成 1st＝**號碼連續時走的方向**（次鍵）、2nd＝下一排往哪走（主鍵）。標籤改 `Number along`／`Then`，gadget 名不變；程式只在收集前把兩組 axis/asc 對調。預設改成 along W->E、then Bottom->Top（同層由西往東、再往上一層）。每次按都把排序過程寫到 `check_batch.txt`（BATCH／IN／OUT）。
+- Order by 的意思改了（使用者，2026-09-24，看 `check_batch.txt` 確認排序本身沒錯、是語意跟使用者直覺相反）：原本 1st＝先分組（主鍵），S->N＋Bottom->Top 會每一疊由下往上編；改成 1st＝**號碼連續時走的方向**（次鍵）、2nd＝下一排往哪走（主鍵）。標籤改 `Number along`／`Then`，gadget 名不變；程式只在收集前把兩組 axis/asc 對調。預設改成 along W->E、then Bottom->Top（同層由西往東、再往上一層）。每次按都把排序過程寫到 `check_batch.txt`（BATCH／KEYS／IN／ORDER／OUT）。第三個方向 `And then`（`.batchdir3`，使用者要求，預設 (none)）：三個選項由快到慢，排序鍵反過來由慢到快（key1＝最慢的那個有用的），(none) 直接略過；解讀選項收成 `BatchDir()`、取座標收成 `BatchKey()`，最後一個鍵不帶容差、前面的鍵差 1mm 內算平手。
 - 「跳號」其實是 Model Explorer 照建立順序列 ZONE 的成員、不照名字（check_batch 的 OUT 顯示 001～014 一個不缺）。Assign Numbers 編完號後，每個框 `REORDER` 到前一號後面（CE 在 owner，先例 `admin/forms/admmaturity.pmlfrm:425`），不同 ZONE 各自排、這批以外的框不動；dump 多一行 `ORDER n moved, m would not move`。
-- 要測：Read CE（有名字／沒名字的框）、Rename、重名被擋、空欄位按 Rename 的 alert、版面；Assign Numbers 同一批連按三次結果都一樣、換排序方向重按會真的重排、跟這批以外的框撞名時會跳號。
+- 要測：Read CE（有名字／沒名字的框）、Rename、重名被擋、空欄位按 Rename 的 alert、版面；Assign Numbers 同一批連按三次結果都一樣、換排序方向重按會真的重排、跟這批以外的框撞名時會跳號、三個方向都設時（例如 along W->E、then S->N、and then Bottom->Top）一層一排一排編、Model Explorer 照號碼排。
 
 ## Check 分頁：框與框之間的縫／重疊／高程不一致（2026-09-23 已併回 master，`0b959c3`..`5f645cd`，**已在 E3D 實測**）
 - 18 個 commit，從 master 開出來後 fast-forward 併回，分支已刪——fast-forward 沒有 merge commit，master 的歷史就是那條分支的歷史，分支名留著只是個重複的標籤。只動 `design/forms/DrawingPlan.pmlfrm`（+1541 行）與本檔。跟 `feature/moveface-multi` 之後合併只有 **2 個衝突點**，都是「兩邊在同一位置各加了幾行」：本檔換電腦第 1 點、`.pmlfrm` 的 member 區塊（一邊 `chk*` 一邊 `mf*`，兩邊都留即可）。

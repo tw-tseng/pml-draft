@@ -263,8 +263,9 @@ layout form !!DrawingPlan dialog dock
 		-- Name - the drawing number is the EQUI's name, and the one   --
 		-- thing about a box this side still sets. two ways: one box   --
 		-- typed in by hand, or a multi-selection numbered in one go   --
-		-- (Prefix + a running sequence, along one direction and then --
-		-- a second, rather than in click order - .AssignNumbers()).   --
+		-- (Prefix + a running sequence, along one direction, then a  --
+		-- second and a third, rather than in click order -            --
+		-- .AssignNumbers()).                                          --
 		-- rev                                                           --
 		-- and the titles are the DRAFT side's now (user, 2026-09-24), --
 		-- which is why the Info tab that also held them is gone       --
@@ -282,7 +283,8 @@ layout form !!DrawingPlan dialog dock
 
 				option .batchdir  'Number along' at xmin.batchprefix ymax.batchprefix+0.3 tagwidth 12 width 22
 				option .batchdir2 'Then'         at xmin.batchdir    ymax.batchdir+0.2   tagwidth 12 width 22
-				toggle .batchskip at xmin.batchdir2 ymax.batchdir2+0.2 'Skip already-named'
+				option .batchdir3 'And then'     at xmin.batchdir2   ymax.batchdir2+0.2  tagwidth 12 width 22
+				toggle .batchskip at xmin.batchdir3 ymax.batchdir3+0.2 'Skip already-named'
 
 				button .batchgo 'Assign Numbers' at xmin.batchskip ymax.batchskip+0.3 width 16 call |!This.AssignNumbers()|
 
@@ -531,6 +533,13 @@ define method .DrawingPlan()
 	!dirs2.append('North -> South (N)')
 	!this.batchdir2.dtext = !dirs2
 	!this.batchdir2.val = 2
+	------------------------------------------------------------------
+	-- And then, the third (user, 2026-09-24): a whole block in one  --
+	-- go - along a row, the next row, the next storey. off by       --
+	-- default, so the two-direction numbering is unchanged           --
+	------------------------------------------------------------------
+	!this.batchdir3.dtext = !dirs2
+	!this.batchdir3.val = 1
 	!this.batchskip.val = true
 	!this.batchresult.val = ''
 
@@ -944,6 +953,53 @@ define method .BatchName(!prefix is STRING, !seq is REAL, !digits is REAL) is ST
 endmethod
 
 ---------------------------------------------------------------------
+-- one of the Name tab's direction options, as the sort needs it:   --
+-- [1]=in use (false for '(none)'), [2]='E'|'N'|'U', [3]=ascending, --
+-- [4]=the text itself, for the dump                                --
+---------------------------------------------------------------------
+define method .BatchDir(!dir is STRING) is ARRAY
+	!r = ARRAY()
+	!use = true
+	!axis = 'N'
+	!asc = false
+	if (!dir.eq('(none)')) then
+		!use = false
+	elseif (!dir.eq('Bottom -> Top (U)')) then
+		!axis = 'U'
+		!asc = true
+	elseif (!dir.eq('Top -> Bottom (U)')) then
+		!axis = 'U'
+		!asc = false
+	elseif (!dir.eq('West -> East (E)')) then
+		!axis = 'E'
+		!asc = true
+	elseif (!dir.eq('East -> West (E)')) then
+		!axis = 'E'
+		!asc = false
+	elseif (!dir.eq('South -> North (N)')) then
+		!axis = 'N'
+		!asc = true
+	endif
+	!r.append(!use)
+	!r.append(!axis)
+	!r.append(!asc)
+	!r.append(!dir)
+	return !r
+endmethod
+
+---------------------------------------------------------------------
+-- a box centre's coordinate on one world axis, 'E' | 'N' | 'U'     --
+---------------------------------------------------------------------
+define method .BatchKey(!pos is POSITION, !axis is STRING) is REAL
+	if (!axis.eq('E')) then
+		return !pos.east
+	elseif (!axis.eq('N')) then
+		return !pos.north
+	endif
+	return !pos.up
+endmethod
+
+---------------------------------------------------------------------
 -- Name tab - Assign Numbers. numbers a multi-selection of boxes in --
 -- one go with Prefix + a running sequence, ordered by Order By     --
 -- rather than by selection/click order - PML has no way to read    --
@@ -988,74 +1044,50 @@ define method .AssignNumbers()
 	------------------------------------------------------------------
 	-- the options only have display text. a bare .selection() hands --
 	-- back the replacement text, which matched none of the strings  --
-	-- below, so every choice fell through to the last else - North  --
-	-- -> South on both - whatever was picked (user, 2026-09-24).    --
-	-- 'DTEXT' the way admstamp.pmlobj reads its month list          --
+	-- in .BatchDir(), so every choice fell through to its last      --
+	-- else - North -> South - whatever was picked (user,            --
+	-- 2026-09-24). 'DTEXT' the way admstamp.pmlobj reads its month  --
+	-- list                                                           --
 	------------------------------------------------------------------
-	!dir1 = !this.batchdir.selection('DTEXT')
-	!axis1 = 'U'
-	!ascend1 = true
-	if (!dir1.eq('Bottom -> Top (U)')) then
-		!axis1 = 'U'
-		!ascend1 = true
-	elseif (!dir1.eq('Top -> Bottom (U)')) then
-		!axis1 = 'U'
-		!ascend1 = false
-	elseif (!dir1.eq('West -> East (E)')) then
-		!axis1 = 'E'
-		!ascend1 = true
-	elseif (!dir1.eq('East -> West (E)')) then
-		!axis1 = 'E'
-		!ascend1 = false
-	elseif (!dir1.eq('South -> North (N)')) then
-		!axis1 = 'N'
-		!ascend1 = true
-	else
-		!axis1 = 'N'
-		!ascend1 = false
-	endif
-
-	!dir2 = !this.batchdir2.selection('DTEXT')
-	!use2 = true
-	!axis2 = 'E'
-	!ascend2 = true
-	if (!dir2.eq('(none)')) then
-		!use2 = false
-	elseif (!dir2.eq('Bottom -> Top (U)')) then
-		!axis2 = 'U'
-		!ascend2 = true
-	elseif (!dir2.eq('Top -> Bottom (U)')) then
-		!axis2 = 'U'
-		!ascend2 = false
-	elseif (!dir2.eq('West -> East (E)')) then
-		!axis2 = 'E'
-		!ascend2 = true
-	elseif (!dir2.eq('East -> West (E)')) then
-		!axis2 = 'E'
-		!ascend2 = false
-	elseif (!dir2.eq('South -> North (N)')) then
-		!axis2 = 'N'
-		!ascend2 = true
-	else
-		!axis2 = 'N'
-		!ascend2 = false
-	endif
+	!r1 = !this.BatchDir(!this.batchdir.selection('DTEXT'))
+	!r2 = !this.BatchDir(!this.batchdir2.selection('DTEXT'))
+	!r3 = !this.BatchDir(!this.batchdir3.selection('DTEXT'))
 
 	------------------------------------------------------------------
-	-- 'Number along' is the way consecutive numbers run, so it is    --
-	-- the minor key; 'Then' is the major one, the rows. the sort     --
-	-- below treats key 1 as major, so with Then in use the two swap  --
-	-- here and everything after reads key 1 = Then, key 2 = along.   --
-	-- with Then '(none)' there is one key and nothing to swap         --
+	-- the options run fastest first - Number along is the way       --
+	-- consecutive numbers go, Then the next row, And then the next  --
+	-- block - but a sort wants its keys slowest first, so they are  --
+	-- lined up the other way round: key 1 the slowest in use, the   --
+	-- last key Number along. a '(none)' drops out, so Then (none)   --
+	-- with And then set is just two directions. Number along always --
+	-- counts (its list has no '(none)'). !nkeys is how many are in  --
+	-- use; the rest are filled in and never looked at               --
 	------------------------------------------------------------------
-	if (!use2) then
-		!tmpaxis = !axis1
-		!axis1 = !axis2
-		!axis2 = !tmpaxis
-		!tmpasc = !ascend1
-		!ascend1 = !ascend2
-		!ascend2 = !tmpasc
+	!kaxes = ARRAY()
+	!kascs = ARRAY()
+	if (!r3[1]) then
+		!kaxes.append(!r3[2])
+		!kascs.append(!r3[3])
 	endif
+	if (!r2[1]) then
+		!kaxes.append(!r2[2])
+		!kascs.append(!r2[3])
+	endif
+	!kaxes.append(!r1[2])
+	!kascs.append(!r1[3])
+	!nkeys = !kaxes.size()
+	do !k from 1 to 3
+		if (!k gt !nkeys) then
+			!kaxes.append('U')
+			!kascs.append(true)
+		endif
+	enddo
+	!axis1 = !kaxes[1]
+	!axis2 = !kaxes[2]
+	!axis3 = !kaxes[3]
+	!ascend1 = !kascs[1]
+	!ascend2 = !kascs[2]
+	!ascend3 = !kascs[3]
 
 	var !projid proj id
 	!sitename = '/' & !projid & '_DrawingPlanBox'
@@ -1067,6 +1099,7 @@ define method .AssignNumbers()
 	!names = ARRAY()
 	!keys1 = ARRAY()
 	!keys2 = ARRAY()
+	!keys3 = ARRAY()
 
 	do !sel values !sels
 		!ok = true
@@ -1106,21 +1139,10 @@ define method .AssignNumbers()
 				if !names.find(!equi).size().eq(0) then
 					var !boxpos worpos
 					!pos = !boxpos.position()
-					!key1 = !pos.up
-					if (!axis1.eq('E')) then
-						!key1 = !pos.east
-					elseif (!axis1.eq('N')) then
-						!key1 = !pos.north
-					endif
-					!key2 = !pos.up
-					if (!axis2.eq('E')) then
-						!key2 = !pos.east
-					elseif (!axis2.eq('N')) then
-						!key2 = !pos.north
-					endif
 					!names.append(!equi)
-					!keys1.append(!key1)
-					!keys2.append(!key2)
+					!keys1.append(!this.BatchKey(!pos, !axis1))
+					!keys2.append(!this.BatchKey(!pos, !axis2))
+					!keys3.append(!this.BatchKey(!pos, !axis3))
 				endif
 			endif
 		endif
@@ -1133,49 +1155,68 @@ define method .AssignNumbers()
 
 	------------------------------------------------------------------
 	-- the working goes out to check_batch.txt, the same way Check   --
-	-- writes check_box.txt: what the two options were read as, each --
-	-- box's two sort keys as gathered, then the order they came out  --
-	-- in with the number each one got. an order that looks wrong is  --
-	-- read from here, not from the model tree                         --
+	-- writes check_box.txt: what the options were read as, each      --
+	-- box's sort keys as gathered (key1 slowest), then the order     --
+	-- they came out in with the number each one got. an order that  --
+	-- looks wrong is read from here, not from the model tree         --
 	------------------------------------------------------------------
 	!dbg = ARRAY()
-	!dbg.append('BATCH along=' & !dir1 & '   then=' & !dir2 & '   key1 (rows) axis=' & !axis1 & ' asc=' & !ascend1.string() & '   key2 (along) axis=' & !axis2 & ' asc=' & !ascend2.string() & ' use=' & !use2.string())
+	!dbg.append('BATCH along=' & !r1[4] & '   then=' & !r2[4] & '   and then=' & !r3[4] & '   keys in use=' & !nkeys.string())
+	!dbg.append('KEYS key1 ' & !axis1 & ' asc=' & !ascend1.string() & '   key2 ' & !axis2 & ' asc=' & !ascend2.string() & '   key3 ' & !axis3 & ' asc=' & !ascend3.string())
 	!ng = !names.size()
 	do !k from 1 to !ng
-		!dbg.append('IN   ' & !names[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]))
+		!dbg.append('IN   ' & !names[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]) & '   key3=' & !this.ChkN3(!keys3[!k]))
 	enddo
 
 	------------------------------------------------------------------
-	-- selection sort on the parallel !keys1/!keys2 arrays. these    --
-	-- lists are at most a few dozen boxes at a time, so the O(n^2)  --
-	-- cost does not matter and this avoids needing a sort-by-key    --
-	-- builtin, which nothing else in this codebase uses.            --
+	-- selection sort on the parallel key arrays. these lists are at  --
+	-- most a few dozen boxes at a time, so the O(n^2) cost does not  --
+	-- matter and this avoids needing a sort-by-key builtin, which    --
+	-- nothing else in this codebase uses.                            --
 	--                                                                --
-	-- key 2 only breaks ties on key 1, and "tie" allows a small      --
-	-- tolerance rather than exact equality - boxes on what is        --
-	-- obviously the same storey can differ by floating point noise  --
-	-- even though they came from the same split                      --
+	-- each key only breaks ties on the one before it, and on every   --
+	-- key but the last "tie" allows a small tolerance rather than    --
+	-- exact equality - boxes on what is obviously the same storey    --
+	-- can differ by floating point noise even though they came from  --
+	-- the same split                                                  --
 	------------------------------------------------------------------
 	!tol = 1
+	!ntol = 0 - !tol
 	!n = !names.size()
 	do !i from 1 to !n
 		!best = !i
 		!jstart = !i + 1
 		do !j from !jstart to !n
-			!d1 = !keys1[!j] - !keys1[!best]
-			if (not(!ascend1)) then
-				!d1 = 0 - !d1
-			endif
 			!swap = false
-			if (!d1.lt(0 - !tol)) then
-				!swap = true
-			elseif (!d1.lt(!tol) and !use2) then
-				!d2 = !keys2[!j] - !keys2[!best]
-				if (not(!ascend2)) then
-					!d2 = 0 - !d2
-				endif
-				if (!d2.lt(0)) then
+			!d = !keys1[!j] - !keys1[!best]
+			if (not(!ascend1)) then
+				!d = 0 - !d
+			endif
+			if (!nkeys eq 1) then
+				if (!d lt 0) then
 					!swap = true
+				endif
+			elseif (!d lt !ntol) then
+				!swap = true
+			elseif (!d lt !tol) then
+				!d = !keys2[!j] - !keys2[!best]
+				if (not(!ascend2)) then
+					!d = 0 - !d
+				endif
+				if (!nkeys eq 2) then
+					if (!d lt 0) then
+						!swap = true
+					endif
+				elseif (!d lt !ntol) then
+					!swap = true
+				elseif (!d lt !tol) then
+					!d = !keys3[!j] - !keys3[!best]
+					if (not(!ascend3)) then
+						!d = 0 - !d
+					endif
+					if (!d lt 0) then
+						!swap = true
+					endif
 				endif
 			endif
 			if (!swap) then
@@ -1192,6 +1233,9 @@ define method .AssignNumbers()
 			!tmpkey = !keys2[!i]
 			!keys2[!i] = !keys2[!best]
 			!keys2[!best] = !tmpkey
+			!tmpkey = !keys3[!i]
+			!keys3[!i] = !keys3[!best]
+			!keys3[!best] = !tmpkey
 		endif
 	enddo
 
@@ -1361,7 +1405,7 @@ define method .AssignNumbers()
 	!dbg.append('ORDER ' & !nreord.string() & ' moved in the tree, ' & !nbadord.string() & ' would not move')
 
 	do !k from 1 to !n
-		!dbg.append('OUT  ' & !k.string() & '   ' & !names[!k] & ' -> ' & !targets[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]))
+		!dbg.append('OUT  ' & !k.string() & '   ' & !names[!k] & ' -> ' & !targets[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]) & '   key3=' & !this.ChkN3(!keys3[!k]))
 	enddo
 	!dbgf = object FILE('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_batch.txt')
 	handle any
