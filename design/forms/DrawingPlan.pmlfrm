@@ -980,7 +980,14 @@ define method .AssignNumbers()
 	!start = !startstr.real()
 	!digits = !startstr.length()
 
-	!dir1 = !this.batchdir.selection()
+	------------------------------------------------------------------
+	-- the options only have display text. a bare .selection() hands --
+	-- back the replacement text, which matched none of the strings  --
+	-- below, so every choice fell through to the last else - North  --
+	-- -> South on both - whatever was picked (user, 2026-09-24).    --
+	-- 'DTEXT' the way admstamp.pmlobj reads its month list          --
+	------------------------------------------------------------------
+	!dir1 = !this.batchdir.selection('DTEXT')
 	!axis1 = 'U'
 	!ascend1 = true
 	if (!dir1.eq('Bottom -> Top (U)')) then
@@ -1003,7 +1010,7 @@ define method .AssignNumbers()
 		!ascend1 = false
 	endif
 
-	!dir2 = !this.batchdir2.selection()
+	!dir2 = !this.batchdir2.selection('DTEXT')
 	!use2 = true
 	!axis2 = 'E'
 	!ascend2 = true
