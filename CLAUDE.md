@@ -46,11 +46,24 @@
   - `DrawingPlanGrid.pmlfrm` 併進 `DrawingPlan` 成 **Grid** 分頁，獨立表單刪掉。方法加 `Grid` 前綴，gadget 撞名的加 `g`（`.gubot/.gutop/.gcreate/.glines/.gstatus/.gresult`），`edgdesc`／`DropPicking`／`Close` 共用一份——兩種 pick 用同一個 packet description，在 Grid 開始點線會把 Pick 分頁做一半的 4 點丟掉。
   - Grid：Esc 只結束該輪，BOX 只有按 Create Boxes 才建；Top U／Bottom U 各有 Pick 鈕（點一個點取 U）；Top/Bottom U 跟點到的高程線一起排序去重分層（`SortedLevels`）。
   - Split/Merge 分頁改名 **Modify**，新增 **Move Face**：一個面推出去／拉進來、對面不動，BOX 就地改 POS＋該軸長度（不建新 BOX）。面用 BOX 自己的軸命名（+X/−X/+Y/−Y/Top/Bottom）。兩種給法：`by offset`＋Move、`to coordinate` 的 Pick（點完直接移、欄位顯示移完的座標）；欄位手打＋Enter 也會移（text CALLBACK，用 `facetolast` 擋重複觸發）。
-  - Modify 分頁重排：頂端三步驟提示、Show Box 旁顯示目前 BOX 名稱／XYZ／U 底..頂、三個功能各自一個子框；Show Box 不再是 toggle。
-- **還沒在 E3D 實測**：Move Face 全部（`XLEN $!newlen` 展開帶不帶 mm；Enter callback 是按 Enter 才觸發還是離開欄位也觸發——若是後者改回顯式按鈕）；Modify 分頁版面（Move Face 右側按鈕用固定 `xmin.faceoff+46` 對齊）；Grid 分頁 Top/Bottom U 併入分層後的結果。已實測 OK：Grid 分頁合併後能建 BOX、Bottom U 的 Pick（修過 DropPicking 順序後）。
+  - Modify 分頁重排：頂端三步驟提示、Show Box 旁顯示目前 BOX 名稱／XYZ／U 底..頂、三個功能各自一個子框；Show Box 不再是 toggle（`feature/moveface-multi` 又改回開關，見下）。
+- **還沒在 E3D 實測**：Grid 分頁 Top/Bottom U 併入分層後的結果。已實測 OK：Grid 分頁合併後能建 BOX、Bottom U 的 Pick（修過 DropPicking 順序後）；Move Face 單 BOX（2026-09-21 使用者實測，含 Enter callback 與版面）。
 - 工作樹上另外有兩個舊備份的刪除（`DrawingPlan1MatchLine(20260122)/(20260311).pmlfnc`）沒進任何 commit，使用者說不要進 master。
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層、圍住選取物建 BOX、BOX 總覽清單。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
+
+## Move Face 多選（2026-09-24 已併回 master，`3c50023`..`16410c8`＋merge commit，**已在 E3D 實測**）
+- 4 個 commit，只動 `DrawingPlan.pmlfrm` 跟本檔，在分支 `feature/moveface-multi` 上做完、實測通過後用 `--no-ff` 併回 master，分支已刪。合併時跟 Check 分頁有兩處文字衝突（member 區塊、本檔換電腦第 1 點，兩邊都留），另外還有一處**語意衝突**是 git 看不出來的：Check 分頁點清單列時自己下 `AID CLEAR ALL`，畫面清了但 Show Box 的按鈕還停在 `Hide Box`，下一次按會變成清而不是畫。在 merge commit 裡把那兩處改成 `ClearAids()`。**這一處還沒在 E3D 實測。**
+- 面改用 North/South/East/West/Top/Bottom 命名，每個 BOX 自己取「法線最接近該方向的側面」；原因是現場同一批 BOX 的 Y 有 `N 12.523 E` 也有 `S 12.523 W`（Merge 那段註解），`+Y` 在隔壁 BOX 是反的，多選時各推各的。轉到接近 45°（內積 < cos 40°）的 BOX 分不出 N/E，跳過並回報。
+- Show Box 讀 `object selection()`：選 2 個以上 DrawingPlanBox 就一起鎖定，否則退回 CE（單選不信選取——命令列導覽不會更新選取，會拿到十分鐘前點的那個）。Split 維持單 BOX，多選按 Pick Split Point 會擋。
+- Show Box 在每個側面中心印 `+X = N` 標籤；boxinfo 多選時列數量與名稱。
+- 三種輸入逐 BOX 算距離：offset 同距、coordinate 各自對齊到同一座標、Pick 各自移到過該點的平面（同向一排 BOX 就是整條 match line 平移）。這個廠格線轉 12.5°，N/S/E/W 面的 coordinate 輸入會被「不與 E/N/U 平行」擋掉，改用 Pick；Top/Bottom 不受影響。
+- 使用者看過第一版截圖後又改了三件事（`2034e99`、`16410c8`）：
+  - Show Box 改回開關：按一下畫、再按一下清（推翻前一天「不要 toggle」的決定），用按鈕標籤解決「按了沒反應」——畫著時按鈕字變 `Hide Box`（`!this.showbox.tag = '...'`，AVEVA 先例 `aba/Forms/abaeditusertask.pmlfrm:61`）。所有 `AID CLEAR ALL` 收進 `ClearAids()`，任何分頁清畫面都會把開關歸零。隱藏不清快取、不清 boxinfo。
+  - Split 的 X/Y/Z 勾選改成 E/W、N/S、U/D（gadget 改名 `splitew/splitns/splitud`），`DoSplitAt` 用 `SideNormal`+`NearestWorld` 看 BOX 的 +X 朝 E 還是 W 來對回 X/Y；offset 的 + 一律朝 E/N/U，+X 朝 W 的 BOX 會把 E/W offset 反號。
+  - 最下面的 `splitresult` 結果行整個拿掉。Move Face 的結果由 Show Box 旁那行（移完 `ReadBoxes` 重讀）顯示，完全沒動到才 `!!alert.message`；Split/Merge 做完 BOX 已不在，「N box(es) created／Merged N into 1」寫到同一行。
+- 已實測 OK（2026-09-24，使用者）：單選 Show Box 側面標籤方向、`AID TEXT |$!lbl|` 帶空格與 `=` 印得出來、按鈕 `.tag` 改字、Split 預設勾 U/D、多選三種給法、多選 Pick 後 ShowFaceCoord 只在座標一致時填欄位、有 BOX 出問題時 alert 一次列完（offset `-100000` 全部擋下）、一部分成功一部分失敗時成功的照移。
+- Batch／Merge 各自還有一份讀選取的迴圈，新的 `SelectedBoxEquis()` 沒去動它們（怕動到已實測的東西），之後可以收成一份。
 
 ## 設備尺寸的標註點（2026-09-21，`8c69f54`＋`1c99bc6`，已在 master，**未在 E3D 實測**）
 - 尺寸鏈上設備那一點，從「`SheetLimitsOfVolume()` 的紙面外接框邊緣＋2mm」改成「設備中心線的端點，落在 BOX 外就沿線夾回邊界」＝ 中心線與 matchline 的交點。
@@ -76,10 +89,10 @@
 - **每次按檢查都會把過程寫到 `check_box.txt`**（`23c2987`，L: 對應這台的 D:，已 gitignore）：`CHECKBOX` 設定／`BOX` 每個框的 E N U、XYZ、U 底..頂、兩個平面軸、外接球半徑／`PAIR` 每一對的 `o=`（B 心在 A 座標系）`g=`（三軸相距，負的是重疊）`npos= ntouch=` 與判定結果／`SKIP` 被預篩擋掉的（中心距與門檻）／`ROW` 真的進清單的。`PAIR` 那行是 `ChkPair` 在分類的當下寫的，用的就是分支讀到的同一組變數——對不起來的 dump 比沒有 dump 更糟。**有 finding 看起來不對，先看這個檔，不要看截圖。**
 - **已實測 OK**（2026-09-23，使用者）：`coll all box for /<proj>_DrawingPlanBox` 不導覽就收得到、比對、清單、中文顯示、`list` 的 `callback` ＋ `.selection()`（回傳列文字）、點列畫 AID ＋ CE 導覽、高程面那一路（分群／分面／一列一個面／依高程排序）、`check_box.txt` 寫檔。
 - **還沒試過**：大 SITE 跑多久（n² 對，預篩過濾掉約七成；`SKIP` 行也是 n² 級，太慢就先把它拿掉）；實際專案上報出來的 finding 是不是真的；**樓高小於 Max gap 的區域會不會把兩個真實高程面併成一個**（這次模型樓高都 2840 以上所以沒遇到，遇到就把 Max gap 調小）。
-- 還沒做：Move Face 加第四種給法 `to neighbour`（貼到鄰框的面）。要改 `FaceDistance()`，而那個方法在 `feature/moveface-multi` 上被大改過，等那支實測完併回 master 再做。
+- 還沒做：Move Face 加第四種給法 `to neighbour`（貼到鄰框的面）。要改 `FaceDistance()`；moveface-multi 已經併回 master，可以開始做了。
 
 ## 換電腦
-1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。進行中的分支 `feature/moveface-multi` 只在本機，要先從舊機器 `git push -u origin feature/moveface-multi`，新機器再 `git checkout` 它。
+1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。有只在本機的進行中分支的話，先從舊機器 `git push -u origin <分支>`，新機器再 `git checkout` 它（`git branch -vv` 沒有 `[origin/...]` 的就是只在本機）。
 2. 設使用者環境變數 `NOTION_TOKEN`。舊 token 已失效（2026-09-20 起 MCP 與 REST 都回 401 `API token is invalid`），到 notion.so/my-integrations 重新產一個，並確認 integration 有連到「E3D-管線平面圖程式摘要」那頁。
 3. 重建 `.mcp.json`：
    ```json

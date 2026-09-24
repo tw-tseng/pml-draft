@@ -148,6 +148,22 @@ layout form !!DrawingPlan dialog dock
 	member .chklvu   is ARRAY
 	member .chklvd   is ARRAY
 
+	------------------------------------------------------------------
+	-- Move Face - every box Show Box locked in, one entry per box  --
+	-- in each array, index-aligned. one box is the common case,    --
+	-- and then these hold the same box as .splitequi/.splitcen     --
+	-- above; two or more selected in the model act together. the   --
+	-- single-box members above stay as they are for Split          --
+	------------------------------------------------------------------
+	member .mfnames   is ARRAY
+	member .mfcens    is ARRAY
+	member .mfxdirs   is ARRAY
+	member .mfydirs   is ARRAY
+	member .mfxlens   is ARRAY
+	member .mfylens   is ARRAY
+	member .mfzlens   is ARRAY
+	member .boxshown  is BOOLEAN
+
 	!this.formTitle = 'Create Drawing Plan Box'
 
 	frame .tabset tabset
@@ -295,12 +311,12 @@ layout form !!DrawingPlan dialog dock
 		----------------------------------------------------------------
 		-- change boxes that already exist: Split cuts one into 2 (or --
 		-- more) along its own X/Y/Z, Move Face pushes one face of a  --
-		-- box out or in with the opposite face staying put, Merge    --
-		-- replaces several with the one box that covers them.        --
-		-- Show Box locks in which box and draws its axes; the split  --
-		-- and the face move work off that cached geometry, not off   --
-		-- CE, so looking around the model in between does not lose  --
-		-- the target                                                  --
+		-- box (or of every selected box) out or in with the opposite --
+		-- face staying put, Merge replaces several with the one box  --
+		-- that covers them. Show Box locks in which box or boxes and --
+		-- draws their axes; the split and the face move work off     --
+		-- that cached geometry, not off CE, so looking around the    --
+		-- model in between does not lose the target                   --
 		----------------------------------------------------------------
 		frame .splitfr 'Modify' width 66
 			------------------------------------------------------------
@@ -308,49 +324,55 @@ layout form !!DrawingPlan dialog dock
 			-- that is about to be changed, by name and size, so it is --
 			-- never a guess which one an action will hit               --
 			------------------------------------------------------------
-			para .modhint text '1. select a box in the model   2. Show Box   3. one action below' width 62
+			para .modhint text '1. select box(es) in the model   2. Show Box   3. one action below' width 62
 
 			button .showbox 'Show Box' at xmin.modhint ymax.modhint+0.2 width 12 call |!This.ShowBox()|
 			para .boxinfo at xmax.showbox+1 ymin.showbox text '(no box yet)' width 48
 
 			------------------------------------------------------------
 			-- Split: the box is cut at a picked point along the ticked --
-			-- axes. Offset shifts the cut from the point actually     --
-			-- picked (snap to a beam, cut 50 below it)                 --
+			-- axes, asked for in world terms - E/W, N/S, U/D - the    --
+			-- same as Move Face's faces; .DoSplitAt() works out which  --
+			-- of the box's own X/Y each one is. Offset shifts the cut  --
+			-- from the point actually picked (snap to a beam, cut 50   --
+			-- below it): + is towards E, N or U                         --
 			------------------------------------------------------------
 			frame .splitsub 'Split' at xmin.modhint ymax.showbox+0.4 width 62
 				para .splithint text 'cut at a picked point, along the ticked axes. offset (mm) shifts the cut' width 58
 
-				toggle .splitx at xmin.splithint ymax.splithint+0.2 'X'
-				text .splitxoff 'offset' at xmax.splitx+1 ymin.splitx tagwidth 7 width 9 is REAL
-				para .splitxmm at xmax.splitxoff+0.2 ymin.splitx text 'mm'
+				toggle .splitew at xmin.splithint ymax.splithint+0.2 'E/W'
+				text .splitewoff 'offset' at xmax.splitew+1 ymin.splitew tagwidth 7 width 9 is REAL
+				para .splitewmm at xmax.splitewoff+0.2 ymin.splitew text 'mm  (+ E)'
 
-				toggle .splity at xmin.splitx ymax.splitx+0.1 'Y'
-				text .splityoff 'offset' at xmax.splity+1 ymin.splity tagwidth 7 width 9 is REAL
-				para .splitymm at xmax.splityoff+0.2 ymin.splity text 'mm'
+				toggle .splitns at xmin.splitew ymax.splitew+0.1 'N/S'
+				text .splitnsoff 'offset' at xmax.splitns+1 ymin.splitns tagwidth 7 width 9 is REAL
+				para .splitnsmm at xmax.splitnsoff+0.2 ymin.splitns text 'mm  (+ N)'
 
-				toggle .splitz at xmin.splity ymax.splity+0.1 'Z'
-				text .splitzoff 'offset' at xmax.splitz+1 ymin.splitz tagwidth 7 width 9 is REAL
-				para .splitzmm at xmax.splitzoff+0.2 ymin.splitz text 'mm'
+				toggle .splitud at xmin.splitns ymax.splitns+0.1 'U/D'
+				text .splitudoff 'offset' at xmax.splitud+1 ymin.splitud tagwidth 7 width 9 is REAL
+				para .splitudmm at xmax.splitudoff+0.2 ymin.splitud text 'mm  (+ U)'
 
-				button .splitpick 'Pick Split Point' at xmin.splitx ymax.splitz+0.3 width 16 call |!This.PickSplitPoint()|
+				button .splitpick 'Pick Split Point' at xmin.splitew ymax.splitud+0.3 width 16 call |!This.PickSplitPoint()|
 			exit
 
 			------------------------------------------------------------
-			-- Move Face: one face, named along the box's own axes as  --
-			-- Show Box draws them, and two ways to say where it goes, --
-			-- one per row with its button on the right: an offset    --
-			-- (+ out, - in) with Move, or a coordinate with Pick -    --
-			-- pick a point and the face moves to it there and then,  --
-			-- the field then showing where it ended up (user,         --
+			-- Move Face: one face, named by the world direction it    --
+			-- faces (N/S/E/W/Top/Bottom - Show Box writes each side's --
+			-- on the box), and two ways to say where it goes, one per --
+			-- row with its button on the right: an offset (+ out,    --
+			-- - in) with Move, or a coordinate with Pick - pick a     --
+			-- point and the face moves to it there and then, the     --
+			-- field then showing where it ended up (user,             --
 			-- 2026-09-20). typing into that field and pressing Enter  --
-			-- moves the face too, for a face square to E/N/U         --
+			-- moves the face too, for a face square to E/N/U. two or  --
+			-- more boxes selected in the model all move together      --
 			------------------------------------------------------------
 			frame .facesub 'Move Face' at xmin.splitsub ymax.splitsub+0.3 width 62
 				para .facehint1 text 'one face goes out or in, the opposite face stays put' width 58
-				para .facehint2 at xmin.facehint1 ymax.facehint1+0.05 text 'X / Y / Z are the axes Show Box draws in the 3D view' width 58
+				para .facehint2 at xmin.facehint1 ymax.facehint1+0.05 text 'N/S/E/W = the side facing that way, Show Box labels them' width 58
+				para .facehint3 at xmin.facehint2 ymax.facehint2+0.05 text '2+ boxes selected (ctrl-click) move together' width 58
 
-				option .faceopt 'Face' at xmin.facehint2 ymax.facehint2+0.3 tagwidth 15 width 12
+				option .faceopt 'Face' at xmin.facehint3 ymax.facehint3+0.3 tagwidth 15 width 12
 
 				text .faceoff 'by offset' at xmin.faceopt ymax.faceopt+0.2 tagwidth 15 width 9 is REAL
 				para .facemm at xmax.faceoff+0.2 ymin.faceoff text 'mm  (+ out, - in)'
@@ -362,15 +384,13 @@ layout form !!DrawingPlan dialog dock
 			exit
 
 			------------------------------------------------------------
-			-- Merge works on the model selection, not on Show Box's   --
-			-- one box                                                  --
+			-- Merge reads the model selection itself, not Show Box's  --
+			-- locked-in boxes                                          --
 			------------------------------------------------------------
 			frame .mergesub 'Merge' at xmin.facesub ymax.facesub+0.3 width 62
 				para .mergehint text 'select several boxes in the model (ctrl-click), then' width 40
 				button .mergebt 'Merge Selected' at xmax.mergehint+1 ymin.mergehint width 16 call |!This.MergeBoxes()|
 			exit
-
-			para .splitresult at xmin.mergesub ymax.mergesub+0.3 text '' width 62
 		exit
 
 		----------------------------------------------------------------
@@ -414,13 +434,13 @@ exit
 -- form start up --
 -------------------
 define method .DrawingPlan()
-	AID CLEAR ALL
+	!this.ClearAids()
 	!this.edgdesc = 'Drawing Plan Box Picking'
 	!this.ClearPoints()
 	!this.ClearInfo()
 	!this.log.clear()
-	!this.splitresult.val = ''
 	!this.splitequi = ''
+	!this.mfnames = object ARRAY()
 
 	------------------------------------------------------------------
 	-- Grid tab starts with nothing picked and no offset. the        --
@@ -432,23 +452,25 @@ define method .DrawingPlan()
 	!this.GridClear()
 
 	------------------------------------------------------------------
-	-- most drawing plan boxes are cut into storeys, so Z is the     --
-	-- axis split along most often - default it on, X/Y off          --
+	-- most drawing plan boxes are cut into storeys, so U/D is the   --
+	-- axis split along most often - default it on, E/W and N/S off  --
 	------------------------------------------------------------------
-	!this.splitz.val = true
+	!this.splitud.val = true
 
 	------------------------------------------------------------------
-	-- Move Face's faces, in the box's own axes. Top is the default  --
-	-- - a storey height changing is the usual reason to move a     --
-	-- face at all                                                   --
+	-- Move Face's faces, by world direction - each box works out   --
+	-- for itself which of its sides that is (see .FaceInfo()).     --
+	-- Top is the default - a storey height changing is the usual   --
+	-- reason to move a face at all. the order is what .FaceInfo()  --
+	-- and .PickFacePoint() index by                                 --
 	------------------------------------------------------------------
 	!faces = ARRAY()
-	!faces.append('+X')
-	!faces.append('-X')
-	!faces.append('+Y')
-	!faces.append('-Y')
-	!faces.append('Top (+Z)')
-	!faces.append('Bottom (-Z)')
+	!faces.append('North')
+	!faces.append('South')
+	!faces.append('East')
+	!faces.append('West')
+	!faces.append('Top')
+	!faces.append('Bottom')
 	!this.faceopt.dtext = !faces
 	!this.faceopt.val = 5
 	!this.facetolast = ''
@@ -1314,7 +1336,7 @@ endmethod
 -- no message at all                                                --
 ---------------------------------------------------------------------
 define method .PickPoints()
-	AID CLEAR ALL
+	!this.ClearAids()
 	!this.ClearPointFields()
 	!this.PickOne(1)
 endmethod
@@ -1387,7 +1409,7 @@ define method .SetPoint(!idx is REAL, !pos is POSITION)
 endmethod
 
 define method .RefreshMarks()
-	AID CLEAR ALL
+	!this.ClearAids()
 	!this.MarkOne(!this.p1e.val, !this.p1n.val, !this.p1u.val, 'P1')
 	!this.MarkOne(!this.p2e.val, !this.p2n.val, !this.p2u.val, 'P2')
 	!this.MarkOne(!this.p3e.val, !this.p3n.val, !this.p3u.val, 'P3')
@@ -1505,7 +1527,7 @@ endmethod
 -- user has already typed in                                      --
 ------------------------------------------------------------------
 define method .ClearPointFields()
-	AID CLEAR ALL
+	!this.ClearAids()
 	!this.p1e.val = ''
 	!this.p1n.val = ''
 	!this.p1u.val = ''
@@ -1559,7 +1581,7 @@ define method .CreateBox()
 	-- no dialog on success - picking is meant to run one frame      --
 	-- after another without anything to click away                 --
 	------------------------------------------------------------------
-	AID CLEAR ALL
+	!this.ClearAids()
 endmethod
 
 ---------------------------------------------------------------------
@@ -1589,7 +1611,7 @@ define method .DeleteBox()
 	endif
 
 	$!ownernav
-	AID CLEAR ALL
+	!this.ClearAids()
 endmethod
 
 --------------------------------------------------------------------
@@ -1627,7 +1649,7 @@ define method .GridClear()
 	!this.gutop.val = ''
 	!this.gstatus.val = ''
 	!this.gresult.val = ''
-	AID CLEAR ALL
+	!this.ClearAids()
 endmethod
 
 ---------------------------------------------------------------------
@@ -2116,7 +2138,7 @@ define method .GridCreateBoxes()
 		!this.levlbls = object ARRAY()
 		!this.levus = object ARRAY()
 		!this.GridRefreshList()
-		AID CLEAR ALL
+		!this.ClearAids()
 	endif
 endmethod
 
@@ -2348,76 +2370,324 @@ define method .CurrentSplitBox() is STRING
 endmethod
 
 ------------------------------------------------------------------
--- button handler for Show Box - a plain toggle. a second press   --
--- while a box is already shown just hides it again; .PickSplitPoint() --
--- does not go through here, it calls .RefreshBox() directly so it --
--- always ends up showing whatever CE is right now rather than     --
--- toggling off something that happened to be shown already        --
+-- every AID the form draws goes through this - the Pick tab's   --
+-- marks, the Grid tab's, Show Box's boxes - so Show Box's own   --
+-- state and its button label follow whichever tab last cleared  --
+-- the view, rather than claiming a box is shown when it is not  --
 ------------------------------------------------------------------
+define method .ClearAids()
+	AID CLEAR ALL
+	!this.boxshown = false
+	!this.showbox.tag = 'Show Box'
+endmethod
+
 ------------------------------------------------------------------
--- Show Box always re-reads the box under CE and redraws its     --
--- axes. it used to toggle - a second press cleared the aids -   --
--- but on a tab a first-time user reads top to bottom, a button  --
--- that sometimes does nothing visible is one more thing to      --
--- puzzle over (user, 2026-09-20). the aids go with Close, or    --
--- with the next Show Box                                        --
+-- Show Box is a toggle: one press reads the box under CE (or    --
+-- the boxes selected, see .RefreshBox()) and draws them, the    --
+-- next press hides the drawing again (user, 2026-09-21). the    --
+-- button says which it will do - 'Hide Box' while something is  --
+-- drawn - so it is never a press that does nothing visible, the --
+-- objection that took the toggle out the day before. hiding     --
+-- keeps the box locked in and its line in the form; Split and   --
+-- Move Face re-read and redraw anyway                           --
 ------------------------------------------------------------------
 define method .ShowBox()
+	if (!this.boxshown) then
+		!this.ClearAids()
+		return
+	endif
 	!this.RefreshBox()
 endmethod
 
 ---------------------------------------------------------------------
--- reads the box's own geometry and caches it on the form, then     --
--- draws its centre and X/Y/Z axes. cached rather than re-read at   --
--- split time because CE can move on to something else before Pick --
--- Split Point is pressed - the split still has to act on the box  --
--- that was shown                                                   --
+-- the drawing plan boxes in the model selection (ctrl-click for    --
+-- several), as EQUI names in selection order with no repeats. a    --
+-- selected EQUI is stepped down onto its BOX the same as CE is on  --
+-- the Split side; anything else caught in the selection is         --
+-- skipped. the same walk Batch and Merge each do inline. walking   --
+-- the selection navigates, so CE is put back where it was - the    --
+-- caller may be about to read CE as its fallback                   --
+---------------------------------------------------------------------
+define method .SelectedBoxEquis() is ARRAY
+	var !projid proj id
+	!sitename = '/' & !projid & '_DrawingPlanBox'
+	!names = object ARRAY()
+
+	!save = !!ce
+	!sele = object selection()
+	!sele.getcurrent()
+	!sels = !sele.getselection()
+	handle any
+		return !names
+	endhandle
+	if (!sels.unset()) then
+		return !names
+	endif
+
+	do !sel values !sels
+		!ok = true
+		$!sel
+		handle any
+			!ok = false
+		endhandle
+
+		if (!ok) then
+			var !cetype type of ce
+			if (!cetype.eqnocase('EQUI')) then
+				!err = !this.BoxUnderEqui()
+				if (!err.neq('')) then
+					!ok = false
+				endif
+			elseif (not(!cetype.eqnocase('BOX'))) then
+				!ok = false
+			endif
+		endif
+
+		if (!ok) then
+			var !site name of site of ce
+			if (!site.eq(!sitename)) then
+				var !equi namn of equi of ce
+				if !names.find(!equi).size().eq(0) then
+					!names.append(!equi)
+				endif
+			endif
+		endif
+	enddo
+
+	!!ce = !save
+	handle any
+	endhandle
+	return !names
+endmethod
+
+---------------------------------------------------------------------
+-- decides which box (or boxes) the Modify tab is about, and reads  --
+-- and draws them. two or more drawing plan boxes in the model      --
+-- selection are taken together - that is how Move Face moves a    --
+-- storey top, or a match line, on a whole row of frames at once.  --
+-- anything less falls back to CE, the same single box as before:  --
+-- a one-element selection is not trusted over CE because the      --
+-- selection does not follow command-line navigation, and a stale  --
+-- one would silently act on the box clicked ten minutes ago. the  --
+-- box line names whatever was locked in, so a stale multi-select  --
+-- at least shows                                                   --
 ---------------------------------------------------------------------
 define method .RefreshBox()
-	AID CLEAR ALL
+	!this.ClearAids()
+	!this.splitequi = ''
+	!this.mfnames = object ARRAY()
+	!this.boxinfo.val = '(no box yet)'
+
+	!names = !this.SelectedBoxEquis()
+	if (!names.size().lt(2)) then
+		!names = object ARRAY()
+		!equi = !this.CurrentSplitBox()
+		if (!equi.eq('')) then
+			return
+		endif
+		!names.append(!equi)
+	endif
+	!this.mfnames = !names
+	!this.ReadBoxes()
+endmethod
+
+---------------------------------------------------------------------
+-- reads every locked-in box's own geometry into the .mf* arrays    --
+-- (and the first one's into the single-box members Split reads),  --
+-- then draws them. cached rather than re-read at split or move    --
+-- time because CE can move on to something else before the point  --
+-- is picked - the action still has to hit the boxes that were     --
+-- shown. separate from .RefreshBox() so a move can re-read the    --
+-- same boxes afterwards without going back to the model selection --
+---------------------------------------------------------------------
+define method .ReadBoxes()
+	!this.ClearAids()
 	!this.splitequi = ''
 	!this.boxinfo.val = '(no box yet)'
-	!equi = !this.CurrentSplitBox()
-	if (!equi.eq('')) then
+	!this.mfcens  = object ARRAY()
+	!this.mfxdirs = object ARRAY()
+	!this.mfydirs = object ARRAY()
+	!this.mfxlens = object ARRAY()
+	!this.mfylens = object ARRAY()
+	!this.mfzlens = object ARRAY()
+
+	!n = !this.mfnames.size()
+	if (!n.eq(0)) then
 		return
 	endif
-	!equinav = !this.NavName(!equi)
 
-	var !boxpos worpos
-	var !xlen xlength
-	var !ylen ylength
-	var !zlen zlength
-	var !ori ori wrt worl
+	do !i from 1 to !n
+		!equi = !this.mfnames[!i]
+		!equinav = !this.NavName(!equi)
+		!ok = true
+		$!equinav
+		handle any
+			!ok = false
+		endhandle
+		if (not(!ok)) then
+			!!alert.error('cannot get back to ' & !equi)
+			!this.mfnames = object ARRAY()
+			return
+		endif
+		!err = !this.BoxUnderEqui()
+		if (!err.neq('')) then
+			!!alert.error(!equi & ' - ' & !err)
+			!this.mfnames = object ARRAY()
+			return
+		endif
 
-	!this.splitequi = !equi
-	!this.splitcen = !boxpos.position()
-	!this.splitxdirstr = !ori.orientation().xdir().string().before('WRT')
-	!this.splitydirstr = !ori.orientation().ydir().string().before('WRT')
-	!this.splitxlen = !xlen.real()
-	!this.splitylen = !ylen.real()
-	!this.splitzlen = !zlen.real()
+		var !boxpos worpos
+		var !xlen xlength
+		var !ylen ylength
+		var !zlen zlength
+		var !ori ori wrt worl
+
+		!this.mfcens.append(!boxpos.position())
+		!this.mfxdirs.append(!ori.orientation().xdir().string().before('WRT'))
+		!this.mfydirs.append(!ori.orientation().ydir().string().before('WRT'))
+		!this.mfxlens.append(!xlen.real())
+		!this.mfylens.append(!ylen.real())
+		!this.mfzlens.append(!zlen.real())
+	enddo
+
+	------------------------------------------------------------------
+	-- the first box is the one Split works on - Split is single-   --
+	-- box and reads these, not the arrays                           --
+	------------------------------------------------------------------
+	!this.splitequi = !this.mfnames[1]
+	!this.splitcen = !this.mfcens[1]
+	!this.splitxdirstr = !this.mfxdirs[1]
+	!this.splitydirstr = !this.mfydirs[1]
+	!this.splitxlen = !this.mfxlens[1]
+	!this.splitylen = !this.mfylens[1]
+	!this.splitzlen = !this.mfzlens[1]
 
 	------------------------------------------------------------------
 	-- the sheet texts live on the EQUI, not the BOX, same as        --
 	-- everywhere else in this form                                  --
 	------------------------------------------------------------------
+	!equinav = !this.NavName(!this.splitequi)
 	!this.splitrev = !this.TagValue(!equinav, 'rev')
 	!this.splittitle1 = !this.TagValue(!equinav, 'title1')
 	!this.splittitle2 = !this.TagValue(!equinav, 'title2')
 	!this.splittitle3 = !this.TagValue(!equinav, 'title3')
 
 	------------------------------------------------------------------
-	-- the box line: name, the three lengths, and where it sits in   --
-	-- U - the numbers a face move is about to change                --
+	-- the box line: one box gets its name, the three lengths and   --
+	-- where it sits in U - the numbers a face move is about to     --
+	-- change, and after the move, the numbers it did change to.    --
+	-- several get the count and their names, so it is never a      --
+	-- guess which boxes an action will hit. Split and Merge, whose --
+	-- box is gone afterwards, write their outcome here instead;    --
+	-- there is no separate result line any more (user, 2026-09-21) --
 	------------------------------------------------------------------
-	!halfz = !this.splitzlen * 0.5
-	!ubot = !this.splitcen.up - !halfz
-	!utop = !this.splitcen.up + !halfz
-	!txt = !equi & '   X ' & !this.splitxlen.string('D0') & '  Y ' & !this.splitylen.string('D0') & '  Z ' & !this.splitzlen.string('D0')
-	!txt = !txt & '   U ' & !ubot.string('D0').replace('mm', '') & ' .. ' & !utop.string('D0').replace('mm', '')
+	if (!n.eq(1)) then
+		!halfz = !this.splitzlen * 0.5
+		!ubot = !this.splitcen.up - !halfz
+		!utop = !this.splitcen.up + !halfz
+		!txt = !this.splitequi & '   X ' & !this.splitxlen.string('D0') & '  Y ' & !this.splitylen.string('D0') & '  Z ' & !this.splitzlen.string('D0')
+		!txt = !txt & '   U ' & !ubot.string('D0').replace('mm', '') & ' .. ' & !utop.string('D0').replace('mm', '')
+	else
+		!txt = !n.string() & ' boxes: '
+		do !i from 1 to !n
+			if (!i.gt(1)) then
+				!txt = !txt & ', '
+			endif
+			!txt = !txt & !this.mfnames[!i]
+		enddo
+	endif
 	!this.boxinfo.val = !txt
 
 	!this.DrawBoxAxes()
+	!this.boxshown = true
+	!this.showbox.tag = 'Hide Box'
+endmethod
+
+---------------------------------------------------------------------
+-- the outward unit normal of one side of one box, in world E/N/U   --
+-- (dimensionless, made the offset-and-divide-by-distance way       --
+-- .DoSplitAt() explains). !s is the side: 1=+X 2=-X 3=+Y 4=-Y.     --
+-- [1]=nE [2]=nN [3]=nU [4]=half length on that axis [5]='X'|'Y'   --
+-- [6]=the side's own name '+X'..'-Y'. reads the cached geometry,   --
+-- so .ReadBoxes() has to have run                                  --
+---------------------------------------------------------------------
+define method .SideNormal(!i is REAL, !s is REAL) is ARRAY
+	!cen = !this.mfcens[!i]
+	!dirstr = !this.mfxdirs[!i]
+	!half = !this.mfxlens[!i] * 0.5
+	!axis = 'X'
+	if (!s eq 3 or !s eq 4) then
+		!dirstr = !this.mfydirs[!i]
+		!half = !this.mfylens[!i] * 0.5
+		!axis = 'Y'
+	endif
+	!dir = object direction(!dirstr)
+	!ref = !cen.offset(!dir, 1000)
+	!len = !cen.distance(!ref)
+	!nE = (!ref.east - !cen.east) / !len
+	!nN = (!ref.north - !cen.north) / !len
+	!nU = (!ref.up - !cen.up) / !len
+	!name = '+' & !axis
+	if (!s eq 2 or !s eq 4) then
+		!nE = 0 - !nE
+		!nN = 0 - !nN
+		!nU = 0 - !nU
+		!name = '-' & !axis
+	endif
+	!info = object ARRAY()
+	!info.append(!nE)
+	!info.append(!nN)
+	!info.append(!nU)
+	!info.append(!half)
+	!info.append(!axis)
+	!info.append(!name)
+	return !info
+endmethod
+
+---------------------------------------------------------------------
+-- which of N / S / E / W a side faces, by its normal - the world   --
+-- direction it is nearest to. the four sides of a box are 90      --
+-- degrees apart, so the nearest is always within 45 and the worst --
+-- case is a box turned exactly 45, where two sides tie. 0.766 is  --
+-- cos(40): a box within 5 degrees of that gets '?' rather than a  --
+-- coin toss, and .FaceInfo() refuses to move it by N/S/E/W. a     --
+-- plant grid turned 12.5 (the field case behind Merge's 180-      --
+-- degree note) is nowhere near that                               --
+---------------------------------------------------------------------
+define method .NearestWorld(!nE is REAL, !nN is REAL) is STRING
+	!best = 'N'
+	!bestdot = !nN
+	if (!nE gt !bestdot) then
+		!best = 'E'
+		!bestdot = !nE
+	endif
+	!negN = 0 - !nN
+	if (!negN gt !bestdot) then
+		!best = 'S'
+		!bestdot = !negN
+	endif
+	!negE = 0 - !nE
+	if (!negE gt !bestdot) then
+		!best = 'W'
+		!bestdot = !negE
+	endif
+	if (!bestdot lt 0.766) then
+		return '?'
+	endif
+	return !best
+endmethod
+
+---------------------------------------------------------------------
+-- draws every locked-in box: centre, X/Y/Z axes, and on each of   --
+-- the four sides the N/S/E/W it answers to in Move Face, next to  --
+-- the box's own axis name - Split still asks for X/Y/Z, Move Face --
+-- asks for N/S/E/W, and one drawing has to serve both              --
+---------------------------------------------------------------------
+define method .DrawBoxAxes()
+	!n = !this.mfnames.size()
+	do !i from 1 to !n
+		!this.DrawOneBox(!i)
+	enddo
 endmethod
 
 ---------------------------------------------------------------------
@@ -2428,15 +2698,15 @@ endmethod
 -- showing here is level by construction. a box tilted out of that --
 -- plane by some other route would show (and split) its Z wrong    --
 ---------------------------------------------------------------------
-define method .DrawBoxAxes()
-	!cen = !this.splitcen
-	!xdir = object direction(!this.splitxdirstr)
-	!ydir = object direction(!this.splitydirstr)
+define method .DrawOneBox(!i is REAL)
+	!cen = !this.mfcens[!i]
+	!xdir = object direction(!this.mfxdirs[!i])
+	!ydir = object direction(!this.mfydirs[!i])
 	!zdir = object direction('U')
 
-	!halfx = !this.splitxlen * 0.5
-	!halfy = !this.splitylen * 0.5
-	!halfz = !this.splitzlen * 0.5
+	!halfx = !this.mfxlens[!i] * 0.5
+	!halfy = !this.mfylens[!i] * 0.5
+	!halfz = !this.mfzlens[!i] * 0.5
 
 	------------------------------------------------------------------
 	-- SPHERE and TEXT are written the same E/N/U way as .MarkOne(), --
@@ -2448,20 +2718,28 @@ define method .DrawBoxAxes()
 	!censtr = !this.EnuOf(!cen)
 	AID SPHERE $!censtr DIA 200
 
-	!ptx = !cen.offset(!xdir, !halfx)
-	!ptxstr = !this.EnuOf(!ptx)
 	AID ARROW NUMBER 1 AT $!<cen> DIRECTION $!<xdir> HEIGH $!<halfx> PROPORTION 0.15
-	AID TEXT |X| AT $!ptxstr
-
-	!pty = !cen.offset(!ydir, !halfy)
-	!ptystr = !this.EnuOf(!pty)
 	AID ARROW NUMBER 1 AT $!<cen> DIRECTION $!<ydir> HEIGH $!<halfy> PROPORTION 0.15
-	AID TEXT |Y| AT $!ptystr
+	AID ARROW NUMBER 1 AT $!<cen> DIRECTION $!<zdir> HEIGH $!<halfz> PROPORTION 0.15
 
 	!ptz = !cen.offset(!zdir, !halfz)
 	!ptzstr = !this.EnuOf(!ptz)
-	AID ARROW NUMBER 1 AT $!<cen> DIRECTION $!<zdir> HEIGH $!<halfz> PROPORTION 0.15
 	AID TEXT |Z| AT $!ptzstr
+
+	------------------------------------------------------------------
+	-- one label per side, at the side's centre: '+X = N' and so on --
+	------------------------------------------------------------------
+	do !s from 1 to 4
+		!side = !this.SideNormal(!i, !s)
+		!world = !this.NearestWorld(!side[1], !side[2])
+		!lbl = !side[6] & ' = ' & !world
+		!pE = !cen.east + !side[1] * !side[4]
+		!pN = !cen.north + !side[2] * !side[4]
+		!pU = !cen.up + !side[3] * !side[4]
+		!pt = !this.PosOf(!pE, !pN, !pU)
+		!ptstr = !this.EnuOf(!pt)
+		AID TEXT |$!lbl| AT $!ptstr
+	enddo
 endmethod
 
 ---------------------------------------------------------------------
@@ -2480,8 +2758,12 @@ define method .PickSplitPoint()
 	if (!this.splitequi.eq('')) then
 		return
 	endif
-	if (not(!this.splitx.val) and not(!this.splity.val) and not(!this.splitz.val)) then
-		!!alert.error('Check at least one of X / Y / Z to split along')
+	if (!this.mfnames.size().gt(1)) then
+		!!alert.error('Split cuts one box at a time - select just one (several at once is for Move Face)')
+		return
+	endif
+	if (not(!this.splitew.val) and not(!this.splitns.val) and not(!this.splitud.val)) then
+		!!alert.error('Check at least one of E/W, N/S, U/D to split along')
 		return
 	endif
 
@@ -2571,22 +2853,75 @@ define method .DoSplitAt()
 	!localz = !dU
 
 	------------------------------------------------------------------
+	-- the toggles ask in world terms - E/W, N/S, U/D - and the cut  --
+	-- runs along the box's own X/Y/Z, so first which of X and Y is  --
+	-- the east-west one: whichever way +X faces nearest (the same   --
+	-- .NearestWorld() Show Box labels the sides with). the other is --
+	-- north-south. a box turned about 45 has no answer and is       --
+	-- refused. Z is U/D on every box (Z is U, see .MakeBoxAt())     --
+	------------------------------------------------------------------
+	!px = !this.SideNormal(1, 1)
+	!xworld = !this.NearestWorld(!px[1], !px[2])
+	!py = !this.SideNormal(1, 3)
+	!yworld = !this.NearestWorld(!py[1], !py[2])
+	if (!xworld.eq('?') or !yworld.eq('?')) then
+		!!alert.error('the box is turned about 45 deg - E/W and N/S do not tell its axes apart, nothing split')
+		return
+	endif
+
+	------------------------------------------------------------------
 	-- Offset shifts the cut away from the point actually picked -   --
 	-- e.g. the user clicks the underside of a steel beam to snap to --
-	-- something, but the real cut is 50mm further down (Z offset    --
-	-- -50). blank is 0mm, same as .ubot.val/.utop.val elsewhere      --
+	-- something, but the real cut is 50mm further down (U/D offset  --
+	-- -50). blank is 0mm, same as .ubot.val/.utop.val elsewhere.    --
+	-- + is towards E, N or U, whichever way the box's own axis      --
+	-- points - a box whose +X faces W gets its E/W offset flipped   --
 	------------------------------------------------------------------
-	!xoff = 0
-	if (not(!this.splitxoff.val.unset())) then
-		!xoff = !this.splitxoff.val
+	!ewoff = 0
+	if (not(!this.splitewoff.val.unset())) then
+		!ewoff = !this.splitewoff.val
 	endif
-	!yoff = 0
-	if (not(!this.splityoff.val.unset())) then
-		!yoff = !this.splityoff.val
+	!nsoff = 0
+	if (not(!this.splitnsoff.val.unset())) then
+		!nsoff = !this.splitnsoff.val
 	endif
 	!zoff = 0
-	if (not(!this.splitzoff.val.unset())) then
-		!zoff = !this.splitzoff.val
+	if (not(!this.splitudoff.val.unset())) then
+		!zoff = !this.splitudoff.val
+	endif
+
+	!cutx = false
+	!cuty = false
+	!xoff = 0
+	!yoff = 0
+	!xlbl = ''
+	!ylbl = ''
+	if (!xworld.eq('E') or !xworld.eq('W')) then
+		!cutx = !this.splitew.val
+		!cuty = !this.splitns.val
+		!xoff = !ewoff
+		!yoff = !nsoff
+		!xlbl = 'E/W'
+		!ylbl = 'N/S'
+		if (!xworld.eq('W')) then
+			!xoff = 0 - !xoff
+		endif
+		if (!yworld.eq('S')) then
+			!yoff = 0 - !yoff
+		endif
+	else
+		!cutx = !this.splitns.val
+		!cuty = !this.splitew.val
+		!xoff = !nsoff
+		!yoff = !ewoff
+		!xlbl = 'N/S'
+		!ylbl = 'E/W'
+		if (!xworld.eq('S')) then
+			!xoff = 0 - !xoff
+		endif
+		if (!yworld.eq('W')) then
+			!yoff = 0 - !yoff
+		endif
 	endif
 	!localx = !localx + !xoff
 	!localy = !localy + !yoff
@@ -2599,7 +2934,7 @@ define method .DoSplitAt()
 	-- line the cut up (an elbow, a beam) is not itself inside the   --
 	-- box on every axis - is not an error any more. that axis is    --
 	-- just left uncut, the same as if it had not been checked, and  --
-	-- .splitresult says so afterwards. only every checked axis      --
+	-- the box line says so afterwards. only every checked axis      --
 	-- being unusable at once is an error, since then there would be --
 	-- nothing left to split                                         --
 	------------------------------------------------------------------
@@ -2608,23 +2943,23 @@ define method .DoSplitAt()
 	!usez = false
 	!skipped = ARRAY()
 
-	if (!this.splitx.val) then
+	if (!cutx) then
 		if (!localx.lt(0 - !halfx + 1) or !localx.gt(!halfx - 1)) then
-			!skipped.append('X')
+			!skipped.append(!xlbl)
 		else
 			!usex = true
 		endif
 	endif
-	if (!this.splity.val) then
+	if (!cuty) then
 		if (!localy.lt(0 - !halfy + 1) or !localy.gt(!halfy - 1)) then
-			!skipped.append('Y')
+			!skipped.append(!ylbl)
 		else
 			!usey = true
 		endif
 	endif
-	if (!this.splitz.val) then
+	if (!this.splitud.val) then
 		if (!localz.lt(0 - !halfz + 1) or !localz.gt(!halfz - 1)) then
-			!skipped.append('Z')
+			!skipped.append('U/D')
 		else
 			!usez = true
 		endif
@@ -2723,7 +3058,7 @@ define method .DoSplitAt()
 			endhandle
 		enddo
 		!!alert.error('Split failed (' & !failed & ') - no changes made')
-		AID CLEAR ALL
+		!this.ClearAids()
 		return
 	endif
 
@@ -2738,23 +3073,26 @@ define method .DoSplitAt()
 		!!alert.error('The ' & !created.size().string() & ' new box(es) were created, but the original box could not be deleted - please delete it by hand')
 	endif
 
-	AID CLEAR ALL
+	!this.ClearAids()
 	!msg = !created.size().string() & ' box(es) created'
 	if (!skipped.size().gt(0)) then
 		!skipstr = ''
 		do !s values !skipped
+			if (!skipstr.neq('')) then
+				!skipstr = !skipstr & ' '
+			endif
 			!skipstr = !skipstr & !s
 		enddo
 		!msg = !msg & ' (' & !skipstr & ' skipped - point too close/outside)'
 	endif
-	!this.splitresult.val = !msg
+	!this.boxinfo.val = !msg
 	!this.splitequi = ''
 endmethod
 
 ----------------------------------------------
 -- Move Face (shares the Modify tab) - one   --
--- face of the box goes out or in, the       --
--- opposite face stays where it is           --
+-- face of each locked-in box goes out or    --
+-- in, the opposite face stays where it is   --
 ----------------------------------------------
 ---------------------------------------------------------------------
 -- the box is changed in place - its POS and the length on that     --
@@ -2763,30 +3101,42 @@ endmethod
 -- boxes, this must not. E3D's own XLEN/YLEN/ZLEN edit grows both   --
 -- ends about the centre, which is never what a frame change wants: --
 -- a storey top moves, a frame edge goes out 500 (user, 2026-09-20). --
--- every way in ends up as one outward distance for the chosen face --
--- and goes through .MoveFace()                                      --
+--                                                                  --
+-- the face is named by the world direction it faces - N/S/E/W and  --
+-- Top/Bottom - not by the box's own axes. boxes on one drawing do  --
+-- not agree on their axes: Merge found 'Y is N 12.523 E' next to  --
+-- 'Y is S 12.523 W' in the field, so '+Y' was north on one box and --
+-- south on its neighbour, and with several boxes selected that    --
+-- would push each one's face a different way. N/S/E/W is resolved --
+-- per box to whichever side faces nearest that way (.FaceInfo()), --
+-- so a row of frames all move the same edge. Top/Bottom is world   --
+-- U on every box by construction ('Z is U' in .MakeBoxAt())        --
+--                                                                  --
+-- every way in ends up as one outward distance per box and goes   --
+-- through .MoveFaces()                                             --
 ---------------------------------------------------------------------
 
 ---------------------------------------------------------------------
--- the chosen face as numbers: its outward unit normal in world     --
--- E/N/U (dimensionless, made the offset-and-divide-by-distance way --
--- .DoSplitAt() explains), the half length of the box on that axis, --
--- and which axis it is. [1]=nE [2]=nN [3]=nU [4]=half [5]='X'|'Y'|'Z' --
--- [6]=the face's name for messages. reads the cached geometry, so  --
--- .RefreshBox() has to have run                                    --
+-- the chosen face of box !i as numbers: its outward unit normal in --
+-- world E/N/U, the half length of the box on that axis, which axis --
+-- it is, and its name for messages. [1]=nE [2]=nN [3]=nU [4]=half  --
+-- [5]='X'|'Y'|'Z' [6]=name [7]=true when the face could be worked  --
+-- out, false with [6] saying why not - a box turned about 45 has  --
+-- no side that is clearly N rather than E. reads the cached        --
+-- geometry, so .ReadBoxes() has to have run                        --
 ---------------------------------------------------------------------
-define method .FaceInfo() is ARRAY
-	!cen = !this.splitcen
+define method .FaceInfo(!i is REAL) is ARRAY
 	!sel = !this.faceopt.val
-	!info = ARRAY()
+	!info = object ARRAY()
 
 	if (!sel eq 5 or !sel eq 6) then
 		!info.append(0)
 		!info.append(0)
 		!info.append(1)
-		!info.append(!this.splitzlen * 0.5)
+		!info.append(!this.mfzlens[!i] * 0.5)
 		!info.append('Z')
 		!info.append('Top')
+		!info.append(true)
 		if (!sel eq 6) then
 			!info[3] = -1
 			!info[6] = 'Bottom'
@@ -2794,99 +3144,78 @@ define method .FaceInfo() is ARRAY
 		return !info
 	endif
 
-	!dirstr = !this.splitxdirstr
-	!half = !this.splitxlen * 0.5
-	!axis = 'X'
-	if (!sel eq 3 or !sel eq 4) then
-		!dirstr = !this.splitydirstr
-		!half = !this.splitylen * 0.5
-		!axis = 'Y'
+	------------------------------------------------------------------
+	-- the world direction asked for, as a unit vector in the plane  --
+	------------------------------------------------------------------
+	!want = 'N'
+	!tE = 0
+	!tN = 1
+	if (!sel eq 2) then
+		!want = 'S'
+		!tN = -1
+	elseif (!sel eq 3) then
+		!want = 'E'
+		!tE = 1
+		!tN = 0
+	elseif (!sel eq 4) then
+		!want = 'W'
+		!tE = -1
+		!tN = 0
 	endif
-	!dir = object direction(!dirstr)
-	!ref = !cen.offset(!dir, 1000)
-	!len = !cen.distance(!ref)
-	!nE = (!ref.east - !cen.east) / !len
-	!nN = (!ref.north - !cen.north) / !len
-	!nU = (!ref.up - !cen.up) / !len
-	!name = '+' & !axis
-	if (!sel eq 2 or !sel eq 4) then
-		!nE = 0 - !nE
-		!nN = 0 - !nN
-		!nU = 0 - !nU
-		!name = '-' & !axis
+
+	------------------------------------------------------------------
+	-- the side whose normal points most nearly that way. the same  --
+	-- 0.766 (cos 40) cut-off as .NearestWorld(), so the labels     --
+	-- Show Box draws and the face this moves always agree           --
+	------------------------------------------------------------------
+	!bests = 0
+	!bestdot = -2
+	do !s from 1 to 4
+		!side = !this.SideNormal(!i, !s)
+		!dot = !side[1] * !tE + !side[2] * !tN
+		if (!dot gt !bestdot) then
+			!bestdot = !dot
+			!bests = !s
+		endif
+	enddo
+	if (!bestdot lt 0.766) then
+		!info.append(0)
+		!info.append(0)
+		!info.append(0)
+		!info.append(0)
+		!info.append('')
+		!info.append('no side clearly faces ' & !want & ' - the box is turned about 45 deg, N/S/E/W do not tell its sides apart')
+		!info.append(false)
+		return !info
 	endif
-	!info.append(!nE)
-	!info.append(!nN)
-	!info.append(!nU)
-	!info.append(!half)
-	!info.append(!axis)
-	!info.append(!name)
+
+	!side = !this.SideNormal(!i, !bests)
+	!info.append(!side[1])
+	!info.append(!side[2])
+	!info.append(!side[3])
+	!info.append(!side[4])
+	!info.append(!side[5])
+	!info.append(!want & ' (' & !side[6] & ')')
+	!info.append(true)
 	return !info
 endmethod
 
 ------------------------------------------------------------------
--- Move by: the offset typed in, + out and - in. the box is      --
--- looked up again off CE first, the same as Pick Split Point,   --
--- so Show Box is a preview and not a required step             --
+-- the world coordinate of a face, when it has one: a face square --
+-- to E, N or U (within 1 degree - 0.9998 is cos 1) sits at one    --
+-- coordinate on that axis. Top/Bottom always do; N/S/E/W only    --
+-- when the box is not turned. [1]=true when it has one, [2]=that  --
+-- coordinate, [3]=+1/-1 for which way outward points along the   --
+-- axis, [4]=which axis 'E'|'N'|'U'                                --
 ------------------------------------------------------------------
-define method .MoveFaceBy()
-	if (!this.faceoff.val.unset()) then
-		!!alert.error('Type the distance to move the face by (+ out, - in)')
-		return
-	endif
-	!this.RefreshBox()
-	if (!this.splitequi.eq('')) then
-		return
-	endif
-	!this.MoveFace(!this.faceoff.val)
-endmethod
-
-------------------------------------------------------------------
--- Enter in the coordinate field. the field is also written by   --
--- .ShowFaceCoord() after a pick, and a callback that then fired  --
--- on the same value would move the face a second time (by       --
--- nothing, but with a lookup and a message), so a value equal   --
--- to the last one written or applied is ignored                 --
-------------------------------------------------------------------
-define method .FaceToTyped()
-	if (!this.faceto.val.unset()) then
-		return
-	endif
-	!now = !this.faceto.val.string()
-	if (!now.eq(!this.facetolast)) then
-		return
-	endif
-	!this.facetolast = !now
-	!this.MoveFaceTo()
-endmethod
-
-------------------------------------------------------------------
--- a world coordinate for the face, typed. only a face square to --
--- the world axes has one - Top/Bottom always (U), +X..-Y only   --
--- when the box is not turned. the outward distance is how far   --
--- the face's present coordinate is from the one typed, signed   --
--- by which way outward points along that axis                   --
-------------------------------------------------------------------
-define method .MoveFaceTo()
-	if (!this.faceto.val.unset()) then
-		!!alert.error('Type the coordinate to move the face to, or Pick a point')
-		return
-	endif
-	!this.RefreshBox()
-	if (!this.splitequi.eq('')) then
-		return
-	endif
-	!info = !this.FaceInfo()
+define method .FaceWorldCoord(!i is REAL, !info is ARRAY) is ARRAY
+	!cen = !this.mfcens[!i]
 	!nE = !info[1]
 	!nN = !info[2]
 	!nU = !info[3]
 	!half = !info[4]
-	!cen = !this.splitcen
+	!r = object ARRAY()
 
-	------------------------------------------------------------------
-	-- which world axis the normal lies along, if any. 0.9998 is    --
-	-- cos(1 degree)                                                 --
-	------------------------------------------------------------------
 	!sign = 0
 	!cencoord = 0
 	!axisname = ''
@@ -2911,42 +3240,159 @@ define method .MoveFaceTo()
 		endif
 		!cencoord = !cen.north
 		!axisname = 'N'
-	else
-		!!alert.error('face ' & !info[6] & ' is not square to E/N/U - the box is turned. use the offset, or Pick a point')
-		return
 	endif
 
-	!facecoord = !cencoord + !sign * !half
-	!d = (!this.faceto.val - !facecoord) * !sign
-	!this.MoveFace(!d)
-	!this.ShowFaceCoord()
+	if (!sign eq 0) then
+		!r.append(false)
+		!r.append(0)
+		!r.append(0)
+		!r.append('')
+		return !r
+	endif
+	!r.append(true)
+	!r.append(!cencoord + !sign * !half)
+	!r.append(!sign)
+	!r.append(!axisname)
+	return !r
 endmethod
 
 ------------------------------------------------------------------
--- after a move: the face's world coordinate into the field, for --
--- a face square to E/N/U; a turned box's X/Y face has no single --
--- one, so the field is blanked. reads the cache .MoveFace() has  --
--- just refreshed. the value is remembered so the field's own    --
--- callback does not act on it                                   --
+-- how far the chosen face of box !i has to go outward (negative --
+-- for inward) for one of the three ways of saying where it goes: --
+-- 'off' the offset field, the same for every box; 'to' the       --
+-- coordinate field, each box its own so faces that started at   --
+-- different places all end at the one coordinate; 'pt' the      --
+-- picked point, each box its face moved to pass through it,     --
+-- i.e. by however far the point is outside (or inside) the face --
+-- along its normal - a row of frames sharing a match line all   --
+-- land on the one plane through the point. [1]=true with [2]=   --
+-- the distance, or [1]=false with [2]=why not                    --
 ------------------------------------------------------------------
-define method .ShowFaceCoord()
-	if (!this.splitequi.eq('')) then
+define method .FaceDistance(!i is REAL, !mode is STRING) is ARRAY
+	!r = object ARRAY()
+	!info = !this.FaceInfo(!i)
+	if (not(!info[7])) then
+		!r.append(false)
+		!r.append(!info[6])
+		return !r
+	endif
+	!cen = !this.mfcens[!i]
+	!d = 0
+
+	if (!mode.eq('off')) then
+		!d = !this.faceoff.val
+	elseif (!mode.eq('pt')) then
+		!posw = !this.facepickpos.wrt(WORL)
+		!dE = !posw.east - !cen.east
+		!dN = !posw.north - !cen.north
+		!dU = !posw.up - !cen.up
+		!along = !dE * !info[1] + !dN * !info[2] + !dU * !info[3]
+		!d = !along - !info[4]
+	else
+		!wc = !this.FaceWorldCoord(!i, !info)
+		if (not(!wc[1])) then
+			!r.append(false)
+			!r.append('face ' & !info[6] & ' is not square to E/N/U - the box is turned. use the offset, or Pick a point')
+			return !r
+		endif
+		!d = (!this.faceto.val - !wc[2]) * !wc[3]
+	endif
+
+	!r.append(true)
+	!r.append(!d)
+	return !r
+endmethod
+
+------------------------------------------------------------------
+-- Move by: the offset typed in, + out and - in. the boxes are   --
+-- looked up again first, the same as Pick Split Point, so Show  --
+-- Box is a preview and not a required step                      --
+------------------------------------------------------------------
+define method .MoveFaceBy()
+	if (!this.faceoff.val.unset()) then
+		!!alert.error('Type the distance to move the face by (+ out, - in)')
 		return
 	endif
-	!info = !this.FaceInfo()
-	!cen = !this.splitcen
-	!coord = 0
-	!found = false
-	if (!info[3].abs() gt 0.9998) then
-		!coord = !cen.up + !info[3] * !info[4]
-		!found = true
-	elseif (!info[1].abs() gt 0.9998) then
-		!coord = !cen.east + !info[1] * !info[4]
-		!found = true
-	elseif (!info[2].abs() gt 0.9998) then
-		!coord = !cen.north + !info[2] * !info[4]
-		!found = true
+	!this.RefreshBox()
+	if (!this.mfnames.size().eq(0)) then
+		return
 	endif
+	!this.MoveFaces('off')
+endmethod
+
+------------------------------------------------------------------
+-- Enter in the coordinate field. the field is also written by   --
+-- .ShowFaceCoord() after a move, and a callback that then fired  --
+-- on the same value would move the face a second time (by       --
+-- nothing, but with a lookup and a message), so a value equal   --
+-- to the last one written or applied is ignored                 --
+------------------------------------------------------------------
+define method .FaceToTyped()
+	if (!this.faceto.val.unset()) then
+		return
+	endif
+	!now = !this.faceto.val.string()
+	if (!now.eq(!this.facetolast)) then
+		return
+	endif
+	!this.facetolast = !now
+	!this.MoveFaceTo()
+endmethod
+
+------------------------------------------------------------------
+-- a world coordinate for the face, typed. only a face square to --
+-- the world axes has one - Top/Bottom always (U), N/S/E/W only  --
+-- when the box is not turned; .FaceDistance() sorts that out    --
+-- box by box                                                     --
+------------------------------------------------------------------
+define method .MoveFaceTo()
+	if (!this.faceto.val.unset()) then
+		!!alert.error('Type the coordinate to move the face to, or Pick a point')
+		return
+	endif
+	!this.RefreshBox()
+	if (!this.mfnames.size().eq(0)) then
+		return
+	endif
+	!this.MoveFaces('to')
+endmethod
+
+------------------------------------------------------------------
+-- after a move: the face's world coordinate into the field, when --
+-- every box's face has one and they all agree (after 'to' they   --
+-- do by construction; after an offset or a pick on a row that    --
+-- was already flush they still do). otherwise the field is       --
+-- blanked - a turned box's N/S/E/W face has no single coordinate --
+-- and boxes left at different places have no one number. reads  --
+-- the cache .MoveFaces() has just refreshed. the value is        --
+-- remembered so the field's own callback does not act on it      --
+------------------------------------------------------------------
+define method .ShowFaceCoord()
+	!n = !this.mfnames.size()
+	!found = false
+	!coord = 0
+	do !i from 1 to !n
+		!info = !this.FaceInfo(!i)
+		!ok = !info[7]
+		if (!ok) then
+			!wc = !this.FaceWorldCoord(!i, !info)
+			!ok = !wc[1]
+		endif
+		if (!ok and !i.eq(1)) then
+			!coord = !wc[2]
+			!found = true
+		elseif (!ok) then
+			!diff = !wc[2] - !coord
+			if (!diff.abs() gt 0.5) then
+				!ok = false
+			endif
+		endif
+		if (not(!ok)) then
+			!found = false
+			break
+		endif
+	enddo
+
 	if (!found) then
 		!str = !coord.string('D1').replace('mm', '')
 		!this.faceto.val = !str.real()
@@ -2960,21 +3406,23 @@ define method .ShowFaceCoord()
 endmethod
 
 ------------------------------------------------------------------
--- Pick on the coordinate row: the face is moved to pass through --
--- the point, i.e. by however far the point is outside (or       --
--- inside) the face along its normal. the box is looked up before --
--- the pick and the geometry cached, the same as Pick Split Point --
+-- Pick on the coordinate row: each box's face is moved to pass  --
+-- through the point. the boxes are looked up before the pick    --
+-- and the geometry cached, the same as Pick Split Point         --
 ------------------------------------------------------------------
 define method .PickFacePoint()
 	!this.RefreshBox()
-	if (!this.splitequi.eq('')) then
+	if (!this.mfnames.size().eq(0)) then
 		return
 	endif
-	!info = !this.FaceInfo()
+	!what = !this.faceopt.dtext[!this.faceopt.val]
+	if (!this.mfnames.size().gt(1)) then
+		!what = !what & ' of ' & !this.mfnames.size().string() & ' boxes'
+	endif
 
 	!this.DropPicking()
 	!packet = object EDGPACKET()
-	!packet.definePosition('Point to move face ' & !info[6] & ' to - it moves as soon as you pick')
+	!packet.definePosition('Point to move face ' & !what & ' to - it moves as soon as you pick')
 	!packet.description = !this.edgdesc
 	!packet.action = |!!DrawingPlan.FacePointPicked(!this.return[1].position)|
 	!packet.remove = false
@@ -2989,72 +3437,111 @@ endmethod
 define method .FacePointPicked(!pos is POSITION)
 	!!DrawingPlan.facepickpos = !pos
 	!!DrawingPlan.DropPicking()
-	!!DrawingPlan.MoveFaceToPoint()
-endmethod
-
-define method .MoveFaceToPoint()
-	!posw = !this.facepickpos.wrt(WORL)
-	!cen = !this.splitcen
-	!info = !this.FaceInfo()
-	!dE = !posw.east - !cen.east
-	!dN = !posw.north - !cen.north
-	!dU = !posw.up - !cen.up
-	!along = !dE * !info[1] + !dN * !info[2] + !dU * !info[3]
-	!d = !along - !info[4]
-	!this.MoveFace(!d)
-	!this.ShowFaceCoord()
+	!!DrawingPlan.MoveFaces('pt')
 endmethod
 
 ---------------------------------------------------------------------
--- the move itself: !d is how far the chosen face goes outward      --
+-- the move, over every locked-in box. !mode says where each box's  --
+-- distance comes from (see .FaceDistance()). a box whose face      --
+-- cannot be worked out, or cannot be moved, is reported and the    --
+-- rest still go - with several selected, one stray box should not  --
+-- stop the row. the boxes are re-read afterwards (not re-selected: --
+-- a pick in between may have changed the model selection) so the   --
+-- next move starts from the new sizes                              --
+---------------------------------------------------------------------
+define method .MoveFaces(!mode is STRING)
+	!n = !this.mfnames.size()
+	!moved = 0
+	!probs = object ARRAY()
+
+	do !i from 1 to !n
+		!r = !this.FaceDistance(!i, !mode)
+		if (not(!r[1])) then
+			!probs.append(!this.mfnames[!i] & ': ' & !r[2])
+			skip
+		endif
+		!d = !r[2]
+		if (!d.abs() lt 0.5) then
+			skip
+		endif
+		!err = !this.MoveOneFace(!i, !d)
+		if (!err.neq('')) then
+			!probs.append(!this.mfnames[!i] & ': ' & !err)
+			skip
+		endif
+		!moved = !moved + 1
+	enddo
+
+	------------------------------------------------------------------
+	-- the box line, re-read, is the report: the new lengths and U  --
+	-- (one box) or the same names (several). the one thing it     --
+	-- cannot show is that nothing happened at all, so that case    --
+	-- says so; a box with a problem gets its own alert below       --
+	------------------------------------------------------------------
+	!this.ReadBoxes()
+	!this.ShowFaceCoord()
+	if (!moved.eq(0) and !probs.size().eq(0)) then
+		!!alert.message('face is already there - nothing moved')
+	endif
+
+	if (!probs.size().gt(0)) then
+		!txt = ''
+		do !p values !probs
+			if (!txt.neq('')) then
+				!txt = !txt & '; '
+			endif
+			!txt = !txt & !p
+		enddo
+		!!alert.error(!txt)
+	endif
+endmethod
+
+---------------------------------------------------------------------
+-- the move of one box: !d is how far its chosen face goes outward  --
 -- (negative for inward). the box keeps its orientation; its centre --
 -- goes half of !d along the face normal and the length on that     --
--- axis grows by !d. CE is put back on the box by name rather than  --
--- trusted, since a pick may have been in between. the cache and    --
--- the axes are refreshed afterwards so the next move starts from   --
--- the new size                                                     --
+-- axis grows by !d. CE is put on the box by name rather than       --
+-- trusted, since a pick may have been in between. '' back when it  --
+-- worked, otherwise what went wrong, for .MoveFaces() to report   --
 ---------------------------------------------------------------------
-define method .MoveFace(!d is REAL)
-	if (!d.abs() lt 0.5) then
-		!this.splitresult.val = 'face is already there - nothing moved'
-		return
+define method .MoveOneFace(!i is REAL, !d is REAL) is STRING
+	!info = !this.FaceInfo(!i)
+	if (not(!info[7])) then
+		return !info[6]
 	endif
-	!info = !this.FaceInfo()
 	!nE = !info[1]
 	!nN = !info[2]
 	!nU = !info[3]
 	!half = !info[4]
 	!axis = !info[5]
 	!name = !info[6]
+	!equi = !this.mfnames[!i]
 
 	!oldlen = !half * 2
 	!newlen = !oldlen + !d
 	if (!newlen lt 1) then
-		!!alert.error('moving face ' & !name & ' by ' & !d.string('D0') & ' would leave the box thinner than 1mm on ' & !axis)
-		return
+		return 'moving face ' & !name & ' by ' & !d.string('D0') & ' would leave the box thinner than 1mm on ' & !axis
 	endif
 
-	!cen = !this.splitcen
+	!cen = !this.mfcens[!i]
 	!shift = !d * 0.5
 	!newE = !cen.east + !nE * !shift
 	!newN = !cen.north + !nN * !shift
 	!newU = !cen.up + !nU * !shift
 	!pcen = !this.PosOf(!newE, !newN, !newU)
 
-	!equinav = !this.NavName(!this.splitequi)
+	!equinav = !this.NavName(!equi)
 	!ok = true
 	$!equinav
 	handle any
 		!ok = false
 	endhandle
 	if (not(!ok)) then
-		!!alert.error('cannot get back to ' & !this.splitequi)
-		return
+		return 'cannot get back to ' & !equi
 	endif
 	!err = !this.BoxUnderEqui()
 	if (!err.neq('')) then
-		!!alert.error(!err)
-		return
+		return !err
 	endif
 
 	POS $!pcen
@@ -3062,8 +3549,7 @@ define method .MoveFace(!d is REAL)
 		!ok = false
 	endhandle
 	if (not(!ok)) then
-		!!alert.error('cannot move ' & !this.splitequi)
-		return
+		return 'cannot move ' & !equi
 	endif
 	------------------------------------------------------------------
 	-- a handle only catches the command right before it, so each   --
@@ -3086,12 +3572,9 @@ define method .MoveFace(!d is REAL)
 		endhandle
 	endif
 	if (not(!ok)) then
-		!!alert.error('moved the centre of ' & !this.splitequi & ' but could not set its ' & !axis & ' length - check the box')
-		return
+		return 'moved the centre of ' & !equi & ' but could not set its ' & !axis & ' length - check the box'
 	endif
-
-	!this.RefreshBox()
-	!this.splitresult.val = 'face ' & !name & ' of ' & !this.splitequi & ' moved ' & !d.string('D0') & ' out - ' & !axis & ' length ' & !oldlen.string('D0') & ' -> ' & !newlen.string('D0')
+	return ''
 endmethod
 
 
@@ -3336,12 +3819,12 @@ define method .MergeBoxes()
 		endif
 	enddo
 
-	AID CLEAR ALL
+	!this.ClearAids()
 	if (!ndel.lt(!names.size())) then
 		!nleft = !names.size() - !ndel
 		!!alert.error(!nleft.string() & ' of the merged box(es) could not be deleted - please delete them by hand')
 	endif
-	!this.splitresult.val = 'Merged ' & !ndel.string() & ' box(es) into 1'
+	!this.boxinfo.val = 'Merged ' & !ndel.string() & ' box(es) into 1'
 endmethod
 
 ----------------------------------------------
@@ -4753,9 +5236,7 @@ define method .ChkShowLevel(!lk is REAL, !cj is REAL, !tol is REAL)
 	!want = !this.chklvu[!lk]
 	!parts = !this.chklvd[!lk].split('~')
 
-	AID CLEAR ALL
-	handle any
-	endhandle
+	!this.ClearAids()
 
 	------------------------------------------------------------------
 	-- every face that meets here, each drawn at the height it is    --
@@ -4876,9 +5357,7 @@ define method .CheckPicked()
 	!u = !p[9]
 	!lbl = !w[1] & '-' & !this.ChkNum(!w[2])
 
-	AID CLEAR ALL
-	handle any
-	endhandle
+	!this.ClearAids()
 
 	!this.ChkPlan(!ia, !u, '')
 	!this.ChkPlan(!ib, !u, '')
@@ -4900,6 +5379,6 @@ endmethod
 
 define method .Close()
 	!this.DropPicking()
-	AID CLEAR ALL
+	!this.ClearAids()
 	kill !!DrawingPlan
 endmethod
