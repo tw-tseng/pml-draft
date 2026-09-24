@@ -1301,6 +1301,65 @@ define method .AssignNumbers()
 		endif
 	enddo
 
+	------------------------------------------------------------------
+	-- Model Explorer lists a zone's members in the order they were  --
+	-- made, not by name, so a batch numbered across stacks read     --
+	-- 001, 004, 007, 010, 002, 003... there even though no number   --
+	-- was missing (user, 2026-09-24). each box is moved to just      --
+	-- after the one numbered before it, so the tree reads in number --
+	-- order. boxes outside the selection keep their places; a box   --
+	-- in another zone starts that zone's run afresh. REORDER is run --
+	-- from the owner, the way admmaturity.pmlfrm does it. a box     --
+	-- that will not move is only out of place in the tree, so it is --
+	-- counted in the dump and nothing more                           --
+	------------------------------------------------------------------
+	!prevref = ''
+	!prevown = ''
+	!nreord = 0
+	!nbadord = 0
+	do !k from 1 to !n
+		!ref = !refs[!k]
+		!ok = true
+		if (!ref.eq('') or !targets[!k].eq('')) then
+			!ok = false
+		endif
+		!own = ''
+		if (!ok) then
+			$!ref
+			handle any
+				!ok = false
+			endhandle
+		endif
+		if (!ok) then
+			var !own owner
+			handle any
+				!ok = false
+			endhandle
+		endif
+		if (!ok) then
+			if (!prevref.neq('') and !own.eq(!prevown)) then
+				$!own
+				handle any
+					!ok = false
+				endhandle
+				if (!ok) then
+					REORDER $!ref AFTER $!prevref
+					handle any
+						!ok = false
+					endhandle
+				endif
+				if (!ok) then
+					!nreord = !nreord + 1
+				else
+					!nbadord = !nbadord + 1
+				endif
+			endif
+			!prevref = !ref
+			!prevown = !own
+		endif
+	enddo
+	!dbg.append('ORDER ' & !nreord.string() & ' moved in the tree, ' & !nbadord.string() & ' would not move')
+
 	do !k from 1 to !n
 		!dbg.append('OUT  ' & !k.string() & '   ' & !names[!k] & ' -> ' & !targets[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]))
 	enddo
