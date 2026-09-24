@@ -263,8 +263,9 @@ layout form !!DrawingPlan dialog dock
 		-- Name - the drawing number is the EQUI's name, and the one   --
 		-- thing about a box this side still sets. two ways: one box   --
 		-- typed in by hand, or a multi-selection numbered in one go   --
-		-- (Prefix + a running sequence, ordered by two axes - the 2nd --
-		-- breaks ties on the 1st - rather than by click order). rev   --
+		-- (Prefix + a running sequence, along one direction and then --
+		-- a second, rather than in click order - .AssignNumbers()).   --
+		-- rev                                                           --
 		-- and the titles are the DRAFT side's now (user, 2026-09-24), --
 		-- which is why the Info tab that also held them is gone       --
 		----------------------------------------------------------------
@@ -279,8 +280,8 @@ layout form !!DrawingPlan dialog dock
 				text .batchprefix 'Prefix'   tagwidth 10 width 14 is STRING
 				text .batchstart  'Start at' at xmax.batchprefix+1 ymin.batchprefix tagwidth 10 width 10 is STRING
 
-				option .batchdir  'Order by (1st)' at xmin.batchprefix ymax.batchprefix+0.3 width 22
-				option .batchdir2 'Order by (2nd)' at xmin.batchdir    ymax.batchdir+0.2   width 22
+				option .batchdir  'Number along' at xmin.batchprefix ymax.batchprefix+0.3 tagwidth 12 width 22
+				option .batchdir2 'Then'         at xmin.batchdir    ymax.batchdir+0.2   tagwidth 12 width 22
 				toggle .batchskip at xmin.batchdir2 ymax.batchdir2+0.2 'Skip already-named'
 
 				button .batchgo 'Assign Numbers' at xmin.batchskip ymax.batchskip+0.3 width 16 call |!This.AssignNumbers()|
@@ -493,11 +494,15 @@ define method .DrawingPlan()
 	!this.ChkClear()
 
 	------------------------------------------------------------------
-	-- Batch's Order By choices, 1st and 2nd share the same list.   --
-	-- default is 'Bottom -> Top (U)' then 'West -> East (E)' -      --
-	-- storey first, left to right within a storey second, which is  --
-	-- the combination the user actually asked for. 'left to right'  --
-	-- only has a fixed meaning on a plan that follows the north-up  --
+	-- Name tab's two directions share the same list. the first is  --
+	-- the way consecutive numbers run, the second the way the next  --
+	-- run starts (user, 2026-09-24 - read the other way round, 1st  --
+	-- as the grouping, S->N then Bottom->Top numbered each stack    --
+	-- bottom to top when the user meant across). default is along   --
+	-- 'West -> East (E)' then 'Bottom -> Top (U)' - left to right   --
+	-- along a storey, then the next storey up, which is what the    --
+	-- old default meant to give. 'left to right' only has a fixed   --
+	-- meaning on a plan that follows the north-up  --
 	-- convention, where it reads as West -> East - the options are  --
 	-- spelled out in compass terms instead of guessing that         --
 	-- convention silently                                           --
@@ -510,10 +515,10 @@ define method .DrawingPlan()
 	!dirs.append('South -> North (N)')
 	!dirs.append('North -> South (N)')
 	!this.batchdir.dtext = !dirs
-	!this.batchdir.val = 1
+	!this.batchdir.val = 3
 	------------------------------------------------------------------
-	-- 2nd also offers '(none)' - not every batch needs a tie        --
-	-- breaker, and forcing one would sort ties by whichever axis    --
+	-- Then also offers '(none)' - a single row needs no second      --
+	-- direction, and forcing one would order ties by whichever axis --
 	-- happened to be picked rather than leaving them as found        --
 	------------------------------------------------------------------
 	!dirs2 = ARRAY()
@@ -525,7 +530,7 @@ define method .DrawingPlan()
 	!dirs2.append('South -> North (N)')
 	!dirs2.append('North -> South (N)')
 	!this.batchdir2.dtext = !dirs2
-	!this.batchdir2.val = 4
+	!this.batchdir2.val = 2
 	!this.batchskip.val = true
 	!this.batchresult.val = ''
 
@@ -1036,6 +1041,22 @@ define method .AssignNumbers()
 		!ascend2 = false
 	endif
 
+	------------------------------------------------------------------
+	-- 'Number along' is the way consecutive numbers run, so it is    --
+	-- the minor key; 'Then' is the major one, the rows. the sort     --
+	-- below treats key 1 as major, so with Then in use the two swap  --
+	-- here and everything after reads key 1 = Then, key 2 = along.   --
+	-- with Then '(none)' there is one key and nothing to swap         --
+	------------------------------------------------------------------
+	if (!use2) then
+		!tmpaxis = !axis1
+		!axis1 = !axis2
+		!axis2 = !tmpaxis
+		!tmpasc = !ascend1
+		!ascend1 = !ascend2
+		!ascend2 = !tmpasc
+	endif
+
 	var !projid proj id
 	!sitename = '/' & !projid & '_DrawingPlanBox'
 
@@ -1118,7 +1139,7 @@ define method .AssignNumbers()
 	-- read from here, not from the model tree                         --
 	------------------------------------------------------------------
 	!dbg = ARRAY()
-	!dbg.append('BATCH 1st=' & !dir1 & ' axis=' & !axis1 & ' asc=' & !ascend1.string() & '   2nd=' & !dir2 & ' use=' & !use2.string() & ' axis=' & !axis2 & ' asc=' & !ascend2.string())
+	!dbg.append('BATCH along=' & !dir1 & '   then=' & !dir2 & '   key1 (rows) axis=' & !axis1 & ' asc=' & !ascend1.string() & '   key2 (along) axis=' & !axis2 & ' asc=' & !ascend2.string() & ' use=' & !use2.string())
 	!ng = !names.size()
 	do !k from 1 to !ng
 		!dbg.append('IN   ' & !names[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]))
@@ -1130,7 +1151,7 @@ define method .AssignNumbers()
 	-- cost does not matter and this avoids needing a sort-by-key    --
 	-- builtin, which nothing else in this codebase uses.            --
 	--                                                                --
-	-- 2nd only breaks ties on 1st, and "tie" allows a small          --
+	-- key 2 only breaks ties on key 1, and "tie" allows a small      --
 	-- tolerance rather than exact equality - boxes on what is        --
 	-- obviously the same storey can differ by floating point noise  --
 	-- even though they came from the same split                      --
