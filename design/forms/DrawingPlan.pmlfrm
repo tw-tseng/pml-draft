@@ -260,38 +260,33 @@ layout form !!DrawingPlan dialog dock
 		exit
 
 		----------------------------------------------------------------
-		-- drawing number and the sheet texts. these end up as TEXT    --
-		-- elements under the EQUI in the 'tag:value' shape the        --
-		-- drawing side reads back                                     --
+		-- Name - the drawing number is the EQUI's name, and the one   --
+		-- thing about a box this side still sets. two ways: one box   --
+		-- typed in by hand, or a multi-selection numbered in one go   --
+		-- (Prefix + a running sequence, ordered by two axes - the 2nd --
+		-- breaks ties on the 1st - rather than by click order). rev   --
+		-- and the titles are the DRAFT side's now (user, 2026-09-24), --
+		-- which is why the Info tab that also held them is gone       --
 		----------------------------------------------------------------
-		frame .infofr 'Info' width 66
-			text .dwgno 'Drawing No.' tagwidth 12 width 40 is STRING
+		frame .batchfr 'Name' width 66
+			frame .namesub 'One box (CE)' width 62
+				text .dwgno 'Drawing No.' tagwidth 12 width 22 is STRING
+				button .nameread 'Read CE' at xmax.dwgno+1 ymin.dwgno width 10 call |!This.ReadBoxName()|
+				button .namego 'Rename' at xmax.nameread+1 ymin.dwgno width 10 call |!This.RenameBox()|
+			exit
 
-			text .revtext    'Rev'     at xmin.dwgno    ymax.dwgno+0.3      tagwidth 12 width 40 is STRING
-			text .title1text 'Title 1' at xmin.revtext  ymax.revtext+0.1    tagwidth 12 width 40 is STRING
-			text .title2text 'Title 2' at xmin.revtext  ymax.title1text+0.1 tagwidth 12 width 40 is STRING
-			text .title3text 'Title 3' at xmin.revtext  ymax.title2text+0.1 tagwidth 12 width 40 is STRING
+			frame .numsub 'Selected boxes - number in order' at xmin.namesub ymax.namesub+0.3 width 62
+				text .batchprefix 'Prefix'   tagwidth 10 width 14 is STRING
+				text .batchstart  'Start at' at xmax.batchprefix+1 ymin.batchprefix tagwidth 10 width 10 is STRING
 
-			button .inforead  'Read CE' at xmin.revtext   ymax.title3text+0.3 width 12 call |!This.ReadInfo()|
-			button .infoapply 'Apply'   at xmax.inforead+1 ymin.inforead      width 12 call |!This.ApplyInfo()|
-		exit
+				option .batchdir  'Order by (1st)' at xmin.batchprefix ymax.batchprefix+0.3 width 22
+				option .batchdir2 'Order by (2nd)' at xmin.batchdir    ymax.batchdir+0.2   width 22
+				toggle .batchskip at xmin.batchdir2 ymax.batchdir2+0.2 'Skip already-named'
 
-		----------------------------------------------------------------
-		-- name a multi-selection of boxes in one go: Prefix + a       --
-		-- running sequence, ordered by two axes (2nd breaks ties on   --
-		-- the 1st) rather than by selection/click order               --
-		----------------------------------------------------------------
-		frame .batchfr 'Batch' width 66
-			text .batchprefix 'Prefix'   tagwidth 10 width 14 is STRING
-			text .batchstart  'Start at' at xmax.batchprefix+1 ymin.batchprefix tagwidth 10 width 10 is STRING
+				button .batchgo 'Assign Numbers' at xmin.batchskip ymax.batchskip+0.3 width 16 call |!This.AssignNumbers()|
 
-			option .batchdir  'Order by (1st)' at xmin.batchprefix ymax.batchprefix+0.3 width 22
-			option .batchdir2 'Order by (2nd)' at xmin.batchdir    ymax.batchdir+0.2   width 22
-			toggle .batchskip at xmin.batchdir2 ymax.batchdir2+0.2 'Skip already-named'
-
-			button .batchgo 'Assign Numbers' at xmin.batchskip ymax.batchskip+0.3 width 16 call |!This.AssignNumbers()|
-
-			para .batchresult at xmin.batchgo ymax.batchgo+0.3 text '' width 62
+				para .batchresult at xmin.batchgo ymax.batchgo+0.3 text '' width 58
+			exit
 		exit
 
 		-------------------------------------------
@@ -445,7 +440,7 @@ define method .DrawingPlan()
 	!this.ClearAids()
 	!this.edgdesc = 'Drawing Plan Box Picking'
 	!this.ClearPoints()
-	!this.ClearInfo()
+	!this.dwgno.val = ''
 	!this.log.clear()
 	!this.splitequi = ''
 	!this.mfnames = object ARRAY()
@@ -750,11 +745,10 @@ endmethod
 -- same 'tag:value' shape DrawingPlan1.Apply() already scans for.   --
 --                                                                  --
 -- set, not add: an existing tag of the same name is overwritten,   --
--- so pressing Apply twice on a box, or picking a new box while the --
--- Info tab still holds the last sheet's titles, cannot leave two   --
--- 'rev:' texts under one EQUI for the drawing side to choose       --
--- between. a blank value is left alone rather than clearing the    --
--- tag, so Apply can never take information off a box by accident   --
+-- so writing the same box twice cannot leave two 'rev:' texts      --
+-- under one EQUI to choose between. a blank value is left alone    --
+-- rather than clearing the tag, so a caller with nothing to say    --
+-- can never take information off a box by accident                 --
 --                                                                  --
 -- navigating back to the EQUI matters - NEW TEXT leaves CE on the  --
 -- text it just made, so without this the four tags would be built  --
@@ -791,8 +785,8 @@ endmethod
 
 ---------------------------------------------------------------------
 -- the value after 'tag:' on the box's TEXT, or '' when there is    --
--- no such tag yet. used by Read CE to bring a box's existing       --
--- rev/titles into the Info tab                                     --
+-- no such tag yet. used by Split and Merge to carry a box's        --
+-- rev/titles over to the boxes that replace it                     --
 ---------------------------------------------------------------------
 define method .TagValue(!equinav is STRING, !tag is STRING) is STRING
 	!found = !this.FindTagText(!equinav, !tag)
@@ -813,7 +807,7 @@ endmethod
 -- the EQUI of the box the user has navigated to, or an empty       --
 -- string when the current element is not one of ours - in which    --
 -- case the reason has already been put on screen.                  --
--- shared by Delete Box and by Apply on the Info tab                 --
+-- shared by Delete Box and by Rename on the Name tab               --
 ---------------------------------------------------------------------
 define method .CurrentBoxEqui() is STRING
 	var !projid proj id
@@ -847,95 +841,82 @@ define method .CurrentBoxEqui() is STRING
 endmethod
 
 ---------------------------------------------------------------------
--- Info tab - put the sheet information on the box the user has     --
--- navigated to. this is the way the boxes get labelled in          --
--- practice: pick all the frames first, then go round them one at   --
--- a time filling in the numbers                                    --
+-- Name tab, one box - gives the box the user has navigated to the  --
+-- drawing number typed in. the way a single frame gets numbered    --
+-- or renumbered by hand; a whole selection at once is             --
+-- .AssignNumbers()                                                  --
 ---------------------------------------------------------------------
-define method .ApplyInfo()
+define method .RenameBox()
+	!dwgno = !this.dwgno.val
+	if (!dwgno.eq('')) then
+		!!alert.error('Type the Drawing No. first (Read CE shows what the box has now)')
+		return
+	endif
 	!equi = !this.CurrentBoxEqui()
 	if (!equi.eq('')) then
 		return
 	endif
 	!equinav = !this.NavName(!equi)
 
-	!dwgno = !this.dwgno.val
-	if (!dwgno.neq('')) then
-		!fullname = !dwgno
-		if (!fullname.substring(1,1).neq('/')) then
-			!fullname = '/' & !fullname
-		endif
-
-		---------------------------------------------------------------
-		-- E3D refuses a duplicate name, and it refuses it with its   --
-		-- own error rather than anything this form can explain, so   --
-		-- look the drawing number up first and say who has it.       --
-		-- finding it on the very box being labelled is not a clash - --
-		-- that is just Apply pressed a second time                   --
-		---------------------------------------------------------------
-		!taken = false
-		!existing = ''
-		$!fullname
-		handle any
-			!taken = false
-		elsehandle none
-			!taken = true
-			var !existing namn of ce
-		endhandle
-		$!equinav
-
-		if (!taken and !existing.neq(!equi)) then
-			!!alert.error('Drawing No. ' & !dwgno & ' is already used by /' & !existing)
-			return
-		endif
-
-		!ok = true
-		NAME $!fullname
-		handle any
-			!ok = false
-		endhandle
-		if (not(!ok)) then
-			!!alert.error('Cannot name the box ' & !fullname)
-			return
-		endif
-
-		var !equi namn of ce
-		!equinav = !this.NavName(!equi)
+	!fullname = !dwgno
+	if (!fullname.substring(1,1).neq('/')) then
+		!fullname = '/' & !fullname
 	endif
 
-	!this.SetTagText(!equinav, 'rev', !this.revtext.val)
-	!this.SetTagText(!equinav, 'title1', !this.title1text.val)
-	!this.SetTagText(!equinav, 'title2', !this.title2text.val)
-	!this.SetTagText(!equinav, 'title3', !this.title3text.val)
+	---------------------------------------------------------------
+	-- E3D refuses a duplicate name, and it refuses it with its   --
+	-- own error rather than anything this form can explain, so   --
+	-- look the drawing number up first and say who has it.       --
+	-- finding it on the very box being labelled is not a clash - --
+	-- that is just Rename pressed a second time                  --
+	---------------------------------------------------------------
+	!taken = false
+	!existing = ''
+	$!fullname
+	handle any
+		!taken = false
+	elsehandle none
+		!taken = true
+		var !existing namn of ce
+	endhandle
 	$!equinav
+
+	if (!taken and !existing.neq(!equi)) then
+		!!alert.error('Drawing No. ' & !dwgno & ' is already used by /' & !existing)
+		return
+	endif
+
+	!ok = true
+	NAME $!fullname
+	handle any
+		!ok = false
+	endhandle
+	if (not(!ok)) then
+		!!alert.error('Cannot name the box ' & !fullname)
+		return
+	endif
+
+	var !equi namn of ce
+	!this.dwgno.val = !equi
 endmethod
 
 ---------------------------------------------------------------------
--- Info tab - Read CE. loads the Info tab from the box the user has --
--- navigated to, so Apply is not working blind: without this, an    --
--- Apply with a blank Rev would look harmless but is only safe      --
--- because blanks are left alone (see .SetTagText()) - the user     --
--- still has to know what is already there before deciding what to  --
--- change. an unnamed box (ref name, '=nnnn/nnnn') leaves the       --
--- Drawing No. field blank rather than showing the ref               --
+-- Name tab, one box - Read CE. puts the name the box the user has  --
+-- navigated to already has into the field, to edit rather than     --
+-- retype. an unnamed box (ref name, '=nnnn/nnnn') leaves the field --
+-- blank rather than showing the ref                                 --
 ---------------------------------------------------------------------
-define method .ReadInfo()
+define method .ReadBoxName()
 	!equi = !this.CurrentBoxEqui()
 	if (!equi.eq('')) then
 		return
 	endif
-	!equinav = !this.NavName(!equi)
 
 	if (!equi.substring(1,1).eq('=')) then
 		!this.dwgno.val = ''
 	else
 		!this.dwgno.val = !equi
 	endif
-
-	!this.revtext.val    = !this.TagValue(!equinav, 'rev')
-	!this.title1text.val = !this.TagValue(!equinav, 'title1')
-	!this.title2text.val = !this.TagValue(!equinav, 'title2')
-	!this.title3text.val = !this.TagValue(!equinav, 'title3')
 endmethod
 
 ---------------------------------------------------------------------
@@ -958,7 +939,7 @@ define method .BatchName(!prefix is STRING, !seq is REAL, !digits is REAL) is ST
 endmethod
 
 ---------------------------------------------------------------------
--- Info tab - Batch Number. numbers a multi-selection of boxes in   --
+-- Name tab - Assign Numbers. numbers a multi-selection of boxes in --
 -- one go with Prefix + a running sequence, ordered by Order By     --
 -- rather than by selection/click order - PML has no way to read    --
 -- back the order the user clicked things in, only which things are --
@@ -1515,21 +1496,6 @@ define method .ClearPoints()
 endmethod
 
 ------------------------------------------------------------------
--- blanks the Info tab. only called once, from .DrawingPlan() at  --
--- form start up - there is no Clear button any more. Read CE      --
--- already does a better job of resetting the tab for any box       --
--- that is actually selected, this is only for the state before     --
--- the user has picked or navigated to anything at all               --
-------------------------------------------------------------------
-define method .ClearInfo()
-	!this.dwgno.val = ''
-	!this.revtext.val = ''
-	!this.title1text.val = ''
-	!this.title2text.val = ''
-	!this.title3text.val = ''
-endmethod
-
-------------------------------------------------------------------
 -- the coordinates on their own. a fresh round of picking wipes   --
 -- the old points but must not throw away a drawing number the    --
 -- user has already typed in                                      --
@@ -1573,11 +1539,10 @@ define method .CreateBox()
 
 	------------------------------------------------------------------
 	-- Pick only ever makes a blank box - no name, no rev, no        --
-	-- titles. naming and labelling is entirely the Info tab's job,  --
-	-- done afterwards with Read CE / Apply once the box exists.     --
-	-- keeping the two apart means a box in progress on the Info     --
-	-- tab (read in, half edited, not yet Applied) can never leak    --
-	-- into a new box picked in the meantime                         --
+	-- titles. naming is entirely the Name tab's job, done           --
+	-- afterwards once the box exists. keeping the two apart means a --
+	-- number typed on the Name tab and not yet applied can never    --
+	-- leak into a new box picked in the meantime                    --
 	------------------------------------------------------------------
 	!err = !this.MakeBox(!p1, !p2, !p3, !ubot, !utop, '', '', '', '', '')
 	if (!err.neq('')) then
@@ -1632,7 +1597,7 @@ endmethod
 -- element took two lines along the top of the grid for levels      --
 -- (user, 2026-09-15). the boxes go through .MakeBox() like every   --
 -- other tab's, so they land in the same site, unnamed, and are     --
--- numbered and labelled on the Info tab afterwards                 --
+-- numbered on the Name tab afterwards                              --
 --------------------------------------------------------------------
 
 ------------------------------------------------------------------
