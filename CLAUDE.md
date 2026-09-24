@@ -82,11 +82,11 @@
 - 「跳號」其實是 Model Explorer 照建立順序列 ZONE 的成員、不照名字（check_batch 的 OUT 顯示 001～014 一個不缺）。Assign Numbers 編完號後，每個框 `REORDER` 到前一號後面（CE 在 owner，先例 `admin/forms/admmaturity.pmlfrm:425`），不同 ZONE 各自排、這批以外的框不動；dump 多一行 `ORDER n moved, m would not move`。
 - 已實測 OK（2026-09-24，使用者）：Read CE、Rename、重名被擋、空欄位的 alert、Assign Numbers 連按結果不變、兩個／三個方向的排序、Model Explorer 照號碼排。
 
-## Pick 分頁：圍住選取物建 BOX（2026-09-24，分支 `feature/box-around-selection`，**未在 E3D 實測**）
+## Pick 分頁：圍住選取物建 BOX（2026-09-24 已併回 master，**已在 E3D 實測**）
 - 給不照格線切的局部圖用（泵區、單台設備；使用者說有可能會出）。Pick 分頁下方子框「Around the selection」：Margin（預設 500mm，六個面同一個值，使用者選的）＋ Box Around Selection 鈕。
 - 框**照正東正北**（使用者選的）：範圍是每個選取物 `WVOL` 的聯集（讀法同 `DrawingPlan1.pmlfrm:728`，`part(1..6)`＝min E N U、max E N U）。不做跟格線轉 12.5° 的版本，因為 `WVOL` 永遠是世界軸，順著格線的一段管子換算到轉過的方向會寬出好幾公尺，要準就得逐一讀管件中心線點，程式量多好幾倍。
 - 選取裡的 DrawingPlanBox 自己的框、沒有範圍（WVOL 全 0 或讀不到）的元素都跳過並計數；建出來的框沒命名，走 Name 分頁。結果寫在鈕旁邊：名稱、X/Y、U 底..頂、用了幾個、跳過幾個。
-- 要測：選一台設備、選幾條管線＋設備、Margin 0 與 500、選取裡混一個圖框（要被跳過）、什麼都沒選的 alert、建出來的框在 DRAFT 出局部圖的範圍對不對。
+- 已實測 OK（2026-09-24，使用者）。
 
 ## Check 分頁：框與框之間的縫／重疊／高程不一致（2026-09-23 已併回 master，`0b959c3`..`5f645cd`，**已在 E3D 實測**）
 - 18 個 commit，從 master 開出來後 fast-forward 併回，分支已刪——fast-forward 沒有 merge commit，master 的歷史就是那條分支的歷史，分支名留著只是個重複的標籤。只動 `design/forms/DrawingPlan.pmlfrm`（+1541 行）與本檔。跟 `feature/moveface-multi` 之後合併只有 **2 個衝突點**，都是「兩邊在同一位置各加了幾行」：本檔換電腦第 1 點、`.pmlfrm` 的 member 區塊（一邊 `chk*` 一邊 `mf*`，兩邊都留即可）。
