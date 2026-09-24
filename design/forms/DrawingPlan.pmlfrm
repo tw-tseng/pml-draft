@@ -335,7 +335,9 @@ layout form !!DrawingPlan dialog dock
 			-- same as Move Face's faces; .DoSplitAt() works out which  --
 			-- of the box's own X/Y each one is. Offset shifts the cut  --
 			-- from the point actually picked (snap to a beam, cut 50   --
-			-- below it): + is towards E, N or U                         --
+			-- below it): + is towards E, N or U. two or more boxes     --
+			-- selected are all cut through the one point - a row of    --
+			-- frames given a mezzanine at one U, see .DoSplitAt()      --
 			------------------------------------------------------------
 			frame .splitsub 'Split' at xmin.modhint ymax.showbox+0.4 width 62
 				para .splithint text 'cut at a picked point, along the ticked axes. offset (mm) shifts the cut' width 58
@@ -2764,18 +2766,19 @@ define method .PickSplitPoint()
 	if (!this.splitequi.eq('')) then
 		return
 	endif
-	if (!this.mfnames.size().gt(1)) then
-		!!alert.error('Split cuts one box at a time - select just one (several at once is for Move Face)')
-		return
-	endif
 	if (not(!this.splitew.val) and not(!this.splitns.val) and not(!this.splitud.val)) then
 		!!alert.error('Check at least one of E/W, N/S, U/D to split along')
 		return
 	endif
 
+	!prompt = 'Split point - anywhere inside the box, off to the side you want to cut'
+	if (!this.mfnames.size().gt(1)) then
+		!prompt = 'Split point - each of the ' & !this.mfnames.size().string() & ' boxes is cut through it'
+	endif
+
 	!this.DropPicking()
 	!packet = object EDGPACKET()
-	!packet.definePosition('Split point - anywhere inside the box, off to the side you want to cut')
+	!packet.definePosition(!prompt)
 	!packet.description = !this.edgdesc
 	!packet.action = |!!DrawingPlan.SplitPointPicked(!this.return[1].position)|
 	!packet.remove = false
@@ -2804,7 +2807,78 @@ define method .SplitPointPicked(!pos is POSITION)
 endmethod
 
 ---------------------------------------------------------------------
--- turns the picked point into an offset along the box's own X/Y   --
+-- the one picked point, applied to every locked-in box in turn -   --
+-- each is cut by the planes through the point square to its own    --
+-- axes, so ticking U/D on a row of frames puts a mezzanine through --
+-- all of them at the one U. a box the point does not reach on a    --
+-- ticked axis is left uncut on that axis, the same as one box on   --
+-- its own always was. each box is all or nothing (.SplitOne()),    --
+-- and one that fails does not stop the rest - it is reported with  --
+-- the others in one alert at the end, the way Move Face does it    --
+---------------------------------------------------------------------
+define method .DoSplitAt()
+	!n = !this.mfnames.size()
+	!probs = object ARRAY()
+	!nsplit = 0
+	!nmade = 0
+	!nskip = 0
+	!oneskip = ''
+
+	do !i from 1 to !n
+		!r = !this.SplitOne(!i)
+		!err = !r[1]
+		!made = !r[2]
+		!skipstr = !r[3]
+		if (!made gt 0) then
+			!nsplit = !nsplit + 1
+			!nmade = !nmade + !made
+			if (!skipstr.neq('')) then
+				!nskip = !nskip + 1
+				!oneskip = !skipstr
+			endif
+		endif
+		if (!err.neq('')) then
+			!probs.append(!this.mfnames[!i] & ': ' & !err)
+		endif
+	enddo
+
+	------------------------------------------------------------------
+	-- the box line says what happened, since the boxes it named are --
+	-- gone. one box keeps the wording it always had. nothing split  --
+	-- at all leaves the boxes drawn and named, as a refused split   --
+	-- always did, so the next pick can go straight in               --
+	------------------------------------------------------------------
+	if (!nsplit gt 0) then
+		!this.ClearAids()
+		if (!n.eq(1)) then
+			!msg = !nmade.string() & ' box(es) created'
+			if (!nskip gt 0) then
+				!msg = !msg & ' (' & !oneskip & ' skipped - point too close/outside)'
+			endif
+		else
+			!msg = !nsplit.string() & ' of ' & !n.string() & ' boxes split into ' & !nmade.string()
+			if (!nskip gt 0) then
+				!msg = !msg & ', ' & !nskip.string() & ' not on every axis'
+			endif
+		endif
+		!this.boxinfo.val = !msg
+		!this.splitequi = ''
+	endif
+
+	if (!probs.size().gt(0)) then
+		!txt = ''
+		do !p values !probs
+			if (!txt.neq('')) then
+				!txt = !txt & '; '
+			endif
+			!txt = !txt & !p
+		enddo
+		!!alert.error(!txt)
+	endif
+endmethod
+
+---------------------------------------------------------------------
+-- turns the picked point into an offset along box !i's own X/Y    --
 -- (and world Up for Z), splits every checked axis in two at that  --
 -- offset, and builds one new box per combination - 1 axis checked --
 -- makes 2 boxes, 2 axes make 4, 3 axes make 8.                    --
@@ -2812,17 +2886,30 @@ endmethod
 -- everything is validated before anything is created. the         --
 -- original box is only deleted once every piece exists; if a      --
 -- piece fails partway through, the pieces already made are rolled --
--- back and the original is left exactly as it was                 --
+-- back and the original is left exactly as it was.                --
+-- [1]='' or what went wrong, [2]=how many boxes were made (0 when --
+-- it was not split), [3]=the checked axes that were left uncut    --
 ---------------------------------------------------------------------
-define method .DoSplitAt()
+define method .SplitOne(!i is REAL) is ARRAY
 	!posw = !this.splitpickpos.wrt(WORL)
-	!cen = !this.splitcen
-	!xdir = object direction(!this.splitxdirstr)
-	!ydir = object direction(!this.splitydirstr)
+	!r = object ARRAY()
+	!r.append('')
+	!r.append(0)
+	!r.append('')
 
-	!halfx = !this.splitxlen * 0.5
-	!halfy = !this.splitylen * 0.5
-	!halfz = !this.splitzlen * 0.5
+	!equi = !this.mfnames[!i]
+	!cen = !this.mfcens[!i]
+	!xdirstr = !this.mfxdirs[!i]
+	!ydirstr = !this.mfydirs[!i]
+	!xlen = !this.mfxlens[!i]
+	!ylen = !this.mfylens[!i]
+	!zlen = !this.mfzlens[!i]
+	!xdir = object direction(!xdirstr)
+	!ydir = object direction(!ydirstr)
+
+	!halfx = !xlen * 0.5
+	!halfy = !ylen * 0.5
+	!halfz = !zlen * 0.5
 
 	------------------------------------------------------------------
 	-- project the picked point onto the box's own X and Y.          --
@@ -2866,13 +2953,13 @@ define method .DoSplitAt()
 	-- north-south. a box turned about 45 has no answer and is       --
 	-- refused. Z is U/D on every box (Z is U, see .MakeBoxAt())     --
 	------------------------------------------------------------------
-	!px = !this.SideNormal(1, 1)
+	!px = !this.SideNormal(!i, 1)
 	!xworld = !this.NearestWorld(!px[1], !px[2])
-	!py = !this.SideNormal(1, 3)
+	!py = !this.SideNormal(!i, 3)
 	!yworld = !this.NearestWorld(!py[1], !py[2])
 	if (!xworld.eq('?') or !yworld.eq('?')) then
-		!!alert.error('the box is turned about 45 deg - E/W and N/S do not tell its axes apart, nothing split')
-		return
+		!r[1] = 'turned about 45 deg - E/W and N/S do not tell its axes apart, not split'
+		return !r
 	endif
 
 	------------------------------------------------------------------
@@ -2972,9 +3059,20 @@ define method .DoSplitAt()
 	endif
 
 	if (not(!usex) and not(!usey) and not(!usez)) then
-		!!alert.error('The picked point is too close to (or outside) every checked axis - nothing to split')
-		return
+		!r[1] = 'the point is too close to (or outside) it on every checked axis - not split'
+		return !r
 	endif
+
+	------------------------------------------------------------------
+	-- the sheet texts live on the EQUI and every piece gets a copy. --
+	-- read now, before the first piece is made - making one moves  --
+	-- CE, and .ReadBoxes() only keeps the first box's              --
+	------------------------------------------------------------------
+	!equinav = !this.NavName(!equi)
+	!rev = !this.TagValue(!equinav, 'rev')
+	!title1 = !this.TagValue(!equinav, 'title1')
+	!title2 = !this.TagValue(!equinav, 'title2')
+	!title3 = !this.TagValue(!equinav, 'title3')
 
 	------------------------------------------------------------------
 	-- one axis not checked = one state, offset 0mm, the full length --
@@ -2987,8 +3085,8 @@ define method .DoSplitAt()
 	!xoffs.append(0)
 	!xoffs.append(0)
 	!xlens = ARRAY()
-	!xlens.append(!this.splitxlen)
-	!xlens.append(!this.splitxlen)
+	!xlens.append(!xlen)
+	!xlens.append(!xlen)
 	!xbound = 1
 	if (!usex) then
 		!xoffs[1] = (!localx - !halfx) / 2
@@ -3002,8 +3100,8 @@ define method .DoSplitAt()
 	!yoffs.append(0)
 	!yoffs.append(0)
 	!ylens = ARRAY()
-	!ylens.append(!this.splitylen)
-	!ylens.append(!this.splitylen)
+	!ylens.append(!ylen)
+	!ylens.append(!ylen)
 	!ybound = 1
 	if (!usey) then
 		!yoffs[1] = (!localy - !halfy) / 2
@@ -3017,8 +3115,8 @@ define method .DoSplitAt()
 	!zoffs.append(0)
 	!zoffs.append(0)
 	!zlens = ARRAY()
-	!zlens.append(!this.splitzlen)
-	!zlens.append(!this.splitzlen)
+	!zlens.append(!zlen)
+	!zlens.append(!zlen)
 	!zbound = 1
 	if (!usez) then
 		!zoffs[1] = (!localz - !halfz) / 2
@@ -3040,7 +3138,7 @@ define method .DoSplitAt()
 				!newcen = !newcen.offset(!ydir, !yoffs[!iy])
 				!newcen = !newcen.offset(!zdir, !zoffs[!iz])
 
-				!err = !this.MakeBoxAt(!newcen, !this.splitydirstr, !xlens[!ix], !ylens[!iy], !zlens[!iz], '', !this.splitrev, !this.splittitle1, !this.splittitle2, !this.splittitle3)
+				!err = !this.MakeBoxAt(!newcen, !ydirstr, !xlens[!ix], !ylens[!iy], !zlens[!iz], '', !rev, !title1, !title2, !title3)
 				if (!err.neq('')) then
 					!failed = !err
 				else
@@ -3063,36 +3161,31 @@ define method .DoSplitAt()
 			handle any
 			endhandle
 		enddo
-		!!alert.error('Split failed (' & !failed & ') - no changes made')
-		!this.ClearAids()
-		return
+		!r[1] = 'failed (' & !failed & ') - left as it was'
+		return !r
 	endif
 
-	!equinav = !this.NavName(!this.splitequi)
 	$!equinav
 	!ok = true
 	delete equi
 	handle any
 		!ok = false
 	endhandle
+	!r[2] = !created.size()
 	if (not(!ok)) then
-		!!alert.error('The ' & !created.size().string() & ' new box(es) were created, but the original box could not be deleted - please delete it by hand')
+		!r[1] = 'the ' & !created.size().string() & ' new box(es) were made, but it could not be deleted - please delete it by hand'
 	endif
 
-	!this.ClearAids()
-	!msg = !created.size().string() & ' box(es) created'
-	if (!skipped.size().gt(0)) then
-		!skipstr = ''
-		do !s values !skipped
-			if (!skipstr.neq('')) then
-				!skipstr = !skipstr & ' '
-			endif
-			!skipstr = !skipstr & !s
-		enddo
-		!msg = !msg & ' (' & !skipstr & ' skipped - point too close/outside)'
-	endif
-	!this.boxinfo.val = !msg
-	!this.splitequi = ''
+	!skipstr = ''
+	do !s values !skipped
+		if (!skipstr.neq('')) then
+			!skipstr = !skipstr & ' '
+		endif
+		!skipstr = !skipstr & !s
+	enddo
+	!r[3] = !skipstr
+	return !r
+
 endmethod
 
 ----------------------------------------------
