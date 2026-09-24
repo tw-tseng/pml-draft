@@ -49,7 +49,7 @@
   - Modify 分頁重排：頂端三步驟提示、Show Box 旁顯示目前 BOX 名稱／XYZ／U 底..頂、三個功能各自一個子框；Show Box 不再是 toggle（`feature/moveface-multi` 又改回開關，見下）。
 - **還沒在 E3D 實測**：Grid 分頁 Top/Bottom U 併入分層後的結果。已實測 OK：Grid 分頁合併後能建 BOX、Bottom U 的 Pick（修過 DropPicking 順序後）；Move Face 單 BOX（2026-09-21 使用者實測，含 Enter callback 與版面）。
 - 工作樹上另外有兩個舊備份的刪除（`DrawingPlan1MatchLine(20260122)/(20260311).pmlfnc`）沒進任何 commit，使用者說不要進 master。
-- 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX、BOX 總覽清單。
+- 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。還沒決定的是「在 3D 每個框中心 AID 印圖號」那半——使用者曾在截圖上手畫 1～8 說明編號順序，這個功能正好取代手畫）。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
 
 ## Move Face 多選（2026-09-24 已併回 master，`3c50023`..`16410c8`＋merge commit，**已在 E3D 實測**）
