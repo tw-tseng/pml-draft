@@ -55,7 +55,7 @@
 ## Move Face 多選（2026-09-24 已併回 master，`3c50023`..`16410c8`＋merge commit，**已在 E3D 實測**）
 - 4 個 commit，只動 `DrawingPlan.pmlfrm` 跟本檔，在分支 `feature/moveface-multi` 上做完、實測通過後用 `--no-ff` 併回 master，分支已刪。合併時跟 Check 分頁有兩處文字衝突（member 區塊、本檔換電腦第 1 點，兩邊都留），另外還有一處**語意衝突**是 git 看不出來的：Check 分頁點清單列時自己下 `AID CLEAR ALL`，畫面清了但 Show Box 的按鈕還停在 `Hide Box`，下一次按會變成清而不是畫。在 merge commit 裡把那兩處改成 `ClearAids()`，2026-09-24 已實測 OK。
 - 面改用 North/South/East/West/Top/Bottom 命名，每個 BOX 自己取「法線最接近該方向的側面」；原因是現場同一批 BOX 的 Y 有 `N 12.523 E` 也有 `S 12.523 W`（Merge 那段註解），`+Y` 在隔壁 BOX 是反的，多選時各推各的。轉到接近 45°（內積 < cos 40°）的 BOX 分不出 N/E，跳過並回報。
-- Show Box 讀 `object selection()`：選 2 個以上 DrawingPlanBox 就一起鎖定，否則退回 CE（單選不信選取——命令列導覽不會更新選取，會拿到十分鐘前點的那個）。Split 維持單 BOX，多選按 Pick Split Point 會擋。
+- Show Box 讀 `object selection()`：選 2 個以上 DrawingPlanBox 就一起鎖定，否則退回 CE（單選不信選取——命令列導覽不會更新選取，會拿到十分鐘前點的那個）。Split 原本維持單 BOX，2026-09-24 也改成多選（分支 `feature/split-multi`，**未在 E3D 實測**；使用者要 Modify 分頁三個功能都能多選，才不會搞混）：一個點、每個框被過該點且垂直於自己軸的平面切，勾 U/D 就是整排框在同一個 U 插夾層。每個框各自全有或全無（`SplitOne()`，失敗只回滾那個框），平面沒穿過的軸照舊跳過，一個框都沒切成時畫面與資訊列不動、只跳 alert。sheet texts（rev/title1~3）逐框從自己的 EQUI 讀，不再用 `split*` 那組只存第一個框的 member。要測：單框行為不變、多選 U/D 插夾層、多選 E/W 有的框沒被穿過、全部都切不到時的 alert、新框的 rev/title 跟各自原框一致。
 - Show Box 在每個側面中心印 `+X = N` 標籤；boxinfo 多選時列數量與名稱。
 - 三種輸入逐 BOX 算距離：offset 同距、coordinate 各自對齊到同一座標、Pick 各自移到過該點的平面（同向一排 BOX 就是整條 match line 平移）。這個廠格線轉 12.5°，N/S/E/W 面的 coordinate 輸入會被「不與 E/N/U 平行」擋掉，改用 Pick；Top/Bottom 不受影響。
 - 使用者看過第一版截圖後又改了三件事（`2034e99`、`16410c8`）：
