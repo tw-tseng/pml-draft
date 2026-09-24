@@ -72,6 +72,16 @@
 - 除錯行 `EQUIDIM`（origin／中心線端點／有沒有夾／夾完的點）會寫進 `check_rebuild.txt`。
 - 還沒決定：中心線本身要不要也畫到 matchline，讓中心線＋投影線變成連續一條；捨入／貼齊要不要收緊（目前只有 `!esh` 那層 `.string('D3')`）。
 
+## Name 分頁（取代 Info，2026-09-24 已併回 master，分支 `feature/name-tab` 已刪，**已在 E3D 實測**）
+- rev／title 改由 DRAFT 處理（使用者）。查證：`DrawingPlan1.pmlfrm:667-669` 每張圖把 `!title1..3` 設成空字串後再也沒給值，DESIGN 端 EQUI 上的 rev/title TEXT 從來沒被讀過——Info 分頁填了等於沒填，還會讓人以為改了圖上的版次。
+- Info 分頁刪掉；Batch 分頁改名 **Name**（gadget 仍叫 `.batchfr`），上面「One box (CE)」：Drawing No.＋Read CE（`ReadBoxName()`）＋Rename（`RenameBox()`，沿用原本的重名檢查）；下面原本的批次編號原封不動包進子框。
+- 建框／Split／Merge／Import 寫 rev/title 的程式**刻意不動**（使用者決定）：沒有輸入的地方，不會再有新值；碰那幾條要全部重測。`SetTagText`／`TagValue` 因此還在。
+- Assign Numbers 的舊 bug（不是這次改出來的）：同一批框重按，第 2 次變 015～028、第 3 次回 001～014——查重名時把「這批框自己的名字」也算成被佔用。改成先算好每框號碼、只有這批以外的東西佔用才跳號，再兩段式：要換號的先 `UNNAME`（AVEVA 先例 `admin/forms/admdisciplines.pmlfrm:189`），再逐一 `NAME`，用 ref 找回框。號碼已經對的不動，結果列多一句「N already had their number」。
+- Assign Numbers 另一個舊 bug：Order by 兩個 option 只設了 dtext，`.selection()` 不帶參數回的是 rtext，跟程式裡比對的字串都對不上，全部掉進最後的 else（North -> South），選什麼都一樣。改成 `.selection('DTEXT')`（AVEVA 先例 `admin/objects/admstamp.pmlobj:2477`）。**option 只有 dtext 時一律用 `.selection('DTEXT')` 或 `.dtext[.val]`**。
+- Order by 的意思改了（使用者，2026-09-24，看 `check_batch.txt` 確認排序本身沒錯、是語意跟使用者直覺相反）：原本 1st＝先分組（主鍵），S->N＋Bottom->Top 會每一疊由下往上編；改成 1st＝**號碼連續時走的方向**（次鍵）、2nd＝下一排往哪走（主鍵）。標籤改 `Number along`／`Then`，gadget 名不變；程式只在收集前把兩組 axis/asc 對調。預設改成 along W->E、then Bottom->Top（同層由西往東、再往上一層）。每次按都把排序過程寫到 `check_batch.txt`（BATCH／KEYS／IN／ORDER／OUT）。第三個方向 `And then`（`.batchdir3`，使用者要求，預設 (none)）：三個選項由快到慢，排序鍵反過來由慢到快（key1＝最慢的那個有用的），(none) 直接略過；解讀選項收成 `BatchDir()`、取座標收成 `BatchKey()`，最後一個鍵不帶容差、前面的鍵差 1mm 內算平手。
+- 「跳號」其實是 Model Explorer 照建立順序列 ZONE 的成員、不照名字（check_batch 的 OUT 顯示 001～014 一個不缺）。Assign Numbers 編完號後，每個框 `REORDER` 到前一號後面（CE 在 owner，先例 `admin/forms/admmaturity.pmlfrm:425`），不同 ZONE 各自排、這批以外的框不動；dump 多一行 `ORDER n moved, m would not move`。
+- 已實測 OK（2026-09-24，使用者）：Read CE、Rename、重名被擋、空欄位的 alert、Assign Numbers 連按結果不變、兩個／三個方向的排序、Model Explorer 照號碼排。
+
 ## Check 分頁：框與框之間的縫／重疊／高程不一致（2026-09-23 已併回 master，`0b959c3`..`5f645cd`，**已在 E3D 實測**）
 - 18 個 commit，從 master 開出來後 fast-forward 併回，分支已刪——fast-forward 沒有 merge commit，master 的歷史就是那條分支的歷史，分支名留著只是個重複的標籤。只動 `design/forms/DrawingPlan.pmlfrm`（+1541 行）與本檔。跟 `feature/moveface-multi` 之後合併只有 **2 個衝突點**，都是「兩邊在同一位置各加了幾行」：本檔換電腦第 1 點、`.pmlfrm` 的 member 區塊（一邊 `chk*` 一邊 `mf*`，兩邊都留即可）。
 - 為什麼做：DRAFT 的 `DrawingPlan1MatchSorted` 只在框線外 50mm 的薄片裡收鄰框（`MatchSorted.pmlfnc:47-68`），縫大於 50 就沒有鄰框，`MatchLine1.pmlfnc:94` 整段標籤被跳過——沒有 tick、沒有 `MATCH LINE Exxxxx`、也沒有 `SEE <鄰圖號>`。縫上的廠房兩張圖都沒有；重疊則是同一段畫兩次。都要等出圖才發現。

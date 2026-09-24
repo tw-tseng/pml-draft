@@ -260,38 +260,36 @@ layout form !!DrawingPlan dialog dock
 		exit
 
 		----------------------------------------------------------------
-		-- drawing number and the sheet texts. these end up as TEXT    --
-		-- elements under the EQUI in the 'tag:value' shape the        --
-		-- drawing side reads back                                     --
+		-- Name - the drawing number is the EQUI's name, and the one   --
+		-- thing about a box this side still sets. two ways: one box   --
+		-- typed in by hand, or a multi-selection numbered in one go   --
+		-- (Prefix + a running sequence, along one direction, then a  --
+		-- second and a third, rather than in click order -            --
+		-- .AssignNumbers()).                                          --
+		-- rev                                                           --
+		-- and the titles are the DRAFT side's now (user, 2026-09-24), --
+		-- which is why the Info tab that also held them is gone       --
 		----------------------------------------------------------------
-		frame .infofr 'Info' width 66
-			text .dwgno 'Drawing No.' tagwidth 12 width 40 is STRING
+		frame .batchfr 'Name' width 66
+			frame .namesub 'One box (CE)' width 62
+				text .dwgno 'Drawing No.' tagwidth 12 width 22 is STRING
+				button .nameread 'Read CE' at xmax.dwgno+1 ymin.dwgno width 10 call |!This.ReadBoxName()|
+				button .namego 'Rename' at xmax.nameread+1 ymin.dwgno width 10 call |!This.RenameBox()|
+			exit
 
-			text .revtext    'Rev'     at xmin.dwgno    ymax.dwgno+0.3      tagwidth 12 width 40 is STRING
-			text .title1text 'Title 1' at xmin.revtext  ymax.revtext+0.1    tagwidth 12 width 40 is STRING
-			text .title2text 'Title 2' at xmin.revtext  ymax.title1text+0.1 tagwidth 12 width 40 is STRING
-			text .title3text 'Title 3' at xmin.revtext  ymax.title2text+0.1 tagwidth 12 width 40 is STRING
+			frame .numsub 'Selected boxes - number in order' at xmin.namesub ymax.namesub+0.3 width 62
+				text .batchprefix 'Prefix'   tagwidth 10 width 14 is STRING
+				text .batchstart  'Start at' at xmax.batchprefix+1 ymin.batchprefix tagwidth 10 width 10 is STRING
 
-			button .inforead  'Read CE' at xmin.revtext   ymax.title3text+0.3 width 12 call |!This.ReadInfo()|
-			button .infoapply 'Apply'   at xmax.inforead+1 ymin.inforead      width 12 call |!This.ApplyInfo()|
-		exit
+				option .batchdir  'Number along' at xmin.batchprefix ymax.batchprefix+0.3 tagwidth 12 width 22
+				option .batchdir2 'Then'         at xmin.batchdir    ymax.batchdir+0.2   tagwidth 12 width 22
+				option .batchdir3 'And then'     at xmin.batchdir2   ymax.batchdir2+0.2  tagwidth 12 width 22
+				toggle .batchskip at xmin.batchdir3 ymax.batchdir3+0.2 'Skip already-named'
 
-		----------------------------------------------------------------
-		-- name a multi-selection of boxes in one go: Prefix + a       --
-		-- running sequence, ordered by two axes (2nd breaks ties on   --
-		-- the 1st) rather than by selection/click order               --
-		----------------------------------------------------------------
-		frame .batchfr 'Batch' width 66
-			text .batchprefix 'Prefix'   tagwidth 10 width 14 is STRING
-			text .batchstart  'Start at' at xmax.batchprefix+1 ymin.batchprefix tagwidth 10 width 10 is STRING
+				button .batchgo 'Assign Numbers' at xmin.batchskip ymax.batchskip+0.3 width 16 call |!This.AssignNumbers()|
 
-			option .batchdir  'Order by (1st)' at xmin.batchprefix ymax.batchprefix+0.3 width 22
-			option .batchdir2 'Order by (2nd)' at xmin.batchdir    ymax.batchdir+0.2   width 22
-			toggle .batchskip at xmin.batchdir2 ymax.batchdir2+0.2 'Skip already-named'
-
-			button .batchgo 'Assign Numbers' at xmin.batchskip ymax.batchskip+0.3 width 16 call |!This.AssignNumbers()|
-
-			para .batchresult at xmin.batchgo ymax.batchgo+0.3 text '' width 62
+				para .batchresult at xmin.batchgo ymax.batchgo+0.3 text '' width 58
+			exit
 		exit
 
 		-------------------------------------------
@@ -445,7 +443,7 @@ define method .DrawingPlan()
 	!this.ClearAids()
 	!this.edgdesc = 'Drawing Plan Box Picking'
 	!this.ClearPoints()
-	!this.ClearInfo()
+	!this.dwgno.val = ''
 	!this.log.clear()
 	!this.splitequi = ''
 	!this.mfnames = object ARRAY()
@@ -498,11 +496,15 @@ define method .DrawingPlan()
 	!this.ChkClear()
 
 	------------------------------------------------------------------
-	-- Batch's Order By choices, 1st and 2nd share the same list.   --
-	-- default is 'Bottom -> Top (U)' then 'West -> East (E)' -      --
-	-- storey first, left to right within a storey second, which is  --
-	-- the combination the user actually asked for. 'left to right'  --
-	-- only has a fixed meaning on a plan that follows the north-up  --
+	-- Name tab's two directions share the same list. the first is  --
+	-- the way consecutive numbers run, the second the way the next  --
+	-- run starts (user, 2026-09-24 - read the other way round, 1st  --
+	-- as the grouping, S->N then Bottom->Top numbered each stack    --
+	-- bottom to top when the user meant across). default is along   --
+	-- 'West -> East (E)' then 'Bottom -> Top (U)' - left to right   --
+	-- along a storey, then the next storey up, which is what the    --
+	-- old default meant to give. 'left to right' only has a fixed   --
+	-- meaning on a plan that follows the north-up  --
 	-- convention, where it reads as West -> East - the options are  --
 	-- spelled out in compass terms instead of guessing that         --
 	-- convention silently                                           --
@@ -515,10 +517,10 @@ define method .DrawingPlan()
 	!dirs.append('South -> North (N)')
 	!dirs.append('North -> South (N)')
 	!this.batchdir.dtext = !dirs
-	!this.batchdir.val = 1
+	!this.batchdir.val = 3
 	------------------------------------------------------------------
-	-- 2nd also offers '(none)' - not every batch needs a tie        --
-	-- breaker, and forcing one would sort ties by whichever axis    --
+	-- Then also offers '(none)' - a single row needs no second      --
+	-- direction, and forcing one would order ties by whichever axis --
 	-- happened to be picked rather than leaving them as found        --
 	------------------------------------------------------------------
 	!dirs2 = ARRAY()
@@ -530,7 +532,14 @@ define method .DrawingPlan()
 	!dirs2.append('South -> North (N)')
 	!dirs2.append('North -> South (N)')
 	!this.batchdir2.dtext = !dirs2
-	!this.batchdir2.val = 4
+	!this.batchdir2.val = 2
+	------------------------------------------------------------------
+	-- And then, the third (user, 2026-09-24): a whole block in one  --
+	-- go - along a row, the next row, the next storey. off by       --
+	-- default, so the two-direction numbering is unchanged           --
+	------------------------------------------------------------------
+	!this.batchdir3.dtext = !dirs2
+	!this.batchdir3.val = 1
 	!this.batchskip.val = true
 	!this.batchresult.val = ''
 
@@ -750,11 +759,10 @@ endmethod
 -- same 'tag:value' shape DrawingPlan1.Apply() already scans for.   --
 --                                                                  --
 -- set, not add: an existing tag of the same name is overwritten,   --
--- so pressing Apply twice on a box, or picking a new box while the --
--- Info tab still holds the last sheet's titles, cannot leave two   --
--- 'rev:' texts under one EQUI for the drawing side to choose       --
--- between. a blank value is left alone rather than clearing the    --
--- tag, so Apply can never take information off a box by accident   --
+-- so writing the same box twice cannot leave two 'rev:' texts      --
+-- under one EQUI to choose between. a blank value is left alone    --
+-- rather than clearing the tag, so a caller with nothing to say    --
+-- can never take information off a box by accident                 --
 --                                                                  --
 -- navigating back to the EQUI matters - NEW TEXT leaves CE on the  --
 -- text it just made, so without this the four tags would be built  --
@@ -791,8 +799,8 @@ endmethod
 
 ---------------------------------------------------------------------
 -- the value after 'tag:' on the box's TEXT, or '' when there is    --
--- no such tag yet. used by Read CE to bring a box's existing       --
--- rev/titles into the Info tab                                     --
+-- no such tag yet. used by Split and Merge to carry a box's        --
+-- rev/titles over to the boxes that replace it                     --
 ---------------------------------------------------------------------
 define method .TagValue(!equinav is STRING, !tag is STRING) is STRING
 	!found = !this.FindTagText(!equinav, !tag)
@@ -813,7 +821,7 @@ endmethod
 -- the EQUI of the box the user has navigated to, or an empty       --
 -- string when the current element is not one of ours - in which    --
 -- case the reason has already been put on screen.                  --
--- shared by Delete Box and by Apply on the Info tab                 --
+-- shared by Delete Box and by Rename on the Name tab               --
 ---------------------------------------------------------------------
 define method .CurrentBoxEqui() is STRING
 	var !projid proj id
@@ -847,95 +855,82 @@ define method .CurrentBoxEqui() is STRING
 endmethod
 
 ---------------------------------------------------------------------
--- Info tab - put the sheet information on the box the user has     --
--- navigated to. this is the way the boxes get labelled in          --
--- practice: pick all the frames first, then go round them one at   --
--- a time filling in the numbers                                    --
+-- Name tab, one box - gives the box the user has navigated to the  --
+-- drawing number typed in. the way a single frame gets numbered    --
+-- or renumbered by hand; a whole selection at once is             --
+-- .AssignNumbers()                                                  --
 ---------------------------------------------------------------------
-define method .ApplyInfo()
+define method .RenameBox()
+	!dwgno = !this.dwgno.val
+	if (!dwgno.eq('')) then
+		!!alert.error('Type the Drawing No. first (Read CE shows what the box has now)')
+		return
+	endif
 	!equi = !this.CurrentBoxEqui()
 	if (!equi.eq('')) then
 		return
 	endif
 	!equinav = !this.NavName(!equi)
 
-	!dwgno = !this.dwgno.val
-	if (!dwgno.neq('')) then
-		!fullname = !dwgno
-		if (!fullname.substring(1,1).neq('/')) then
-			!fullname = '/' & !fullname
-		endif
-
-		---------------------------------------------------------------
-		-- E3D refuses a duplicate name, and it refuses it with its   --
-		-- own error rather than anything this form can explain, so   --
-		-- look the drawing number up first and say who has it.       --
-		-- finding it on the very box being labelled is not a clash - --
-		-- that is just Apply pressed a second time                   --
-		---------------------------------------------------------------
-		!taken = false
-		!existing = ''
-		$!fullname
-		handle any
-			!taken = false
-		elsehandle none
-			!taken = true
-			var !existing namn of ce
-		endhandle
-		$!equinav
-
-		if (!taken and !existing.neq(!equi)) then
-			!!alert.error('Drawing No. ' & !dwgno & ' is already used by /' & !existing)
-			return
-		endif
-
-		!ok = true
-		NAME $!fullname
-		handle any
-			!ok = false
-		endhandle
-		if (not(!ok)) then
-			!!alert.error('Cannot name the box ' & !fullname)
-			return
-		endif
-
-		var !equi namn of ce
-		!equinav = !this.NavName(!equi)
+	!fullname = !dwgno
+	if (!fullname.substring(1,1).neq('/')) then
+		!fullname = '/' & !fullname
 	endif
 
-	!this.SetTagText(!equinav, 'rev', !this.revtext.val)
-	!this.SetTagText(!equinav, 'title1', !this.title1text.val)
-	!this.SetTagText(!equinav, 'title2', !this.title2text.val)
-	!this.SetTagText(!equinav, 'title3', !this.title3text.val)
+	---------------------------------------------------------------
+	-- E3D refuses a duplicate name, and it refuses it with its   --
+	-- own error rather than anything this form can explain, so   --
+	-- look the drawing number up first and say who has it.       --
+	-- finding it on the very box being labelled is not a clash - --
+	-- that is just Rename pressed a second time                  --
+	---------------------------------------------------------------
+	!taken = false
+	!existing = ''
+	$!fullname
+	handle any
+		!taken = false
+	elsehandle none
+		!taken = true
+		var !existing namn of ce
+	endhandle
 	$!equinav
+
+	if (!taken and !existing.neq(!equi)) then
+		!!alert.error('Drawing No. ' & !dwgno & ' is already used by /' & !existing)
+		return
+	endif
+
+	!ok = true
+	NAME $!fullname
+	handle any
+		!ok = false
+	endhandle
+	if (not(!ok)) then
+		!!alert.error('Cannot name the box ' & !fullname)
+		return
+	endif
+
+	var !equi namn of ce
+	!this.dwgno.val = !equi
 endmethod
 
 ---------------------------------------------------------------------
--- Info tab - Read CE. loads the Info tab from the box the user has --
--- navigated to, so Apply is not working blind: without this, an    --
--- Apply with a blank Rev would look harmless but is only safe      --
--- because blanks are left alone (see .SetTagText()) - the user     --
--- still has to know what is already there before deciding what to  --
--- change. an unnamed box (ref name, '=nnnn/nnnn') leaves the       --
--- Drawing No. field blank rather than showing the ref               --
+-- Name tab, one box - Read CE. puts the name the box the user has  --
+-- navigated to already has into the field, to edit rather than     --
+-- retype. an unnamed box (ref name, '=nnnn/nnnn') leaves the field --
+-- blank rather than showing the ref                                 --
 ---------------------------------------------------------------------
-define method .ReadInfo()
+define method .ReadBoxName()
 	!equi = !this.CurrentBoxEqui()
 	if (!equi.eq('')) then
 		return
 	endif
-	!equinav = !this.NavName(!equi)
 
 	if (!equi.substring(1,1).eq('=')) then
 		!this.dwgno.val = ''
 	else
 		!this.dwgno.val = !equi
 	endif
-
-	!this.revtext.val    = !this.TagValue(!equinav, 'rev')
-	!this.title1text.val = !this.TagValue(!equinav, 'title1')
-	!this.title2text.val = !this.TagValue(!equinav, 'title2')
-	!this.title3text.val = !this.TagValue(!equinav, 'title3')
 endmethod
 
 ---------------------------------------------------------------------
@@ -958,7 +953,54 @@ define method .BatchName(!prefix is STRING, !seq is REAL, !digits is REAL) is ST
 endmethod
 
 ---------------------------------------------------------------------
--- Info tab - Batch Number. numbers a multi-selection of boxes in   --
+-- one of the Name tab's direction options, as the sort needs it:   --
+-- [1]=in use (false for '(none)'), [2]='E'|'N'|'U', [3]=ascending, --
+-- [4]=the text itself, for the dump                                --
+---------------------------------------------------------------------
+define method .BatchDir(!dir is STRING) is ARRAY
+	!r = ARRAY()
+	!use = true
+	!axis = 'N'
+	!asc = false
+	if (!dir.eq('(none)')) then
+		!use = false
+	elseif (!dir.eq('Bottom -> Top (U)')) then
+		!axis = 'U'
+		!asc = true
+	elseif (!dir.eq('Top -> Bottom (U)')) then
+		!axis = 'U'
+		!asc = false
+	elseif (!dir.eq('West -> East (E)')) then
+		!axis = 'E'
+		!asc = true
+	elseif (!dir.eq('East -> West (E)')) then
+		!axis = 'E'
+		!asc = false
+	elseif (!dir.eq('South -> North (N)')) then
+		!axis = 'N'
+		!asc = true
+	endif
+	!r.append(!use)
+	!r.append(!axis)
+	!r.append(!asc)
+	!r.append(!dir)
+	return !r
+endmethod
+
+---------------------------------------------------------------------
+-- a box centre's coordinate on one world axis, 'E' | 'N' | 'U'     --
+---------------------------------------------------------------------
+define method .BatchKey(!pos is POSITION, !axis is STRING) is REAL
+	if (!axis.eq('E')) then
+		return !pos.east
+	elseif (!axis.eq('N')) then
+		return !pos.north
+	endif
+	return !pos.up
+endmethod
+
+---------------------------------------------------------------------
+-- Name tab - Assign Numbers. numbers a multi-selection of boxes in --
 -- one go with Prefix + a running sequence, ordered by Order By     --
 -- rather than by selection/click order - PML has no way to read    --
 -- back the order the user clicked things in, only which things are --
@@ -972,10 +1014,13 @@ endmethod
 -- renumber something that was already named on purpose. unticked,  --
 -- every box in the selection is renumbered regardless               --
 --                                                                  --
--- the sequence never overwrites an existing name - a collision     --
--- just moves on to the next number, so the same prefix can be run  --
--- again later to pick up where it left off, or two prefixes can    --
--- share the site without stepping on each other                    --
+-- the sequence never takes a name something else already has - a  --
+-- collision just moves on to the next number, so the same prefix   --
+-- can be run again later on new boxes to pick up where it left     --
+-- off, or two prefixes can share the site without stepping on each --
+-- other. 'something else' means outside this selection: the boxes  --
+-- being numbered give their own names up, so running it twice on   --
+-- the same boxes gives the same numbers both times                 --
 ---------------------------------------------------------------------
 define method .AssignNumbers()
 	!prefix = !this.batchprefix.val
@@ -996,54 +1041,53 @@ define method .AssignNumbers()
 	!start = !startstr.real()
 	!digits = !startstr.length()
 
-	!dir1 = !this.batchdir.selection()
-	!axis1 = 'U'
-	!ascend1 = true
-	if (!dir1.eq('Bottom -> Top (U)')) then
-		!axis1 = 'U'
-		!ascend1 = true
-	elseif (!dir1.eq('Top -> Bottom (U)')) then
-		!axis1 = 'U'
-		!ascend1 = false
-	elseif (!dir1.eq('West -> East (E)')) then
-		!axis1 = 'E'
-		!ascend1 = true
-	elseif (!dir1.eq('East -> West (E)')) then
-		!axis1 = 'E'
-		!ascend1 = false
-	elseif (!dir1.eq('South -> North (N)')) then
-		!axis1 = 'N'
-		!ascend1 = true
-	else
-		!axis1 = 'N'
-		!ascend1 = false
-	endif
+	------------------------------------------------------------------
+	-- the options only have display text. a bare .selection() hands --
+	-- back the replacement text, which matched none of the strings  --
+	-- in .BatchDir(), so every choice fell through to its last      --
+	-- else - North -> South - whatever was picked (user,            --
+	-- 2026-09-24). 'DTEXT' the way admstamp.pmlobj reads its month  --
+	-- list                                                           --
+	------------------------------------------------------------------
+	!r1 = !this.BatchDir(!this.batchdir.selection('DTEXT'))
+	!r2 = !this.BatchDir(!this.batchdir2.selection('DTEXT'))
+	!r3 = !this.BatchDir(!this.batchdir3.selection('DTEXT'))
 
-	!dir2 = !this.batchdir2.selection()
-	!use2 = true
-	!axis2 = 'E'
-	!ascend2 = true
-	if (!dir2.eq('(none)')) then
-		!use2 = false
-	elseif (!dir2.eq('Bottom -> Top (U)')) then
-		!axis2 = 'U'
-		!ascend2 = true
-	elseif (!dir2.eq('Top -> Bottom (U)')) then
-		!axis2 = 'U'
-		!ascend2 = false
-	elseif (!dir2.eq('West -> East (E)')) then
-		!axis2 = 'E'
-		!ascend2 = true
-	elseif (!dir2.eq('East -> West (E)')) then
-		!axis2 = 'E'
-		!ascend2 = false
-	elseif (!dir2.eq('South -> North (N)')) then
-		!axis2 = 'N'
-		!ascend2 = true
-	else
-		!axis2 = 'N'
-		!ascend2 = false
+	------------------------------------------------------------------
+	-- the options run fastest first - Number along is the way       --
+	-- consecutive numbers go, Then the next row, And then the next  --
+	-- block - but a sort wants its keys slowest first, so they are  --
+	-- lined up the other way round: key 1 the slowest in use, the   --
+	-- last key Number along. a '(none)' drops out, so Then (none)   --
+	-- with And then set is just two directions. Number along always --
+	-- counts (its list has no '(none)'). !nkeys is how many are in  --
+	-- use; the rest are filled in and never looked at               --
+	------------------------------------------------------------------
+	!kaxes = ARRAY()
+	!kascs = ARRAY()
+	if (!r3[1]) then
+		!kaxes.append(!r3[2])
+		!kascs.append(!r3[3])
 	endif
+	if (!r2[1]) then
+		!kaxes.append(!r2[2])
+		!kascs.append(!r2[3])
+	endif
+	!kaxes.append(!r1[2])
+	!kascs.append(!r1[3])
+	!nkeys = !kaxes.size()
+	do !k from 1 to 3
+		if (!k gt !nkeys) then
+			!kaxes.append('U')
+			!kascs.append(true)
+		endif
+	enddo
+	!axis1 = !kaxes[1]
+	!axis2 = !kaxes[2]
+	!axis3 = !kaxes[3]
+	!ascend1 = !kascs[1]
+	!ascend2 = !kascs[2]
+	!ascend3 = !kascs[3]
 
 	var !projid proj id
 	!sitename = '/' & !projid & '_DrawingPlanBox'
@@ -1055,6 +1099,7 @@ define method .AssignNumbers()
 	!names = ARRAY()
 	!keys1 = ARRAY()
 	!keys2 = ARRAY()
+	!keys3 = ARRAY()
 
 	do !sel values !sels
 		!ok = true
@@ -1094,21 +1139,10 @@ define method .AssignNumbers()
 				if !names.find(!equi).size().eq(0) then
 					var !boxpos worpos
 					!pos = !boxpos.position()
-					!key1 = !pos.up
-					if (!axis1.eq('E')) then
-						!key1 = !pos.east
-					elseif (!axis1.eq('N')) then
-						!key1 = !pos.north
-					endif
-					!key2 = !pos.up
-					if (!axis2.eq('E')) then
-						!key2 = !pos.east
-					elseif (!axis2.eq('N')) then
-						!key2 = !pos.north
-					endif
 					!names.append(!equi)
-					!keys1.append(!key1)
-					!keys2.append(!key2)
+					!keys1.append(!this.BatchKey(!pos, !axis1))
+					!keys2.append(!this.BatchKey(!pos, !axis2))
+					!keys3.append(!this.BatchKey(!pos, !axis3))
 				endif
 			endif
 		endif
@@ -1120,36 +1154,69 @@ define method .AssignNumbers()
 	endif
 
 	------------------------------------------------------------------
-	-- selection sort on the parallel !keys1/!keys2 arrays. these    --
-	-- lists are at most a few dozen boxes at a time, so the O(n^2)  --
-	-- cost does not matter and this avoids needing a sort-by-key    --
-	-- builtin, which nothing else in this codebase uses.            --
+	-- the working goes out to check_batch.txt, the same way Check   --
+	-- writes check_box.txt: what the options were read as, each      --
+	-- box's sort keys as gathered (key1 slowest), then the order     --
+	-- they came out in with the number each one got. an order that  --
+	-- looks wrong is read from here, not from the model tree         --
+	------------------------------------------------------------------
+	!dbg = ARRAY()
+	!dbg.append('BATCH along=' & !r1[4] & '   then=' & !r2[4] & '   and then=' & !r3[4] & '   keys in use=' & !nkeys.string())
+	!dbg.append('KEYS key1 ' & !axis1 & ' asc=' & !ascend1.string() & '   key2 ' & !axis2 & ' asc=' & !ascend2.string() & '   key3 ' & !axis3 & ' asc=' & !ascend3.string())
+	!ng = !names.size()
+	do !k from 1 to !ng
+		!dbg.append('IN   ' & !names[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]) & '   key3=' & !this.ChkN3(!keys3[!k]))
+	enddo
+
+	------------------------------------------------------------------
+	-- selection sort on the parallel key arrays. these lists are at  --
+	-- most a few dozen boxes at a time, so the O(n^2) cost does not  --
+	-- matter and this avoids needing a sort-by-key builtin, which    --
+	-- nothing else in this codebase uses.                            --
 	--                                                                --
-	-- 2nd only breaks ties on 1st, and "tie" allows a small          --
-	-- tolerance rather than exact equality - boxes on what is        --
-	-- obviously the same storey can differ by floating point noise  --
-	-- even though they came from the same split                      --
+	-- each key only breaks ties on the one before it, and on every   --
+	-- key but the last "tie" allows a small tolerance rather than    --
+	-- exact equality - boxes on what is obviously the same storey    --
+	-- can differ by floating point noise even though they came from  --
+	-- the same split                                                  --
 	------------------------------------------------------------------
 	!tol = 1
+	!ntol = 0 - !tol
 	!n = !names.size()
 	do !i from 1 to !n
 		!best = !i
 		!jstart = !i + 1
 		do !j from !jstart to !n
-			!d1 = !keys1[!j] - !keys1[!best]
-			if (not(!ascend1)) then
-				!d1 = 0 - !d1
-			endif
 			!swap = false
-			if (!d1.lt(0 - !tol)) then
-				!swap = true
-			elseif (!d1.lt(!tol) and !use2) then
-				!d2 = !keys2[!j] - !keys2[!best]
-				if (not(!ascend2)) then
-					!d2 = 0 - !d2
-				endif
-				if (!d2.lt(0)) then
+			!d = !keys1[!j] - !keys1[!best]
+			if (not(!ascend1)) then
+				!d = 0 - !d
+			endif
+			if (!nkeys eq 1) then
+				if (!d lt 0) then
 					!swap = true
+				endif
+			elseif (!d lt !ntol) then
+				!swap = true
+			elseif (!d lt !tol) then
+				!d = !keys2[!j] - !keys2[!best]
+				if (not(!ascend2)) then
+					!d = 0 - !d
+				endif
+				if (!nkeys eq 2) then
+					if (!d lt 0) then
+						!swap = true
+					endif
+				elseif (!d lt !ntol) then
+					!swap = true
+				elseif (!d lt !tol) then
+					!d = !keys3[!j] - !keys3[!best]
+					if (not(!ascend3)) then
+						!d = 0 - !d
+					endif
+					if (!d lt 0) then
+						!swap = true
+					endif
 				endif
 			endif
 			if (!swap) then
@@ -1166,59 +1233,193 @@ define method .AssignNumbers()
 			!tmpkey = !keys2[!i]
 			!keys2[!i] = !keys2[!best]
 			!keys2[!best] = !tmpkey
+			!tmpkey = !keys3[!i]
+			!keys3[!i] = !keys3[!best]
+			!keys3[!best] = !tmpkey
 		endif
 	enddo
 
+	------------------------------------------------------------------
+	-- every box's number is worked out before any name is touched.  --
+	-- a name counts as taken only when something outside this       --
+	-- selection holds it - a box being numbered is about to give its --
+	-- name up. counting those as taken was why a second press found  --
+	-- 001..014 held by the very boxes it was renumbering and went on --
+	-- to 015..028, and a third came back to 001 (user, 2026-09-24)   --
+	------------------------------------------------------------------
 	!seq = !start
-	!assigned = 0
-	!failed = ARRAY()
-
+	!targets = ARRAY()
 	do !nm values !names
-		!avail = false
-		!fullname = ''
+		!target = ''
 		do !try from 1 to 10000
 			!candidate = !this.BatchName(!prefix, !seq, !digits)
 			!fullname = '/' & !candidate
+			!seq = !seq + 1
 			!taken = false
+			!holder = ''
 			$!fullname
 			handle any
 				!taken = false
 			elsehandle none
 				!taken = true
+				var !holder namn of ce
 			endhandle
 			if (!taken) then
-				!seq = !seq + 1
-			else
-				!avail = true
+				if (!names.find(!holder).size().gt(0)) then
+					!taken = false
+				endif
+			endif
+			if (not(!taken)) then
+				!target = !candidate
 				break
 			endif
 		enddo
+		!targets.append(!target)
+	enddo
 
-		if (not(!avail)) then
-			!failed.append(!nm)
+	------------------------------------------------------------------
+	-- two passes, because E3D refuses a name that is still in use:   --
+	-- box A cannot become 002 while box B, further down the list, is --
+	-- still called 002. so every box that is changing lets go of its --
+	-- name first (UNNAME), then each takes its new one. a box whose  --
+	-- name is already its number is left alone. boxes are found      --
+	-- again by ref, which does not change when the name does         --
+	------------------------------------------------------------------
+	!n = !names.size()
+	!refs = ARRAY()
+	!failed = ARRAY()
+	!same = 0
+	do !k from 1 to !n
+		!nm = !names[!k]
+		!target = !targets[!k]
+		!ref = ''
+		!equinav = !this.NavName(!nm)
+		!ok = true
+		$!equinav
+		handle any
+			!ok = false
+		endhandle
+		if (!ok) then
+			var !ref ref of ce
+		endif
+		if (!ok and !target.neq('') and !nm.neq(!target) and !nm.substring(1,1).neq('=')) then
+			UNNAME
+			handle any
+				!ok = false
+			endhandle
+		endif
+		if (not(!ok)) then
+			!ref = ''
+		endif
+		!refs.append(!ref)
+	enddo
+
+	!assigned = 0
+	do !k from 1 to !n
+		!nm = !names[!k]
+		!target = !targets[!k]
+		!ref = !refs[!k]
+		!ok = true
+		if (!target.eq('') or !ref.eq('')) then
+			!ok = false
+		elseif (!nm.eq(!target)) then
+			!same = !same + 1
+			skip
 		else
-			!equinav = !this.NavName(!nm)
-			!ok = true
-			$!equinav
+			$!ref
 			handle any
 				!ok = false
 			endhandle
 			if (!ok) then
+				!fullname = '/' & !target
 				NAME $!fullname
 				handle any
 					!ok = false
 				endhandle
 			endif
-			if (!ok) then
-				!assigned = !assigned + 1
-				!seq = !seq + 1
-			else
-				!failed.append(!nm)
-			endif
+		endif
+		if (!ok) then
+			!assigned = !assigned + 1
+		else
+			!failed.append(!nm)
 		endif
 	enddo
 
-	!this.batchresult.val = !assigned.string() & ' box(es) numbered'
+	------------------------------------------------------------------
+	-- Model Explorer lists a zone's members in the order they were  --
+	-- made, not by name, so a batch numbered across stacks read     --
+	-- 001, 004, 007, 010, 002, 003... there even though no number   --
+	-- was missing (user, 2026-09-24). each box is moved to just      --
+	-- after the one numbered before it, so the tree reads in number --
+	-- order. boxes outside the selection keep their places; a box   --
+	-- in another zone starts that zone's run afresh. REORDER is run --
+	-- from the owner, the way admmaturity.pmlfrm does it. a box     --
+	-- that will not move is only out of place in the tree, so it is --
+	-- counted in the dump and nothing more                           --
+	------------------------------------------------------------------
+	!prevref = ''
+	!prevown = ''
+	!nreord = 0
+	!nbadord = 0
+	do !k from 1 to !n
+		!ref = !refs[!k]
+		!ok = true
+		if (!ref.eq('') or !targets[!k].eq('')) then
+			!ok = false
+		endif
+		!own = ''
+		if (!ok) then
+			$!ref
+			handle any
+				!ok = false
+			endhandle
+		endif
+		if (!ok) then
+			var !own owner
+			handle any
+				!ok = false
+			endhandle
+		endif
+		if (!ok) then
+			if (!prevref.neq('') and !own.eq(!prevown)) then
+				$!own
+				handle any
+					!ok = false
+				endhandle
+				if (!ok) then
+					REORDER $!ref AFTER $!prevref
+					handle any
+						!ok = false
+					endhandle
+				endif
+				if (!ok) then
+					!nreord = !nreord + 1
+				else
+					!nbadord = !nbadord + 1
+				endif
+			endif
+			!prevref = !ref
+			!prevown = !own
+		endif
+	enddo
+	!dbg.append('ORDER ' & !nreord.string() & ' moved in the tree, ' & !nbadord.string() & ' would not move')
+
+	do !k from 1 to !n
+		!dbg.append('OUT  ' & !k.string() & '   ' & !names[!k] & ' -> ' & !targets[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]) & '   key3=' & !this.ChkN3(!keys3[!k]))
+	enddo
+	!dbgf = object FILE('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_batch.txt')
+	handle any
+	elsehandle none
+		!dbgf.writeFile('OVERWRITE', !dbg)
+		handle any
+		endhandle
+	endhandle
+
+	!msg = !assigned.string() & ' box(es) numbered'
+	if (!same gt 0) then
+		!msg = !msg & ', ' & !same.string() & ' already had their number'
+	endif
+	!this.batchresult.val = !msg
 	if (!failed.size().gt(0)) then
 		!!alert.error(!failed.size().string() & ' box(es) could not be named - check the model for what changed underneath')
 	endif
@@ -1515,21 +1716,6 @@ define method .ClearPoints()
 endmethod
 
 ------------------------------------------------------------------
--- blanks the Info tab. only called once, from .DrawingPlan() at  --
--- form start up - there is no Clear button any more. Read CE      --
--- already does a better job of resetting the tab for any box       --
--- that is actually selected, this is only for the state before     --
--- the user has picked or navigated to anything at all               --
-------------------------------------------------------------------
-define method .ClearInfo()
-	!this.dwgno.val = ''
-	!this.revtext.val = ''
-	!this.title1text.val = ''
-	!this.title2text.val = ''
-	!this.title3text.val = ''
-endmethod
-
-------------------------------------------------------------------
 -- the coordinates on their own. a fresh round of picking wipes   --
 -- the old points but must not throw away a drawing number the    --
 -- user has already typed in                                      --
@@ -1573,11 +1759,10 @@ define method .CreateBox()
 
 	------------------------------------------------------------------
 	-- Pick only ever makes a blank box - no name, no rev, no        --
-	-- titles. naming and labelling is entirely the Info tab's job,  --
-	-- done afterwards with Read CE / Apply once the box exists.     --
-	-- keeping the two apart means a box in progress on the Info     --
-	-- tab (read in, half edited, not yet Applied) can never leak    --
-	-- into a new box picked in the meantime                         --
+	-- titles. naming is entirely the Name tab's job, done           --
+	-- afterwards once the box exists. keeping the two apart means a --
+	-- number typed on the Name tab and not yet applied can never    --
+	-- leak into a new box picked in the meantime                    --
 	------------------------------------------------------------------
 	!err = !this.MakeBox(!p1, !p2, !p3, !ubot, !utop, '', '', '', '', '')
 	if (!err.neq('')) then
@@ -1632,7 +1817,7 @@ endmethod
 -- element took two lines along the top of the grid for levels      --
 -- (user, 2026-09-15). the boxes go through .MakeBox() like every   --
 -- other tab's, so they land in the same site, unnamed, and are     --
--- numbered and labelled on the Info tab afterwards                 --
+-- numbered on the Name tab afterwards                              --
 --------------------------------------------------------------------
 
 ------------------------------------------------------------------
