@@ -358,14 +358,16 @@ layout form !!DrawingPlan dialog dock
 			------------------------------------------------------------
 			-- Move Face: one face, named by the world direction it    --
 			-- faces (N/S/E/W/Top/Bottom - Show Box writes each side's --
-			-- on the box), and two ways to say where it goes, one per --
-			-- row with its button on the right: an offset (+ out,    --
+			-- on the box), and three ways to say where it goes, one  --
+			-- per row with its button on the right: an offset (+ out, --
 			-- - in) with Move, or a coordinate with Pick - pick a     --
 			-- point and the face moves to it there and then, the     --
 			-- field then showing where it ended up (user,             --
 			-- 2026-09-20). typing into that field and pressing Enter  --
-			-- moves the face too, for a face square to E/N/U. two or  --
-			-- more boxes selected in the model all move together      --
+			-- moves the face too, for a face square to E/N/U. or Snap --
+			-- - onto the nearest face of another box that it looks at --
+			-- (see .NbDistance()). two or more boxes selected in the  --
+			-- model all move together                                  --
 			------------------------------------------------------------
 			frame .facesub 'Move Face' at xmin.splitsub ymax.splitsub+0.3 width 62
 				para .facehint1 text 'one face goes out or in, the opposite face stays put' width 58
@@ -381,6 +383,10 @@ layout form !!DrawingPlan dialog dock
 				text .faceto 'to coordinate' at xmin.faceoff ymax.faceoff+0.1 tagwidth 15 width 9 is REAL
 				para .facetomm at xmax.faceto+0.2 ymin.faceto text 'E/N/U, or type+Enter'
 				button .facepkbt 'Pick' at xmin.faceoff+46 ymin.faceto width 8 call |!This.PickFacePoint()|
+
+				para .facenb at xmin.faceto ymax.faceto+0.2 text 'to neighbour' width 14
+				para .facenbmm at xmin.faceto+15 ymin.facenb text 'nearest box facing it' width 30
+				button .facenbbt 'Snap' at xmin.faceoff+46 ymin.facenb width 8 call |!This.MoveFaceToNb()|
 			exit
 
 			------------------------------------------------------------
@@ -3265,8 +3271,9 @@ endmethod
 -- picked point, each box its face moved to pass through it,     --
 -- i.e. by however far the point is outside (or inside) the face --
 -- along its normal - a row of frames sharing a match line all   --
--- land on the one plane through the point. [1]=true with [2]=   --
--- the distance, or [1]=false with [2]=why not                    --
+-- land on the one plane through the point; 'nb' onto the nearest --
+-- box the face looks at, each box its own (see .NbDistance()).  --
+-- [1]=true with [2]=the distance, or [1]=false with [2]=why not  --
 ------------------------------------------------------------------
 define method .FaceDistance(!i is REAL, !mode is STRING) is ARRAY
 	!r = object ARRAY()
@@ -3288,6 +3295,12 @@ define method .FaceDistance(!i is REAL, !mode is STRING) is ARRAY
 		!dU = !posw.up - !cen.up
 		!along = !dE * !info[1] + !dN * !info[2] + !dU * !info[3]
 		!d = !along - !info[4]
+	elseif (!mode.eq('nb')) then
+		!nb = !this.NbDistance(!i, !info)
+		if (not(!nb[1])) then
+			return !nb
+		endif
+		!d = !nb[2]
 	else
 		!wc = !this.FaceWorldCoord(!i, !info)
 		if (not(!wc[1])) then
@@ -3355,6 +3368,221 @@ define method .MoveFaceTo()
 		return
 	endif
 	!this.MoveFaces('to')
+endmethod
+
+------------------------------------------------------------------
+-- Snap: each box's face goes onto the nearest face of another   --
+-- box that it looks at - out across a gap, or back out of an    --
+-- overlap. every box in the site is read the Check tab's way,   --
+-- into the Check tab's own arrays, which are put back after:    --
+-- the Findings list on that tab indexes into them, and a Split  --
+-- or a Merge since the last Check would leave its rows pointing --
+-- at the wrong boxes if they were left re-read                   --
+------------------------------------------------------------------
+define method .MoveFaceToNb()
+	!this.RefreshBox()
+	if (!this.mfnames.size().eq(0)) then
+		return
+	endif
+
+	!sv1 = !this.chknames
+	!sv2 = !this.chkcens
+	!sv3 = !this.chkuxe
+	!sv4 = !this.chkuxn
+	!sv5 = !this.chkuye
+	!sv6 = !this.chkuyn
+	!sv7 = !this.chkxlens
+	!sv8 = !this.chkylens
+	!sv9 = !this.chkzlens
+	!sv10 = !this.chkrads
+
+	!res = !this.ChkReadAll()
+	!err = !res[1]
+	if (!err.eq('')) then
+		!this.MoveFaces('nb')
+	endif
+
+	!this.chknames = !sv1
+	!this.chkcens = !sv2
+	!this.chkuxe = !sv3
+	!this.chkuxn = !sv4
+	!this.chkuye = !sv5
+	!this.chkuyn = !sv6
+	!this.chkxlens = !sv7
+	!this.chkylens = !sv8
+	!this.chkzlens = !sv9
+	!this.chkrads = !sv10
+
+	if (!err.neq('')) then
+		!!alert.error(!err)
+	endif
+endmethod
+
+---------------------------------------------------------------------
+-- how far box !i's face (!info, from .FaceInfo()) has to move to   --
+-- land on the nearest face of another box that it looks at. reads  --
+-- the .chk* arrays .MoveFaceToNb() has just filled. a box counts   --
+-- when                                                              --
+--   - it has a face square to this one (within 1 degree, the same  --
+--     0.9998 as .ChkPair()) - there is no snapping to a slant      --
+--   - its centre is out in front of this box's centre, so a box    --
+--     that overlaps is found but one behind is not                 --
+--   - it shares more than the Check tab's tolerance with this face --
+--     on both of the face's own two axes - face to face, not edge  --
+--     to edge, the same rule the Check tab reports a gap by        --
+--   - its face is no further out than the Check tab's Max gap, and --
+--     not so far back that this box would be left under 1mm        --
+-- several counting, the nearest wins either way (user,             --
+-- 2026-09-24); Check picks up what that leaves against the rest.   --
+-- [1]=true with [2]=the distance, + out and - in, or [1]=false     --
+-- with [2]=why not                                                  --
+---------------------------------------------------------------------
+define method .NbDistance(!i is REAL, !info is ARRAY) is ARRAY
+	!r = object ARRAY()
+	!tol = 1
+	if (not(!this.chktol.val.unset())) then
+		!tol = !this.chktol.val
+	endif
+	if (!tol lt 0) then
+		!tol = 0
+	endif
+	!ntol = 0 - !tol
+	!maxgap = 2000
+	if (not(!this.chkmax.val.unset())) then
+		!maxgap = !this.chkmax.val
+	endif
+
+	!nE = !info[1]
+	!nN = !info[2]
+	!nU = !info[3]
+	!half = !info[4]
+	!axis = !info[5]
+	!cen = !this.mfcens[!i]
+	!cn = !cen.east * !nE + !cen.north * !nN + !cen.up * !nU
+	!face = !cn + !half
+
+	------------------------------------------------------------------
+	-- the face's own two axes, the two it has an extent along: the  --
+	-- box's other plan axis and U for a side, both plan axes for    --
+	-- Top/Bottom                                                    --
+	------------------------------------------------------------------
+	!sx = !this.SideNormal(!i, 1)
+	!sy = !this.SideNormal(!i, 3)
+	!a2 = object ARRAY()
+	!a2.append(0)
+	!a2.append(0)
+	!a2.append(1)
+	!a2.append(!this.mfzlens[!i] * 0.5)
+	if (!axis.eq('X')) then
+		!a1 = !sy
+	elseif (!axis.eq('Y')) then
+		!a1 = !sx
+	else
+		!a1 = !sx
+		!a2 = !sy
+	endif
+
+	!found = false
+	!best = 0
+	!bestabs = 0
+	!n = !this.chknames.size()
+	do !j from 1 to !n
+		!nm = !this.chknames[!j]
+		if (!nm.eq(!this.mfnames[!i])) then
+			skip
+		endif
+
+		!dx = !nE * !this.chkuxe[!j] + !nN * !this.chkuxn[!j]
+		!dy = !nE * !this.chkuye[!j] + !nN * !this.chkuyn[!j]
+		!adx = !dx.abs()
+		!ady = !dy.abs()
+		!adz = !nU.abs()
+		if (!adx lt 0.9998 and !ady lt 0.9998 and !adz lt 0.9998) then
+			skip
+		endif
+
+		!cj = !this.chkcens[!j]
+		!pj = !cj.east * !nE + !cj.north * !nN + !cj.up * !nU
+		if (!pj le !cn) then
+			skip
+		endif
+
+		!hx = !this.chkxlens[!j] * 0.5
+		!hy = !this.chkylens[!j] * 0.5
+		!hz = !this.chkzlens[!j] * 0.5
+		!ej = !adx * !hx + !ady * !hy + !adz * !hz
+		!d = !pj - !ej - !face
+		if (!d gt !maxgap) then
+			skip
+		endif
+		!newlen = !half * 2 + !d
+		if (!newlen lt 1) then
+			skip
+		endif
+
+		!ap1 = !this.NbApart(!i, !j, !a1)
+		if (!ap1 ge !ntol) then
+			skip
+		endif
+		!ap2 = !this.NbApart(!i, !j, !a2)
+		if (!ap2 ge !ntol) then
+			skip
+		endif
+
+		!ad = !d.abs()
+		if (not(!found) or !ad lt !bestabs) then
+			!found = true
+			!best = !d
+			!bestabs = !ad
+		endif
+	enddo
+
+	if (not(!found)) then
+		!r.append(false)
+		!mg = !maxgap.string('D0').replace('mm', '')
+		!r.append('no box that face ' & !info[6] & ' looks at within ' & !mg & 'mm (Max gap on the Check tab)')
+		return !r
+	endif
+	!r.append(true)
+	!r.append(!best)
+	return !r
+endmethod
+
+---------------------------------------------------------------------
+-- how far apart box !i and box !j are along one of !i's own axes,  --
+-- !a = [nE, nN, nU, half length of !i on it] as .SideNormal()      --
+-- gives it: positive when clear of each other, negative by the     --
+-- overlap, the same as .ChkSpan()[1]. !j's half width along the    --
+-- axis is picked up off whichever of its own axes runs that way,   --
+-- the way .ChkPair() does it                                       --
+---------------------------------------------------------------------
+define method .NbApart(!i is REAL, !j is REAL, !a is ARRAY) is REAL
+	!aE = !a[1]
+	!aN = !a[2]
+	!aU = !a[3]
+	!ah = !a[4]
+	!ci = !this.mfcens[!i]
+	!cj = !this.chkcens[!j]
+	!pc = !ci.east * !aE + !ci.north * !aN + !ci.up * !aU
+	!pj = !cj.east * !aE + !cj.north * !aN + !cj.up * !aU
+
+	!dx = !aE * !this.chkuxe[!j] + !aN * !this.chkuxn[!j]
+	!dy = !aE * !this.chkuye[!j] + !aN * !this.chkuyn[!j]
+	!adx = !dx.abs()
+	!ady = !dy.abs()
+	!adz = !aU.abs()
+	!hx = !this.chkxlens[!j] * 0.5
+	!hy = !this.chkylens[!j] * 0.5
+	!hz = !this.chkzlens[!j] * 0.5
+	!ej = !adx * !hx + !ady * !hy + !adz * !hz
+
+	!a1 = !pc - !ah
+	!a2 = !pc + !ah
+	!b1 = !pj - !ej
+	!b2 = !pj + !ej
+	!sp = !this.ChkSpan(!a1, !a2, !b1, !b2)
+	!apart = !sp[1]
+	return !apart
 endmethod
 
 ------------------------------------------------------------------

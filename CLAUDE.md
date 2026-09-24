@@ -53,7 +53,7 @@
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
 
 ## Move Face 多選（2026-09-24 已併回 master，`3c50023`..`16410c8`＋merge commit，**已在 E3D 實測**）
-- 4 個 commit，只動 `DrawingPlan.pmlfrm` 跟本檔，在分支 `feature/moveface-multi` 上做完、實測通過後用 `--no-ff` 併回 master，分支已刪。合併時跟 Check 分頁有兩處文字衝突（member 區塊、本檔換電腦第 1 點，兩邊都留），另外還有一處**語意衝突**是 git 看不出來的：Check 分頁點清單列時自己下 `AID CLEAR ALL`，畫面清了但 Show Box 的按鈕還停在 `Hide Box`，下一次按會變成清而不是畫。在 merge commit 裡把那兩處改成 `ClearAids()`。**這一處還沒在 E3D 實測。**
+- 4 個 commit，只動 `DrawingPlan.pmlfrm` 跟本檔，在分支 `feature/moveface-multi` 上做完、實測通過後用 `--no-ff` 併回 master，分支已刪。合併時跟 Check 分頁有兩處文字衝突（member 區塊、本檔換電腦第 1 點，兩邊都留），另外還有一處**語意衝突**是 git 看不出來的：Check 分頁點清單列時自己下 `AID CLEAR ALL`，畫面清了但 Show Box 的按鈕還停在 `Hide Box`，下一次按會變成清而不是畫。在 merge commit 裡把那兩處改成 `ClearAids()`，2026-09-24 已實測 OK。
 - 面改用 North/South/East/West/Top/Bottom 命名，每個 BOX 自己取「法線最接近該方向的側面」；原因是現場同一批 BOX 的 Y 有 `N 12.523 E` 也有 `S 12.523 W`（Merge 那段註解），`+Y` 在隔壁 BOX 是反的，多選時各推各的。轉到接近 45°（內積 < cos 40°）的 BOX 分不出 N/E，跳過並回報。
 - Show Box 讀 `object selection()`：選 2 個以上 DrawingPlanBox 就一起鎖定，否則退回 CE（單選不信選取——命令列導覽不會更新選取，會拿到十分鐘前點的那個）。Split 維持單 BOX，多選按 Pick Split Point 會擋。
 - Show Box 在每個側面中心印 `+X = N` 標籤；boxinfo 多選時列數量與名稱。
@@ -89,7 +89,7 @@
 - **每次按檢查都會把過程寫到 `check_box.txt`**（`23c2987`，L: 對應這台的 D:，已 gitignore）：`CHECKBOX` 設定／`BOX` 每個框的 E N U、XYZ、U 底..頂、兩個平面軸、外接球半徑／`PAIR` 每一對的 `o=`（B 心在 A 座標系）`g=`（三軸相距，負的是重疊）`npos= ntouch=` 與判定結果／`SKIP` 被預篩擋掉的（中心距與門檻）／`ROW` 真的進清單的。`PAIR` 那行是 `ChkPair` 在分類的當下寫的，用的就是分支讀到的同一組變數——對不起來的 dump 比沒有 dump 更糟。**有 finding 看起來不對，先看這個檔，不要看截圖。**
 - **已實測 OK**（2026-09-23，使用者）：`coll all box for /<proj>_DrawingPlanBox` 不導覽就收得到、比對、清單、中文顯示、`list` 的 `callback` ＋ `.selection()`（回傳列文字）、點列畫 AID ＋ CE 導覽、高程面那一路（分群／分面／一列一個面／依高程排序）、`check_box.txt` 寫檔。
 - **還沒試過**：大 SITE 跑多久（n² 對，預篩過濾掉約七成；`SKIP` 行也是 n² 級，太慢就先把它拿掉）；實際專案上報出來的 finding 是不是真的；**樓高小於 Max gap 的區域會不會把兩個真實高程面併成一個**（這次模型樓高都 2840 以上所以沒遇到，遇到就把 Max gap 調小）。
-- 還沒做：Move Face 加第四種給法 `to neighbour`（貼到鄰框的面）。要改 `FaceDistance()`；moveface-multi 已經併回 master，可以開始做了。
+- Move Face 第四種給法 `to neighbour`（Snap 鈕，2026-09-24 已併回 master，`5bf07e7`，**已在 E3D 實測**）：沿用 Face 選單選的面，每個選到的 BOX 自己找「那個面正對的最近鄰框」貼過去——有縫往外長、有重疊往內縮。鄰框的條件在 `NbDistance()` 的註解：面要平行（1°）、中心在本框中心前方、在面的兩個軸上都共用超過 Check 的容差（面對面，不是只碰到邊）、距離不超過 Check 的 Max gap。好幾個符合時貼 |距離| 最小的（使用者決定，2026-09-24），跟其他鄰框剩下的縫／重疊交給 Check 分頁抓。讀全部框借 `ChkReadAll()`，讀完把 `chk*` 陣列還原——Check 清單的列用 index 指那些陣列，中間做過 Split／Merge 的話重讀會讓舊列指到別的框。已實測 OK（使用者）：單框 N/S/E/W/Top、有縫與有重疊、多選一排框一起貼、沒有鄰框時的 alert、做完回 Check 分頁點舊的列仍畫對。
 
 ## 換電腦
 1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。有只在本機的進行中分支的話，先從舊機器 `git push -u origin <分支>`，新機器再 `git checkout` 它（`git branch -vv` 沒有 `[origin/...]` 的就是只在本機）。
