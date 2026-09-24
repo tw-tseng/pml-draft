@@ -1004,15 +1004,106 @@ define method .BatchDir(!dir is STRING) is ARRAY
 endmethod
 
 ---------------------------------------------------------------------
--- a box centre's coordinate on one world axis, 'E' | 'N' | 'U'     --
+-- where a box sits on one world axis, 'E' | 'N' | 'U', off its     --
+-- WVOL (min E N U, max E N U - the same six DrawingPlan1 reads):   --
+-- [1]=low end [2]=high end [3]=middle. a box turned off the world  --
+-- axes gets a WVOL a little wider than itself, which only makes    --
+-- .BatchBands() a little more willing to call two boxes one row.   --
+-- no WVOL, and the box counts as a point at !pos                    --
 ---------------------------------------------------------------------
-define method .BatchKey(!pos is POSITION, !axis is STRING) is REAL
+define method .BatchSpan(!pos is POSITION, !wvol is STRING, !axis is STRING) is ARRAY
+	!ilo = 3
+	!ihi = 6
+	!v = !pos.up
 	if (!axis.eq('E')) then
-		return !pos.east
+		!ilo = 1
+		!ihi = 4
+		!v = !pos.east
 	elseif (!axis.eq('N')) then
-		return !pos.north
+		!ilo = 2
+		!ihi = 5
+		!v = !pos.north
 	endif
-	return !pos.up
+	!r = ARRAY()
+	!last = !wvol.part(6)
+	if (!last.eq('')) then
+		!c = !v.string('D3').replace('mm', '').real()
+		!r.append(!c)
+		!r.append(!c)
+		!r.append(!c)
+		return !r
+	endif
+	!lo = !wvol.part(!ilo).replace('mm', '').real()
+	!hi = !wvol.part(!ihi).replace('mm', '').real()
+	!mid = (!lo + !hi) * 0.5
+	!r.append(!lo)
+	!r.append(!hi)
+	!r.append(!mid)
+	return !r
+endmethod
+
+---------------------------------------------------------------------
+-- which storey / row each box is in, along one axis: 1, 2, 3...    --
+-- in the direction asked for. two boxes are in the same one when   --
+-- the middle of either lies inside the other's span - a pipe-rack  --
+-- box 400 lower than the frames beside it is still on their        --
+-- storey. going up the axis, a new one starts at the first box     --
+-- whose middle is clear of the span of the box that started the    --
+-- current one, and is measured from that first box, not the last  --
+-- one added, so a run of boxes each a little higher than the last  --
+-- cannot creep up a whole storey. matching middles to 1mm on the   --
+-- other hand called that rack box a storey of its own and gave it  --
+-- 001 (user, 2026-09-24)                                           --
+---------------------------------------------------------------------
+define method .BatchBands(!mid is ARRAY, !lo is ARRAY, !hi is ARRAY, !asc is BOOLEAN) is ARRAY
+	!n = !mid.size()
+	!ord = ARRAY()
+	!band = ARRAY()
+	do !i from 1 to !n
+		!ord.append(!i)
+		!band.append(0)
+	enddo
+	do !i from 1 to !n
+		!best = !i
+		!jstart = !i + 1
+		do !j from !jstart to !n
+			!oj = !ord[!j]
+			!ob = !ord[!best]
+			if (!mid[!oj] lt !mid[!ob]) then
+				!best = !j
+			endif
+		enddo
+		!tmp = !ord[!i]
+		!ord[!i] = !ord[!best]
+		!ord[!best] = !tmp
+	enddo
+
+	!nb = 0
+	!first = 0
+	do !k from 1 to !n
+		!ix = !ord[!k]
+		!join = false
+		if (!first gt 0) then
+			if (!mid[!ix] le !hi[!first]) then
+				!join = true
+			endif
+			if (!mid[!first] ge !lo[!ix]) then
+				!join = true
+			endif
+		endif
+		if (not(!join)) then
+			!nb = !nb + 1
+			!first = !ix
+		endif
+		!band[!ix] = !nb
+	enddo
+
+	if (not(!asc)) then
+		do !k from 1 to !n
+			!band[!k] = !nb + 1 - !band[!k]
+		enddo
+	endif
+	return !band
 endmethod
 
 ---------------------------------------------------------------------
@@ -1116,6 +1207,10 @@ define method .AssignNumbers()
 	!keys1 = ARRAY()
 	!keys2 = ARRAY()
 	!keys3 = ARRAY()
+	!lo1 = ARRAY()
+	!hi1 = ARRAY()
+	!lo2 = ARRAY()
+	!hi2 = ARRAY()
 
 	do !sel values !sels
 		!ok = true
@@ -1155,10 +1250,22 @@ define method .AssignNumbers()
 				if !names.find(!equi).size().eq(0) then
 					var !boxpos worpos
 					!pos = !boxpos.position()
+					!bvol = ''
+					var !bvol wvol
+					handle any
+						!bvol = ''
+					endhandle
+					!s1 = !this.BatchSpan(!pos, !bvol, !axis1)
+					!s2 = !this.BatchSpan(!pos, !bvol, !axis2)
+					!s3 = !this.BatchSpan(!pos, !bvol, !axis3)
 					!names.append(!equi)
-					!keys1.append(!this.BatchKey(!pos, !axis1))
-					!keys2.append(!this.BatchKey(!pos, !axis2))
-					!keys3.append(!this.BatchKey(!pos, !axis3))
+					!keys1.append(!s1[3])
+					!keys2.append(!s2[3])
+					!keys3.append(!s3[3])
+					!lo1.append(!s1[1])
+					!hi1.append(!s1[2])
+					!lo2.append(!s2[1])
+					!hi2.append(!s2[2])
 				endif
 			endif
 		endif
@@ -1181,57 +1288,73 @@ define method .AssignNumbers()
 	!dbg.append('KEYS key1 ' & !axis1 & ' asc=' & !ascend1.string() & '   key2 ' & !axis2 & ' asc=' & !ascend2.string() & '   key3 ' & !axis3 & ' asc=' & !ascend3.string())
 	!ng = !names.size()
 	do !k from 1 to !ng
-		!dbg.append('IN   ' & !names[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]) & '   key3=' & !this.ChkN3(!keys3[!k]))
+		!dbg.append('IN   ' & !names[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & ' (' & !this.ChkN3(!lo1[!k]) & '..' & !this.ChkN3(!hi1[!k]) & ')   key2=' & !this.ChkN3(!keys2[!k]) & ' (' & !this.ChkN3(!lo2[!k]) & '..' & !this.ChkN3(!hi2[!k]) & ')   key3=' & !this.ChkN3(!keys3[!k]))
 	enddo
 
 	------------------------------------------------------------------
-	-- selection sort on the parallel key arrays. these lists are at  --
-	-- most a few dozen boxes at a time, so the O(n^2) cost does not  --
-	-- matter and this avoids needing a sort-by-key builtin, which    --
-	-- nothing else in this codebase uses.                            --
-	--                                                                --
-	-- each key only breaks ties on the one before it, and on every   --
-	-- key but the last "tie" allows a small tolerance rather than    --
-	-- exact equality - boxes on what is obviously the same storey    --
-	-- can differ by floating point noise even though they came from  --
-	-- the same split                                                  --
+	-- every key but the last is a storey or a row, not a coordinate: --
+	-- .BatchBands() numbers them. only the last - Number along - is  --
+	-- compared as a coordinate. with one key there is nothing to     --
+	-- group                                                           --
 	------------------------------------------------------------------
-	!tol = 1
-	!ntol = 0 - !tol
 	!n = !names.size()
+	!band1 = ARRAY()
+	!band2 = ARRAY()
+	do !k from 1 to !n
+		!band1.append(0)
+		!band2.append(0)
+	enddo
+	if (!nkeys ge 2) then
+		!band1 = !this.BatchBands(!keys1, !lo1, !hi1, !ascend1)
+	endif
+	if (!nkeys ge 3) then
+		!band2 = !this.BatchBands(!keys2, !lo2, !hi2, !ascend2)
+	endif
+
+	------------------------------------------------------------------
+	-- selection sort on the parallel arrays. these lists are at most --
+	-- a few dozen boxes at a time, so the O(n^2) cost does not       --
+	-- matter and this avoids needing a sort-by-key builtin, which    --
+	-- nothing else in this codebase uses. band numbers already run   --
+	-- the way asked for; the last key is turned round here           --
+	------------------------------------------------------------------
 	do !i from 1 to !n
 		!best = !i
 		!jstart = !i + 1
 		do !j from !jstart to !n
 			!swap = false
-			!d = !keys1[!j] - !keys1[!best]
-			if (not(!ascend1)) then
-				!d = 0 - !d
-			endif
 			if (!nkeys eq 1) then
+				!d = !keys1[!j] - !keys1[!best]
+				if (not(!ascend1)) then
+					!d = 0 - !d
+				endif
 				if (!d lt 0) then
 					!swap = true
 				endif
-			elseif (!d lt !ntol) then
-				!swap = true
-			elseif (!d lt !tol) then
-				!d = !keys2[!j] - !keys2[!best]
-				if (not(!ascend2)) then
-					!d = 0 - !d
-				endif
-				if (!nkeys eq 2) then
-					if (!d lt 0) then
-						!swap = true
-					endif
-				elseif (!d lt !ntol) then
+			else
+				!d = !band1[!j] - !band1[!best]
+				if (!d lt 0) then
 					!swap = true
-				elseif (!d lt !tol) then
-					!d = !keys3[!j] - !keys3[!best]
-					if (not(!ascend3)) then
+				elseif (!d eq 0 and !nkeys eq 2) then
+					!d = !keys2[!j] - !keys2[!best]
+					if (not(!ascend2)) then
 						!d = 0 - !d
 					endif
 					if (!d lt 0) then
 						!swap = true
+					endif
+				elseif (!d eq 0) then
+					!d = !band2[!j] - !band2[!best]
+					if (!d lt 0) then
+						!swap = true
+					elseif (!d eq 0) then
+						!d = !keys3[!j] - !keys3[!best]
+						if (not(!ascend3)) then
+							!d = 0 - !d
+						endif
+						if (!d lt 0) then
+							!swap = true
+						endif
 					endif
 				endif
 			endif
@@ -1252,6 +1375,12 @@ define method .AssignNumbers()
 			!tmpkey = !keys3[!i]
 			!keys3[!i] = !keys3[!best]
 			!keys3[!best] = !tmpkey
+			!tmpkey = !band1[!i]
+			!band1[!i] = !band1[!best]
+			!band1[!best] = !tmpkey
+			!tmpkey = !band2[!i]
+			!band2[!i] = !band2[!best]
+			!band2[!best] = !tmpkey
 		endif
 	enddo
 
@@ -1421,7 +1550,7 @@ define method .AssignNumbers()
 	!dbg.append('ORDER ' & !nreord.string() & ' moved in the tree, ' & !nbadord.string() & ' would not move')
 
 	do !k from 1 to !n
-		!dbg.append('OUT  ' & !k.string() & '   ' & !names[!k] & ' -> ' & !targets[!k] & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]) & '   key3=' & !this.ChkN3(!keys3[!k]))
+		!dbg.append('OUT  ' & !k.string() & '   ' & !names[!k] & ' -> ' & !targets[!k] & '   band1=' & !band1[!k].string() & '   band2=' & !band2[!k].string() & '   key1=' & !this.ChkN3(!keys1[!k]) & '   key2=' & !this.ChkN3(!keys2[!k]) & '   key3=' & !this.ChkN3(!keys3[!k]))
 	enddo
 	!dbgf = object FILE('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_batch.txt')
 	handle any

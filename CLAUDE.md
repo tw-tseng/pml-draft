@@ -80,6 +80,7 @@
 - Assign Numbers 另一個舊 bug：Order by 兩個 option 只設了 dtext，`.selection()` 不帶參數回的是 rtext，跟程式裡比對的字串都對不上，全部掉進最後的 else（North -> South），選什麼都一樣。改成 `.selection('DTEXT')`（AVEVA 先例 `admin/objects/admstamp.pmlobj:2477`）。**option 只有 dtext 時一律用 `.selection('DTEXT')` 或 `.dtext[.val]`**。
 - Order by 的意思改了（使用者，2026-09-24，看 `check_batch.txt` 確認排序本身沒錯、是語意跟使用者直覺相反）：原本 1st＝先分組（主鍵），S->N＋Bottom->Top 會每一疊由下往上編；改成 1st＝**號碼連續時走的方向**（次鍵）、2nd＝下一排往哪走（主鍵）。標籤改 `Number along`／`Then`，gadget 名不變；程式只在收集前把兩組 axis/asc 對調。預設改成 along W->E、then Bottom->Top（同層由西往東、再往上一層）。每次按都把排序過程寫到 `check_batch.txt`（BATCH／KEYS／IN／ORDER／OUT）。第三個方向 `And then`（`.batchdir3`，使用者要求，預設 (none)）：三個選項由快到慢，排序鍵反過來由慢到快（key1＝最慢的那個有用的），(none) 直接略過；解讀選項收成 `BatchDir()`、取座標收成 `BatchKey()`，最後一個鍵不帶容差、前面的鍵差 1mm 內算平手。
 - 「跳號」其實是 Model Explorer 照建立順序列 ZONE 的成員、不照名字（check_batch 的 OUT 顯示 001～014 一個不缺）。Assign Numbers 編完號後，每個框 `REORDER` 到前一號後面（CE 在 owner，先例 `admin/forms/admmaturity.pmlfrm:425`），不同 ZONE 各自排、這批以外的框不動；dump 多一行 `ORDER n moved, m would not move`。
+- **分層／分排改用範圍，不用中心差 1mm**（分支 `fix/batch-bands`，**未在 E3D 實測**）：用「圍住選取物」建的管架框中心 U 比旁邊的框低 145mm，被當成更低的一層拿到 001（使用者，2026-09-24）。改成 `BatchBands()`：慢的鍵（And then、Then）各自分群——兩框只要有一個的中心落在另一個的範圍內就算同一層／排，新的一群從「群裡第一個框」量（跟 Check 的高程面同一個道理，免得一路爬上去）；只有最後一個鍵（Number along）比座標。範圍與中心都從框的 `WVOL` 讀（`BatchSpan()`），`BatchKey()` 刪掉。check_batch 的 IN 多印範圍、OUT 多印 band1／band2。
 - 已實測 OK（2026-09-24，使用者）：Read CE、Rename、重名被擋、空欄位的 alert、Assign Numbers 連按結果不變、兩個／三個方向的排序、Model Explorer 照號碼排。
 
 ## Pick 分頁：圍住選取物建 BOX（2026-09-24 已併回 master，**已在 E3D 實測**）
