@@ -52,6 +52,13 @@
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX（2026-09-24 做了，見「Pick 分頁：圍住選取物」）、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。「在 3D 每個框中心 AID 印圖號」那半也不做：框一多標籤疊在一起反而看不清楚（使用者，2026-09-24）；要確認編號順序就看 `check_batch.txt`）。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
 
+## DRAFT：view 下方的圖名（2026-09-24，分支 `feature/view-title`，**未在 E3D 實測**）
+- 使用者要求：view 正下方兩行，置中對齊 view。上行 `PLAN at ELEVATION +<框頂面 U>`，顏色 20、字高＝Match Line Text Height（`.matchhei`）、有底線；下行 `SCALE 1:n`，黃色、字高＝Pipe Label Height（`.lineheitx`）。高程取**框頂面**（`WVOL` part 6），**直接用 E3D 的 U**、帶正負號（使用者選的）；比例讀 view 自己的 `VSCA`，fit 或手選都一樣。
+- 放在**所有下方標註的更下面**（使用者選的）：`.RecenterView()` 算完格線圈圈後記下 `.titletop`（下方內容的底），再把 `TitleDepth()`（5＋字高1＋1＋2.5＋字高2）加進下緣一起置中，view 移動時 `titletop` 跟著 `dy` 走；置中後才建字（NOTE 的文字是圖紙座標，不會跟著 view 移）。
+- 元素：view 底下一個具名 NOTE `<drwg>/SS/S1/V1/VTITLE`，內含 `ELEV`、`ULINE`（STRA）、`SCALE`。**更新路徑**（有 REVI）找得到就只改 BTEXT、位置不動；舊圖還沒有就用 `TitleTopNow()` 放在目前最下方標註底下，不動 view。現有程式用 `note 1` 找的都是先建的那個 NOTE，這個會是 NOTE 2，不衝突。
+- 底線長度是**估的**（字高×0.8×字數，同 `.WatchRect()`），E3D 沒有讀文字實際寬度的屬性；對中心畫，估錯兩端平均。實測太長／太短就調那個 0.8。更新路徑改了字、底線長度不跟著變。
+- 要測：重建一張圖看兩行字的位置、顏色、字高、底線長度；置中後整張圖還在 canvas 裡；有 REVI 的圖更新後字有沒有跟著框頂面變、位置不動；舊圖第一次更新時補建。
+
 ## Move Face 多選（2026-09-24 已併回 master，`3c50023`..`16410c8`＋merge commit，**已在 E3D 實測**）
 - 4 個 commit，只動 `DrawingPlan.pmlfrm` 跟本檔，在分支 `feature/moveface-multi` 上做完、實測通過後用 `--no-ff` 併回 master，分支已刪。合併時跟 Check 分頁有兩處文字衝突（member 區塊、本檔換電腦第 1 點，兩邊都留），另外還有一處**語意衝突**是 git 看不出來的：Check 分頁點清單列時自己下 `AID CLEAR ALL`，畫面清了但 Show Box 的按鈕還停在 `Hide Box`，下一次按會變成清而不是畫。在 merge commit 裡把那兩處改成 `ClearAids()`，2026-09-24 已實測 OK。
 - 面改用 North/South/East/West/Top/Bottom 命名，每個 BOX 自己取「法線最接近該方向的側面」；原因是現場同一批 BOX 的 Y 有 `N 12.523 E` 也有 `S 12.523 W`（Merge 那段註解），`+Y` 在隔壁 BOX 是反的，多選時各推各的。轉到接近 45°（內積 < cos 40°）的 BOX 分不出 N/E，跳過並回報。
