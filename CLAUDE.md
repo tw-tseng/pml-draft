@@ -1,5 +1,13 @@
 # PA_pmllibE3D2.1 — AVEVA E3D 2.1 的 PML 程式庫
 
+## 目前進度（2026-09-24，換電腦前寫的）
+- `master` = `origin/master` = `f0aaa59`，已 push。當天併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
+- **進行中**：分支 `feature/view-title`（`dea3a5d`，**只在本機、未實測**）——DRAFT view 下方的圖名，細節見「DRAFT：view 下方的圖名」。下一步：使用者在 E3D 重建／更新各一張圖，照那節的「要測」測，OK 就 `--no-ff` 併回 master 並 push。唯一預期要調的是底線長度的係數 0.8。
+- 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
+- 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
+- 使用者決定不做的（別再提）：複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）。
+- 合作方式：一個功能一支分支，使用者在 E3D 實測後才 `--no-ff` 併回 master 並 push；每次改完 `.pmlfrm` 提醒 kill／reload／show；使用者回報時截圖放 repo 根目錄 `error.png`，除錯看 `check*.txt`（`check_box.txt`＝Check 分頁、`check_batch.txt`＝Assign Numbers、`check4.txt`＝RecenterView）。
+
 ## 目錄與命名
 - `design/` 是 DESIGN 模組、`draft/` 是 DRAFT 模組。檔名前綴決定模組：`DrawingPlan*` = DESIGN（建圖框 BOX），`DrawingPlan1*` = DRAFT（出圖／標註／版次）。新表單照這個規則命名。
 - 一個 `.pmlfnc` 一個全域函式，PML 靠檔名找函式。
@@ -38,7 +46,7 @@
 ## 這台機器
 - 這是測試機，E3D 版本跟正式機不同：缺屬性／缺命令用 `HANDLE ANY` 包掉，能跑完就好，不必真的修。
 - PML 寫到 `L:`，對應這台的 `D:`；使用者說「請看 check」是指 `D:\...\CHECK.TXT`（check*.txt 都是除錯 dump，已 gitignore）。
-- Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。
+- Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫——2026-09-24 MCP 仍 403，REST 用 User 層的 token 正常讀到頁面（PowerShell `Invoke-RestMethod`，header `Notion-Version: 2022-06-28`）。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。
 
 ## 待實測（2026-09-21 已併回 master，`bd8079f`..`1c99bc6`）
 - 原本在 `feature/drawingplan-grid-merge`。2026-09-21 使用者決定連同尚未實測的部份一起併進 master（我有先提醒下面那條「還沒在 E3D 實測」）。分支本身還在，內容已全部包含在 master 裏。
@@ -116,11 +124,17 @@
 - Move Face 第四種給法 `to neighbour`（Snap 鈕，2026-09-24 已併回 master，`5bf07e7`，**已在 E3D 實測**）：沿用 Face 選單選的面，每個選到的 BOX 自己找「那個面正對的最近鄰框」貼過去——有縫往外長、有重疊往內縮。鄰框的條件在 `NbDistance()` 的註解：面要平行（1°）、中心在本框中心前方、在面的兩個軸上都共用超過 Check 的容差（面對面，不是只碰到邊）、距離不超過 Check 的 Max gap。好幾個符合時貼 |距離| 最小的（使用者決定，2026-09-24），跟其他鄰框剩下的縫／重疊交給 Check 分頁抓。讀全部框借 `ChkReadAll()`，讀完把 `chk*` 陣列還原——Check 清單的列用 index 指那些陣列，中間做過 Split／Merge 的話重讀會讓舊列指到別的框。已實測 OK（使用者）：單框 N/S/E/W/Top、有縫與有重疊、多選一排框一起貼、沒有鄰框時的 alert、做完回 Check 分頁點舊的列仍畫對。
 
 ## 換電腦
-1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。有只在本機的進行中分支的話，先從舊機器 `git push -u origin <分支>`，新機器再 `git checkout` 它（`git branch -vv` 沒有 `[origin/...]` 的就是只在本機）。
-2. 設使用者環境變數 `NOTION_TOKEN`。舊 token 已失效（2026-09-20 起 MCP 與 REST 都回 401 `API token is invalid`），到 notion.so/my-integrations 重新產一個，並確認 integration 有連到「E3D-管線平面圖程式摘要」那頁。
-3. 重建 `.mcp.json`：
+**整個目錄複製過去（2026-09-24 使用者的做法）**：
+1. 複製整個 repo 目錄。`.git`（含只在本機的分支，例如 `feature/view-title`）、`bin/` 裡的 BlankPos.exe／RevCloud.exe（被 gitignore、不在 GitHub，但在目錄裡）、`.mcp.json`、未追蹤的 check／log 檔都會跟著過去，不用另外 push 或重建。到了新機器先 `git status`、`git branch -vv` 對一下。
+2. 放到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
+3. **路徑寫死的地方**：26 處 PML 把除錯檔寫到 `L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check*.txt`（`DrawingPlan1.pmlfrm` 18 處，另有 GridAnnotation／LineNoAnnotation 各 2、FlowAnnotation／MatchGaps 各 1、`DrawingPlan.pmlfrm` 2）。新機器的 E3D 看到的 `L:` 要指到同一個目錄，否則 dump 靜靜寫不出來（Check 分頁會多一列「寫不出 check_box.txt」）。
+4. 使用者環境變數 `NOTION_TOKEN`：從舊機器抄同一個值（PowerShell `[Environment]::GetEnvironmentVariable('NOTION_TOKEN','User')`），設成新機器的 **User** 層，然後重開 VS Code。2026-09-24 這個 token 用 REST 是有效的；MCP 端點會回 403，照「這台機器」那條改走 REST。
+5. Claude Code 的 memory **不在 repo 目錄裡**：`%USERPROFILE%\.claude\projects\<repo路徑編碼>\memory\`，這台是 `C:\Users\tw.tseng\.claude\projects\d--E3D-pdms-prog-E3D2-1-PA-pmllibE3D2-1\memory\`（約 39 個檔）。要另外複製；新機器上 repo 路徑不同的話資料夾名稱也會不同，把檔案放進新名稱的資料夾。沒複製的話，本檔加 Notion 也夠開工。
+
+**改用 git clone 的話**（不是整個複製）：
+1. `git clone https://github.com/tw-tseng/pml-draft.git`，只在本機的分支要先從舊機器 `git push -u origin <分支>` 再 `git checkout`（`git branch -vv` 沒有 `[origin/...]` 的就是只在本機）。
+2. 重建 `.mcp.json`：
    ```json
    {"mcpServers":{"notion":{"type":"http","url":"https://mcp.notion.com/mcp","headers":{"Authorization":"Bearer ${NOTION_TOKEN}"}}}}
    ```
-4. `bin/` 裡的 BlankPos.exe、RevCloud.exe 不在 repo（各 25MB），從舊機器或 `Documents\Python\blankpos`、`revcloud` 重建後手動放到 PMLLIB 搜尋路徑下的 bin。**PyInstaller 產出的是 `dist\start-完整版06.exe`，要改名複製成 `bin\BlankPos.exe`**——2026-09-21 就是 build 完沒部署，出圖一整天都在吃舊 exe，表現得跟「改了沒用」一模一樣。改完 exe 先 `ls -la bin/` 對時間戳。
-5. Claude Code 的 memory 在 `%USERPROFILE%\.claude\projects\<repo路徑編碼>\memory\`，整個資料夾複製過去就接得上；沒複製的話，本檔加 Notion 也夠開工。
+3. `bin/` 的 BlankPos.exe、RevCloud.exe 不在 repo（各 25MB），從舊機器或 `Documents\Python\blankpos`、`revcloud` 重建後手動放到 PMLLIB 搜尋路徑下的 bin。**PyInstaller 產出的是 `dist\start-完整版06.exe`，要改名複製成 `bin\BlankPos.exe`**——2026-09-21 就是 build 完沒部署，出圖一整天都在吃舊 exe，表現得跟「改了沒用」一模一樣。改完 exe 先 `ls -la bin/` 對時間戳。
