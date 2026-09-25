@@ -3,6 +3,7 @@
 ## 目前進度（2026-09-24，換電腦前寫的）
 - `master` = `origin/master` = `f0aaa59`，已 push。當天併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
 - **進行中**：分支 `feature/view-title`（**只在本機**）——DRAFT view 下方的圖名，細節見「DRAFT：view 下方的圖名」。2026-09-25 第一次實測只有底線（已修）；第二次字出來了，但底線太長、字離線太遠，照使用者畫的 `error.png` 改了間距與底線長度，等再測。OK 就 `--no-ff` 併回 master 並 push。
+- **進行中**：分支 `feature/import-paliby`（`5b8ebc7`，從 master 開，**只在本機、未實測**）——View 分頁 Representation Style 下方的 Import PA-LIBY 鈕，細節寫在那支分支 CLAUDE.md「目錄與命名」的 PA-LIBY 那條。跟 `feature/view-title` 都改 `DrawingPlan1.pmlfrm`（不同段落），E3D 讀的是工作目錄，**一次只能測一支**：切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
 - 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
 - 使用者決定不做的（別再提）：複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）。
