@@ -713,7 +713,7 @@ endmethod
 -- a NEW, OLD or END that fails stops the run: going on would build the --
 -- rest at the wrong level, which is what happened. a setting that      --
 -- fails -- a colour this machine's dictionary lacks, say -- is noted   --
--- and passed over, and they are all listed at the end                  --
+-- and passed over, listed in check_liby.txt only                       --
 --                                                                       --
 -- every name the macro makes is looked up first: one left over from a --
 -- run like the one above would stop it at its NEW with /PA-LIBY half   --
@@ -826,11 +826,14 @@ define method .ImportPaLibyNow() is boolean
 		!!alert.error('PA-LIBY.txt ran but /PA-LIBY/REPR/PIPE/GA or /PA-LIBY/HRUL/GEN/Hatch-Gen is not there - see check_liby.txt')
 		return false
 	endif
+	----------------------------------------------------------------------
+	-- the refused settings are in check_liby.txt only: a success is one --
+	-- dialog, the button's message (user, 2026-09-25). on the test      --
+	-- machine they are BOCOLO/BOSTYL/OCCOLO/OCSTYL on all nine STYLEs,  --
+	-- attributes its E3D does not have                                 --
+	----------------------------------------------------------------------
 	!log.append('DONE')
 	!this.LibyLog(!log)
-	if (!bad.size().gt(0)) then
-		!!alert.warning(!bad.size().string() & ' setting(s) of PA-LIBY.txt were refused on this machine and skipped, the first: ' & !bad[1] & ' - all of them are in check_liby.txt')
-	endif
 	return true
 endmethod
 
