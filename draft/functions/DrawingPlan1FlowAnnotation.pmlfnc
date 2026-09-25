@@ -488,6 +488,28 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 		!flowsca = 1
 	endif
 	------------------------------------------------------------------------
+	-- how long the arrow is on the sheet, and how far clear of the ends   --
+	-- of its visible run it has to stay, mm of the sheet                  --
+	--                                                                     --
+	-- the symbol is drawn from its tail: the point an arrow is placed at  --
+	-- is where the feathers are, and it reaches forwards from there the   --
+	-- way the pipe flows, which is from the first end of the tube to the --
+	-- second, seen[4..5] to seen[6..7]. only the tail used to be kept     --
+	-- inside the run, so an arrow slid to the far end of a short run      --
+	-- beside the border was drawn out past the view (user, 2026-09-25:   --
+	-- 50-B-9, 12.8mm of run, slid to 0.95 to get clear of its neighbour, --
+	-- feathers 0.6mm inside the border and all of the head outside it)  --
+	--                                                                     --
+	-- WELD-ARR at Scale 1 came out 7.2 to 7.5mm long on that sheet (tails --
+	-- 20.35mm apart in check_flow.txt were 62px apart on the screenshot), --
+	-- so 8 per unit of Scale. E3D has no attribute giving the size a      --
+	-- symbol comes out at; another symbol on the FlowArrow tab may want a --
+	-- different number here. !minrun, 10, still leaves room for it: a run --
+	-- long enough to be offered an arrow is long enough to hold one      --
+	------------------------------------------------------------------------
+	!alen = 8 * !flowsca
+	!amarg = 0.5
+	------------------------------------------------------------------------
 	-- turn !dbg on to have every branch report where its arrow went, in   --
 	-- the command window. that is the quickest way to tell a pair which   --
 	-- really is too close from a pair which only looks it. the same lines --
@@ -692,6 +714,7 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 					!ry = !seen[7] - !seen[5]
 					!rl2 = !rx * !rx + !ry * !ry
 					skip if (!rl2 le 0)
+					!rl = !rl2.sqrt()
 					!tang = !tangs[!ii]
 					do !ci from 1 to !exrefs.size()
 						skip if (!exclaim[!ci])
@@ -704,6 +727,20 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 						!qy = !seen[5] + !t * !ry
 						!d2 = (!ax - !qx) * (!ax - !qx) + (!ay - !qy) * (!ay - !qy)
 						skip if (!d2 gt !ontol2)
+						--------------------------------------------------------
+						-- and its head inside the view: one put down before  --
+						-- 2026-09-25 at the far end of a short run by the    --
+						-- border reaches out past it (see !alen), and goes   --
+						-- through the placing again. only the view is tested --
+						-- here, not the run: a head over the fitting at the  --
+						-- end of its tube is still on the drawing, and      --
+						-- moving it would be a cloud on the revision for     --
+						-- nothing                                            --
+						--------------------------------------------------------
+						!hx = !ax + !alen * !rx / !rl
+						!hy = !ay + !alen * !ry / !rl
+						skip if (!hx lt !vwx1 - !amarg or !hx gt !vwx2 + !amarg)
+						skip if (!hy lt !vwy1 - !amarg or !hy gt !vwy2 + !amarg)
 						--------------------------------------------------------
 						-- the two angles can be on either side of the wrap:  --
 						-- ADEGREES reads back in whichever range E3D keeps   --
@@ -750,10 +787,41 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 					do !ii from !sorted.size() to 1 by -1
 						!trytubi = !sorted[!ii].split('~').getindexed(2)
 						!seen = !seens[!ii]
+						------------------------------------------------------------
+						-- the tail may go anywhere from !amarg past the first   --
+						-- end of the run to !alen + !amarg short of the second, --
+						-- so the whole arrow lies on the run and so inside the  --
+						-- view. each place tried is pulled into that stretch:  --
+						-- on a run of 17mm and more the middle, which is tried --
+						-- first, is already in it and nothing moves; on a     --
+						-- shorter one the tail is drawn back until the head    --
+						-- fits. a run with no such stretch at all, only with a --
+						-- Scale well over 1, is passed over                    --
+						------------------------------------------------------------
+						!fitok = false
 						if (not(!seen.empty())) then
+							!frx = !seen[6] - !seen[4]
+							!fry = !seen[7] - !seen[5]
+							!frl2 = !frx * !frx + !fry * !fry
+							if (!frl2 gt 0) then
+								!frl = !frl2.sqrt()
+								!smin = !amarg
+								!smax = !frl - !alen - !amarg
+								if (!smax geq !smin) then
+									!fitok = true
+								endif
+							endif
+						endif
+						if (!fitok) then
 							do !ff from 1 to !fracs.size()
-								!px = !seen[4] + !fracs[!ff] * (!seen[6] - !seen[4])
-								!py = !seen[5] + !fracs[!ff] * (!seen[7] - !seen[5])
+								!s = !fracs[!ff] * !frl
+								if (!s lt !smin) then
+									!s = !smin
+								elseif (!s gt !smax) then
+									!s = !smax
+								endif
+								!px = !seen[4] + (!s / !frl) * !frx
+								!py = !seen[5] + (!s / !frl) * !fry
 								----------------------------------------------------
 								-- how far this spot is from the nearest arrow    --
 								-- already down, squared to keep clear of sqrt.   --
