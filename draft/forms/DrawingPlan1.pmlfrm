@@ -43,7 +43,8 @@ layout form !!DrawingPlan1 dialog dock
 			text .rrsftext 'Representation Style' at xmin.frametext ymax.frametext+0.1 tagwidth 20 width 30 is string 
 			button .rrsfbutn 'CE' at xmax.rrsftext+0.4 ymin.rrsftext width 5 call |!This.typepick('RRST', 'rrsftext')|
 			paragraph .rrsfpara at xmax.rrsfbutn+0.5 ymin.rrsfbutn+0.1 text 'RRST'
-			text .hrsftext 'Hatching Style' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 20 width 30 is string 
+			button .palibybutn 'Import PA-LIBY' at xmin.rrsftext ymax.rrsftext+0.1 width 15 call |!This.ImportPaLiby()|
+			text .hrsftext 'Hatching Style' at xmin.rrsftext ymax.palibybutn+0.1 tagwidth 20 width 30 is string
 			button .hrsfbutn 'CE' at xmax.hrsftext+0.4 ymin.hrsftext width 5 call |!This.typepick('HRST', 'hrsftext')|
 			paragraph .hrsfpara at xmax.hrsfbutn+0.5 ymin.hrsfbutn+0.1 text 'HRST'
 			list .excllist 'Exclude from View' at xmin.hrsftext ymax.hrsftext+0.2 multiple width 34 height 4
@@ -268,6 +269,13 @@ define method .DrawingPlan1()
   ------------------------------------------------------------------------
   !this.rrsftext.val = |/PA-LIBY/REPR/PIPE/GA|
   !this.hrsftext.val = |/PA-LIBY/HRUL/GEN/Hatch-Gen|
+	----------------------------------------------------------------------
+	-- Import PA-LIBY is live only while the project has no /PA-LIBY     --
+	-- (user, 2026-09-25), looked up again on every show: the form stays --
+	-- loaded between shows, and meanwhile a Create Drawings, or another --
+	-- user's Save Work, may have brought it in                          --
+	----------------------------------------------------------------------
+	!this.initcall = '!this.PaLibyButton()'
 	----------------------------------------------------------------------
 	-- the scales a job normally draws at, auto first for the fit the    --
 	-- program used to make on its own, Other last for anything not in   --
@@ -617,14 +625,73 @@ define method .EnsurePaLiby() is boolean
 	if (not(!wantsr or !wantsh)) then
 		return true
 	endif
-	!have = true
-	/PA-LIBY
-	handle any
-		!have = false
-	endhandle
-	if (!have) then
+	if (!this.HavePaLiby()) then
 		return true
 	endif
+	!ok = !this.ImportPaLibyNow()
+	!this.PaLibyButton()
+	return !ok
+endmethod
+
+--------------------------------------------------------------------------
+-- whether the project has /PA-LIBY, without moving CE -- this runs on   --
+-- every show of the form, and a CE jumping to a library the user never  --
+-- asked for would be a surprise. a name that is not there makes DBREF  --
+-- raise (AVEVA's admauthuser.pmlfrm:422 tests a name the same way)     --
+--------------------------------------------------------------------------
+define method .HavePaLiby() is boolean
+	!ref = object DBREF('/PA-LIBY')
+	handle any
+		return false
+	endhandle
+	if (!ref.badref()) then
+		return false
+	endif
+	return true
+endmethod
+
+--------------------------------------------------------------------------
+-- Import PA-LIBY greyed out once the project has it (user, 2026-09-25)  --
+--------------------------------------------------------------------------
+define method .PaLibyButton()
+	!have = !this.HavePaLiby()
+	!this.palibybutn.active = not(!have)
+endmethod
+
+--------------------------------------------------------------------------
+-- the Import PA-LIBY button: the same import .Apply() makes on its own, --
+-- for a user who wants to pick another style under /PA-LIBY with the    --
+-- CE buttons before the project's first Create Drawings (user,         --
+-- 2026-09-25). it goes into the Destination's database like the        --
+-- drawings, so a Destination is needed first; CE is put back after     --
+--------------------------------------------------------------------------
+define method .ImportPaLiby()
+	if (!this.HavePaLiby()) then
+		!this.PaLibyButton()
+		return
+	endif
+	if (!this.dest.val.eq('')) then
+		!!alert.error('Set the Destination on the Drawing tab first - /PA-LIBY goes into the same database as the drawings')
+		return
+	endif
+	!prev = ce
+	!ok = !this.ImportPaLibyNow()
+	$!prev
+	handle any
+	endhandle
+	!this.PaLibyButton()
+	if (!ok) then
+		!!alert.message('/PA-LIBY imported. Save Work to keep it - other users see it after that')
+	endif
+endmethod
+
+--------------------------------------------------------------------------
+-- run draft\PA-LIBY.txt into the Destination's database. false, with   --
+-- the reason already shown, when it could not; checked afterwards by   --
+-- name, because a macro that fails half way (a read-only database, say) --
+-- only prints to the command window and does not raise                  --
+--------------------------------------------------------------------------
+define method .ImportPaLibyNow() is boolean
 	!file = !this.FindOnPmllib('draft\PA-LIBY.txt')
 	if (!file.eq('')) then
 		!!alert.error('PA-LIBY.txt not found beside any PMLLIB entry - /PA-LIBY representation library cannot be imported')
@@ -636,6 +703,10 @@ define method .EnsurePaLiby() is boolean
 	-- same (writable) DB the drawings are going into                     --
 	----------------------------------------------------------------------
 	$!this.dest.val
+	handle any
+		!!alert.error('Destination ' & !this.dest.val & ' not found - /PA-LIBY cannot be imported')
+		return false
+	endhandle
 	owner
 	handle any
 	endhandle
@@ -644,6 +715,10 @@ define method .EnsurePaLiby() is boolean
 		!!alert.error('import of PA-LIBY.txt failed - see the command window, /PA-LIBY may be half built')
 		return false
 	endhandle
+	if (not(!this.HavePaLiby())) then
+		!!alert.error('PA-LIBY.txt ran but /PA-LIBY is still not there - see the command window (is the Destination database writable?)')
+		return false
+	endif
 	return true
 endmethod
 

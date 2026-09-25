@@ -12,7 +12,7 @@
 ## 目錄與命名
 - `design/` 是 DESIGN 模組、`draft/` 是 DRAFT 模組。檔名前綴決定模組：`DrawingPlan*` = DESIGN（建圖框 BOX），`DrawingPlan1*` = DRAFT（出圖／標註／版次）。新表單照這個規則命名。
 - 一個 `.pmlfnc` 一個全域函式，PML 靠檔名找函式。
-- `draft/PA-LIBY.txt` 是 DRAFT 裡 `/PA-LIBY` 這個 DEPT 用 E3D `OUTPUT` 倒出來的巨集：出圖用的 representation／hatch 的 rule 與 style 都在裡面，DrawingPlan1 出圖時若目的 DB 沒有 `/PA-LIBY` 會自動 `$M` 匯入。在 E3D 改了那組 LIBY 要重新 OUTPUT 覆蓋這個檔，不要手改。
+- `draft/PA-LIBY.txt` 是 DRAFT 裡 `/PA-LIBY` 這個 DEPT 用 E3D `OUTPUT` 倒出來的巨集：出圖用的 representation／hatch 的 rule 與 style 都在裡面，DrawingPlan1 出圖時若目的 DB 沒有 `/PA-LIBY` 會自動 `$M` 匯入。在 E3D 改了那組 LIBY 要重新 OUTPUT 覆蓋這個檔，不要手改。View 分頁 Representation Style 下方另有 **Import PA-LIBY** 鈕（2026-09-25，分支 `feature/import-paliby`，**未實測**）：專案沒有 `/PA-LIBY` 才能按（每次 show 由 `initcall` 重查，`.HavePaLiby()` 用 `object DBREF` 查、不移動 CE），讓使用者在第一次出圖前就能用 CE 鈕挑 `/PA-LIBY` 底下的樣式；匯入要先有 Destination（建在同一個 DB），匯入後 CE 放回原處、提醒 Save Work。出圖跟按鈕共用 `.ImportPaLibyNow()`，跑完再查一次名字（巨集半途失敗只印在命令視窗、不會 raise）。
 - `pml.index` 由 E3D 的 `pml rehash all` 重建，不入庫。新增 `.pmlfnc`/`.pmlfrm` 後要 rehash，否則呼叫失敗會被 `handle any` 吃掉、變成無聲的無作用。
 - 設計文件與各主題的定案在 Notion 頁面「E3D-管線平面圖程式摘要」（page id `3c8dd89e-3acd-80a7-9a3d-cecae639393f`），每個主題一個 toggle。改 出圖／版次／標註／柱位線 的行為前先讀對應的 toggle。
 
