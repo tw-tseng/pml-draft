@@ -2,11 +2,11 @@
 
 ## 目前進度（2026-09-24，換電腦前寫的）
 - `master` = `origin/master` = `f0aaa59`，已 push。當天併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
-- **進行中**：分支 `feature/view-title`（`dea3a5d`，**只在本機、未實測**）——DRAFT view 下方的圖名，細節見「DRAFT：view 下方的圖名」。下一步：使用者在 E3D 重建／更新各一張圖，照那節的「要測」測，OK 就 `--no-ff` 併回 master 並 push。唯一預期要調的是底線長度的係數 0.8。
+- **進行中**：分支 `feature/view-title`（**只在本機**）——DRAFT view 下方的圖名，細節見「DRAFT：view 下方的圖名」。2026-09-25 第一次實測：只有底線、兩行字都沒出來，已修（見那節），等使用者再測。OK 就 `--no-ff` 併回 master 並 push。唯一預期要調的是底線長度的係數 0.8。
 - 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
 - 使用者決定不做的（別再提）：複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）。
-- 合作方式：一個功能一支分支，使用者在 E3D 實測後才 `--no-ff` 併回 master 並 push；每次改完 `.pmlfrm` 提醒 kill／reload／show；使用者回報時截圖放 repo 根目錄 `error.png`，除錯看 `check*.txt`（`check_box.txt`＝Check 分頁、`check_batch.txt`＝Assign Numbers、`check4.txt`＝RecenterView）。
+- 合作方式：一個功能一支分支，使用者在 E3D 實測後才 `--no-ff` 併回 master 並 push；每次改完 `.pmlfrm` 提醒 kill／reload／show；使用者回報時截圖放 repo 根目錄 `error.png`，除錯看 `check*.txt`（`check_box.txt`＝Check 分頁、`check_batch.txt`＝Assign Numbers、`check4.txt`＝RecenterView、`check_title.txt`＝view 下方的圖名）。
 
 ## 目錄與命名
 - `design/` 是 DESIGN 模組、`draft/` 是 DRAFT 模組。檔名前綴決定模組：`DrawingPlan*` = DESIGN（建圖框 BOX），`DrawingPlan1*` = DRAFT（出圖／標註／版次）。新表單照這個規則命名。
@@ -60,7 +60,9 @@
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX（2026-09-24 做了，見「Pick 分頁：圍住選取物」）、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。「在 3D 每個框中心 AID 印圖號」那半也不做：框一多標籤疊在一起反而看不清楚（使用者，2026-09-24）；要確認編號順序就看 `check_batch.txt`）。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
 
-## DRAFT：view 下方的圖名（2026-09-24，分支 `feature/view-title`，**未在 E3D 實測**）
+## DRAFT：view 下方的圖名（2026-09-24，分支 `feature/view-title`，**第一版實測失敗，修正版未實測**）
+- 2026-09-25 第一次實測：底線有、兩行字都沒有。原因是 `cheitx $!h1s`（沒引號的數字 `4.00`）——repo 裡其他三十幾處 `cheitx` 全部帶引號（`|4|`、`'3mm'`），CHEITX 吃文字，整行被拒絕、又被 `handle any` 吃掉，所以沒報錯。底線用 fpt/tpt 不經過 CHEITX 才建得出來。**`cheitx` 一律 `|...|` 或 `'...'`。**
+- 同一次一起改的：顏色拆成獨立一行、設不上就退回 `green`（AVEVA 先例 `assyboundbox.pmlfnc:173`，顏色字典沒有那個號碼是 `(61,604)`；截圖底線偏白，顏色 20 在這台可能不存在）；`alig base` → `alig bbody`（6113 行的 MATCH LINE 字就是用 bbody，畫面上看得到）；更新路徑找到 VTITLE 卻缺 ELEV／SCALE 的話刪掉整個 NOTE 重建（不然第一版留下的空 NOTE 永遠補不回來）；每一步寫進 `check_title.txt`（`.TitleLog()`，append，一張圖一段）。
 - 使用者要求：view 正下方兩行，置中對齊 view。上行 `PLAN at ELEVATION +<框頂面 U>`，顏色 20、字高＝Match Line Text Height（`.matchhei`）、有底線；下行 `SCALE 1:n`，黃色、字高＝Pipe Label Height（`.lineheitx`）。高程取**框頂面**（`WVOL` part 6），**直接用 E3D 的 U**、帶正負號（使用者選的）；比例讀 view 自己的 `VSCA`，fit 或手選都一樣。
 - 放在**所有下方標註的更下面**（使用者選的）：`.RecenterView()` 算完格線圈圈後記下 `.titletop`（下方內容的底），再把 `TitleDepth()`（5＋字高1＋1＋2.5＋字高2）加進下緣一起置中，view 移動時 `titletop` 跟著 `dy` 走；置中後才建字（NOTE 的文字是圖紙座標，不會跟著 view 移）。
 - 元素：view 底下一個具名 NOTE `<drwg>/SS/S1/V1/VTITLE`，內含 `ELEV`、`ULINE`（STRA）、`SCALE`。**更新路徑**（有 REVI）找得到就只改 BTEXT、位置不動；舊圖還沒有就用 `TitleTopNow()` 放在目前最下方標註底下，不動 view。現有程式用 `note 1` 找的都是先建的那個 NOTE，這個會是 NOTE 2，不衝突。
@@ -127,7 +129,7 @@
 **整個目錄複製過去（2026-09-24 使用者的做法）**：
 1. 複製整個 repo 目錄。`.git`（含只在本機的分支，例如 `feature/view-title`）、`bin/` 裡的 BlankPos.exe／RevCloud.exe（被 gitignore、不在 GitHub，但在目錄裡）、`.mcp.json`、未追蹤的 check／log 檔都會跟著過去，不用另外 push 或重建。到了新機器先 `git status`、`git branch -vv` 對一下。
 2. 放到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
-3. **路徑寫死的地方**：26 處 PML 把除錯檔寫到 `L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check*.txt`（`DrawingPlan1.pmlfrm` 18 處，另有 GridAnnotation／LineNoAnnotation 各 2、FlowAnnotation／MatchGaps 各 1、`DrawingPlan.pmlfrm` 2）。新機器的 E3D 看到的 `L:` 要指到同一個目錄，否則 dump 靜靜寫不出來（Check 分頁會多一列「寫不出 check_box.txt」）。
+3. **路徑寫死的地方**：27 處 PML 把除錯檔寫到 `L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check*.txt`（`DrawingPlan1.pmlfrm` 19 處，另有 GridAnnotation／LineNoAnnotation 各 2、FlowAnnotation／MatchGaps 各 1、`DrawingPlan.pmlfrm` 2）。新機器的 E3D 看到的 `L:` 要指到同一個目錄，否則 dump 靜靜寫不出來（Check 分頁會多一列「寫不出 check_box.txt」）。
 4. 使用者環境變數 `NOTION_TOKEN`：從舊機器抄同一個值（PowerShell `[Environment]::GetEnvironmentVariable('NOTION_TOKEN','User')`），設成新機器的 **User** 層，然後重開 VS Code。2026-09-24 這個 token 用 REST 是有效的；MCP 端點會回 403，照「這台機器」那條改走 REST。
 5. Claude Code 的 memory **不在 repo 目錄裡**：`%USERPROFILE%\.claude\projects\<repo路徑編碼>\memory\`，這台是 `C:\Users\tw.tseng\.claude\projects\d--E3D-pdms-prog-E3D2-1-PA-pmllibE3D2-1\memory\`（約 39 個檔）。要另外複製；新機器上 repo 路徑不同的話資料夾名稱也會不同，把檔案放進新名稱的資料夾。沒複製的話，本檔加 Notion 也夠開工。
 

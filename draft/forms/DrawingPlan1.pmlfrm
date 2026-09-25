@@ -3716,30 +3716,53 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 		!t2 = 'SCALE ' & !vs.string('D0').replace('mm', '') & ':1'
 	endif
 
+	!this.TitleLog('VTITLE ' & !name & ' top=' & !top.string('D3') & ' t1=' & !t1 & ' t2=' & !t2)
+
 	!nt = !name & '/SS/S1/V1/VTITLE'
+	!elevnm = !nt & '/ELEV'
+	!scalenm = !nt & '/SCALE'
 	!exists = true
 	$!nt
 	handle any
 		!exists = false
 	endhandle
 	if (!exists) then
-		!elevnm = !nt & '/ELEV'
+		!whole = true
 		$!elevnm
 		handle any
-		elsehandle none
-			BTEXT |$!t1|
-			handle any
-			endhandle
+			!whole = false
 		endhandle
-		!scalenm = !nt & '/SCALE'
 		$!scalenm
 		handle any
-		elsehandle none
+			!whole = false
+		endhandle
+		if (!whole) then
+			$!elevnm
+			BTEXT |$!t1|
+			handle any
+				!this.TitleLog('  ELEV btext failed: ' & !!error.text)
+			endhandle
+			$!scalenm
 			BTEXT |$!t2|
 			handle any
+				!this.TitleLog('  SCALE btext failed: ' & !!error.text)
 			endhandle
+			!this.TitleLog('  found, words rewritten, place kept')
+			return
+		endif
+		----------------------------------------------------------------
+		-- a NOTE without its texts is what the first version left     --
+		-- behind (cheitx unquoted, 2026-09-25): found by name, it     --
+		-- would only ever have its missing texts "rewritten", so it   --
+		-- is deleted and made again below                             --
+		----------------------------------------------------------------
+		$!nt
+		delete note
+		handle any
+			!this.TitleLog('  half made, delete failed: ' & !!error.text)
+			return
 		endhandle
-		return
+		!this.TitleLog('  half made, deleted, made again')
 	endif
 
 	!h = !this.TitleHeights()
@@ -3764,20 +3787,86 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 	!h1s = !h1.string('D2').replace('mm', '')
 	!h2s = !h2.string('D2').replace('mm', '')
 
+	------------------------------------------------------------------
+	-- cheitx takes text: every other call in this library quotes it  --
+	-- (|4|, '3mm'), and the unquoted number this first had rejected  --
+	-- the whole line, silently under the handle -- both texts missing --
+	-- and only the underline drawn (user, 2026-09-25). the colours    --
+	-- go on lines of their own, AVEVA's way (assyboundbox.pmlfnc:173) --
+	-- -- a number not in the colour dictionary is (61,604) and must   --
+	-- not cost the text itself -- and fall back to green              --
+	------------------------------------------------------------------
 	$!name/SS/S1/V1
 	new note $!nt
 	handle any
+		!this.TitleLog('  new note failed: ' & !!error.text)
 		return
 	endhandle
-	new texp $!nt/ELEV btext |$!t1| origin x $!cxs y $!y1s cheitx $!h1s alig base just center txcolour 20 font 1
+
+	!made = true
+	new texp $!elevnm btext |$!t1| origin x $!cxs y $!y1s cheitx |$!h1s| alig bbody just center font 1
+	handle any
+		!made = false
+		!this.TitleLog('  ELEV failed: ' & !!error.text)
+	endhandle
+	if (!made) then
+		!colok = true
+		txcolour 20
+		handle any
+			!colok = false
+			!this.TitleLog('  ELEV txcolour 20 failed, green instead: ' & !!error.text)
+		endhandle
+		if (not(!colok)) then
+			txcolour green
+			handle any
+			endhandle
+		endif
+	endif
+
+	$!nt
+	!made = true
+	new stra $!nt/ULINE fpt x $!xas y $!yus tpt x $!xbs y $!yus
+	handle any
+		!made = false
+		!this.TitleLog('  ULINE failed: ' & !!error.text)
+	endhandle
+	if (!made) then
+		!colok = true
+		NLColour 20
+		handle any
+			!colok = false
+			!this.TitleLog('  ULINE nlcolour 20 failed, green instead: ' & !!error.text)
+		endhandle
+		if (not(!colok)) then
+			NLColour green
+			handle any
+			endhandle
+		endif
+	endif
+
+	$!nt
+	new texp $!scalenm btext |$!t2| origin x $!cxs y $!y2s cheitx |$!h2s| alig bbody just center txcolour yellow font 1
+	handle any
+		!this.TitleLog('  SCALE failed: ' & !!error.text)
+	endhandle
+	!this.TitleLog('  made: cx=' & !cxs & ' y1=' & !y1s & ' yu=' & !yus & ' y2=' & !y2s & ' h1=' & !h1s & ' h2=' & !h2s & ' uline ' & !xas & '..' & !xbs)
+endmethod
+
+------------------------------------------------------------------------
+-- one line of check_title.txt, the record of what .ViewTitle() did.   --
+-- appended, one block per sheet; a dump that cannot be written is     --
+-- skipped, never an error                                             --
+------------------------------------------------------------------------
+define method .TitleLog(!msg is string)
+	!f = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_title.txt')
+	!f.open('append')
+	handle any
+		return
+	endhandle
+	!f.writerecord(!msg)
 	handle any
 	endhandle
-	$!nt
-	new stra $!nt/ULINE fpt x $!xas y $!yus tpt x $!xbs y $!yus NLColour 20
-	handle any
-	endhandle
-	$!nt
-	new texp $!nt/SCALE btext |$!t2| origin x $!cxs y $!y2s cheitx $!h2s alig base just center txcolour yellow font 1
+	!f.close()
 	handle any
 	endhandle
 endmethod
