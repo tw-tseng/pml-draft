@@ -1,9 +1,10 @@
 # PA_pmllibE3D2.1 — AVEVA E3D 2.1 的 PML 程式庫
 
 ## 目前進度（2026-09-25）
-- `master` 已 push，2026-09-25 併了 `feature/view-title`（圖名，重建已實測 OK）與 `feature/import-paliby`（Import PA-LIBY 鈕，已實測）。2026-09-24 併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
+- `master` 已 push，2026-09-25 併了 `feature/view-title`（圖名，重建已實測 OK）、`feature/import-paliby`（Import PA-LIBY 鈕，已實測）與 `fix/flow-arrow-in-view`（流向箭頭不出 view，已實測）。2026-09-24 併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
 - DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；更新路徑（有 REVI 的圖改字、底線跟著改長短、舊圖補建）**使用者決定不測**：目前沒有這種情形（2026-09-25）。細節見「DRAFT：view 下方的圖名」。
 - Import PA-LIBY 鈕（原分支 `feature/import-paliby`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**）：View 分頁 Hatching Style 下方，細節見「目錄與命名」的 PA-LIBY 那條。
+- 流向箭頭畫到 view 外（原分支 `fix/flow-arrow-in-view`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**），細節見「DRAFT：流向箭頭不出 view」。
 - 切分支的坑：E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**，切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
 - 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
@@ -75,6 +76,13 @@
 - 更新路徑改了字，底線長度跟著改（`.TitleLine()`：讀 ELEV 自己的 `chei`、以原底線中點為中心、y 不動）；字的位置仍不動，所以第二次實測以前建的圖要**重建**才會用到新間距。
 - 已實測 OK（2026-09-25，使用者，第三次）：重建一張圖，兩行字、顏色、字高、間距、底線長度。
 - 沒測，使用者決定不測（2026-09-25，目前沒有這種情形）：有 REVI 的圖更新後字有沒有跟著框頂面變、位置不動、底線長度跟著字改；舊圖第一次更新時補建；第一版留下的空 VTITLE 會被刪掉重建。
+
+## DRAFT：流向箭頭不出 view（2026-09-25 併回 master，**已在 E3D 實測**）
+- 使用者回報：50-B-9 的箭頭整支畫在 view 左邊界外。`check_flow.txt` 那張圖（`/=23718/1695`）三個箭頭 x=320.0／340.3／360.9；截圖上三個箭頭**尾巴**在 233／295／358px，間距跟 check_flow 的放置點成比例（約 3.06px/mm），頭或中心都對不上——**符號原點在尾巴，箭頭從放置點往流向（tube 的 p1→p2）伸出去**，WELD-ARR 在 Scale 1 約 7.2～7.5mm。
+- 原因：候選位置（`!fracs` 0.5、0.35…0.05、0.95）只保證尾巴在看得見的那段（`VisibleSheetRunOfTube`，已被 box 的紙面矩形裁過）上，沒算箭頭長。那支看得見 12.8mm，為了離鄰居 20mm（`!mindist`）滑到 0.95，尾巴在邊界內 0.6mm、頭全在外面。
+- 修法：`!alen = 8 * !flowsca`（量到的 7.5 再留一點）、`!amarg = 0.5`。新放的：尾巴夾在 `[!amarg, 段長 - !alen - !amarg]`，段長 ≥17mm 的中點本來就在裡面、位置不變；放不下的段（只有 Scale 遠大於 1 才會）跳過。沿用舊箭頭（更新路徑）：多查一條頭有沒有出 view（只看 view，不看段——頭壓到段尾的管件上仍在圖內，動它只會多一朵修訂雲），出了就重放。換別的 SYTM 的話 8 可能要調。
+- 預期（照那張圖推）：`/1531` 放不到離鄰居 20mm，改走 roomiest，x≈327.9、畫到 319.9；`/1590` 也往回拉約 2.8mm；`/1600` 不動。check_flow 裡 `/1531` 會變成 `roomiest yes`。
+- 已實測 OK（2026-09-25，使用者）：重建那張圖，箭頭都在 view 內。
 
 ## Move Face 多選（2026-09-24 已併回 master，`3c50023`..`16410c8`＋merge commit，**已在 E3D 實測**）
 - 4 個 commit，只動 `DrawingPlan.pmlfrm` 跟本檔，在分支 `feature/moveface-multi` 上做完、實測通過後用 `--no-ff` 併回 master，分支已刪。合併時跟 Check 分頁有兩處文字衝突（member 區塊、本檔換電腦第 1 點，兩邊都留），另外還有一處**語意衝突**是 git 看不出來的：Check 分頁點清單列時自己下 `AID CLEAR ALL`，畫面清了但 Show Box 的按鈕還停在 `Hide Box`，下一次按會變成清而不是畫。在 merge commit 裡把那兩處改成 `ClearAids()`，2026-09-24 已實測 OK。
