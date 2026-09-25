@@ -3617,15 +3617,52 @@ define method .TitleHeights() is array
 endmethod
 
 ------------------------------------------------------------------------
+-- where the view title's parts go, sheet y, hanging from !top: [1] the --
+-- green text's origin, [2] the underline, [3] the yellow text's origin --
+--                                                                      --
+-- the texts are alig bbody, and font 1 draws its capitals from 0.29 x  --
+-- height above such an origin to 1.15 x height above it (measured off  --
+-- a sheet, 2026-09-25: 4mm text, capitals 3.44 tall standing 1.16 up;  --
+-- 3mm the same). the gaps here are the ones seen on paper: 5mm from   --
+-- the annotation above to the capitals, then the picture the user     --
+-- drew (error.png, 2026-09-25), in green text heights so it keeps its --
+-- look at any height: 0.18 from the capitals down to the line, 0.25   --
+-- from the line down to the yellow capitals -- 0.7 and 1.0 at 4mm.    --
+-- they were 2.1 on both sides, too far (user)                         --
+------------------------------------------------------------------------
+define method .TitleRows(!top is real) is array
+	!h = !this.TitleHeights()
+	!y1 = !top - 5 - 1.15 * !h[1]
+	!yu = !y1 + 0.29 * !h[1] - 0.18 * !h[1]
+	!y2 = !yu - 0.25 * !h[1] - 1.15 * !h[2]
+	!r = object array()
+	!r.append(!y1)
+	!r.append(!yu)
+	!r.append(!y2)
+	return !r
+endmethod
+
+------------------------------------------------------------------------
 -- how far the view title reaches below the point it hangs from, sheet  --
--- mm: 5 clear of the annotation above, the green line, 1 to its        --
--- underline, 2.5 more, the yellow line. .ViewTitle() lays it out with  --
--- the same numbers                                                     --
+-- mm, down to the yellow text's origin -- .TitleRows() from 0          --
 ------------------------------------------------------------------------
 define method .TitleDepth() is real
-	!h = !this.TitleHeights()
-	!d = 5 + !h[1] + 1 + 2.5 + !h[2]
+	!r = !this.TitleRows(0)
+	!d = 0 - !r[3]
 	return !d
+endmethod
+
+------------------------------------------------------------------------
+-- the underline's length, sheet mm: as wide as the green text, the way --
+-- the user drew it. E3D has no attribute giving the width a text comes --
+-- out at, so it is font 1's, measured off a sheet (2026-09-25): 0.625  --
+-- x height per character, both lines alike -- 62.5 for 25 characters  --
+-- at 4mm, 18.9 for 10 at 3mm. the first guess, 0.8, overshot by 8.7   --
+-- at each end                                                          --
+------------------------------------------------------------------------
+define method .TitleWidth(!t is string, !h is real) is real
+	!w = 0.625 * !h * !t.length()
+	return !w
 endmethod
 
 ------------------------------------------------------------------------
@@ -3675,12 +3712,12 @@ endmethod
 --                                                                       --
 -- a NOTE of its own under the view, named <drwg>/SS/S1/V1/VTITLE, with --
 -- ELEV, ULINE and SCALE in it, so a later run finds it by name. found,  --
--- only the words are rewritten: an issued sheet keeps its layout, the   --
--- same rule as the view itself. not found, it is made with its top at  --
--- sheet y !top. the underline's length is estimated, 0.8 x height per   --
--- character like .WatchRect() -- E3D has no attribute giving the width  --
--- a text actually comes out at -- and centred like the text, so an     --
--- estimate off either way is off evenly at both ends                   --
+-- only the words are rewritten, and the underline's length with them   --
+-- (.TitleLine()): an issued sheet keeps its layout, the same rule as   --
+-- the view itself. not found, it is made with its top at sheet y !top, --
+-- laid out by .TitleRows(); the underline is as wide as the green text --
+-- by font 1's measured width (.TitleWidth()), centred like the text,   --
+-- so an estimate off either way is off evenly at both ends             --
 ------------------------------------------------------------------------
 define method .ViewTitle(!name is string, !box is string, !top is real)
 	!ok = true
@@ -3747,6 +3784,7 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 			handle any
 				!this.TitleLog('  SCALE btext failed: ' & !!error.text)
 			endhandle
+			!this.TitleLine(!nt, !t1)
 			!this.TitleLog('  found, words rewritten, place kept')
 			return
 		endif
@@ -3771,10 +3809,11 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 	!xl = !this.viewLLsh.part(2).replace('mm', '').real()
 	!xr = !this.viewLRsh.part(2).replace('mm', '').real()
 	!cx = (!xl + !xr) * 0.5
-	!y1 = !top - 5 - !h1
-	!yu = !y1 - 1
-	!y2 = !yu - 2.5 - !h2
-	!w = 0.8 * !h1 * !t1.length()
+	!rows = !this.TitleRows(!top)
+	!y1 = !rows[1]
+	!yu = !rows[2]
+	!y2 = !rows[3]
+	!w = !this.TitleWidth(!t1, !h1)
 	!xa = !cx - !w * 0.5
 	!xb = !cx + !w * 0.5
 
@@ -3850,6 +3889,82 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 		!this.TitleLog('  SCALE failed: ' & !!error.text)
 	endhandle
 	!this.TitleLog('  made: cx=' & !cxs & ' y1=' & !y1s & ' yu=' & !yus & ' y2=' & !y2s & ' h1=' & !h1s & ' h2=' & !h2s & ' uline ' & !xas & '..' & !xbs)
+endmethod
+
+------------------------------------------------------------------------
+-- an existing title's underline made as wide as its new words, about  --
+-- its own middle and at its own y: the update path keeps the title    --
+-- where it is, but the line hugs the text now, so one more digit in   --
+-- the elevation must not leave it short (or a sheet from before       --
+-- 2026-09-25 with the 0.8 estimate's long line). the height is read   --
+-- off the text itself, which keeps the height it was made with        --
+------------------------------------------------------------------------
+define method .TitleLine(!nt is string, !t1 is string)
+	!hh = !this.TitleHeights()
+	!he = !hh[1]
+	!elevnm = !nt & '/ELEV'
+	!chs = ''
+	$!elevnm
+	var !chs chei
+	handle any
+		!chs = ''
+	endhandle
+	!hr = !chs.replace('mm', '').real()
+	handle any
+		!hr = 0
+	endhandle
+	if (!hr gt 0) then
+		!he = !hr
+	endif
+
+	!ulnm = !nt & '/ULINE'
+	!uf = ''
+	!ut = ''
+	$!ulnm
+	handle any
+		!this.TitleLog('  no ULINE to resize')
+		return
+	endhandle
+	var !uf fpt
+	handle any
+		!uf = ''
+	endhandle
+	var !ut tpt
+	handle any
+		!ut = ''
+	endhandle
+	!sf = !!DrawingPlan1MatchXY(!uf)
+	!st = !!DrawingPlan1MatchXY(!ut)
+	!pf = !sf.split('~')
+	!pt = !st.split('~')
+	if (!pf.size().lt(2) or !pt.size().lt(2)) then
+		!this.TitleLog('  ULINE ends unreadable: ' & !uf & ' / ' & !ut)
+		return
+	endif
+	if (!pf[1].eq('') or !pf[2].eq('') or !pt[1].eq('')) then
+		!this.TitleLog('  ULINE ends unreadable: ' & !uf & ' / ' & !ut)
+		return
+	endif
+	!ax = !pf[1].real()
+	!bx = !pt[1].real()
+	!uys = !pf[2]
+	!mx = (!ax + !bx) * 0.5
+	!w = !this.TitleWidth(!t1, !he)
+	!xa = !mx - !w * 0.5
+	!xb = !mx + !w * 0.5
+	!xas = !xa.string('D3').replace('mm', '')
+	!xbs = !xb.string('D3').replace('mm', '')
+	fpt x $!xas y $!uys
+	handle any
+		!this.TitleLog('  ULINE fpt failed: ' & !!error.text)
+		return
+	endhandle
+	tpt x $!xbs y $!uys
+	handle any
+		!this.TitleLog('  ULINE tpt failed: ' & !!error.text)
+		return
+	endhandle
+	!this.TitleLog('  ULINE now ' & !xas & '..' & !xbs & ' at y ' & !uys & ' (height ' & !he.string('D2') & ')')
 endmethod
 
 ------------------------------------------------------------------------
