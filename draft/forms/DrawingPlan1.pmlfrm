@@ -43,10 +43,11 @@ layout form !!DrawingPlan1 dialog dock
 			text .rrsftext 'Representation Style' at xmin.frametext ymax.frametext+0.1 tagwidth 20 width 30 is string 
 			button .rrsfbutn 'CE' at xmax.rrsftext+0.4 ymin.rrsftext width 5 call |!This.typepick('RRST', 'rrsftext')|
 			paragraph .rrsfpara at xmax.rrsfbutn+0.5 ymin.rrsfbutn+0.1 text 'RRST'
-			text .hrsftext 'Hatching Style' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 20 width 30 is string 
+			text .hrsftext 'Hatching Style' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 20 width 30 is string
 			button .hrsfbutn 'CE' at xmax.hrsftext+0.4 ymin.hrsftext width 5 call |!This.typepick('HRST', 'hrsftext')|
 			paragraph .hrsfpara at xmax.hrsfbutn+0.5 ymin.hrsfbutn+0.1 text 'HRST'
-			list .excllist 'Exclude from View' at xmin.hrsftext ymax.hrsftext+0.2 multiple width 34 height 4
+			button .palibybutn 'Import PA-LIBY' at xmin.hrsftext ymax.hrsftext+0.1 width 15 call |!This.ImportPaLiby()|
+			list .excllist 'Exclude from View' at xmin.hrsftext ymax.palibybutn+0.2 multiple width 34 height 4
 			-- +0.75 drops the three buttons clear of the list's own tag row, so that
 			-- Add CE lines up with the top of the list box and not with the label
 			button .excladdbutn 'Add CE'     at xmax.excllist+0.5 ymin.excllist+0.75  width 12 call '!This.ExclAddCe()'
@@ -268,6 +269,13 @@ define method .DrawingPlan1()
   ------------------------------------------------------------------------
   !this.rrsftext.val = |/PA-LIBY/REPR/PIPE/GA|
   !this.hrsftext.val = |/PA-LIBY/HRUL/GEN/Hatch-Gen|
+	----------------------------------------------------------------------
+	-- Import PA-LIBY is live only while the project has no /PA-LIBY     --
+	-- (user, 2026-09-25), looked up again on every show: the form stays --
+	-- loaded between shows, and meanwhile a Create Drawings, or another --
+	-- user's Save Work, may have brought it in                          --
+	----------------------------------------------------------------------
+	!this.initcall = '!this.PaLibyButton()'
 	----------------------------------------------------------------------
 	-- the scales a job normally draws at, auto first for the fit the    --
 	-- program used to make on its own, Other last for anything not in   --
@@ -617,34 +625,227 @@ define method .EnsurePaLiby() is boolean
 	if (not(!wantsr or !wantsh)) then
 		return true
 	endif
-	!have = true
-	/PA-LIBY
-	handle any
-		!have = false
-	endhandle
-	if (!have) then
+	if (!this.HavePaLiby()) then
 		return true
 	endif
+	!ok = !this.ImportPaLibyNow()
+	!this.PaLibyButton()
+	return !ok
+endmethod
+
+--------------------------------------------------------------------------
+-- whether the project has /PA-LIBY, without moving CE -- this runs on   --
+-- every show of the form, and a CE jumping to a library the user never  --
+-- asked for would be a surprise                                         --
+--------------------------------------------------------------------------
+define method .HavePaLiby() is boolean
+	!have = !this.NameExists('/PA-LIBY')
+	return !have
+endmethod
+
+--------------------------------------------------------------------------
+-- whether an element of that name exists, without moving CE. a name     --
+-- that is not there makes DBREF raise (AVEVA's admauthuser.pmlfrm:422   --
+-- tests a name the same way)                                            --
+--------------------------------------------------------------------------
+define method .NameExists(!n is string) is boolean
+	!ref = object DBREF(!n)
+	handle any
+		return false
+	endhandle
+	if (!ref.badref()) then
+		return false
+	endif
+	return true
+endmethod
+
+--------------------------------------------------------------------------
+-- Import PA-LIBY greyed out once the project has it (user, 2026-09-25)  --
+--------------------------------------------------------------------------
+define method .PaLibyButton()
+	!have = !this.HavePaLiby()
+	!this.palibybutn.active = not(!have)
+endmethod
+
+--------------------------------------------------------------------------
+-- the Import PA-LIBY button: the same import .Apply() makes on its own, --
+-- for a user who wants to pick another style under /PA-LIBY with the    --
+-- CE buttons before the project's first Create Drawings (user,         --
+-- 2026-09-25). it goes into the Destination's database like the        --
+-- drawings, so a Destination is needed first; CE is put back after     --
+--------------------------------------------------------------------------
+define method .ImportPaLiby()
+	if (!this.HavePaLiby()) then
+		!this.PaLibyButton()
+		return
+	endif
+	if (!this.dest.val.eq('')) then
+		!!alert.error('Set the Destination on the Drawing tab first - /PA-LIBY goes into the same database as the drawings')
+		return
+	endif
+	!prev = ce
+	!ok = !this.ImportPaLibyNow()
+	$!prev
+	handle any
+	endhandle
+	!this.PaLibyButton()
+	if (!ok) then
+		!!alert.message('/PA-LIBY imported. Save Work to keep it - other users see it after that')
+	endif
+endmethod
+
+--------------------------------------------------------------------------
+-- run draft\PA-LIBY.txt into the Destination's database. false, with   --
+-- the reason already shown, when it could not                          --
+--                                                                       --
+-- the file is NOT given to $M (2026-09-25). it starts with a UTF-8 BOM  --
+-- -- E3D's OUTPUT writes one, and so does every file PML writes -- and --
+-- run by $M its first line, NEW DEPT /PA-LIBY, did not make the DEPT:   --
+-- the rest of the macro ran on the Destination's own DEPT, setting its --
+-- SIZE, FONT and colours and putting /PA-LIBY/REPR and the other LIBYs --
+-- under it beside the REGI (user). so the DEPT is made here, where a   --
+-- failure shows E3D's own message, and lines 2 on are run one by one,  --
+-- $!ln, which never sees the BOM and can say which line failed. the    --
+-- file is one command a line (NEW/OLD/END and attribute settings, no   --
+-- $ | ! in it), so a line is a whole command. the file itself stays as  --
+-- OUTPUT wrote it                                                       --
+--                                                                       --
+-- a NEW, OLD or END that fails stops the run: going on would build the --
+-- rest at the wrong level, which is what happened. a setting that      --
+-- fails -- a colour this machine's dictionary lacks, say -- is noted   --
+-- and passed over, listed in check_liby.txt only                       --
+--                                                                       --
+-- every name the macro makes is looked up first: one left over from a --
+-- run like the one above would stop it at its NEW with /PA-LIBY half   --
+-- built, and the button then grey. afterwards the two styles the View  --
+-- tab defaults to must be there. the whole run goes to check_liby.txt  --
+--------------------------------------------------------------------------
+define method .ImportPaLibyNow() is boolean
+	!log = object array()
 	!file = !this.FindOnPmllib('draft\PA-LIBY.txt')
 	if (!file.eq('')) then
 		!!alert.error('PA-LIBY.txt not found beside any PMLLIB entry - /PA-LIBY representation library cannot be imported')
 		return false
 	endif
+	!log.append('PALIBY file=' & !file & ' dest=' & !this.dest.val)
+	!ff = object file(!file)
+	!ff.open('read')
+	!lines = !ff.readfile()
+	!ff.close()
+	if (!lines.size().lt(2)) then
+		!!alert.error('PA-LIBY.txt is empty - /PA-LIBY cannot be imported')
+		return false
+	endif
+	!first = !lines[1].upcase()
+	if (not(!first.matchwild('*NEW DEPT /PA-LIBY*'))) then
+		!!alert.error('PA-LIBY.txt does not start with NEW DEPT /PA-LIBY - /PA-LIBY cannot be imported')
+		return false
+	endif
+
+	!taken = object array()
+	do !i from 2 to !lines.size()
+		!parts = !lines[!i].trim().split()
+		skip if (!parts.size().lt(3))
+		skip if (!parts[1].upcase().neq('NEW'))
+		if (!this.NameExists(!parts[3])) then
+			!taken.append(!parts[3])
+			!log.append('TAKEN ' & !parts[3])
+		endif
+	enddo
+	if (!taken.size().gt(0)) then
+		!this.LibyLog(!log)
+		!few = ''
+		!nf = min(3, !taken.size())
+		do !i from 1 to !nf
+			!few = !few & ' ' & !taken[!i]
+		enddo
+		!!alert.error(!taken.size().string() & ' of the names PA-LIBY.txt makes already exist, left over from an earlier import - delete them first (deleting a LIBY takes what is under it):' & !few & ' ... all in check_liby.txt')
+		return false
+	endif
+
 	----------------------------------------------------------------------
-	-- the macro opens with NEW DEPT /PA-LIBY. standing on the DEPT that  --
-	-- owns the destination REGI files the new DEPT beside it, in the     --
-	-- same (writable) DB the drawings are going into                     --
+	-- standing on the DEPT that owns the destination REGI, a NEW DEPT   --
+	-- goes in beside it, in the same (writable) DB the drawings go into --
 	----------------------------------------------------------------------
 	$!this.dest.val
+	handle any
+		!!alert.error('Destination ' & !this.dest.val & ' not found - /PA-LIBY cannot be imported')
+		return false
+	endhandle
 	owner
 	handle any
 	endhandle
-	$M "$!file"
+	!otype = ''
+	var !otype type
 	handle any
-		!!alert.error('import of PA-LIBY.txt failed - see the command window, /PA-LIBY may be half built')
+		!otype = ''
+	endhandle
+	if (!otype.neq('DEPT')) then
+		!!alert.error('The Destination is not in a DEPT (its owner is ' & !otype & ') - /PA-LIBY cannot be imported')
+		return false
+	endif
+	new dept /PA-LIBY
+	handle any
+		!log.append('NEWDEPT failed: ' & !!error.text)
+		!this.LibyLog(!log)
+		!!alert.error('Could not create DEPT /PA-LIBY: ' & !!error.text)
 		return false
 	endhandle
+	!log.append('NEWDEPT ok')
+
+	!bad = object array()
+	!run = 0
+	do !i from 2 to !lines.size()
+		!ln = !lines[!i].trim()
+		skip if (!ln.eq(''))
+		!parts = !ln.split()
+		!kw = !parts[1].upcase()
+		!run = !run + 1
+		$!ln
+		handle any
+			!msg = 'line ' & !i.string() & ': ' & !ln & ' - ' & !!error.text
+			if (!kw.eq('NEW') or !kw.eq('OLD') or !kw.eq('END')) then
+				!log.append('STOPPED ' & !msg)
+				!this.LibyLog(!log)
+				!!alert.error('PA-LIBY.txt stopped at ' & !msg & ' - /PA-LIBY is half built')
+				return false
+			endif
+			!bad.append(!msg)
+			!log.append('REFUSED ' & !msg)
+		endhandle
+	enddo
+	!log.append('RAN ' & !run.string() & ' commands, ' & !bad.size().string() & ' settings refused')
+
+	!ok = !this.NameExists('/PA-LIBY/REPR/PIPE/GA')
+	if (!ok) then
+		!ok = !this.NameExists('/PA-LIBY/HRUL/GEN/Hatch-Gen')
+	endif
+	if (not(!ok)) then
+		!log.append('MISSING /PA-LIBY/REPR/PIPE/GA or /PA-LIBY/HRUL/GEN/Hatch-Gen')
+		!this.LibyLog(!log)
+		!!alert.error('PA-LIBY.txt ran but /PA-LIBY/REPR/PIPE/GA or /PA-LIBY/HRUL/GEN/Hatch-Gen is not there - see check_liby.txt')
+		return false
+	endif
+	----------------------------------------------------------------------
+	-- the refused settings are in check_liby.txt only: a success is one --
+	-- dialog, the button's message (user, 2026-09-25). on the test      --
+	-- machine they are BOCOLO/BOSTYL/OCCOLO/OCSTYL on all nine STYLEs,  --
+	-- attributes its E3D does not have                                 --
+	----------------------------------------------------------------------
+	!log.append('DONE')
+	!this.LibyLog(!log)
 	return true
+endmethod
+
+--------------------------------------------------------------------------
+-- check_liby.txt, the record of the last .ImportPaLibyNow(). a dump    --
+-- that cannot be written is skipped, never an error                    --
+--------------------------------------------------------------------------
+define method .LibyLog(!log is array)
+	!f = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_liby.txt')
+	!f.writefile('OVERWRITE', !log)
+	handle any
+	endhandle
 endmethod
 
 --------------------------------------
