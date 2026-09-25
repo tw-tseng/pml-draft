@@ -1,9 +1,10 @@
 # PA_pmllibE3D2.1 — AVEVA E3D 2.1 的 PML 程式庫
 
 ## 目前進度（2026-09-25）
-- `master` 已 push，2026-09-25 併了 `feature/view-title`（圖名，重建已實測 OK）。2026-09-24 併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
+- `master` 已 push，2026-09-25 併了 `feature/view-title`（圖名，重建已實測 OK）與 `feature/import-paliby`（Import PA-LIBY 鈕，已實測）。2026-09-24 併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
 - DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；**更新路徑沒有另外回報**（有 REVI 的圖改字、底線跟著改長短、舊圖補建），細節見「DRAFT：view 下方的圖名」。
-- **進行中**：分支 `feature/import-paliby`（圖名併回 master 後 rebase 到 master 上，所以也含圖名；**只在本機**，匯入與按鈕已實測 OK，只剩「成功時只跳一個對話框」沒再測）——View 分頁 Hatching Style 下方的 Import PA-LIBY 鈕，細節寫在那支分支 CLAUDE.md「目錄與命名」的 PA-LIBY 那條。E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**：切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
+- Import PA-LIBY 鈕（原分支 `feature/import-paliby`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**）：View 分頁 Hatching Style 下方，細節見「目錄與命名」的 PA-LIBY 那條。
+- 切分支的坑：E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**，切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
 - 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
 - 使用者決定不做的（別再提）：複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）。
@@ -12,9 +13,9 @@
 ## 目錄與命名
 - `design/` 是 DESIGN 模組、`draft/` 是 DRAFT 模組。檔名前綴決定模組：`DrawingPlan*` = DESIGN（建圖框 BOX），`DrawingPlan1*` = DRAFT（出圖／標註／版次）。新表單照這個規則命名。
 - 一個 `.pmlfnc` 一個全域函式，PML 靠檔名找函式。
-- `draft/PA-LIBY.txt` 是 DRAFT 裡 `/PA-LIBY` 這個 DEPT 用 E3D `OUTPUT` 倒出來的巨集：出圖用的 representation／hatch 的 rule 與 style 都在裡面，DrawingPlan1 出圖時若目的 DB 沒有 `/PA-LIBY` 會自動 `$M` 匯入。在 E3D 改了那組 LIBY 要重新 OUTPUT 覆蓋這個檔，不要手改。View 分頁 Hatching Style 下方另有 **Import PA-LIBY** 鈕（2026-09-25，分支 `feature/import-paliby`，**修正版已在 E3D 實測 OK**；使用者要放 Hatching 下方，不是 Representation 下方）：專案沒有 `/PA-LIBY` 才能按（每次 show 由 `initcall` 重查，`.HavePaLiby()`／`.NameExists()` 用 `object DBREF` 查、不移動 CE），讓使用者第一次出圖前就能用 CE 鈕挑 `/PA-LIBY` 底下的樣式；要先有 Destination（建在同一個 DB），匯入後 CE 放回原處、提醒 Save Work。出圖跟按鈕共用 `.ImportPaLibyNow()`。
+- `draft/PA-LIBY.txt` 是 DRAFT 裡 `/PA-LIBY` 這個 DEPT 用 E3D `OUTPUT` 倒出來的巨集：出圖用的 representation／hatch 的 rule 與 style 都在裡面，DrawingPlan1 出圖時若目的 DB 沒有 `/PA-LIBY` 會自動 `$M` 匯入。在 E3D 改了那組 LIBY 要重新 OUTPUT 覆蓋這個檔，不要手改。View 分頁 Hatching Style 下方另有 **Import PA-LIBY** 鈕（2026-09-25 併回 master，**已在 E3D 實測**；使用者要放 Hatching 下方，不是 Representation 下方）：專案沒有 `/PA-LIBY` 才能按（每次 show 由 `initcall` 重查，`.HavePaLiby()`／`.NameExists()` 用 `object DBREF` 查、不移動 CE），讓使用者第一次出圖前就能用 CE 鈕挑 `/PA-LIBY` 底下的樣式；要先有 Destination（建在同一個 DB），匯入後 CE 放回原處、提醒 Save Work。出圖跟按鈕共用 `.ImportPaLibyNow()`。
 - **匯入不再用 `$M`**（2026-09-25 第一次實測）：`$M` 跑 PA-LIBY.txt 時第一行 `NEW DEPT /PA-LIBY` 沒建出 DEPT，後面照跑——DEPT1 自己被設了 SIZE／FONT／顏色（第 2～22 行），`/PA-LIBY/REPR`、`/STYL`、`/HRUL`、`/HSTYL` 四個 LIBY 建在 DEPT1 底下、跟 REGI 並排（使用者：「在其它階層匯入」）。第一行跟其他行唯一的差別是檔頭的 UTF-8 BOM（E3D OUTPUT 寫的；**PML 的 `writefile`／`writerecord` 寫出的檔也一律帶 BOM**，check*.txt 都是 `EF BB BF` 開頭，所以「去 BOM 另存一份再 `$M`」行不通）。沒有看到命令視窗的錯誤訊息，BOM 是推論。現在：先查巨集要建的每個名字都不存在（有殘留就列出來停下）→ 到 Destination 的 owner（必須是 DEPT）→ PML 自己 `new dept /PA-LIBY`（失敗就秀 E3D 的錯誤）→ 第 2 行起逐行 `$!ln`：NEW／OLD／END 失敗就停（再跑下去會建到錯的層），屬性行失敗記下來繼續、最後一次 warning 列出（這台缺顏色號碼是常態）→ 確認 `/PA-LIBY/REPR/PIPE/GA` 與 `/PA-LIBY/HRUL/GEN/Hatch-Gen` 存在。整段寫進 `check_liby.txt`（`.LibyLog()`，每次覆蓋）。成功時只有按鈕那一個「imported」對話框，被跳過的屬性只寫 check_liby（使用者：其它對話框不要；失敗的 error 仍會跳，不然失敗會無聲）。
-- 已實測 OK（2026-09-25，使用者）：`DEPT PA-LIBY` 建在 WORL 底下、緊接在 DEPT1 後面（站在 DEPT 上 `new dept` 是插在 CE 後面的兄弟——所以第一次失敗的確是 `$M` 跑的第一行，BOM 的推論更站得住）；按鈕變灰、關掉再開仍是灰的；Save Work 後用預設 `/PA-LIBY/...` 出圖正常。這台被拒絕 36 行，全是 9 個 STYLE 上的 `BOCOLO`／`BOSTYL`／`OCCOLO`／`OCSTYL`（`(47,15) Syntax error`，這台 E3D 沒有這四個屬性；PA-LIBY.txt 是正式機 OUTPUT 的，正式機應該 0 行）。「只剩一個對話框」那個改動（拿掉 warning）是實測後才改的，沒有再測。PA-LIBY.txt 必須維持一行一個指令、不含 `$ | !`（OUTPUT 的格式本來就是）。
+- 已實測 OK（2026-09-25，使用者）：`DEPT PA-LIBY` 建在 WORL 底下、緊接在 DEPT1 後面（站在 DEPT 上 `new dept` 是插在 CE 後面的兄弟——所以第一次失敗的確是 `$M` 跑的第一行，BOM 的推論更站得住）；按鈕變灰、關掉再開仍是灰的；Save Work 後用預設 `/PA-LIBY/...` 出圖正常。這台被拒絕 36 行，全是 9 個 STYLE 上的 `BOCOLO`／`BOSTYL`／`OCCOLO`／`OCSTYL`（`(47,15) Syntax error`，這台 E3D 沒有這四個屬性；PA-LIBY.txt 是正式機 OUTPUT 的，正式機應該 0 行）。「只剩一個對話框」（拿掉 warning）也已實測 OK。PA-LIBY.txt 必須維持一行一個指令、不含 `$ | !`（OUTPUT 的格式本來就是）。
 - `pml.index` 由 E3D 的 `pml rehash all` 重建，不入庫。新增 `.pmlfnc`/`.pmlfrm` 後要 rehash，否則呼叫失敗會被 `handle any` 吃掉、變成無聲的無作用。
 - 設計文件與各主題的定案在 Notion 頁面「E3D-管線平面圖程式摘要」（page id `3c8dd89e-3acd-80a7-9a3d-cecae639393f`），每個主題一個 toggle。改 出圖／版次／標註／柱位線 的行為前先讀對應的 toggle。
 
