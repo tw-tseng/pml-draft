@@ -251,6 +251,7 @@ layout form !!DrawingPlan1 dialog dock
 	member .labbanddown is real     $( the border of the view on each side, $)
 	member .labbandleft is real     $( in sheet mm. filled in by            $)
 	member .labbandright is real    $( DrawingPlan1LineNoAnnotation         $)
+	member .titletop is real        $( sheet y the view title hangs from, set by .RecenterView() $)
 	
 
 exit
@@ -1642,6 +1643,20 @@ define method .Apply()
 				handle any
 				endhandle
 
+				------------------------------------------------------------------
+				-- the view title under the drawing: PLAN at ELEVATION +<top of  --
+				-- box> and SCALE 1:n. after .RecenterView(), which left room    --
+				-- for it and says where it goes (.titletop)                     --
+				------------------------------------------------------------------
+				!ttop = !this.titletop
+				if (!ttop.unset()) then
+					!ttop = !this.TitleTopNow()
+				endif
+				!this.ViewTitle(!name, !box.string(), !ttop)
+				$!name/SS/S1/V1
+				handle any
+				endhandle
+
 				---------------------------
 				-- flow arrow annotation --
 				---------------------------
@@ -2231,6 +2246,19 @@ define method .Apply()
 				1
 				last
 				!!DrawingPlan1FlowAnnotation(!name)
+				------------------------------------------------------------------
+				-- the view title: its words follow the box (a moved top) and    --
+				-- the view scale, its place stays where it was. a sheet issued  --
+				-- before the title existed gets one under what is there now,    --
+				-- without the view moving -- see .ViewTitle()                   --
+				------------------------------------------------------------------
+				$!name/SS/S1/V1
+				handle any
+				endhandle
+				!this.ViewTitle(!name, !box.string(), !this.TitleTopNow())
+				$!name/SS/S1/V1
+				handle any
+				endhandle
 				------------------------------------------------------------------
 				-- update deliberately does NOT call .RecenterView() (2026-09-01, --
 				-- reverted same day it was added): once a REVI exists the view   --
@@ -3288,6 +3316,15 @@ define method .RecenterView(!name is string, !equistr is string)
 		endif
 	enddo
 	----------------------------------------------------------------------
+	-- and by the view title, which goes under all of it (.ViewTitle(),  --
+	-- user 2026-09-24): the bottom of the annotation as it stands is    --
+	-- where the title hangs from, and the title's own depth is added    --
+	-- below that so the centring makes room for it instead of pushing  --
+	-- it off the canvas afterwards                                      --
+	----------------------------------------------------------------------
+	!this.titletop = !ocy1
+	!ocy1 = !ocy1 - !this.TitleDepth()
+	----------------------------------------------------------------------
 	-- how far it sticks out of each edge, and the move which centres it --
 	--                                                                   --
 	-- (!ovl - !ovr) * 0.5 IS the centring shift: it multiplies out to   --
@@ -3407,6 +3444,7 @@ define method .RecenterView(!name is string, !equistr is string)
 			!this.viewURsh = 'x ' & string(!this.viewURsh.part(2).real() + !dx) & ' y ' & string(!this.viewURsh.part(4).real() + !dy)
 			!this.viewLLsh = 'x ' & string(!this.viewLLsh.part(2).real() + !dx) & ' y ' & string(!this.viewLLsh.part(4).real() + !dy)
 			!this.viewLRsh = 'x ' & string(!this.viewLRsh.part(2).real() + !dx) & ' y ' & string(!this.viewLRsh.part(4).real() + !dy)
+			!this.titletop = !this.titletop + !dy
 			------------------------------------------------------------
 			-- the box corners are sheet coordinates too, so they move  --
 			-- with the view exactly as the border corners do           --
@@ -3553,6 +3591,399 @@ define method .RecenterView(!name is string, !equistr is string)
 			!!DrawingPlan1MatchLine(!name, !equistr)
 		endif
 	endif
+endmethod
+
+------------------------------------------------------------------------
+-- the two heights of the view title, sheet mm: [1] the green line, the --
+-- match line text height; [2] the yellow line, the pipe label height   --
+-- (user, 2026-09-24). a field that does not read falls back to the    --
+-- form's own default                                                   --
+------------------------------------------------------------------------
+define method .TitleHeights() is array
+	!h1 = 4
+	!s1 = !this.matchhei.val.replace('mm', '').trim()
+	!h1 = !s1.real()
+	handle any
+		!h1 = 4
+	endhandle
+	!h2 = 3
+	if (not(!this.lineheitx.val.unset())) then
+		!h2 = !this.lineheitx.val
+	endif
+	!h = object array()
+	!h.append(!h1)
+	!h.append(!h2)
+	return !h
+endmethod
+
+------------------------------------------------------------------------
+-- where the view title's parts go, sheet y, hanging from !top: [1] the --
+-- green text's origin, [2] the underline, [3] the yellow text's origin --
+--                                                                      --
+-- the texts are alig bbody, and font 1 draws its capitals from 0.29 x  --
+-- height above such an origin to 1.15 x height above it (measured off  --
+-- a sheet, 2026-09-25: 4mm text, capitals 3.44 tall standing 1.16 up;  --
+-- 3mm the same). the gaps here are the ones seen on paper: 5mm from   --
+-- the annotation above to the capitals, then the picture the user     --
+-- drew (error.png, 2026-09-25), in green text heights so it keeps its --
+-- look at any height: 0.18 from the capitals down to the line, 0.25   --
+-- from the line down to the yellow capitals -- 0.7 and 1.0 at 4mm.    --
+-- they were 2.1 on both sides, too far (user)                         --
+------------------------------------------------------------------------
+define method .TitleRows(!top is real) is array
+	!h = !this.TitleHeights()
+	!y1 = !top - 5 - 1.15 * !h[1]
+	!yu = !y1 + 0.29 * !h[1] - 0.18 * !h[1]
+	!y2 = !yu - 0.25 * !h[1] - 1.15 * !h[2]
+	!r = object array()
+	!r.append(!y1)
+	!r.append(!yu)
+	!r.append(!y2)
+	return !r
+endmethod
+
+------------------------------------------------------------------------
+-- how far the view title reaches below the point it hangs from, sheet  --
+-- mm, down to the yellow text's origin -- .TitleRows() from 0          --
+------------------------------------------------------------------------
+define method .TitleDepth() is real
+	!r = !this.TitleRows(0)
+	!d = 0 - !r[3]
+	return !d
+endmethod
+
+------------------------------------------------------------------------
+-- the underline's length, sheet mm: as wide as the green text, the way --
+-- the user drew it. E3D has no attribute giving the width a text comes --
+-- out at, so it is font 1's, measured off a sheet (2026-09-25): 0.625  --
+-- x height per character, both lines alike -- 62.5 for 25 characters  --
+-- at 4mm, 18.9 for 10 at 3mm. the first guess, 0.8, overshot by 8.7   --
+-- at each end                                                          --
+------------------------------------------------------------------------
+define method .TitleWidth(!t is string, !h is real) is real
+	!w = 0.625 * !h * !t.length()
+	return !w
+endmethod
+
+------------------------------------------------------------------------
+-- the bottom of everything under the view as it stands, sheet y -- the --
+-- view border less the label band below it, and the grid bubbles -- the --
+-- same reckoning .RecenterView() makes, for the update path, which      --
+-- never moves the view and so never runs that                           --
+------------------------------------------------------------------------
+define method .TitleTopNow() is real
+	!y = min(!this.viewLLsh.part(4).replace('mm', '').real(), !this.viewURsh.part(4).replace('mm', '').real())
+	!band = 0
+	!band = !this.labbanddown
+	handle any
+		!band = 0
+	endhandle
+	if (!band.unset()) then
+		!band = 0
+	endif
+	!y = !y - !band
+	!gbubn = 0
+	!gbubn = !!DrawingPlan1GridBubbles.size()
+	handle any
+		!gbubn = 0
+	endhandle
+	do !gbubi from 1 to !gbubn
+		!gbubp = object array()
+		!gbubp = !!DrawingPlan1GridBubbles[!gbubi].split('~')
+		handle any
+			skip
+		endhandle
+		if (!gbubp.size().gt(2)) then
+			!gbuby = !gbubp[3].replace('mm', '').real() - 5
+			!y = min(!y, !gbuby)
+		endif
+	enddo
+	return !y
+endmethod
+
+------------------------------------------------------------------------
+-- the title under the view (user, 2026-09-24):                         --
+--     PLAN at ELEVATION +119510     green (colour 20), match line text --
+--     ---------------------------   height, underlined                  --
+--            SCALE 1:50             yellow, pipe label height          --
+-- both centred on the view. the elevation is the top of the box, E3D's --
+-- own U, signed; the scale is the view's own VSCA, so it is whatever   --
+-- was really drawn, fitted or picked.                                   --
+--                                                                       --
+-- a NOTE of its own under the view, named <drwg>/SS/S1/V1/VTITLE, with --
+-- ELEV, ULINE and SCALE in it, so a later run finds it by name. found,  --
+-- only the words are rewritten, and the underline's length with them   --
+-- (.TitleLine()): an issued sheet keeps its layout, the same rule as   --
+-- the view itself. not found, it is made with its top at sheet y !top, --
+-- laid out by .TitleRows(); the underline is as wide as the green text --
+-- by font 1's measured width (.TitleWidth()), centred like the text,   --
+-- so an estimate off either way is off evenly at both ends             --
+------------------------------------------------------------------------
+define method .ViewTitle(!name is string, !box is string, !top is real)
+	!ok = true
+	var !bw wvol of $!box
+	handle any
+		!ok = false
+	endhandle
+	if (not(!ok)) then
+		return
+	endif
+	!topu = !bw.part(6).replace('mm', '').real()
+	!elev = !topu.string('D0').replace('mm', '')
+	if (!topu ge 0) then
+		!elev = '+' & !elev
+	endif
+	!t1 = 'PLAN at ELEVATION ' & !elev
+
+	!vs = 0
+	$!name/SS/S1/V1
+	var !vsstr vsca
+	handle any
+		!vsstr = ''
+	endhandle
+	!vs = !vsstr.replace('mm', '').real()
+	handle any
+		!vs = 0
+	endhandle
+	!t2 = 'SCALE'
+	if (!vs gt 0 and !vs lt 1) then
+		!den = 1 / !vs
+		!t2 = 'SCALE 1:' & !den.string('D0').replace('mm', '')
+	elseif (!vs ge 1) then
+		!t2 = 'SCALE ' & !vs.string('D0').replace('mm', '') & ':1'
+	endif
+
+	!this.TitleLog('VTITLE ' & !name & ' top=' & !top.string('D3') & ' t1=' & !t1 & ' t2=' & !t2)
+
+	!nt = !name & '/SS/S1/V1/VTITLE'
+	!elevnm = !nt & '/ELEV'
+	!scalenm = !nt & '/SCALE'
+	!exists = true
+	$!nt
+	handle any
+		!exists = false
+	endhandle
+	if (!exists) then
+		!whole = true
+		$!elevnm
+		handle any
+			!whole = false
+		endhandle
+		$!scalenm
+		handle any
+			!whole = false
+		endhandle
+		if (!whole) then
+			$!elevnm
+			BTEXT |$!t1|
+			handle any
+				!this.TitleLog('  ELEV btext failed: ' & !!error.text)
+			endhandle
+			$!scalenm
+			BTEXT |$!t2|
+			handle any
+				!this.TitleLog('  SCALE btext failed: ' & !!error.text)
+			endhandle
+			!this.TitleLine(!nt, !t1)
+			!this.TitleLog('  found, words rewritten, place kept')
+			return
+		endif
+		----------------------------------------------------------------
+		-- a NOTE without its texts is what the first version left     --
+		-- behind (cheitx unquoted, 2026-09-25): found by name, it     --
+		-- would only ever have its missing texts "rewritten", so it   --
+		-- is deleted and made again below                             --
+		----------------------------------------------------------------
+		$!nt
+		delete note
+		handle any
+			!this.TitleLog('  half made, delete failed: ' & !!error.text)
+			return
+		endhandle
+		!this.TitleLog('  half made, deleted, made again')
+	endif
+
+	!h = !this.TitleHeights()
+	!h1 = !h[1]
+	!h2 = !h[2]
+	!xl = !this.viewLLsh.part(2).replace('mm', '').real()
+	!xr = !this.viewLRsh.part(2).replace('mm', '').real()
+	!cx = (!xl + !xr) * 0.5
+	!rows = !this.TitleRows(!top)
+	!y1 = !rows[1]
+	!yu = !rows[2]
+	!y2 = !rows[3]
+	!w = !this.TitleWidth(!t1, !h1)
+	!xa = !cx - !w * 0.5
+	!xb = !cx + !w * 0.5
+
+	!cxs = !cx.string('D3').replace('mm', '')
+	!y1s = !y1.string('D3').replace('mm', '')
+	!yus = !yu.string('D3').replace('mm', '')
+	!y2s = !y2.string('D3').replace('mm', '')
+	!xas = !xa.string('D3').replace('mm', '')
+	!xbs = !xb.string('D3').replace('mm', '')
+	!h1s = !h1.string('D2').replace('mm', '')
+	!h2s = !h2.string('D2').replace('mm', '')
+
+	------------------------------------------------------------------
+	-- cheitx takes text: every other call in this library quotes it  --
+	-- (|4|, '3mm'), and the unquoted number this first had rejected  --
+	-- the whole line, silently under the handle -- both texts missing --
+	-- and only the underline drawn (user, 2026-09-25). the colours    --
+	-- go on lines of their own, AVEVA's way (assyboundbox.pmlfnc:173) --
+	-- -- a number not in the colour dictionary is (61,604) and must   --
+	-- not cost the text itself -- and fall back to green              --
+	------------------------------------------------------------------
+	$!name/SS/S1/V1
+	new note $!nt
+	handle any
+		!this.TitleLog('  new note failed: ' & !!error.text)
+		return
+	endhandle
+
+	!made = true
+	new texp $!elevnm btext |$!t1| origin x $!cxs y $!y1s cheitx |$!h1s| alig bbody just center font 1
+	handle any
+		!made = false
+		!this.TitleLog('  ELEV failed: ' & !!error.text)
+	endhandle
+	if (!made) then
+		!colok = true
+		txcolour 20
+		handle any
+			!colok = false
+			!this.TitleLog('  ELEV txcolour 20 failed, green instead: ' & !!error.text)
+		endhandle
+		if (not(!colok)) then
+			txcolour green
+			handle any
+			endhandle
+		endif
+	endif
+
+	$!nt
+	!made = true
+	new stra $!nt/ULINE fpt x $!xas y $!yus tpt x $!xbs y $!yus
+	handle any
+		!made = false
+		!this.TitleLog('  ULINE failed: ' & !!error.text)
+	endhandle
+	if (!made) then
+		!colok = true
+		NLColour 20
+		handle any
+			!colok = false
+			!this.TitleLog('  ULINE nlcolour 20 failed, green instead: ' & !!error.text)
+		endhandle
+		if (not(!colok)) then
+			NLColour green
+			handle any
+			endhandle
+		endif
+	endif
+
+	$!nt
+	new texp $!scalenm btext |$!t2| origin x $!cxs y $!y2s cheitx |$!h2s| alig bbody just center txcolour yellow font 1
+	handle any
+		!this.TitleLog('  SCALE failed: ' & !!error.text)
+	endhandle
+	!this.TitleLog('  made: cx=' & !cxs & ' y1=' & !y1s & ' yu=' & !yus & ' y2=' & !y2s & ' h1=' & !h1s & ' h2=' & !h2s & ' uline ' & !xas & '..' & !xbs)
+endmethod
+
+------------------------------------------------------------------------
+-- an existing title's underline made as wide as its new words, about  --
+-- its own middle and at its own y: the update path keeps the title    --
+-- where it is, but the line hugs the text now, so one more digit in   --
+-- the elevation must not leave it short (or a sheet from before       --
+-- 2026-09-25 with the 0.8 estimate's long line). the height is read   --
+-- off the text itself, which keeps the height it was made with        --
+------------------------------------------------------------------------
+define method .TitleLine(!nt is string, !t1 is string)
+	!hh = !this.TitleHeights()
+	!he = !hh[1]
+	!elevnm = !nt & '/ELEV'
+	!chs = ''
+	$!elevnm
+	var !chs chei
+	handle any
+		!chs = ''
+	endhandle
+	!hr = !chs.replace('mm', '').real()
+	handle any
+		!hr = 0
+	endhandle
+	if (!hr gt 0) then
+		!he = !hr
+	endif
+
+	!ulnm = !nt & '/ULINE'
+	!uf = ''
+	!ut = ''
+	$!ulnm
+	handle any
+		!this.TitleLog('  no ULINE to resize')
+		return
+	endhandle
+	var !uf fpt
+	handle any
+		!uf = ''
+	endhandle
+	var !ut tpt
+	handle any
+		!ut = ''
+	endhandle
+	!sf = !!DrawingPlan1MatchXY(!uf)
+	!st = !!DrawingPlan1MatchXY(!ut)
+	!pf = !sf.split('~')
+	!pt = !st.split('~')
+	if (!pf.size().lt(2) or !pt.size().lt(2)) then
+		!this.TitleLog('  ULINE ends unreadable: ' & !uf & ' / ' & !ut)
+		return
+	endif
+	if (!pf[1].eq('') or !pf[2].eq('') or !pt[1].eq('')) then
+		!this.TitleLog('  ULINE ends unreadable: ' & !uf & ' / ' & !ut)
+		return
+	endif
+	!ax = !pf[1].real()
+	!bx = !pt[1].real()
+	!uys = !pf[2]
+	!mx = (!ax + !bx) * 0.5
+	!w = !this.TitleWidth(!t1, !he)
+	!xa = !mx - !w * 0.5
+	!xb = !mx + !w * 0.5
+	!xas = !xa.string('D3').replace('mm', '')
+	!xbs = !xb.string('D3').replace('mm', '')
+	fpt x $!xas y $!uys
+	handle any
+		!this.TitleLog('  ULINE fpt failed: ' & !!error.text)
+		return
+	endhandle
+	tpt x $!xbs y $!uys
+	handle any
+		!this.TitleLog('  ULINE tpt failed: ' & !!error.text)
+		return
+	endhandle
+	!this.TitleLog('  ULINE now ' & !xas & '..' & !xbs & ' at y ' & !uys & ' (height ' & !he.string('D2') & ')')
+endmethod
+
+------------------------------------------------------------------------
+-- one line of check_title.txt, the record of what .ViewTitle() did.   --
+-- appended, one block per sheet; a dump that cannot be written is     --
+-- skipped, never an error                                             --
+------------------------------------------------------------------------
+define method .TitleLog(!msg is string)
+	!f = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_title.txt')
+	!f.open('append')
+	handle any
+		return
+	endhandle
+	!f.writerecord(!msg)
+	handle any
+	endhandle
+	!f.close()
+	handle any
+	endhandle
 endmethod
 
 define method .NozzleAnnotation(!name is string)

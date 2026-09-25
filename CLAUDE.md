@@ -1,5 +1,14 @@
 # PA_pmllibE3D2.1 — AVEVA E3D 2.1 的 PML 程式庫
 
+## 目前進度（2026-09-25）
+- `master` 已 push，2026-09-25 併了 `feature/view-title`（圖名，重建已實測 OK）。2026-09-24 併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
+- DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；**更新路徑沒有另外回報**（有 REVI 的圖改字、底線跟著改長短、舊圖補建），細節見「DRAFT：view 下方的圖名」。
+- **進行中**：分支 `feature/import-paliby`（圖名併回 master 後 rebase 到 master 上，所以也含圖名；**只在本機、未實測**）——View 分頁 Representation Style 下方的 Import PA-LIBY 鈕，細節寫在那支分支 CLAUDE.md「目錄與命名」的 PA-LIBY 那條。E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**：切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
+- 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
+- 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
+- 使用者決定不做的（別再提）：複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）。
+- 合作方式：一個功能一支分支，使用者在 E3D 實測後才 `--no-ff` 併回 master 並 push；每次改完 `.pmlfrm` 提醒 kill／reload／show；使用者回報時截圖放 repo 根目錄 `error.png`，除錯看 `check*.txt`（`check_box.txt`＝Check 分頁、`check_batch.txt`＝Assign Numbers、`check4.txt`＝RecenterView、`check_title.txt`＝view 下方的圖名）。
+
 ## 目錄與命名
 - `design/` 是 DESIGN 模組、`draft/` 是 DRAFT 模組。檔名前綴決定模組：`DrawingPlan*` = DESIGN（建圖框 BOX），`DrawingPlan1*` = DRAFT（出圖／標註／版次）。新表單照這個規則命名。
 - 一個 `.pmlfnc` 一個全域函式，PML 靠檔名找函式。
@@ -38,7 +47,7 @@
 ## 這台機器
 - 這是測試機，E3D 版本跟正式機不同：缺屬性／缺命令用 `HANDLE ANY` 包掉，能跑完就好，不必真的修。
 - PML 寫到 `L:`，對應這台的 `D:`；使用者說「請看 check」是指 `D:\...\CHECK.TXT`（check*.txt 都是除錯 dump，已 gitignore）。
-- Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。
+- Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫——2026-09-24 MCP 仍 403，REST 用 User 層的 token 正常讀到頁面（PowerShell `Invoke-RestMethod`，header `Notion-Version: 2022-06-28`）。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。
 
 ## 待實測（2026-09-21 已併回 master，`bd8079f`..`1c99bc6`）
 - 原本在 `feature/drawingplan-grid-merge`。2026-09-21 使用者決定連同尚未實測的部份一起併進 master（我有先提醒下面那條「還沒在 E3D 實測」）。分支本身還在，內容已全部包含在 master 裏。
@@ -51,6 +60,18 @@
 - 工作樹上另外有兩個舊備份的刪除（`DrawingPlan1MatchLine(20260122)/(20260311).pmlfnc`）沒進任何 commit，使用者說不要進 master。
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX（2026-09-24 做了，見「Pick 分頁：圍住選取物」）、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。「在 3D 每個框中心 AID 印圖號」那半也不做：框一多標籤疊在一起反而看不清楚（使用者，2026-09-24）；要確認編號順序就看 `check_batch.txt`）。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
+
+## DRAFT：view 下方的圖名（2026-09-24，2026-09-25 併回 master，**重建已實測 OK，更新路徑未實測**）
+- 2026-09-25 第一次實測：底線有、兩行字都沒有。原因是 `cheitx $!h1s`（沒引號的數字 `4.00`）——repo 裡其他三十幾處 `cheitx` 全部帶引號（`|4|`、`'3mm'`），CHEITX 吃文字，整行被拒絕、又被 `handle any` 吃掉，所以沒報錯。底線用 fpt/tpt 不經過 CHEITX 才建得出來。**`cheitx` 一律 `|...|` 或 `'...'`。**
+- 同一次一起改的：顏色拆成獨立一行、設不上就退回 `green`（AVEVA 先例 `assyboundbox.pmlfnc:173`，顏色字典沒有那個號碼是 `(61,604)`；截圖底線偏白，顏色 20 在這台可能不存在）；`alig base` → `alig bbody`（6113 行的 MATCH LINE 字就是用 bbody，畫面上看得到）；更新路徑找到 VTITLE 卻缺 ELEV／SCALE 的話刪掉整個 NOTE 重建（不然第一版留下的空 NOTE 永遠補不回來）；每一步寫進 `check_title.txt`（`.TitleLog()`，append，一張圖一段）。
+- 使用者要求：view 正下方兩行，置中對齊 view。上行 `PLAN at ELEVATION +<框頂面 U>`，顏色 20、字高＝Match Line Text Height（`.matchhei`）、有底線；下行 `SCALE 1:n`，黃色、字高＝Pipe Label Height（`.lineheitx`）。高程取**框頂面**（`WVOL` part 6），**直接用 E3D 的 U**、帶正負號（使用者選的）；比例讀 view 自己的 `VSCA`，fit 或手選都一樣。
+- 放在**所有下方標註的更下面**（使用者選的）：`.RecenterView()` 算完格線圈圈後記下 `.titletop`（下方內容的底），再把 `TitleDepth()`（從 `.TitleRows(0)` 算）加進下緣一起置中，view 移動時 `titletop` 跟著 `dy` 走；置中後才建字（NOTE 的文字是圖紙座標，不會跟著 view 移）。
+- 元素：view 底下一個具名 NOTE `<drwg>/SS/S1/V1/VTITLE`，內含 `ELEV`、`ULINE`（STRA）、`SCALE`。**更新路徑**（有 REVI）找得到就只改 BTEXT、位置不動；舊圖還沒有就用 `TitleTopNow()` 放在目前最下方標註底下，不動 view。現有程式用 `note 1` 找的都是先建的那個 NOTE，這個會是 NOTE 2，不衝突。
+- 第二次實測（2026-09-25，`check_title.txt` 給了 h1=4／h2=3／底線 80mm，截圖量像素換算）：font 1 的字寬 **0.625×字高×字數**（25 字 4mm＝62.5、10 字 3mm＝18.9，兩行一致，等寬）；`alig bbody` 的原點在大寫字母底下 **0.29×字高**，大寫頂在原點上 **1.15×字高**（所以原本「字底下 1mm」實際是 2.1mm）。第一版估 0.8 的底線兩端各長 8.7mm。
+- 間距照使用者畫的 `error.png`（字寬＝線長；字底→線 0.21 倍大寫高、線→黃字頂 0.29 倍），換成綠字字高：字底→線 **0.18×h1**、線→黃字頂 **0.25×h1**（4mm 時 0.7／1.0mm），上方標註→綠字頂 5mm 不變。全在 `.TitleRows()`，`TitleDepth()` 跟 `ViewTitle()` 都從它拿；底線長度在 `.TitleWidth()`。**要再調就調這兩個方法的係數**，量法：截圖用 PIL 逐列找綠／黃像素的範圍，底線長度當比例尺。
+- 更新路徑改了字，底線長度跟著改（`.TitleLine()`：讀 ELEV 自己的 `chei`、以原底線中點為中心、y 不動）；字的位置仍不動，所以第二次實測以前建的圖要**重建**才會用到新間距。
+- 已實測 OK（2026-09-25，使用者，第三次）：重建一張圖，兩行字、顏色、字高、間距、底線長度。
+- 還沒回報：有 REVI 的圖更新後字有沒有跟著框頂面變、位置不動、底線長度跟著字改；舊圖第一次更新時補建；第一版留下的空 VTITLE 會被刪掉重建。
 
 ## Move Face 多選（2026-09-24 已併回 master，`3c50023`..`16410c8`＋merge commit，**已在 E3D 實測**）
 - 4 個 commit，只動 `DrawingPlan.pmlfrm` 跟本檔，在分支 `feature/moveface-multi` 上做完、實測通過後用 `--no-ff` 併回 master，分支已刪。合併時跟 Check 分頁有兩處文字衝突（member 區塊、本檔換電腦第 1 點，兩邊都留），另外還有一處**語意衝突**是 git 看不出來的：Check 分頁點清單列時自己下 `AID CLEAR ALL`，畫面清了但 Show Box 的按鈕還停在 `Hide Box`，下一次按會變成清而不是畫。在 merge commit 裡把那兩處改成 `ClearAids()`，2026-09-24 已實測 OK。
@@ -109,11 +130,17 @@
 - Move Face 第四種給法 `to neighbour`（Snap 鈕，2026-09-24 已併回 master，`5bf07e7`，**已在 E3D 實測**）：沿用 Face 選單選的面，每個選到的 BOX 自己找「那個面正對的最近鄰框」貼過去——有縫往外長、有重疊往內縮。鄰框的條件在 `NbDistance()` 的註解：面要平行（1°）、中心在本框中心前方、在面的兩個軸上都共用超過 Check 的容差（面對面，不是只碰到邊）、距離不超過 Check 的 Max gap。好幾個符合時貼 |距離| 最小的（使用者決定，2026-09-24），跟其他鄰框剩下的縫／重疊交給 Check 分頁抓。讀全部框借 `ChkReadAll()`，讀完把 `chk*` 陣列還原——Check 清單的列用 index 指那些陣列，中間做過 Split／Merge 的話重讀會讓舊列指到別的框。已實測 OK（使用者）：單框 N/S/E/W/Top、有縫與有重疊、多選一排框一起貼、沒有鄰框時的 alert、做完回 Check 分頁點舊的列仍畫對。
 
 ## 換電腦
-1. `git clone https://github.com/tw-tseng/pml-draft.git` 到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。有只在本機的進行中分支的話，先從舊機器 `git push -u origin <分支>`，新機器再 `git checkout` 它（`git branch -vv` 沒有 `[origin/...]` 的就是只在本機）。
-2. 設使用者環境變數 `NOTION_TOKEN`。舊 token 已失效（2026-09-20 起 MCP 與 REST 都回 401 `API token is invalid`），到 notion.so/my-integrations 重新產一個，並確認 integration 有連到「E3D-管線平面圖程式摘要」那頁。
-3. 重建 `.mcp.json`：
+**整個目錄複製過去（2026-09-24 使用者的做法）**：
+1. 複製整個 repo 目錄。`.git`（含只在本機的分支，例如 `feature/view-title`）、`bin/` 裡的 BlankPos.exe／RevCloud.exe（被 gitignore、不在 GitHub，但在目錄裡）、`.mcp.json`、未追蹤的 check／log 檔都會跟著過去，不用另外 push 或重建。到了新機器先 `git status`、`git branch -vv` 對一下。
+2. 放到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
+3. **路徑寫死的地方**：27 處 PML 把除錯檔寫到 `L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check*.txt`（`DrawingPlan1.pmlfrm` 19 處，另有 GridAnnotation／LineNoAnnotation 各 2、FlowAnnotation／MatchGaps 各 1、`DrawingPlan.pmlfrm` 2）。新機器的 E3D 看到的 `L:` 要指到同一個目錄，否則 dump 靜靜寫不出來（Check 分頁會多一列「寫不出 check_box.txt」）。
+4. 使用者環境變數 `NOTION_TOKEN`：從舊機器抄同一個值（PowerShell `[Environment]::GetEnvironmentVariable('NOTION_TOKEN','User')`），設成新機器的 **User** 層，然後重開 VS Code。2026-09-24 這個 token 用 REST 是有效的；MCP 端點會回 403，照「這台機器」那條改走 REST。
+5. Claude Code 的 memory **不在 repo 目錄裡**：`%USERPROFILE%\.claude\projects\<repo路徑編碼>\memory\`，這台是 `C:\Users\tw.tseng\.claude\projects\d--E3D-pdms-prog-E3D2-1-PA-pmllibE3D2-1\memory\`（約 39 個檔）。要另外複製；新機器上 repo 路徑不同的話資料夾名稱也會不同，把檔案放進新名稱的資料夾。沒複製的話，本檔加 Notion 也夠開工。
+
+**改用 git clone 的話**（不是整個複製）：
+1. `git clone https://github.com/tw-tseng/pml-draft.git`，只在本機的分支要先從舊機器 `git push -u origin <分支>` 再 `git checkout`（`git branch -vv` 沒有 `[origin/...]` 的就是只在本機）。
+2. 重建 `.mcp.json`：
    ```json
    {"mcpServers":{"notion":{"type":"http","url":"https://mcp.notion.com/mcp","headers":{"Authorization":"Bearer ${NOTION_TOKEN}"}}}}
    ```
-4. `bin/` 裡的 BlankPos.exe、RevCloud.exe 不在 repo（各 25MB），從舊機器或 `Documents\Python\blankpos`、`revcloud` 重建後手動放到 PMLLIB 搜尋路徑下的 bin。**PyInstaller 產出的是 `dist\start-完整版06.exe`，要改名複製成 `bin\BlankPos.exe`**——2026-09-21 就是 build 完沒部署，出圖一整天都在吃舊 exe，表現得跟「改了沒用」一模一樣。改完 exe 先 `ls -la bin/` 對時間戳。
-5. Claude Code 的 memory 在 `%USERPROFILE%\.claude\projects\<repo路徑編碼>\memory\`，整個資料夾複製過去就接得上；沒複製的話，本檔加 Notion 也夠開工。
+3. `bin/` 的 BlankPos.exe、RevCloud.exe 不在 repo（各 25MB），從舊機器或 `Documents\Python\blankpos`、`revcloud` 重建後手動放到 PMLLIB 搜尋路徑下的 bin。**PyInstaller 產出的是 `dist\start-完整版06.exe`，要改名複製成 `bin\BlankPos.exe`**——2026-09-21 就是 build 完沒部署，出圖一整天都在吃舊 exe，表現得跟「改了沒用」一模一樣。改完 exe 先 `ls -la bin/` 對時間戳。
