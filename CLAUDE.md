@@ -2,12 +2,12 @@
 
 ## 目前進度（2026-09-25）
 - `master` 已 push，2026-09-25 併了 `feature/view-title`（圖名，重建已實測 OK）與 `feature/import-paliby`（Import PA-LIBY 鈕，已實測）。2026-09-24 併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
-- DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；**更新路徑沒有另外回報**（有 REVI 的圖改字、底線跟著改長短、舊圖補建），細節見「DRAFT：view 下方的圖名」。
+- DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；更新路徑（有 REVI 的圖改字、底線跟著改長短、舊圖補建）**使用者決定不測**：目前沒有這種情形（2026-09-25）。細節見「DRAFT：view 下方的圖名」。
 - Import PA-LIBY 鈕（原分支 `feature/import-paliby`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**）：View 分頁 Hatching Style 下方，細節見「目錄與命名」的 PA-LIBY 那條。
 - 切分支的坑：E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**，切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
 - 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
-- 使用者決定不做的（別再提）：複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）。
+- 使用者決定不做的（別再提）：複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）、圖名更新路徑的實測（目前沒有這種情形）。
 - 合作方式：一個功能一支分支，使用者在 E3D 實測後才 `--no-ff` 併回 master 並 push；每次改完 `.pmlfrm` 提醒 kill／reload／show；使用者回報時截圖放 repo 根目錄 `error.png`，除錯看 `check*.txt`（`check_box.txt`＝Check 分頁、`check_batch.txt`＝Assign Numbers、`check4.txt`＝RecenterView、`check_title.txt`＝view 下方的圖名、`check_liby.txt`＝匯入 PA-LIBY）。
 
 ## 目錄與命名
@@ -64,7 +64,7 @@
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX（2026-09-24 做了，見「Pick 分頁：圍住選取物」）、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。「在 3D 每個框中心 AID 印圖號」那半也不做：框一多標籤疊在一起反而看不清楚（使用者，2026-09-24）；要確認編號順序就看 `check_batch.txt`）。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
 
-## DRAFT：view 下方的圖名（2026-09-24，2026-09-25 併回 master，**重建已實測 OK，更新路徑未實測**）
+## DRAFT：view 下方的圖名（2026-09-24，2026-09-25 併回 master，**重建已實測 OK；更新路徑使用者決定不測**）
 - 2026-09-25 第一次實測：底線有、兩行字都沒有。原因是 `cheitx $!h1s`（沒引號的數字 `4.00`）——repo 裡其他三十幾處 `cheitx` 全部帶引號（`|4|`、`'3mm'`），CHEITX 吃文字，整行被拒絕、又被 `handle any` 吃掉，所以沒報錯。底線用 fpt/tpt 不經過 CHEITX 才建得出來。**`cheitx` 一律 `|...|` 或 `'...'`。**
 - 同一次一起改的：顏色拆成獨立一行、設不上就退回 `green`（AVEVA 先例 `assyboundbox.pmlfnc:173`，顏色字典沒有那個號碼是 `(61,604)`；截圖底線偏白，顏色 20 在這台可能不存在）；`alig base` → `alig bbody`（6113 行的 MATCH LINE 字就是用 bbody，畫面上看得到）；更新路徑找到 VTITLE 卻缺 ELEV／SCALE 的話刪掉整個 NOTE 重建（不然第一版留下的空 NOTE 永遠補不回來）；每一步寫進 `check_title.txt`（`.TitleLog()`，append，一張圖一段）。
 - 使用者要求：view 正下方兩行，置中對齊 view。上行 `PLAN at ELEVATION +<框頂面 U>`，顏色 20、字高＝Match Line Text Height（`.matchhei`）、有底線；下行 `SCALE 1:n`，黃色、字高＝Pipe Label Height（`.lineheitx`）。高程取**框頂面**（`WVOL` part 6），**直接用 E3D 的 U**、帶正負號（使用者選的）；比例讀 view 自己的 `VSCA`，fit 或手選都一樣。
@@ -74,7 +74,7 @@
 - 間距照使用者畫的 `error.png`（字寬＝線長；字底→線 0.21 倍大寫高、線→黃字頂 0.29 倍），換成綠字字高：字底→線 **0.18×h1**、線→黃字頂 **0.25×h1**（4mm 時 0.7／1.0mm），上方標註→綠字頂 5mm 不變。全在 `.TitleRows()`，`TitleDepth()` 跟 `ViewTitle()` 都從它拿；底線長度在 `.TitleWidth()`。**要再調就調這兩個方法的係數**，量法：截圖用 PIL 逐列找綠／黃像素的範圍，底線長度當比例尺。
 - 更新路徑改了字，底線長度跟著改（`.TitleLine()`：讀 ELEV 自己的 `chei`、以原底線中點為中心、y 不動）；字的位置仍不動，所以第二次實測以前建的圖要**重建**才會用到新間距。
 - 已實測 OK（2026-09-25，使用者，第三次）：重建一張圖，兩行字、顏色、字高、間距、底線長度。
-- 還沒回報：有 REVI 的圖更新後字有沒有跟著框頂面變、位置不動、底線長度跟著字改；舊圖第一次更新時補建；第一版留下的空 VTITLE 會被刪掉重建。
+- 沒測，使用者決定不測（2026-09-25，目前沒有這種情形）：有 REVI 的圖更新後字有沒有跟著框頂面變、位置不動、底線長度跟著字改；舊圖第一次更新時補建；第一版留下的空 VTITLE 會被刪掉重建。
 
 ## Move Face 多選（2026-09-24 已併回 master，`3c50023`..`16410c8`＋merge commit，**已在 E3D 實測**）
 - 4 個 commit，只動 `DrawingPlan.pmlfrm` 跟本檔，在分支 `feature/moveface-multi` 上做完、實測通過後用 `--no-ff` 併回 master，分支已刪。合併時跟 Check 分頁有兩處文字衝突（member 區塊、本檔換電腦第 1 點，兩邊都留），另外還有一處**語意衝突**是 git 看不出來的：Check 分頁點清單列時自己下 `AID CLEAR ALL`，畫面清了但 Show Box 的按鈕還停在 `Hide Box`，下一次按會變成清而不是畫。在 merge commit 裡把那兩處改成 `ClearAids()`，2026-09-24 已實測 OK。
