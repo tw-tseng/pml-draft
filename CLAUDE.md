@@ -5,11 +5,12 @@
 - DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；更新路徑（有 REVI 的圖改字、底線跟著改長短、舊圖補建）**使用者決定不測**：目前沒有這種情形（2026-09-25）。細節見「DRAFT：view 下方的圖名」。
 - Import PA-LIBY 鈕（原分支 `feature/import-paliby`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**）：View 分頁 Hatching Style 下方，細節見「目錄與命名」的 PA-LIBY 那條。
 - 流向箭頭畫到 view 外（原分支 `fix/flow-arrow-in-view`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**），細節見「DRAFT：流向箭頭不出 view」。
+- **進行中（2026-09-26）**：分支 `feature/user-view`——使用者在 Draw 自己建的 VIEW 套我們的標註，**未在 E3D 實測**，細節見「DRAFT：使用者自建的 VIEW」。先做平面，立面／SECTION 之後。
 - 切分支的坑：E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**，切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
 - 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
 - 使用者決定不做的（別再提）：複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）、圖名更新路徑的實測（目前沒有這種情形）。
-- 合作方式：一個功能一支分支，使用者在 E3D 實測後才 `--no-ff` 併回 master 並 push；每次改完 `.pmlfrm` 提醒 kill／reload／show；使用者回報時截圖放 repo 根目錄 `error.png`，除錯看 `check*.txt`（`check_box.txt`＝Check 分頁、`check_batch.txt`＝Assign Numbers、`check4.txt`＝RecenterView、`check_title.txt`＝view 下方的圖名、`check_liby.txt`＝匯入 PA-LIBY）。
+- 合作方式：一個功能一支分支，使用者在 E3D 實測後才 `--no-ff` 併回 master 並 push；每次改完 `.pmlfrm` 提醒 kill／reload／show；使用者回報時截圖放 repo 根目錄 `error.png`，除錯看 `check*.txt`（`check_box.txt`＝Check 分頁、`check_batch.txt`＝Assign Numbers、`check4.txt`＝RecenterView、`check_title.txt`＝view 下方的圖名、`check_liby.txt`＝匯入 PA-LIBY、`check_userview.txt`＝自建 VIEW 的 Annotate Views）。
 
 ## 目錄與命名
 - `design/` 是 DESIGN 模組、`draft/` 是 DRAFT 模組。檔名前綴決定模組：`DrawingPlan*` = DESIGN（建圖框 BOX），`DrawingPlan1*` = DRAFT（出圖／標註／版次）。新表單照這個規則命名。
@@ -51,7 +52,7 @@
 ## 這台機器
 - 這是測試機，E3D 版本跟正式機不同：缺屬性／缺命令用 `HANDLE ANY` 包掉，能跑完就好，不必真的修。
 - PML 寫到 `L:`，對應這台的 `D:`；使用者說「請看 check」是指 `D:\...\CHECK.TXT`（check*.txt 都是除錯 dump，已 gitignore）。
-- Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫——2026-09-24 MCP 仍 403，REST 用 User 層的 token 正常讀到頁面（PowerShell `Invoke-RestMethod`，header `Notion-Version: 2022-06-28`）。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。
+- Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫——2026-09-24 MCP 仍 403，REST 用 User 層的 token 正常讀到頁面（PowerShell `Invoke-RestMethod`，header `Notion-Version: 2022-06-28`）。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。2026-09-26 在使用者目錄 `egg` 的電腦上 MCP 401、REST 也 401 `API token is invalid`：這台 User 層的 `NOTION_TOKEN` 不是有效的值（換電腦第 4 點沒做到），那次沒讀 Notion。
 
 ## 待實測（2026-09-21 已併回 master，`bd8079f`..`1c99bc6`）
 - 原本在 `feature/drawingplan-grid-merge`。2026-09-21 使用者決定連同尚未實測的部份一起併進 master（我有先提醒下面那條「還沒在 E3D 實測」）。分支已刪（2026-09-25，內容全在 master 裏）。
@@ -64,6 +65,26 @@
 - 工作樹上另外有兩個舊備份的刪除（`DrawingPlan1MatchLine(20260122)/(20260311).pmlfnc`）沒進任何 commit，使用者說不要進 master。
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX（2026-09-24 做了，見「Pick 分頁：圍住選取物」）、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。「在 3D 每個框中心 AID 印圖號」那半也不做：框一多標籤疊在一起反而看不清楚（使用者，2026-09-24）；要確認編號順序就看 `check_batch.txt`）。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
+
+## DRAFT：使用者自建的 VIEW（2026-09-26，分支 `feature/user-view`，**未在 E3D 實測**）
+- 使用者要求：使用者在 Draw 自己建的 VIEW，照那個 VIEW 的設定套我們的程式，變成格式一致的圖。**先做平面，好了再做立面／SECTION**（使用者決定）。立面也要做，所以走「保留使用者的 view、在上面標註」，不走「從 view 反推 BOX」。
+- 使用者的決定（2026-09-26）：範圍用 **VIEW 的 LIMITS** 取代 BOX；**圖框都不管**（backing sheet、圖框文字、keyplan、指北針），view 不移動；drawlist 照 Apply 的方式把範圍內 ZONE＋REFGRD 全加，不要的用 View 分頁的 Exclude 拿掉；representation／hatching 用**表單的值**；在 SHEE（或 DRWG）層一次收所有 VIEW 批次跑。
+- 介面：Drawing 分頁下方「Views drawn by hand」：Add CE（VIEW 收它自己；SHEE／DRWG 收底下所有 VIEW）、Remove、Remove All、Annotate Views。Create Drawings 從 BOX 建的 view（`*/SS/S1/V1`）不收。清單每列是 view 名字，沒名字時是 refno，兩者都能直接導覽。
+- 第一個 commit `65d5dfe`（路徑參數化，BOX 的路字串不變）：`DrawingPlan1ViewPath(!name)`／`DrawingPlan1LibPath(!name)`——名字是 VIEW 就回傳它自己，否則照舊組 `<name>/SS/S1/V1`、`<name>/SS`。**看元素型別、不看表單旗標**，因為 DrawingPlan1Revision 也會叫 DimLines。10 個標註函式與表單的 Nozzle/Valve/Redu/Inst/Supt Annotation 改用 `!vw`／`!lib`；NAME_CIRC 樣板搬成 `.InstTemplate(!lib)`；`ViewTitle` 拆出 `.ViewTitleAt(!name, !topu, !top)`。
+- 第二個 commit（`.AnnotateViews()` → 每個 view `.AnnotateView()`）：
+  - 沒名字的 view 先命名（sheet 有名字 → `<sheet>/V<n>`，否則 `/VIEW-<refno>`），因為我們的東西都靠 `<view>/ateXXX` 找回來。
+  - 只收往下看的平面：`.ViewSheetTransform()` 的行列式要 ≥ 0.99×|E||N|。立面／SECTION 會壓扁其中一軸（≈0），仰視是負的。
+  - 範圍：AVEVA 的 `DRAVIEWLIMITS`（`draft/objects/draviewlimits.pmlobj`，依序 VWLIMITS → `:CDLIMITS` → VVOL → VLIMITS；AVEVA 自己設範圍時 VWLIMITS 與 `:CDLIMITS` 一起寫，`drasetviewlimits.pmlfrm:276`）。投到紙上跟 view 框取交集＝「框邊」（`boxXXsh`），view 框本身是 `viewXXsh`——跟 update 路徑同一個語意。世界的 `minE..maxU`／`wminE..` 照 Apply 從 BOX 算的方式由交集矩形推回。
+  - 每個 view 自己一組庫：`<view>/LIBY`（建在 DRWG 底下）、DLLB `<view>/DRAWLIST`、IDLI `<view>/DRAWLIST/DRWG`、LALB `<view>/LALB`，view 的 IDLN 改指過來——原本的 drawlist 可能跟別的 view 共用，清掉會連別的 view 一起改。範圍若來自 VVOL／VLIMITS，另外寫 `:CDLIMITS` 釘住（drawlist 換了那兩個可能會跟著變）。
+  - 重跑：先刪 view 上名字是 `<view>/ate*` 的 LAYE／NOTE、`<view>/VTITLE`、`<view>/LIBY`，整組重建（沒有 REVI 的 update 路徑）。使用者自己的東西不碰。
+  - match line 畫在 view 的 NOTE 1（MatchLine／MatchLine1／MatchCollect）：view 裡已有使用者的 NOTE 時，我們的 `<view>/ateNOTE` 用 `new note ... before first mem` 插到最前面。
+  - 順序跟 Apply 一樣；不跑 RecenterView、圖框文字、keyplan、指北針、WriteRevInfo。圖名高程取 LIMITS 頂面，位置用 `TitleTopNow()`（最下方標註底下，不移動 view）。
+  - `MatchSorted` 碰到 VIEW 不帶 `exclude`（沒有自己的 BOX）。view 邊界剛好貼齊 BOX 才會有鄰圖；鄰圖那邊不會反指這張。
+  - 每一步寫進 `check_userview.txt`（每次按 Annotate Views 覆蓋）：frame、E/N 對紙面的矩陣與行列式、limits 來源與數值、交集矩形、世界範圍、drawlist 成員數、每個失敗的步驟。
+- **實測步驟**：`pml rehash all`（新增兩個 .pmlfnc）→ kill／reload／show。先用 Create Drawings 重建一張 BOX 的圖，**確認跟改之前一樣**（第一個 commit 只換路徑）。再試自建平面 view：有名字／沒名字、有 VWLIMITS／沒有、轉角度的、SHEE 批次、同一個 view 重跑一次不會疊兩份。
+- 沒把握的地方（實測先看這些）：`new note <name> before first mem`（AVEVA 先例只有 `new coup before first`、`NEW POINSP BEFORE FIRST MEMBER`、`REORDER ... BEFORE FIRST MEM`）；`DRAVIEWLIMITS` 在這台能不能建（讀 `.vwlimits` 屬性）；DXF 匯出在 view 上執行時匯出的是不是整張 sheet。
+- 已知限制：使用者自己加的 VSEC 切面不看；轉角度的 view，範圍取 LIMITS 投到紙上的外接矩形，會比實際大一點（多出來的只是空白）。
+- 使用者給的 SECTION 樣圖（2026-09-26，之後做立面時的依據）：頂部格線圈圈（A、B）；左側高程標記（+21795 …），每個高程一條橫線；設備名、管線號用引線標註；圖名三行：`SECTION A`（綠、底線）、`SCALE 1:50`、`See Dwg. No. <平面圖號>`；**沒有尺寸鏈、沒有 match line**。
 
 ## DRAFT：view 下方的圖名（2026-09-24，2026-09-25 併回 master，**重建已實測 OK；更新路徑使用者決定不測**）
 - 2026-09-25 第一次實測：底線有、兩行字都沒有。原因是 `cheitx $!h1s`（沒引號的數字 `4.00`）——repo 裡其他三十幾處 `cheitx` 全部帶引號（`|4|`、`'3mm'`），CHEITX 吃文字，整行被拒絕、又被 `handle any` 吃掉，所以沒報錯。底線用 fpt/tpt 不經過 CHEITX 才建得出來。**`cheitx` 一律 `|...|` 或 `'...'`。**
