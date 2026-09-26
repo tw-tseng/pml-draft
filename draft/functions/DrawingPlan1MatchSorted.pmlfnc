@@ -65,13 +65,30 @@ define function !!DrawingPlan1MatchSorted(!dir is string, !projid is string, !eq
 		!tempp6 = !tempp5.offset(!tempdirl.direction(), 50).offset(!tempdird.direction(), 50)
 	endif			
 	!tempp6.up = !!DrawingPlan1.maxU - 50
-	var !boxes coll all box within $!tempp3 to $!tempp6 for /$!projid_DrawingPlanBox exclude /$!equistr
+	------------------------------------------------------------------
+	-- a view drawn by hand (.AnnotateViews()) is handed over as its  --
+	-- own name without the slash, and has no box of its own to be    --
+	-- left out -- every box along the border is a neighbour          --
+	------------------------------------------------------------------
+	!ownvw = ''
+	var !ownvw type of /$!equistr
 	handle any
-		---------------------------
-		-- for unnamed equipment --
-		---------------------------
-		var !boxes coll all box within $!tempp3 to $!tempp6 for /$!projid_DrawingPlanBox exclude $!equistr
-	endhandle						
+		!ownvw = ''
+	endhandle
+	if (!ownvw.eq('VIEW')) then
+		var !boxes coll all box within $!tempp3 to $!tempp6 for /$!projid_DrawingPlanBox
+		handle any
+			!boxes = object array()
+		endhandle
+	else
+		var !boxes coll all box within $!tempp3 to $!tempp6 for /$!projid_DrawingPlanBox exclude /$!equistr
+		handle any
+			---------------------------
+			-- for unnamed equipment --
+			---------------------------
+			var !boxes coll all box within $!tempp3 to $!tempp6 for /$!projid_DrawingPlanBox exclude $!equistr
+		endhandle
+	endif
 	!chks = object array()
 	do !box values !boxes
 		-------------------------------------------------------
