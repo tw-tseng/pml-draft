@@ -1,0 +1,29 @@
+--------------------------------------------------------------------
+-- Function : the view a DrawingPlan1 pass works on               --
+-- Date     : 2026-09-26                                          --
+--                                                                --
+-- every annotation pass is handed a name and used to build the   --
+-- view from it as <name>/SS/S1/V1 -- the drawing .Apply() makes  --
+-- out of a box. a view somebody drew by hand (.AnnotateViews())  --
+-- has a name of its own and no such hierarchy above it, so it is --
+-- handed over as itself: a name that is a VIEW is the view.      --
+-- anything else -- the box's name, which is an EQUI in the       --
+-- design, or a name that does not resolve at all -- is taken the --
+-- old way, so the box path reads exactly the same paths as       --
+-- before                                                         --
+--                                                                --
+-- stateless on purpose: DrawingPlan1Revision calls some of these --
+-- passes too, and a flag left on the form by the last run would  --
+-- send it to the wrong view                                      --
+--------------------------------------------------------------------
+define function !!DrawingPlan1ViewPath(!name is string) is string
+	!vwt = ''
+	var !vwt type of $!name
+	handle any
+		!vwt = ''
+	endhandle
+	if (!vwt.eq('VIEW')) then
+		return !name
+	endif
+	return !name & '/SS/S1/V1'
+endfunction

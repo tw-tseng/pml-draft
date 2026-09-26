@@ -1,0 +1,24 @@
+--------------------------------------------------------------------
+-- Function : where a DrawingPlan1 drawing keeps its own library  --
+-- Date     : 2026-09-26                                          --
+--                                                                --
+-- the drawlist and the label templates of a drawing .Apply()     --
+-- made from a box sit under <name>/SS: <name>/SS/LIBY,           --
+-- <name>/SS/LALB, <name>/SS/DRAWLIST/DRWG. a view somebody drew  --
+-- by hand gets the same three under its own name instead         --
+-- (<view>/LIBY, <view>/LALB, <view>/DRAWLIST/DRWG), one set per  --
+-- view, so two views on one sheet never share a drawlist. same   --
+-- test as DrawingPlan1ViewPath: a name that is a VIEW is the     --
+-- view, anything else is a box                                   --
+--------------------------------------------------------------------
+define function !!DrawingPlan1LibPath(!name is string) is string
+	!vwt = ''
+	var !vwt type of $!name
+	handle any
+		!vwt = ''
+	endhandle
+	if (!vwt.eq('VIEW')) then
+		return !name
+	endif
+	return !name & '/SS'
+endfunction

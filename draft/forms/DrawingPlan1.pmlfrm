@@ -1111,53 +1111,7 @@ define method .Apply()
 				------------------------------------------
 				-- create instrument template reference --
 				------------------------------------------
-				$!name/SS/LIBY
-				new lalb $!name/SS/LALB
-				new sytm $!name/SS/LALB/NAME_CIRC
-				XYPS X 0mm Y 0mm
-				JUST Centre
-				ALIGN Hbody
-				FONT 1
-				CHEITX '3mm'
-				CSPATX '0'
-				LSPATX '0'
-				TXCOLO 1
-				NLSTYL Solid
-				NLCOLO 1
-				LLSTYL Solid
-				LLCOLO 1
-				FSTYLE Off
-				FCOLOUR 1
-				MCOLOUR 1
-				LZCOLO 1
-				LZLSTY Solid
-				LZVIS true
-				LZPRIN true
-				
-				NEW CIRCLE
-				Origin Centre Offset X 0mm Y 0mm
-				-- bubble size from the Annotation tab. .insttext3 'Diameter'  --
-				-- had no reader at all until now: field, default and Save     --
-				-- record existed, nothing consumed it, and the circle was     --
-				-- this literal (same shape as .gridhei, 2026-09-08)           --
-				!instdiav = !this.insttext3.val
-				!instdia = !instdiav.string('D2') & 'mm'
-				DIAM $!instdia
-				NLSTYL Solid
-				NLCOLO 5
-				FSTYLE Off
-				FCOLOUR 1
-				
-				NEW TEXTPRIMITIVE
-				Origin Offset X 0mm Y 0mm
-				FONT 1
-				CHEITX '1.5mm'
-				CSPATX '0'
-				LSPATX '0'
-				JUST Centre
-				ALIGN Hbody
-				BTEX |$!this.insttext2.val|
-				TXCOLO 5
+				!this.InstTemplate(!name & '/SS')
 				
 				new shee $!name/SS/S1
 				IDLN $!name/SS/DRAWLIST/DRWG
@@ -3930,6 +3884,16 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 		return
 	endif
 	!topu = !bw.part(6).replace('mm', '').real()
+	!this.ViewTitleAt(!name, !topu, !top)
+endmethod
+
+------------------------------------------------------------------------
+-- the rest of .ViewTitle(), with the elevation handed over instead of --
+-- read off a box: a view drawn by hand has no box, its top is the top --
+-- of its limits (.AnnotateView())                                     --
+------------------------------------------------------------------------
+define method .ViewTitleAt(!name is string, !topu is real, !top is real)
+	!vw = !!DrawingPlan1ViewPath(!name)
 	!elev = !topu.string('D0').replace('mm', '')
 	if (!topu ge 0) then
 		!elev = '+' & !elev
@@ -3937,7 +3901,7 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 	!t1 = 'PLAN at ELEVATION ' & !elev
 
 	!vs = 0
-	$!name/SS/S1/V1
+	$!vw
 	var !vsstr vsca
 	handle any
 		!vsstr = ''
@@ -3956,7 +3920,7 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 
 	!this.TitleLog('VTITLE ' & !name & ' top=' & !top.string('D3') & ' t1=' & !t1 & ' t2=' & !t2)
 
-	!nt = !name & '/SS/S1/V1/VTITLE'
+	!nt = !vw & '/VTITLE'
 	!elevnm = !nt & '/ELEV'
 	!scalenm = !nt & '/SCALE'
 	!exists = true
@@ -4036,7 +4000,7 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 	-- -- a number not in the colour dictionary is (61,604) and must   --
 	-- not cost the text itself -- and fall back to green              --
 	------------------------------------------------------------------
-	$!name/SS/S1/V1
+	$!vw
 	new note $!nt
 	handle any
 		!this.TitleLog('  new note failed: ' & !!error.text)
@@ -4188,7 +4152,8 @@ define method .TitleLog(!msg is string)
 endmethod
 
 define method .NozzleAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateNOZZ
+	!vw = !!DrawingPlan1ViewPath(!name)
+	NEW LAYE $!vw/ateNOZZ
 	Purpose NOZZ
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -4852,7 +4817,8 @@ define method .northarrowpick()
 endmethod
 
 define method .ValveAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateVALV
+	!vw = !!DrawingPlan1ViewPath(!name)
+	NEW LAYE $!vw/ateVALV
 	Purpose VALV
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -4953,7 +4919,8 @@ define method .ValveAnnotation(!name is string)
 endmethod
 
 define method .ReduAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateREDU
+	!vw = !!DrawingPlan1ViewPath(!name)
+	NEW LAYE $!vw/ateREDU
 	Purpose REDU
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -5067,8 +5034,68 @@ define method .ReduAnnotation(!name is string)
 
 endmethod
 
+------------------------------------------------------------------------
+-- the instrument bubble, NAME_CIRC, in the label library !lib/LALB   --
+-- (the LIBY !lib/LIBY has to exist). lifted out of .Apply() as it    --
+-- was, so the view drawn by hand (.AnnotateView()) makes exactly the --
+-- same bubble in a library of its own: !lib is <drawing>/SS for a    --
+-- box, the view itself for a view (DrawingPlan1LibPath). CE is left  --
+-- inside the new SYTM, the way the inline code left it               --
+------------------------------------------------------------------------
+define method .InstTemplate(!lib is string)
+	$!lib/LIBY
+	new lalb $!lib/LALB
+	new sytm $!lib/LALB/NAME_CIRC
+	XYPS X 0mm Y 0mm
+	JUST Centre
+	ALIGN Hbody
+	FONT 1
+	CHEITX '3mm'
+	CSPATX '0'
+	LSPATX '0'
+	TXCOLO 1
+	NLSTYL Solid
+	NLCOLO 1
+	LLSTYL Solid
+	LLCOLO 1
+	FSTYLE Off
+	FCOLOUR 1
+	MCOLOUR 1
+	LZCOLO 1
+	LZLSTY Solid
+	LZVIS true
+	LZPRIN true
+	
+	NEW CIRCLE
+	Origin Centre Offset X 0mm Y 0mm
+	-- bubble size from the Annotation tab. .insttext3 'Diameter'  --
+	-- had no reader at all until now: field, default and Save     --
+	-- record existed, nothing consumed it, and the circle was     --
+	-- this literal (same shape as .gridhei, 2026-09-08)           --
+	!instdiav = !this.insttext3.val
+	!instdia = !instdiav.string('D2') & 'mm'
+	DIAM $!instdia
+	NLSTYL Solid
+	NLCOLO 5
+	FSTYLE Off
+	FCOLOUR 1
+	
+	NEW TEXTPRIMITIVE
+	Origin Offset X 0mm Y 0mm
+	FONT 1
+	CHEITX '1.5mm'
+	CSPATX '0'
+	LSPATX '0'
+	JUST Centre
+	ALIGN Hbody
+	BTEX |$!this.insttext2.val|
+	TXCOLO 5
+endmethod
+
 define method .InstAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateINST
+	!vw = !!DrawingPlan1ViewPath(!name)
+	!lib = !!DrawingPlan1LibPath(!name)
+	NEW LAYE $!vw/ateINST
 	Purpose INST
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -5133,7 +5160,7 @@ define method .InstAnnotation(!name is string)
 	----------------------------------------------------------------
 	!instdiav = !this.insttext3.val
 	!instdia = !instdiav.string('D2') & 'mm'
-	$!name/SS/LALB/NAME_CIRC
+	$!lib/LALB/NAME_CIRC
 	handle any
 	elsehandle none
 		var !ncircs coll all circle for ce
@@ -5149,7 +5176,7 @@ define method .InstAnnotation(!name is string)
 	-- back onto the layer: the NEW SLABs below are created under  --
 	-- whatever CE is left here                                    --
 	----------------------------------------------------------------
-	$!name/SS/S1/V1/ateINST
+	$!vw/ateINST
 	handle any
 	endhandle
 	
@@ -5169,7 +5196,7 @@ define method .InstAnnotation(!name is string)
 		endif
 		NEW SLAB
 		DDNA $!inst
-		tmrf $!name/SS/LALB/NAME_CIRC
+		tmrf $!lib/LALB/NAME_CIRC
 		Font 1
 		Blnk true
 		Bmargin 0mm
@@ -6579,7 +6606,9 @@ $)
 endmethod
 
 define method .SuptAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateSUPT
+	!vw = !!DrawingPlan1ViewPath(!name)
+	!lib = !!DrawingPlan1LibPath(!name)
+	NEW LAYE $!vw/ateSUPT
 	Purpose SUPT
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -6637,12 +6666,12 @@ define method .SuptAnnotation(!name is string)
 	Function unset
   
   if not(!this.supttog1.val) then
-    $!name/SS/LALB
+    $!lib/LALB
     handle any
-      $!name/SS/LIBY
-      new lalb $!name/SS/LALB
+      $!lib/LIBY
+      new lalb $!lib/LALB
     endhandle
-    new sytm $!name/SS/LALB/NAME_SUPT
+    new sytm $!lib/LALB/NAME_SUPT
     XYPS X 0mm Y 0mm
     JUST Centre
     ALIGN Hbody
@@ -6676,7 +6705,7 @@ define method .SuptAnnotation(!name is string)
     ALIGN Hbody
     BTEX |#STEX|
     TXCOLO 5
-    !this.supttmp = |$!name/SS/LALB/NAME_SUPT|
+    !this.supttmp = |$!lib/LALB/NAME_SUPT|
   endif
 	
 	------------------------------------------------------------------
@@ -6695,7 +6724,7 @@ define method .SuptAnnotation(!name is string)
 
 	var !insts coll all atta with isnamed within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
 	do !inst values !insts
-		$!name/SS/S1/V1/ateSUPT
+		$!vw/ateSUPT
 		------------------------------------------------------------------
 		-- see the note in .NozzleAnnotation() -- the volume above is    --
 		-- the world box containing the drawing box, the sheet position  --
@@ -6824,7 +6853,7 @@ define method .SuptAnnotation(!name is string)
 			!inst  = !snames[!ik]
 			!stext = !stexts[!ik]
 			!apos1 = !sposs[!ik]
-			$!name/SS/S1/V1/ateSUPT
+			$!vw/ateSUPT
 			NEW SLAB
 			DDNA $!inst
 			!ce = ref
@@ -6886,15 +6915,17 @@ endmethod
 -- create support template reference --
 ---------------------------------------
 define method .SuptAnnotation(!name is string, !stext is string)
-	$!name/SS/LIBY
-	$!name/SS/LALB
+	!vw = !!DrawingPlan1ViewPath(!name)
+	!lib = !!DrawingPlan1LibPath(!name)
+	$!lib/LIBY
+	$!lib/LALB
 	handle any
-		new lalb $!name/SS/LALB
+		new lalb $!lib/LALB
 	endhandle
 	!slen = !stext.length()
-	$!name/SS/LALB/NAME_SUPT$!slen
+	$!lib/LALB/NAME_SUPT$!slen
 	handle any
-		new sytm $!name/SS/LALB/NAME_SUPT$!slen
+		new sytm $!lib/LALB/NAME_SUPT$!slen
 		XYPS X 100mm Y 100mm
 		JUST Centre
 		ALIGN Hbody
@@ -6949,5 +6980,5 @@ define method .SuptAnnotation(!name is string, !stext is string)
 		BTEX |#STEX|
 		TXCOLO 5
 	endhandle
-	!this.supttmp = |$!name/SS/LALB/NAME_SUPT$!slen|
+	!this.supttmp = |$!lib/LALB/NAME_SUPT$!slen|
 endmethod

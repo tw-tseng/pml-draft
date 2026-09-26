@@ -16,14 +16,15 @@ endhandle
 -- which calls this function has to change                               --
 --------------------------------------------------------------------------
 define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real, !boxYlen is real)
+	!vw = !!DrawingPlan1ViewPath(!name)
 	--------------------------------------------------------------------
 	-- update path: this LAYE survives from a previous run, so reuse  --
 	-- it instead of erroring on a duplicate name. attribute lines    --
 	-- below always reapply, harmless whether the LAYE is new or old  --
 	--------------------------------------------------------------------
-	$!name/SS/S1/V1/ateLINE
+	$!vw/ateLINE
 	handle any
-		NEW LAYE $!name/SS/S1/V1/ateLINE
+		NEW LAYE $!vw/ateLINE
 	elsehandle none
 	endhandle
 	--------------------------------------------------------------------
@@ -50,7 +51,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 	handle any
 		!boxchg = true
 	endhandle
-	$!name/SS/S1/V1/ateLINE
+	$!vw/ateLINE
 	Purpose LINE
 	Lvisibility true
 	Font 1
@@ -330,7 +331,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
 
-		$!name/SS/S1/V1
+		$!vw
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -582,7 +583,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
 
-		$!name/SS/S1/V1
+		$!vw
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -644,7 +645,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl
 
-		$!name/SS/S1/V1
+		$!vw
 		var !mems coll all bran members within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -707,7 +708,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
 		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
 
-		$!name/SS/S1/V1
+		$!vw
 		var !mems coll all elbo within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -966,7 +967,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- hdir/tdir opposite to view direction  --
 		-- and hpos/tpos is within view limit    --
 		-------------------------------------------
-		$!name/SS/S1/V1
+		$!vw
 		var !mems coll all bran with unset(href) or unset(tref) within $!vlfm to $!vlto
 		do !i from 1 to !mems.size()
 			!mem = !mems[$!i]
@@ -1184,7 +1185,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			!i = !ii
 		enddo
 		
-		$!name/SS/S1/V1/ateLINE
+		$!vw/ateLINE
 
 		--------------------------------------------------------------------
 		-- update path: this side's LDIM survives from a previous run, so --
@@ -1193,9 +1194,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- fresh), so this always falls through to NEW LDIM there         --
 		--------------------------------------------------------------------
 		!ldimexisted = true
-		$!name/SS/S1/V1/ateLINE_$!dir
+		$!vw/ateLINE_$!dir
 		handle any
-			NEW LDIM $!name/SS/S1/V1/ateLINE_$!dir
+			NEW LDIM $!vw/ateLINE_$!dir
 			!ldimexisted = false
 		elsehandle none
 		endhandle
@@ -1329,7 +1330,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endhandle
 				endhandle
 			endif
-			$!name/SS/S1/V1/ateLINE_$!dir
+			$!vw/ateLINE_$!dir
 			if (!dbgln) then
 				!dbgf.writerecord('DIMBASE ' & !dir & ' doffread=' & !exdoffs & ' frozenline=' & !frozendepth.string() & ' ok=' & !hasfrozen.string())
 			endif
@@ -2398,7 +2399,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (!!DrawingPlan1.DimAlongIsNew(!dimalong, !alongv, !dimtol)) then
 					!dimalong.append(!alongv)
 					if (not(!foundtick)) then
-						$!name/SS/S1/V1/ateLINE_$!dir
+						$!vw/ateLINE_$!dir
 						NEW DPOI POS $!attapos
 						!claimeddpois.append(ce)
 					elseif (!hasmoved and !hasauto) then
@@ -2430,7 +2431,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		---------------------------------
 		-- create dimension for limits --
 		---------------------------------
-		$!name/SS/S1/V1/ateLINE_$!dir
+		$!vw/ateLINE_$!dir
 		var !dpois coll all dpoi for ce
 		
 		if (!dir.eq('right')) then
@@ -2798,7 +2799,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- it back on this side's LDIM before the cleanup walks below,  --
 		-- which is the class of bug commit c0a3e5d was about           --
 		----------------------------------------------------------------
-		$!name/SS/S1/V1/ateLINE_$!dir
+		$!vw/ateLINE_$!dir
 		handle any
 		endhandle
 		--------------------------------------------------------------------
@@ -2959,7 +2960,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- to the LAYE instead, which is what broke SORT DIM below. going --
 		-- straight to the LDIM by its own path sidesteps OWNER entirely --
 		--------------------------------------------------------------------
-		$!name/SS/S1/V1/ateLINE_$!dir
+		$!vw/ateLINE_$!dir
 		SORT DIM
 		--------------------------------------------------------------------
 		-- the dimension LINE sits DOFFSET away from the FIRST point of the --
@@ -3049,7 +3050,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				endif
 			endhandle
 		endif
-		$!name/SS/S1/V1/ateLINE_$!dir
+		$!vw/ateLINE_$!dir
 		--------------------------------------------------------------------
 		-- !dimoff is the same number as DOFFSET, kept so that the GLAB    --
 		-- block below can work out where the dimension line ended up      --
@@ -3082,7 +3083,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!hasm1 = true
 			endhandle
 		endif
-		$!name/SS/S1/V1/ateLINE_$!dir
+		$!vw/ateLINE_$!dir
 		if (!hasfrozen and !hasm1) then
 			------------------------------------------------------------
 			-- !frozendepth is already the LINE's own depth (member 1   --
@@ -3119,7 +3120,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- rotate text 90 degree when distance is less than 7mm --
 		----------------------------------------------------------
 		
-		$!name/SS/S1/V1/ateLINE_$!dir
+		$!vw/ateLINE_$!dir
 		!mcount = mcount
 		if (!mcount.gt(1)) then
 			do !x from 1 to !mcount - 1
@@ -3182,7 +3183,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			------------------------------------------------------------------
 			-- where the dimension line ended up                             --
 			------------------------------------------------------------------
-			$!name/SS/S1/V1/ateLINE_$!dir
+			$!vw/ateLINE_$!dir
 			!gfirst = 1
 			$!gfirst
 			var !gfpos pos
@@ -3376,7 +3377,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			------------------------------------------------------------------
 			-- and draw them                                                 --
 			------------------------------------------------------------------
-			$!name/SS/S1/V1/ateLINE
+			$!vw/ateLINE
 			!gprev = 0
 			!gprevplace = 0
 			!gprevchei = 0

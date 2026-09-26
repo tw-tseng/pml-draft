@@ -21,12 +21,13 @@
 -- and calls this again before redrawing the match line           --
 -------------------------------------------------------------------
 define function !!DrawingPlan1MatchTicks(!name is string, !equistr is string)
+	!vw = !!DrawingPlan1ViewPath(!name)
 	!!DrawingPlan1MatchTickPos = object array()
 	var !projid proj id
 	!dirlist = 'right left down up'
 	do !jj from 1 to 4
 		!dir = !dirlist.part(!jj)
-		$!name/SS/S1/V1
+		$!vw
 		!sortedtypes = !!DrawingPlan1MatchSorted(!dir, !projid, !equistr)
 		!exists = object array()
 		do !i from 1 to !sortedtypes.size()

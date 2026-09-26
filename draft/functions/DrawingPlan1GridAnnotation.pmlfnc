@@ -4,6 +4,7 @@
 -- Date     : 2025/01/08      --
 --------------------------------
 define function !!DrawingPlan1GridAnnotation(!name is string)
+	!vw = !!DrawingPlan1ViewPath(!name)
 	----------------------------------------------------------------------
 	-- where every grid bubble of this drawing ends up on the sheet, so  --
 	-- that !!DrawingPlan1LineNoAnnotation can keep the pipe numbers out --
@@ -21,9 +22,9 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	-- below always reapply, harmless whether it is new or old -- same  --
 	-- as DrawingPlan1LineNoAnnotation does with ateLINE (2026-08-28)   --
 	--------------------------------------------------------------------
-	$!name/SS/S1/V1/ateGRID
+	$!vw/ateGRID
 	handle any
-		NEW LAYE $!name/SS/S1/V1/ateGRID
+		NEW LAYE $!vw/ateGRID
 	elsehandle none
 	endhandle
 	Purpose GRIDA
@@ -102,7 +103,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	!!DrawingPlan1GridSlabNppt = object array()
 	!!DrawingPlan1GridSlabClaims = object array()
 	!!DrawingPlan1GridSlabXypo = object array()
-	$!name/SS/S1/V1/ateGRID
+	$!vw/ateGRID
 	var !exslabs coll all slab for ce
 	handle any
 		!exslabs = object array()
@@ -164,7 +165,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	--------------------------------------------------------------------
 	!!DrawingPlan1GridFrozenSides = object array()
 	!!DrawingPlan1GridFrozenDepths = object array()
-	$!name/SS/S1/V1/ateGRID
+	$!vw/ateGRID
 	!fn = 0
 	!fn = !!DrawingPlan1GridSlabRefs.size()
 	handle any
@@ -240,7 +241,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	----------------------------------------------
 	-- calculate view four corners coordination --
 	----------------------------------------------
-	$!name/SS/S1/V1
+	$!vw
 --	var !shxypos shxypos
 --	var !size size
 	
@@ -253,7 +254,8 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 	!gridels = object array()
   
 	!temps = object array()
-	var !addes coll all adde for $!name/SS/DRAWLIST/DRWG
+	!idlpath = !!DrawingPlan1LibPath(!name) & '/DRAWLIST/DRWG'
+	var !addes coll all adde for $!idlpath
 	do !adde values !addes
 	  var !type type of idna of $!adde
 		if (!type.eq('REFGRD')) then
@@ -265,7 +267,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
  		endif
 	enddo
 	
-	$!name/SS/S1/V1/ateGRID
+	$!vw/ateGRID
 	do !gridel values !gridels
 	  var !gridpls coll all gridpl for $!gridel
 		var !refglns coll all refgln for $!gridpls[1]
@@ -287,7 +289,7 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 			
 --			$p $!p1dirsh
 
-			$!name/SS/S1/V1/ateGRID
+			$!vw/ateGRID
 			-------------------------------------------------------------------------
 			-- .intersections holds the intersections of THIS refgln only, because --
 			-- the checks below pick them up by getindexed(1) and getindexed(2).   --

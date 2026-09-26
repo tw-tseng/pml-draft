@@ -4,6 +4,7 @@
 -- Date     : 2025/12/28                   --
 ---------------------------------------------
 define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
+	!vw = !!DrawingPlan1ViewPath(!name)
 	var !projid proj id
 	!dirlist = 'right left down up'
 	!format = object format()
@@ -18,7 +19,7 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	-- straight and every text on a drawing where nothing had actually --
 	-- moved (2026-08-28)                                              --
 	--------------------------------------------------------------------
-	$!name/SS/S1/V1
+	$!vw
 	!!DrawingPlan1MatchCollect()
 	--------------------------------------------------------------------
 	-- emptied here, filled by the four sides below: one record per    --
@@ -46,7 +47,7 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	-- lived form of the arrow (MLARR_<side>_<k>_S and _H), swept the  --
 	-- same way for the drawings made with it                          --
 	--------------------------------------------------------------------
-	$!name/SS/S1/V1
+	$!vw
 	!arrold = object array()
 	var !arrold coll all (glab stra outl) for ce
 	handle any
@@ -81,10 +82,10 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	-- size is Tsiztx, the one number to tune                          --
 	--------------------------------------------------------------------
 	!mlok = true
-	$!name/SS/S1/V1/ateMATCH
+	$!vw/ateMATCH
 	handle any
-		$!name/SS/S1/V1
-		NEW LAYE $!name/SS/S1/V1/ateMATCH
+		$!vw
+		NEW LAYE $!vw/ateMATCH
 		handle any
 			!mlok = false
 		endhandle
@@ -121,17 +122,17 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 		handle any
 		endhandle
 	endif
-	$!name/SS/S1/V1
+	$!vw
 	!!DrawingPlan1MatchObst = object array()
 	!!DrawingPlan1MatchObstacles(!name)
 	handle any
 	endhandle
 	do !jj from 1 to 4
 		!dir = !dirlist.part(!jj)
-		$!name/SS/S1/V1
+		$!vw
 		!!DrawingPlan1MatchLine1(!dir, !projid, !equistr, !format)
 	enddo
-	$!name/SS/S1/V1
+	$!vw
 	note 1
 	-------------------------------------------------------------------
 	-- the box round the view. these four are given sheet positions,  --

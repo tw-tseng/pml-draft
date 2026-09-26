@@ -4,14 +4,15 @@
 -- Date     : 2025/08/15            --
 --------------------------------------
 define function !!DrawingPlan1FlowAnnotation(!name is string)
+	!vw = !!DrawingPlan1ViewPath(!name)
 	--------------------------------------------------------------------
 	-- update path: this LAYE survives from a previous run, so reuse it --
 	-- instead of erroring on a duplicate name, the same as ateGRID and --
 	-- ateLINE do. the attribute lines below reapply either way         --
 	--------------------------------------------------------------------
-	$!name/SS/S1/V1/ateFLOW
+	$!vw/ateFLOW
 	handle any
-		NEW LAYE $!name/SS/S1/V1/ateFLOW
+		NEW LAYE $!vw/ateFLOW
 	elsehandle none
 	endhandle
 	Purpose FLOW
@@ -181,7 +182,7 @@ define function !!DrawingPlan1FlowAnnotation(!name is string)
 	--------------------------------------------------------------------
 	-- back on the layer, where NEW SLAB below has to be made           --
 	--------------------------------------------------------------------
-	$!name/SS/S1/V1/ateFLOW
+	$!vw/ateFLOW
 
 	------------------------------------------------
 	-- sort !tubiss by how much of the tube shows --
