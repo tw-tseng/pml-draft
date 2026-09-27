@@ -869,6 +869,9 @@ define method .Apply()
 		!!alert.error('Cannot verify office network connection - Create Drawings is only available inside the company network')
 		return
 	endif
+	if (not(!this.FunctionsReady())) then
+		return
+	endif
 	if (not(!this.EnsurePaLiby())) then
 		return
 	endif
@@ -2571,6 +2574,9 @@ define method .AnnotateViews()
 		!!alert.error('Cannot verify office network connection - Annotate Views is only available inside the company network')
 		return
 	endif
+	if (not(!this.FunctionsReady())) then
+		return
+	endif
 	!items = !this.uvlist.dtext
 	if (!items.size().eq(0)) then
 		!!alert.error('Add the views first: navigate to a VIEW, or to its SHEE or DRWG, and press Add CE')
@@ -3245,6 +3251,29 @@ define method .UvNewName() is string
 		return !cand
 	endif
 	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- every annotation pass starts with DrawingPlan1ViewPath and some     --
+-- with DrawingPlan1LibPath. a .pmlfnc PML has not been told about     --
+-- (no PML REHASH ALL since it was added) answers 'Function not found' --
+-- on every pass -- after Create Drawings has already deleted the old  --
+-- drawing (reported 2026-09-27: all twelve steps of a view failed     --
+-- that way). asked once up front instead, before anything is touched  --
+------------------------------------------------------------------------
+define method .FunctionsReady() is boolean
+	!probe = ''
+	!probe = !!DrawingPlan1ViewPath('/')
+	handle any
+		!!alert.error('PML cannot find DrawingPlan1ViewPath - run PML REHASH ALL on the command line, then try again. Nothing has been changed.')
+		return false
+	endhandle
+	!probe = !!DrawingPlan1LibPath('/')
+	handle any
+		!!alert.error('PML cannot find DrawingPlan1LibPath - run PML REHASH ALL on the command line, then try again. Nothing has been changed.')
+		return false
+	endhandle
+	return true
 endmethod
 
 define method .UvLog(!msg is string)
