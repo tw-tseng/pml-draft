@@ -5,6 +5,17 @@
 ---------------------------------------------
 define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	!vw = !!DrawingPlan1ViewPath(!name)
+	----------------------------------------------------------------
+	-- the note the match line is drawn in: NOTE 1 of the sheet for a --
+	-- drawing made from a box, as always; <view>/ateNOTE for a view  --
+	-- drawn by hand (.AnnotateView()), whose sheet holds the user's  --
+	-- notes and perhaps other views. DrawingPlan1ViewPath hands a     --
+	-- VIEW back as itself, which is how the two are told apart       --
+	----------------------------------------------------------------
+	!ownnote = ''
+	if (!vw.eq(!name)) then
+		!ownnote = !vw & '/ateNOTE'
+	endif
 	var !projid proj id
 	!dirlist = 'right left down up'
 	!format = object format()
@@ -20,7 +31,7 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 	-- moved (2026-08-28)                                              --
 	--------------------------------------------------------------------
 	$!vw
-	!!DrawingPlan1MatchCollect()
+	!!DrawingPlan1MatchCollect(!ownnote)
 	--------------------------------------------------------------------
 	-- emptied here, filled by the four sides below: one record per    --
 	-- match line text, side and sheet extent, for the gap pass which  --
@@ -133,7 +144,11 @@ define function !!DrawingPlan1MatchLine(!name is string, !equistr is string)
 		!!DrawingPlan1MatchLine1(!dir, !projid, !equistr, !format)
 	enddo
 	$!vw
-	note 1
+	if (!ownnote.eq('')) then
+		note 1
+	else
+		$!ownnote
+	endif
 	-------------------------------------------------------------------
 	-- the box round the view. these four are given sheet positions,  --
 	-- so they sit on the sheet and do not travel with the view the   --

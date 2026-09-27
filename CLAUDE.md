@@ -77,15 +77,16 @@
   - 範圍：AVEVA 的 `DRAVIEWLIMITS`（`draft/objects/draviewlimits.pmlobj`，依序 VWLIMITS → `:CDLIMITS` → VVOL → VLIMITS；AVEVA 自己設範圍時 VWLIMITS 與 `:CDLIMITS` 一起寫，`drasetviewlimits.pmlfrm:276`）。投到紙上跟 view 框取交集＝「框邊」（`boxXXsh`），view 框本身是 `viewXXsh`——跟 update 路徑同一個語意。世界的 `minE..maxU`／`wminE..` 照 Apply 從 BOX 算的方式由交集矩形推回。
   - 每個 view 自己一組庫：`<view>/LIBY`（建在 DRWG 底下）、DLLB `<view>/DRAWLIST`、IDLI `<view>/DRAWLIST/DRWG`、LALB `<view>/LALB`，view 的 IDLN 改指過來——原本的 drawlist 可能跟別的 view 共用，清掉會連別的 view 一起改。範圍若來自 VVOL／VLIMITS，另外寫 `:CDLIMITS` 釘住（drawlist 換了那兩個可能會跟著變）。
   - 重跑：先刪 view 上名字是 `<view>/ate*` 的 LAYE／NOTE、`<view>/VTITLE`、`<view>/LIBY`，整組重建（沒有 REVI 的 update 路徑）。使用者自己的東西不碰。
-  - match line 畫在 view 的 NOTE 1（MatchLine／MatchLine1／MatchCollect）：view 裡已有使用者的 NOTE 時，我們的 `<view>/ateNOTE` 用 `new note ... before first mem` 插到最前面。
+  - **NOTE 是 sheet 的元素**（view 自己的是 VNOT）：站在 VIEW 上 `new note` 會建在 SHEE 底下，BOX 的圖 match line 用的 `note 1` 其實是 sheet 的第一個 NOTE（VTITLE 是第二個）。使用者的 sheet 有自己的 NOTE、也可能有好幾個 view，所以自建 view 有自己的 `<view>/ateNOTE`（建在 sheet 底下），MatchLine 看 `DrawingPlan1ViewPath(!name) eq !name`（＝是 VIEW）就把名字傳給 MatchCollect、自己導覽過去，MatchLine1 從 `'/' & !equistr` 做同樣判斷；BOX 的路照舊 `note 1`。`.UvClearOwn()` 到 sheet 的 NOTE 裡找 `<view>/ate*` 與 `<view>/VTITLE`。
   - 順序跟 Apply 一樣；不跑 RecenterView、圖框文字、keyplan、指北針、WriteRevInfo。圖名高程取 LIMITS 頂面，位置用 `TitleTopNow()`（最下方標註底下，不移動 view）。
   - `MatchSorted` 碰到 VIEW 不帶 `exclude`（沒有自己的 BOX）。view 邊界剛好貼齊 BOX 才會有鄰圖；鄰圖那邊不會反指這張。
   - 每一步寫進 `check_userview.txt`（每次按 Annotate Views 覆蓋）：frame、E/N 對紙面的矩陣與行列式、limits 來源與數值、交集矩形、世界範圍、drawlist 成員數、每個失敗的步驟。
 - **實測步驟**：`pml rehash all`（新增兩個 .pmlfnc）→ kill／reload／show。先用 Create Drawings 重建一張 BOX 的圖，**確認跟改之前一樣**（第一個 commit 只換路徑）。再試自建平面 view：有名字／沒名字、有 VWLIMITS／沒有、轉角度的、SHEE 批次、同一個 view 重跑一次不會疊兩份。
-- 沒把握的地方（實測先看這些）：`new note <name> before first mem`（AVEVA 先例只有 `new coup before first`、`NEW POINSP BEFORE FIRST MEMBER`、`REORDER ... BEFORE FIRST MEM`）；`DRAVIEWLIMITS` 在這台能不能建（讀 `.vwlimits` 屬性）；DXF 匯出在 view 上執行時匯出的是不是整張 sheet。
+- 沒把握的地方（實測先看這些）：`DRAVIEWLIMITS` 在這台能不能建（讀 `.vwlimits` 屬性）；DXF 匯出在 view 上執行時匯出的是不是整張 sheet。
 - 第一次實測（2026-09-27，`/DR2/S2/V1`）：判斷平面（行列式 0.0011111＝1/30²）、`DRAVIEWLIMITS` 讀到 VWLIMITS、框與範圍的交集、自建 drawlist（8 個成員）、IDLN、`<view>/ateNOTE` 都走完沒報錯；12 個標註步驟全部 `PML: Function not found`——沒 `pml rehash all`，`pml.index` 還停在 9/25。已加 `.FunctionsReady()`（`11b5896`）：Create Drawings 與 Annotate Views 一開始就試叫兩個新函式，找不到就提示 rehash、什麼都不動（Create Drawings 不然會先刪掉舊圖才炸）。重跑同一個 view 會清掉這次留下的 `<view>/ateNOTE`、`<view>/LIBY` 再重建。
 - 第二次實測（2026-09-27，rehash 後）：只剩 flow arrows 失敗 `PML Error in method METHOD : 輸入字串格式不正確`（.NET FormatException）。原因：交集的框邊經過 `.ViewSheetTransform()`（中心是 POSITION 的 east／north）帶著 `mm`，框角字串變成 `x 260.11mm y ...`，讀回來全是長度，FlowAnnotation 丟給 `AteSortLineNo.method()` 的排序鍵帶了單位。BOX 的路框角是純數字（`.value()`／`replace('mm','')`）。修法：寫框角前 `.string('D6').replace('mm','').real()`。MatchSorted 送 AteSort 的欄位也帶 `boxURsh.part(4)`，有鄰框時一樣會炸，同一個修法一起解。**框角字串一律純數字。**
-- 同一次使用者回報 Drawing 分頁原本的 Cancel（Close）鍵不見了；`.Cancel` 的定義沒動過，等截圖看是被新的框蓋住還是被擠出去。
+- 同一次使用者回報 Drawing 分頁原本的 Cancel（Close）鍵不見了；`.Cancel` 的定義沒動過。沒有截圖，推測是被新框蓋住：改成在新框之後才宣告（後宣告的畫在上層）、位置不變，新框往下多留 0.6。還是不見的話要截圖。
+- 第三次實測（2026-09-27）：`its note could not be made: (41,12) Name /DR2/S2/V1/ateNOTE already used`——清掉了 10 個（9 個 layer＋LIBY），NOTE 一個都沒刪到：`.UvClearOwn()` 在 view 底下找 NOTE，但 NOTE 在 sheet 底下（見上面那條）。上一次跑的 match line 外框因此可能畫進了 `/DR2/S2` 的第一個 NOTE（若那是使用者自己的），修好後的重跑不會去清它。
 - 已知限制：使用者自己加的 VSEC 切面不看；轉角度的 view，範圍取 LIMITS 投到紙上的外接矩形，會比實際大一點（多出來的只是空白）。
 - 使用者給的 SECTION 樣圖（2026-09-26，之後做立面時的依據）：頂部格線圈圈（A、B）；左側高程標記（+21795 …），每個高程一條橫線；設備名、管線號用引線標註；圖名三行：`SECTION A`（綠、底線）、`SCALE 1:50`、`See Dwg. No. <平面圖號>`；**沒有尺寸鏈、沒有 match line**。
 
@@ -94,7 +95,7 @@
 - 同一次一起改的：顏色拆成獨立一行、設不上就退回 `green`（AVEVA 先例 `assyboundbox.pmlfnc:173`，顏色字典沒有那個號碼是 `(61,604)`；截圖底線偏白，顏色 20 在這台可能不存在）；`alig base` → `alig bbody`（6113 行的 MATCH LINE 字就是用 bbody，畫面上看得到）；更新路徑找到 VTITLE 卻缺 ELEV／SCALE 的話刪掉整個 NOTE 重建（不然第一版留下的空 NOTE 永遠補不回來）；每一步寫進 `check_title.txt`（`.TitleLog()`，append，一張圖一段）。
 - 使用者要求：view 正下方兩行，置中對齊 view。上行 `PLAN at ELEVATION +<框頂面 U>`，顏色 20、字高＝Match Line Text Height（`.matchhei`）、有底線；下行 `SCALE 1:n`，黃色、字高＝Pipe Label Height（`.lineheitx`）。高程取**框頂面**（`WVOL` part 6），**直接用 E3D 的 U**、帶正負號（使用者選的）；比例讀 view 自己的 `VSCA`，fit 或手選都一樣。
 - 放在**所有下方標註的更下面**（使用者選的）：`.RecenterView()` 算完格線圈圈後記下 `.titletop`（下方內容的底），再把 `TitleDepth()`（從 `.TitleRows(0)` 算）加進下緣一起置中，view 移動時 `titletop` 跟著 `dy` 走；置中後才建字（NOTE 的文字是圖紙座標，不會跟著 view 移）。
-- 元素：view 底下一個具名 NOTE `<drwg>/SS/S1/V1/VTITLE`，內含 `ELEV`、`ULINE`（STRA）、`SCALE`。**更新路徑**（有 REVI）找得到就只改 BTEXT、位置不動；舊圖還沒有就用 `TitleTopNow()` 放在目前最下方標註底下，不動 view。現有程式用 `note 1` 找的都是先建的那個 NOTE，這個會是 NOTE 2，不衝突。
+- 元素：一個具名 NOTE `<drwg>/SS/S1/V1/VTITLE`（站在 view 上建，實際在 sheet 底下——NOTE 是 sheet 的元素），內含 `ELEV`、`ULINE`（STRA）、`SCALE`。**更新路徑**（有 REVI）找得到就只改 BTEXT、位置不動；舊圖還沒有就用 `TitleTopNow()` 放在目前最下方標註底下，不動 view。現有程式用 `note 1` 找的都是先建的那個 NOTE，這個會是 NOTE 2，不衝突。
 - 第二次實測（2026-09-25，`check_title.txt` 給了 h1=4／h2=3／底線 80mm，截圖量像素換算）：font 1 的字寬 **0.625×字高×字數**（25 字 4mm＝62.5、10 字 3mm＝18.9，兩行一致，等寬）；`alig bbody` 的原點在大寫字母底下 **0.29×字高**，大寫頂在原點上 **1.15×字高**（所以原本「字底下 1mm」實際是 2.1mm）。第一版估 0.8 的底線兩端各長 8.7mm。
 - 間距照使用者畫的 `error.png`（字寬＝線長；字底→線 0.21 倍大寫高、線→黃字頂 0.29 倍），換成綠字字高：字底→線 **0.18×h1**、線→黃字頂 **0.25×h1**（4mm 時 0.7／1.0mm），上方標註→綠字頂 5mm 不變。全在 `.TitleRows()`，`TitleDepth()` 跟 `ViewTitle()` 都從它拿；底線長度在 `.TitleWidth()`。**要再調就調這兩個方法的係數**，量法：截圖用 PIL 逐列找綠／黃像素的範圍，底線長度當比例尺。
 - 更新路徑改了字，底線長度跟著改（`.TitleLine()`：讀 ELEV 自己的 `chei`、以原底線中點為中心、y 不動）；字的位置仍不動，所以第二次實測以前建的圖要**重建**才會用到新間距。

@@ -34,13 +34,12 @@ layout form !!DrawingPlan1 dialog dock
 			text .dest     'Destination'     at xmin.hiera ymax.hiera+0.5 width 33 is string 
 			button .desbut 'CE'              at xmax.dest+0.1 ymin.dest width 6 call '!This.desce()'
 			button .apply  'Create Drawings' at xmin.dest ymax.dest+0.5 width 23 call '!This.Apply()'
-			button .Cancel 'Cancel'          at xmax.apply+15 ymin.apply width 12 call '!This.Close()'
 			----------------------------------------------------------------
 			-- views drawn by hand in Draw, annotated where they stand      --
 			-- (.AnnotateViews()). Add CE takes a VIEW, or every view of a  --
 			-- SHEE or DRWG                                                 --
 			----------------------------------------------------------------
-			frame .uvframe 'Views drawn by hand (plan only for now)' at xmin.dest ymax.apply+0.6
+			frame .uvframe 'Views drawn by hand (plan only for now)' at xmin.dest ymax.apply+1.2
 				list .uvlist 'Views' multiple width 36 height 6
 				button .uvadd 'Add CE'     at xmax.uvlist+0.5 ymin.uvlist+0.75 width 12 call '!This.UvAddCe()'
 				button .uvrem 'Remove'     at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
@@ -48,6 +47,13 @@ layout form !!DrawingPlan1 dialog dock
 				button .uvgo 'Annotate Views' at xmin.uvlist ymax.uvlist+0.3 width 23 call '!This.AnnotateViews()'
 				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
 			exit
+			--------------------------------------------------------------
+			-- after the frame above, where it used to sit right after    --
+			-- Create Drawings: with it in front of the frame the button  --
+			-- disappeared (user, 2026-09-27) -- declared last it is      --
+			-- drawn last, on top. same place as before                   --
+			--------------------------------------------------------------
+			button .Cancel 'Cancel'          at xmax.apply+15 ymin.apply width 12 call '!This.Close()'
 		exit
 		frame .viewframe 'View' width 40
 			text .frametext 'Backing Sheet' tagwidth 20 width 30 is string 
@@ -2980,32 +2986,21 @@ define method .AnnotateView(!it is string) is string
 	endhandle
 
 	------------------------------------------------------------------
-	-- the match line draws into NOTE 1 of the view                   --
-	-- (DrawingPlan1MatchLine / MatchLine1 / MatchCollect), which on  --
-	-- a drawing made from a box is its own. here the view may hold   --
-	-- notes of the user's, so this program's goes in front of them   --
+	-- the note the match line is drawn in. a NOTE is a sheet         --
+	-- element -- the one a VIEW owns is a VNOT -- so NEW NOTE on a   --
+	-- view makes it under the sheet, and on a drawing made from a    --
+	-- box the match line simply uses NOTE 1 of the sheet. this sheet --
+	-- is the user's and may hold their notes and other views, so the --
+	-- view gets a note of its own and the match line is sent to it   --
+	-- by name (DrawingPlan1MatchLine). the first version looked for  --
+	-- its notes under the view, never found last run's, and the next --
+	-- run stopped on 'Name .../ateNOTE already used' (2026-09-27)    --
 	------------------------------------------------------------------
-	var !unotes coll all note for $!vw
+	$!sh
+	new note $!vw/ateNOTE
 	handle any
-		!unotes = object array()
+		return 'its note could not be made: ' & !!error.text
 	endhandle
-	$!vw
-	if (!unotes.size().eq(0)) then
-		new note $!vw/ateNOTE
-		handle any
-			return 'its note could not be made: ' & !!error.text
-		endhandle
-	else
-		new note $!vw/ateNOTE before first mem
-		handle any
-			!warn.append('own NOTE not first (' & !!error.text & '), the match line may land in a NOTE of the user')
-			$!vw
-			new note $!vw/ateNOTE
-			handle any
-				return 'its note could not be made: ' & !!error.text
-			endhandle
-		endhandle
-	endif
 
 	------------------------------------------------------------------
 	-- and the passes, in .Apply()'s order                           --
@@ -3201,8 +3196,15 @@ define method .UvClearOwn(!vw is string) is string
 			!gone = !gone + 1
 		endif
 	enddo
+	------------------------------------------------------------------
+	-- the notes are the sheet's, not the view's (a NOTE is a sheet   --
+	-- element): <view>/ateNOTE and <view>/VTITLE are found among the --
+	-- sheet's notes by name. the pattern ends in a slash before ate, --
+	-- so /S2/V1 does not reach the notes of /S2/V10                  --
+	------------------------------------------------------------------
 	!ttl = !vw & '/VTITLE'
-	var !notes coll all note for $!vw
+	var !vsh owner of $!vw
+	var !notes coll all note for $!vsh
 	handle any
 		!notes = object array()
 	endhandle

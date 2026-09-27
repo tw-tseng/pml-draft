@@ -17,7 +17,15 @@ define function !!DrawingPlan1MatchLine1(!dir is string, !projid is string, !equ
 	-- / DrawingPlan1LineNoAnnotation, 2026-08-28)                     --
 	--------------------------------------------------------------------
 	!sortedtypes = !!DrawingPlan1MatchSorted(!dir, !projid, !equistr)
-	note 1
+	-- NOTE 1 of the sheet, or the view's own note for a view drawn by --
+	-- hand -- see DrawingPlan1MatchLine                               --
+	!mlname = '/' & !equistr
+	!mlvw = !!DrawingPlan1ViewPath(!mlname)
+	if (!mlvw.eq(!mlname)) then
+		$!mlvw/ateNOTE
+	else
+		note 1
+	endif
 	-- the arrows of this side are numbered in text order, see DrawingPlan1MatchArrow;
 	-- last run's were swept by DrawingPlan1MatchLine before this side ran --
 	!!DrawingPlan1MatchArrowN = 0
