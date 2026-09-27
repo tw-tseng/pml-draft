@@ -83,6 +83,7 @@
   - 每一步寫進 `check_userview.txt`（每次按 Annotate Views 覆蓋）：frame、E/N 對紙面的矩陣與行列式、limits 來源與數值、交集矩形、世界範圍、drawlist 成員數、每個失敗的步驟。
 - **實測步驟**：`pml rehash all`（新增兩個 .pmlfnc）→ kill／reload／show。先用 Create Drawings 重建一張 BOX 的圖，**確認跟改之前一樣**（第一個 commit 只換路徑）。再試自建平面 view：有名字／沒名字、有 VWLIMITS／沒有、轉角度的、SHEE 批次、同一個 view 重跑一次不會疊兩份。
 - 沒把握的地方（實測先看這些）：`new note <name> before first mem`（AVEVA 先例只有 `new coup before first`、`NEW POINSP BEFORE FIRST MEMBER`、`REORDER ... BEFORE FIRST MEM`）；`DRAVIEWLIMITS` 在這台能不能建（讀 `.vwlimits` 屬性）；DXF 匯出在 view 上執行時匯出的是不是整張 sheet。
+- 第一次實測（2026-09-27，`/DR2/S2/V1`）：判斷平面（行列式 0.0011111＝1/30²）、`DRAVIEWLIMITS` 讀到 VWLIMITS、框與範圍的交集、自建 drawlist（8 個成員）、IDLN、`<view>/ateNOTE` 都走完沒報錯；12 個標註步驟全部 `PML: Function not found`——沒 `pml rehash all`，`pml.index` 還停在 9/25。已加 `.FunctionsReady()`（`11b5896`）：Create Drawings 與 Annotate Views 一開始就試叫兩個新函式，找不到就提示 rehash、什麼都不動（Create Drawings 不然會先刪掉舊圖才炸）。重跑同一個 view 會清掉這次留下的 `<view>/ateNOTE`、`<view>/LIBY` 再重建。
 - 已知限制：使用者自己加的 VSEC 切面不看；轉角度的 view，範圍取 LIMITS 投到紙上的外接矩形，會比實際大一點（多出來的只是空白）。
 - 使用者給的 SECTION 樣圖（2026-09-26，之後做立面時的依據）：頂部格線圈圈（A、B）；左側高程標記（+21795 …），每個高程一條橫線；設備名、管線號用引線標註；圖名三行：`SECTION A`（綠、底線）、`SCALE 1:50`、`See Dwg. No. <平面圖號>`；**沒有尺寸鏈、沒有 match line**。
 
