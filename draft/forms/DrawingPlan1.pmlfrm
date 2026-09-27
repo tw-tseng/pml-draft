@@ -45,15 +45,15 @@ layout form !!DrawingPlan1 dialog dock
 				button .uvrem 'Remove'     at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
 				button .uvall 'Remove All' at xmin.uvadd ymax.uvrem+0.3 width 12 call '!This.UvRemoveAll()'
 				button .uvgo 'Annotate Views' at xmin.uvlist ymax.uvlist+0.3 width 23 call '!This.AnnotateViews()'
+				----------------------------------------------------------
+				-- closes the whole form. beside Annotate Views, in the   --
+				-- column of Add CE / Remove / Remove All (user,          --
+				-- 2026-09-27); it used to sit after Create Drawings, and --
+				-- went missing there once this frame was added           --
+				----------------------------------------------------------
+				button .Cancel 'Cancel' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
 				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
 			exit
-			--------------------------------------------------------------
-			-- after the frame above, where it used to sit right after    --
-			-- Create Drawings: with it in front of the frame the button  --
-			-- disappeared (user, 2026-09-27) -- declared last it is      --
-			-- drawn last, on top. same place as before                   --
-			--------------------------------------------------------------
-			button .Cancel 'Cancel'          at xmax.apply+15 ymin.apply width 12 call '!This.Close()'
 		exit
 		frame .viewframe 'View' width 40
 			text .frametext 'Backing Sheet' tagwidth 20 width 30 is string 
