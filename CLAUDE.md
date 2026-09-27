@@ -92,7 +92,7 @@
 - **第四次實測 OK（2026-09-27，使用者「看起來好像沒有問題」）**：`/DR2/S2/V1`（有名字、VWLIMITS、1:30、沒轉角度、旁邊沒有 BOX）。check_userview 走到 `DONE`、`cleared 3`（上一輪留下的 ateNOTE／VTITLE／LIBY——到 sheet 找 NOTE 對了，也就是重跑有測到）、check_flow 放了 4 支箭頭、圖名 `PLAN at ELEVATION +104620`／`SCALE 1:30`。check_title 同時有 `/=23718/1695` 用 1:30、1:50 重建的紀錄（BOX 的路迴歸）。
 - 沒名字的 view 實測 OK（2026-09-27，使用者）：`=2013286677/154008` 自動取名 `/DR2/S2/V2`（sheet 有名字、`V1` 已被佔用，取第一個空號），走到 `DONE`。它跟 `/DR2/S2/V1` 在同一張 sheet，但兩個 view 是分兩次按的，不算「一次收多個 view」。
 - 一張 SHEE 一次跑兩個 view 實測 OK（2026-09-27，使用者）：Add CE 在 `/DR2/S2`，`/DR2/S2/V1` 與沒名字的 `=2013286677/154008`（當場取名 `/DR2/S2/V2`）同一輪都走到 `DONE`，各自一份 drawlist 與 NOTE。兩個 view 這次都是乾淨的（`cleared 0`，前一輪的標註沒有 Save Work），所以「同一輪裡後跑的清掉先跑的」這條沒被考驗到，但清除只認 `<view>/ate*`，不會跨 view。
-- **還沒測的情況**：轉角度的 view、旁邊有 BOX（match line 有鄰圖，順便驗 MatchSorted 送 AteSort 的欄位不再帶 mm）、範圍來自 VVOL／VLIMITS 的 view（會寫 `:CDLIMITS` 釘住）、Cancel 鍵在新位置（Annotate Views 旁）。
+- **還沒測的情況**：轉角度的 view、旁邊有 BOX（match line 有鄰圖，順便驗 MatchSorted 送 AteSort 的欄位不再帶 mm）、範圍來自 VVOL／VLIMITS 的 view（會寫 `:CDLIMITS` 釘住）。Cancel 鍵在新位置（Annotate Views 旁）已確認 OK（2026-09-27，使用者）。
 - 已知限制：使用者自己加的 VSEC 切面不看；轉角度的 view，範圍取 LIMITS 投到紙上的外接矩形，會比實際大一點（多出來的只是空白）。
 - Notion 設計頁已加 toggle「使用者自建的 VIEW 套標註：Annotate Views（2026-09-26）」（2026-09-27，REST 寫入，block `3e8dd89e-3acd-813f-bbb7-e714a967583f`）：定案、操作流程、做法、踩到的坑、狀態與待辦。之後測完的項目要回去更新「五、狀態與待辦」。
 - 使用者給的 SECTION 樣圖（2026-09-26，之後做立面時的依據）：頂部格線圈圈（A、B）；左側高程標記（+21795 …），每個高程一條橫線；設備名、管線號用引線標註；圖名三行：`SECTION A`（綠、底線）、`SCALE 1:50`、`See Dwg. No. <平面圖號>`；**沒有尺寸鏈、沒有 match line**。
