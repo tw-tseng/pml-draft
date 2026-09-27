@@ -2765,6 +2765,20 @@ define method .AnnotateView(!it is string) is string
 	if (!bx2 - !bx1 lt 1 or !by2 - !by1 lt 1) then
 		return 'its limits fall outside its frame'
 	endif
+	------------------------------------------------------------------
+	-- plain numbers from here on. the limits came back through      --
+	-- .ViewSheetTransform(), whose centre is a POSITION's east and  --
+	-- north, and so carry mm: the box strings came out 'x 260.11mm  --
+	-- y 483.90mm', everything reading them back got a length, and   --
+	-- FlowAnnotation's sort key went to the .NET sort as '...mm' --  --
+	-- 'input string was not in a correct format' (2026-09-27, the   --
+	-- first view tried). the box path's corners are plain numbers   --
+	-- (.value() / replace('mm', '')), and so are these now          --
+	------------------------------------------------------------------
+	!bx1 = !bx1.string('D6').replace('mm', '').real()
+	!bx2 = !bx2.string('D6').replace('mm', '').real()
+	!by1 = !by1.string('D6').replace('mm', '').real()
+	!by2 = !by2.string('D6').replace('mm', '').real()
 	!this.boxULsh = 'x ' & string(!bx1) & ' y ' & string(!by2)
 	!this.boxURsh = 'x ' & string(!bx2) & ' y ' & string(!by2)
 	!this.boxLLsh = 'x ' & string(!bx1) & ' y ' & string(!by1)
