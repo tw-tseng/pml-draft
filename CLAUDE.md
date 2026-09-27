@@ -52,7 +52,7 @@
 ## 這台機器
 - 這是測試機，E3D 版本跟正式機不同：缺屬性／缺命令用 `HANDLE ANY` 包掉，能跑完就好，不必真的修。
 - PML 寫到 `L:`，對應這台的 `D:`；使用者說「請看 check」是指 `D:\...\CHECK.TXT`（check*.txt 都是除錯 dump，已 gitignore）。
-- Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫——2026-09-24 MCP 仍 403，REST 用 User 層的 token 正常讀到頁面（PowerShell `Invoke-RestMethod`，header `Notion-Version: 2022-06-28`）。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。2026-09-26 在使用者目錄 `egg` 的電腦上 MCP 401、REST 也 401 `API token is invalid`：這台 User 層的 `NOTION_TOKEN` 不是有效的值（換電腦第 4 點沒做到），那次沒讀 Notion。
+- Notion MCP（`.mcp.json`，被 gitignore）用固定 integration token，讀 `NOTION_TOKEN` 使用者環境變數。hosted MCP 端點常對這個 token 回 403，連不上就直接用 REST API（`api.notion.com`，同一個 token）讀寫——2026-09-24 MCP 仍 403，REST 用 User 層的 token 正常讀到頁面（PowerShell `Invoke-RestMethod`，header `Notion-Version: 2022-06-28`）。MCP 回 401 `invalid_token` 多半是 VS Code 行程沒繼承到 `NOTION_TOKEN`（PowerShell 查 `$env:NOTION_TOKEN` 為空、User 層有值）：重開 VS Code，當下可先用 User 層的值走 REST。2026-09-26 在使用者目錄 `egg` 的電腦上 MCP 401、REST 也 401 `API token is invalid`：這台 User 層的 `NOTION_TOKEN` 不是有效的值（換電腦第 4 點沒做到），那次沒讀 Notion。2026-09-27 使用者用 `setx` 設了新 token，REST 讀頁面正常、VS Code 行程也有繼承到；MCP 仍 403，照舊走 REST。
 
 ## 待實測（2026-09-21 已併回 master，`bd8079f`..`1c99bc6`）
 - 原本在 `feature/drawingplan-grid-merge`。2026-09-21 使用者決定連同尚未實測的部份一起併進 master（我有先提醒下面那條「還沒在 E3D 實測」）。分支已刪（2026-09-25，內容全在 master 裏）。
@@ -89,7 +89,8 @@
 - 第三次實測（2026-09-27）：`its note could not be made: (41,12) Name /DR2/S2/V1/ateNOTE already used`——清掉了 10 個（9 個 layer＋LIBY），NOTE 一個都沒刪到：`.UvClearOwn()` 在 view 底下找 NOTE，但 NOTE 在 sheet 底下（見上面那條）。上一次跑的 match line 外框因此可能畫進了 `/DR2/S2` 的第一個 NOTE（若那是使用者自己的），修好後的重跑不會去清它。
 - **第四次實測 OK（2026-09-27，使用者「看起來好像沒有問題」）**：`/DR2/S2/V1`（有名字、VWLIMITS、1:30、沒轉角度、旁邊沒有 BOX）。check_userview 走到 `DONE`、`cleared 3`（上一輪留下的 ateNOTE／VTITLE／LIBY——到 sheet 找 NOTE 對了，也就是重跑有測到）、check_flow 放了 4 支箭頭、圖名 `PLAN at ELEVATION +104620`／`SCALE 1:30`。check_title 同時有 `/=23718/1695` 用 1:30、1:50 重建的紀錄（BOX 的路迴歸）。
 - 沒名字的 view 實測 OK（2026-09-27，使用者）：`=2013286677/154008` 自動取名 `/DR2/S2/V2`（sheet 有名字、`V1` 已被佔用，取第一個空號），走到 `DONE`。它跟 `/DR2/S2/V1` 在同一張 sheet，但兩個 view 是分兩次按的，不算「一次收多個 view」。
-- **還沒測的情況**：轉角度的 view、SHEE／DRWG 一次收多個 view、旁邊有 BOX（match line 有鄰圖，順便驗 MatchSorted 送 AteSort 的欄位不再帶 mm）、範圍來自 VVOL／VLIMITS 的 view（會寫 `:CDLIMITS` 釘住）、Cancel 鍵移到新框之後有沒有回來（使用者沒特別說）。
+- 一張 SHEE 一次跑兩個 view 實測 OK（2026-09-27，使用者）：Add CE 在 `/DR2/S2`，`/DR2/S2/V1` 與沒名字的 `=2013286677/154008`（當場取名 `/DR2/S2/V2`）同一輪都走到 `DONE`，各自一份 drawlist 與 NOTE。兩個 view 這次都是乾淨的（`cleared 0`，前一輪的標註沒有 Save Work），所以「同一輪裡後跑的清掉先跑的」這條沒被考驗到，但清除只認 `<view>/ate*`，不會跨 view。
+- **還沒測的情況**：轉角度的 view、旁邊有 BOX（match line 有鄰圖，順便驗 MatchSorted 送 AteSort 的欄位不再帶 mm）、範圍來自 VVOL／VLIMITS 的 view（會寫 `:CDLIMITS` 釘住）、Cancel 鍵移到新框之後有沒有回來（使用者沒特別說）。
 - 已知限制：使用者自己加的 VSEC 切面不看；轉角度的 view，範圍取 LIMITS 投到紙上的外接矩形，會比實際大一點（多出來的只是空白）。
 - 使用者給的 SECTION 樣圖（2026-09-26，之後做立面時的依據）：頂部格線圈圈（A、B）；左側高程標記（+21795 …），每個高程一條橫線；設備名、管線號用引線標註；圖名三行：`SECTION A`（綠、底線）、`SCALE 1:50`、`See Dwg. No. <平面圖號>`；**沒有尺寸鏈、沒有 match line**。
 
