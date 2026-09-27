@@ -5,7 +5,7 @@
 - DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；更新路徑（有 REVI 的圖改字、底線跟著改長短、舊圖補建）**使用者決定不測**：目前沒有這種情形（2026-09-25）。細節見「DRAFT：view 下方的圖名」。
 - Import PA-LIBY 鈕（原分支 `feature/import-paliby`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**）：View 分頁 Hatching Style 下方，細節見「目錄與命名」的 PA-LIBY 那條。
 - 流向箭頭畫到 view 外（原分支 `fix/flow-arrow-in-view`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**），細節見「DRAFT：流向箭頭不出 view」。
-- **進行中（2026-09-26）**：分支 `feature/user-view`——使用者在 Draw 自己建的 VIEW 套我們的標註，**未在 E3D 實測**，細節見「DRAFT：使用者自建的 VIEW」。先做平面，立面／SECTION 之後。
+- **進行中（2026-09-26）**：分支 `feature/user-view`——使用者在 Draw 自己建的 VIEW 套我們的標註，**單一個有名字、沒轉角度的平面 view 已實測 OK（2026-09-27）**，細節與還沒測的情況見「DRAFT：使用者自建的 VIEW」。先做平面，立面／SECTION 之後。
 - 切分支的坑：E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**，切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
 - 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
@@ -66,7 +66,7 @@
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX（2026-09-24 做了，見「Pick 分頁：圍住選取物」）、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。「在 3D 每個框中心 AID 印圖號」那半也不做：框一多標籤疊在一起反而看不清楚（使用者，2026-09-24）；要確認編號順序就看 `check_batch.txt`）。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
 
-## DRAFT：使用者自建的 VIEW（2026-09-26，分支 `feature/user-view`，**未在 E3D 實測**）
+## DRAFT：使用者自建的 VIEW（2026-09-26，分支 `feature/user-view`，**基本情況已在 E3D 實測**）
 - 使用者要求：使用者在 Draw 自己建的 VIEW，照那個 VIEW 的設定套我們的程式，變成格式一致的圖。**先做平面，好了再做立面／SECTION**（使用者決定）。立面也要做，所以走「保留使用者的 view、在上面標註」，不走「從 view 反推 BOX」。
 - 使用者的決定（2026-09-26）：範圍用 **VIEW 的 LIMITS** 取代 BOX；**圖框都不管**（backing sheet、圖框文字、keyplan、指北針），view 不移動；drawlist 照 Apply 的方式把範圍內 ZONE＋REFGRD 全加，不要的用 View 分頁的 Exclude 拿掉；representation／hatching 用**表單的值**；在 SHEE（或 DRWG）層一次收所有 VIEW 批次跑。
 - 介面：Drawing 分頁下方「Views drawn by hand」：Add CE（VIEW 收它自己；SHEE／DRWG 收底下所有 VIEW）、Remove、Remove All、Annotate Views。Create Drawings 從 BOX 建的 view（`*/SS/S1/V1`）不收。清單每列是 view 名字，沒名字時是 refno，兩者都能直接導覽。
@@ -87,6 +87,8 @@
 - 第二次實測（2026-09-27，rehash 後）：只剩 flow arrows 失敗 `PML Error in method METHOD : 輸入字串格式不正確`（.NET FormatException）。原因：交集的框邊經過 `.ViewSheetTransform()`（中心是 POSITION 的 east／north）帶著 `mm`，框角字串變成 `x 260.11mm y ...`，讀回來全是長度，FlowAnnotation 丟給 `AteSortLineNo.method()` 的排序鍵帶了單位。BOX 的路框角是純數字（`.value()`／`replace('mm','')`）。修法：寫框角前 `.string('D6').replace('mm','').real()`。MatchSorted 送 AteSort 的欄位也帶 `boxURsh.part(4)`，有鄰框時一樣會炸，同一個修法一起解。**框角字串一律純數字。**
 - 同一次使用者回報 Drawing 分頁原本的 Cancel（Close）鍵不見了；`.Cancel` 的定義沒動過。沒有截圖，推測是被新框蓋住：改成在新框之後才宣告（後宣告的畫在上層）、位置不變，新框往下多留 0.6。還是不見的話要截圖。
 - 第三次實測（2026-09-27）：`its note could not be made: (41,12) Name /DR2/S2/V1/ateNOTE already used`——清掉了 10 個（9 個 layer＋LIBY），NOTE 一個都沒刪到：`.UvClearOwn()` 在 view 底下找 NOTE，但 NOTE 在 sheet 底下（見上面那條）。上一次跑的 match line 外框因此可能畫進了 `/DR2/S2` 的第一個 NOTE（若那是使用者自己的），修好後的重跑不會去清它。
+- **第四次實測 OK（2026-09-27，使用者「看起來好像沒有問題」）**：`/DR2/S2/V1`（有名字、VWLIMITS、1:30、沒轉角度、旁邊沒有 BOX）。check_userview 走到 `DONE`、`cleared 3`（上一輪留下的 ateNOTE／VTITLE／LIBY——到 sheet 找 NOTE 對了，也就是重跑有測到）、check_flow 放了 4 支箭頭、圖名 `PLAN at ELEVATION +104620`／`SCALE 1:30`。check_title 同時有 `/=23718/1695` 用 1:30、1:50 重建的紀錄（BOX 的路迴歸）。
+- **還沒測的情況**：沒名字的 view（自動命名）、轉角度的 view、SHEE／DRWG 一次收多個 view、旁邊有 BOX（match line 有鄰圖，順便驗 MatchSorted 送 AteSort 的欄位不再帶 mm）、範圍來自 VVOL／VLIMITS 的 view（會寫 `:CDLIMITS` 釘住）、Cancel 鍵移到新框之後有沒有回來（使用者沒特別說）。
 - 已知限制：使用者自己加的 VSEC 切面不看；轉角度的 view，範圍取 LIMITS 投到紙上的外接矩形，會比實際大一點（多出來的只是空白）。
 - 使用者給的 SECTION 樣圖（2026-09-26，之後做立面時的依據）：頂部格線圈圈（A、B）；左側高程標記（+21795 …），每個高程一條橫線；設備名、管線號用引線標註；圖名三行：`SECTION A`（綠、底線）、`SCALE 1:50`、`See Dwg. No. <平面圖號>`；**沒有尺寸鏈、沒有 match line**。
 
