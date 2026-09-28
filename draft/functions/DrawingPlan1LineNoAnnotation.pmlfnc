@@ -2985,26 +2985,71 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- point holding the corner coordinate, say) is left to place the   --
 		-- line the way it always has                                       --
 		--------------------------------------------------------------------
+		--------------------------------------------------------------------
+		-- a first point sitting INSIDE the standard depth, moved or not,  --
+		-- is given back the same way (a negative shift pushes the line    --
+		-- out). a grid line that stops short of the border -- ES.A..ES.D  --
+		-- start at ES.1, 10mm inside the left border -- puts its point at --
+		-- its own end, and after SORT DIM that point was the first one:   --
+		-- the line came 15 off it, 8mm off the border instead of 18, and  --
+		-- the match line text had no room between them (user, 2026-09-28, --
+		-- both the box and the hand-drawn view). only the depth of the    --
+		-- line changes; the points and the figures do not                 --
+		--------------------------------------------------------------------
 		!dimshift = 0
 		!mvn = 0
 		!mvn = !movedrefs.size()
 		handle any
 			!mvn = 0
 		endhandle
+		!gfirst = 1
+		$!gfirst
+		handle any
+		elsehandle none
+			!m1ref = ce
+			!m1moved = false
+			do !mvi from 1 to !mvn
+				!mvr = !movedrefs[!mvi]
+				if (!m1ref.eq(!mvr)) then
+					!m1moved = true
+					break
+				endif
+			enddo
+			!ggapi = !!DrawingPlan1.gridgap.val
+			if (!dir.eq('right')) then
+				!stdin = !!DrawingPlan1.boxURsh.part(2).real() + !ggapi
+			elseif (!dir.eq('left')) then
+				!stdin = !!DrawingPlan1.boxULsh.part(2).real() - !ggapi
+			elseif (!dir.eq('down')) then
+				!stdin = !!DrawingPlan1.boxLLsh.part(4).real() - !ggapi
+			else
+				!stdin = !!DrawingPlan1.boxULsh.part(4).real() + !ggapi
+			endif
+			var !m1ipos pos
+			var !m1iposh shpos of $!m1ipos
+			if (!dir.eq('right') or !dir.eq('left')) then
+				!m1idepth = !m1iposh.split().getindexed(2).replace('mm','').real()
+			else
+				!m1idepth = !m1iposh.split().getindexed(4).replace('mm','').real()
+			endif
+			if (!dir.eq('right') or !dir.eq('up')) then
+				!inshift = !m1idepth - !stdin
+			else
+				!inshift = !stdin - !m1idepth
+			endif
+			if (!inshift.lt(-0.01)) then
+				!dimshift = !inshift
+			endif
+			if (!dbgln) then
+				!dbgf.writerecord('DIMINSIDE ' & !dir & ' std=' & !stdin.string() & ' m1=' & !m1idepth.string() & ' shift=' & !dimshift.string())
+			endif
+		endhandle
+		-- back on the LDIM: '1' below means its first member again --
+		$!vw/ateLINE_$!dir
 		if (!mvn.gt(0)) then
-			!gfirst = 1
 			$!gfirst
 			handle any
 			elsehandle none
-				!m1ref = ce
-				!m1moved = false
-				do !mvi from 1 to !mvn
-					!mvr = !movedrefs[!mvi]
-					if (!m1ref.eq(!mvr)) then
-						!m1moved = true
-						break
-					endif
-				enddo
 				if (!m1moved) then
 					----------------------------------------------------------
 					-- the depth every automatically placed point sits at.   --
@@ -3036,8 +3081,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					else
 						!dimshift = !stddepth - !m1depth
 					endif
-					-- dragged inwards, or not really dragged at all: nothing to give back --
-					if (!dimshift.lt(0)) then
+					-- not really dragged at all: nothing to give back. dragged    --
+					-- inwards: the inside check above already gave it back, and --
+					-- this is the same number (2026-09-28)                      --
+					if (!dimshift.lt(0) and !dimshift.geq(-0.01)) then
 						!dimshift = 0
 					endif
 					-- and never so far that the line would cross its own points --
