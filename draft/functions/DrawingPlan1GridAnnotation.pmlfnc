@@ -431,7 +431,45 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 				-------------------------------------------------
 				-- check which end point is inside view limits --
 				-------------------------------------------------
-				if (!p1possh.position().east.gt(!!DrawingPlan1.boxULsh.position().east) and !p1possh.position().east.lt(!!DrawingPlan1.boxURsh.position().east) and !p1possh.position().north.gt(!!DrawingPlan1.boxLLsh.position().north) and !p1possh.position().north.lt(!!DrawingPlan1.boxULsh.position().north)) then
+				---------------------------------------------------------------
+				-- an end lying ON the border counts as inside (0.01mm). a     --
+				-- view drawn by hand with its limits typed on the grid lines --
+				-- themselves put ES.A along the bottom edge: p1 at ES.1       --
+				-- inside, p2 at the corner, which is the crossing. the old    --
+				-- strict test read p1 as outside and hung the Left bubble    --
+				-- off p2, in the middle of the view, and the match line text --
+				-- moved out five rows to get past it (user, 2026-09-28,       --
+				-- check_grid / check_gap). when both ends pass, the one      --
+				-- farther from the crossing is the inside end -- the other   --
+				-- one IS the crossing                                         --
+				---------------------------------------------------------------
+				!gtol = 0.01
+				!gxl = !!DrawingPlan1.boxULsh.position().east.value() - !gtol
+				!gxr = !!DrawingPlan1.boxURsh.position().east.value() + !gtol
+				!gyb = !!DrawingPlan1.boxLLsh.position().north.value() - !gtol
+				!gyt = !!DrawingPlan1.boxULsh.position().north.value() + !gtol
+				!g1x = !p1possh.position().east.value()
+				!g1y = !p1possh.position().north.value()
+				!g2x = !p2possh.position().east.value()
+				!g2y = !p2possh.position().north.value()
+				!gin1 = false
+				if (!g1x.gt(!gxl) and !g1x.lt(!gxr) and !g1y.gt(!gyb) and !g1y.lt(!gyt)) then
+					!gin1 = true
+				endif
+				!gin2 = false
+				if (!g2x.gt(!gxl) and !g2x.lt(!gxr) and !g2y.gt(!gyb) and !g2y.lt(!gyt)) then
+					!gin2 = true
+				endif
+				!guse1 = !gin1
+				if (!gin1 and !gin2) then
+					!gcr = !!DrawingPlan1.intersections.getindexed(!i).split('-').getindexed(2).position()
+					!gcx = !gcr.east.value()
+					!gcy = !gcr.north.value()
+					!g1d = (!g1x - !gcx) * (!g1x - !gcx) + (!g1y - !gcy) * (!g1y - !gcy)
+					!g2d = (!g2x - !gcx) * (!g2x - !gcx) + (!g2y - !gcy) * (!g2y - !gcy)
+					!guse1 = !g1d.geq(!g2d)
+				endif
+				if (!guse1) then
 					!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p1possh, !p2possh, !refgln, 1)
 				else
 					!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p2possh, !p1possh, !refgln, 2)
