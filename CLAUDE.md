@@ -1,11 +1,11 @@
 # PA_pmllibE3D2.1 — AVEVA E3D 2.1 的 PML 程式庫
 
-## 目前進度（2026-09-25）
+## 目前進度（2026-09-28）
 - `master` 已 push，2026-09-25 併了 `feature/view-title`（圖名，重建已實測 OK）、`feature/import-paliby`（Import PA-LIBY 鈕，已實測）與 `fix/flow-arrow-in-view`（流向箭頭不出 view，已實測）。2026-09-24 併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
 - DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；更新路徑（有 REVI 的圖改字、底線跟著改長短、舊圖補建）**使用者決定不測**：目前沒有這種情形（2026-09-25）。細節見「DRAFT：view 下方的圖名」。
 - Import PA-LIBY 鈕（原分支 `feature/import-paliby`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**）：View 分頁 Hatching Style 下方，細節見「目錄與命名」的 PA-LIBY 那條。
 - 流向箭頭畫到 view 外（原分支 `fix/flow-arrow-in-view`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**），細節見「DRAFT：流向箭頭不出 view」。
-- **進行中（2026-09-26）**：分支 `feature/user-view`——使用者在 Draw 自己建的 VIEW 套我們的標註，**單一個有名字、沒轉角度的平面 view 已實測 OK（2026-09-27）**，細節與還沒測的情況見「DRAFT：使用者自建的 VIEW」。先做平面，立面／SECTION 之後。
+- **進行中（2026-09-26）**：分支 `feature/user-view`（**只在本機、沒 push，還沒併回 master**——使用者要全部測完再併）——使用者在 Draw 自己建的 VIEW 套我們的標註。已實測 OK：單一個有名字、沒轉角度的平面 view、重跑、沒名字的 view、一張 SHEE 兩個 view（2026-09-27）；**旁邊有 BOX（範圍等於 BOX 的 view 跟 BOX 的圖對照）2026-09-28 OK**，途中修了兩個 **BOX 的圖也有**的 bug（格線壓框邊時圓圈掛錯端、左尺寸鏈第一點在框內時尺寸線太靠框），也在同一支分支上。**下一步**：剩三項沒測（轉角度、混立面 view、範圍來自 VVOL／VLIMITS）＋局部圖要不要擋的決定，細節見「DRAFT：使用者自建的 VIEW」。先做平面，立面／SECTION 之後。
 - 切分支的坑：E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**，切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
 - 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
@@ -67,7 +67,7 @@
 - 討論過、沒做：Import 分頁的「兩個對角點」格式（現在只有三點法；要做的話加「3 點／2 對角點」切換，兩對角點展開成 P1/P2/P3 丟 `MakeBox`）；DESIGN 端還缺的：多選一起改高程、鄰框縫／重疊檢查＋貼齊（DRAFT MatchSorted 在邊外 50mm 找鄰居）、複製到其他樓層（使用者 2026-09-24 決定不做：只有土木鋼構改了才用得到，很少見；樓高改用多選 Move Face／Snap，插夾層用 Split U/D。真的碰到一層很多框要插夾層，先做 Split 多選，比做複製功能小很多）、圍住選取物建 BOX（2026-09-24 做了，見「Pick 分頁：圍住選取物」）、BOX 總覽清單（使用者 2026-09-24 決定不做：Assign Numbers 會把 ZONE 成員 REORDER 成號碼順序，Model Explorer 就是清單。「在 3D 每個框中心 AID 印圖號」那半也不做：框一多標籤疊在一起反而看不清楚（使用者，2026-09-24）；要確認編號順序就看 `check_batch.txt`）。
 - 舊的 `develop` 分支（7 月練 git 的孤兒分支）已經不在了（2026-09-23 查）。
 
-## DRAFT：使用者自建的 VIEW（2026-09-26，分支 `feature/user-view`，**基本情況已在 E3D 實測**）
+## DRAFT：使用者自建的 VIEW（2026-09-26，分支 `feature/user-view`，**基本情況＋旁邊有 BOX 已在 E3D 實測，還有三項沒測**）
 - 使用者要求：使用者在 Draw 自己建的 VIEW，照那個 VIEW 的設定套我們的程式，變成格式一致的圖。**先做平面，好了再做立面／SECTION**（使用者決定）。立面也要做，所以走「保留使用者的 view、在上面標註」，不走「從 view 反推 BOX」。
 - 使用者的決定（2026-09-26）：範圍用 **VIEW 的 LIMITS** 取代 BOX；**圖框都不管**（backing sheet、圖框文字、keyplan、指北針），view 不移動；drawlist 照 Apply 的方式把範圍內 ZONE＋REFGRD 全加，不要的用 View 分頁的 Exclude 拿掉；representation／hatching 用**表單的值**；在 SHEE（或 DRWG）層一次收所有 VIEW 批次跑。
 - 介面：Drawing 分頁下方「Views drawn by hand」：Add CE（VIEW 收它自己；SHEE／DRWG 收底下所有 VIEW）、Remove、Remove All、Annotate Views。Create Drawings 從 BOX 建的 view（`*/SS/S1/V1`）不收。清單每列是 view 名字，沒名字時是 refno，兩者都能直接導覽。
@@ -93,12 +93,12 @@
 - 沒名字的 view 實測 OK（2026-09-27，使用者）：`=2013286677/154008` 自動取名 `/DR2/S2/V2`（sheet 有名字、`V1` 已被佔用，取第一個空號），走到 `DONE`。它跟 `/DR2/S2/V1` 在同一張 sheet，但兩個 view 是分兩次按的，不算「一次收多個 view」。
 - 一張 SHEE 一次跑兩個 view 實測 OK（2026-09-27，使用者）：Add CE 在 `/DR2/S2`，`/DR2/S2/V1` 與沒名字的 `=2013286677/154008`（當場取名 `/DR2/S2/V2`）同一輪都走到 `DONE`，各自一份 drawlist 與 NOTE。兩個 view 這次都是乾淨的（`cleared 0`，前一輪的標註沒有 Save Work），所以「同一輪裡後跑的清掉先跑的」這條沒被考驗到，但清除只認 `<view>/ate*`，不會跨 view。
 - **還沒測的情況**（2026-09-27 跟使用者講好的順序）。Cancel 鍵在新位置（Annotate Views 旁）已確認 OK（2026-09-27，使用者）。
-  1. 旁邊有 BOX（match line 有鄰圖，順便驗 MatchSorted 送 AteSort 的欄位不再帶 mm）：挑一個沒轉角度、旁邊有鄰框的 BOX，在 Draw 自建一個平面 view，VWLIMITS＝那個 BOX 的 E/N/U 範圍、比例相同，跟那個 BOX 用 Create Drawings 出的圖對照 tick、`MATCH LINE E…`、`SEE <鄰圖號>` 在不在同樣的邊。又跳「輸入字串格式不正確」就是 mm 沒去乾淨。
+  1. **已實測 OK（2026-09-28，使用者「目前看起來沒問題」，見下面兩條）**。旁邊有 BOX（match line 有鄰圖，順便驗 MatchSorted 送 AteSort 的欄位不再帶 mm）：挑一個沒轉角度、旁邊有鄰框的 BOX，在 Draw 自建一個平面 view，VWLIMITS＝那個 BOX 的 E/N/U 範圍、比例相同，跟那個 BOX 用 Create Drawings 出的圖對照 tick、`MATCH LINE E…`、`SEE <鄰圖號>` 在不在同樣的邊。又跳「輸入字串格式不正確」就是 mm 沒去乾淨。
   2. 轉角度的 view（ADEG，例如跟格線一樣 12.5°）：洋紅外框貼著 view 邊，尺寸鏈、管線號在四邊，check 走到 `DONE`。
   3. 清單裡混一個立面／SECTION view：那列回 `not a plan view looking down`，其他照跑，「N of M」數對。
   4. 範圍來自 VVOL／VLIMITS（建 view 時不設範圍）：check 的 `limits (VVOL)` 或 `(VLIMITS)`，同一個 view 重跑變 `limits (CDLIMITS)`、數字不變。
-- 第 1 項第一次測（2026-09-28，`error.png`＝BOX 的圖、`error1.png`＝同範圍的自建 view `/DR2/S2/V1`）：兩個差別是**同一個 bug**。自建 view 的 LIMITS 打在格線上（C＝N 292990、H＝N 301140），ES 格線（畫面上 EB.x）的 ES.A／ES.D 剛好壓在下／上緣；ES 的橫線只從 ES.1（p1，框內）畫到 ES.2（p2，右緣角落）。GridAnnotation 在「只有一個交點」那段判斷哪一端在框內用嚴格大於／小於，壓在邊上的 p1 被當成框外，Left 圓圈改掛 p2 → 跑到 view 中間的邊上（`check_grid` 的 `side=Left nppt=2 ... sheet=340`）；下方 MATCH LINE 字的第一排被那個圓圈佔住，被 MatchRow 推出去五排、加一支箭頭（`check_gap` 的 `MROW down row=5 row1hit=332.3,176.5..348.1,187.8`）。左邊 H／C 看起來「沒有線連到框」也是因為那條線其實是 ES.A／ES.D 的引線。修法（`0c754ee`）：壓在邊上 0.01mm 內算框內，兩端都算時取離交點遠的那端；BOX 的圖只有格線剛好壓在框邊時才會不同（原本也是錯的）。另外兩個不是 bug：最左的尺寸 301 vs 300 是 BOX 本身比使用者打的整數 LIMITS 寬約 1mm（下方尺寸鏈 301+1700+1960 vs 300+1700+1960）；框邊在 301140 卻印 `N301141` 兩張都一樣——Apply 本來就在範圍外加 0.025 再用 AVEVA 的 `stringRoundUpValue` 無條件進位，BOX 的路一直如此，沒動。使用者 22:13 重跑後 log 已證實：`check_grid` 的 ES.A／ES.D Left 變成 `nppt=1 sheet=240`、`check_gap` 的 `MROW down row=1`（畫面待使用者確認）。
-- 同一次使用者另外指出（BOX 的圖與自建 view **都有**）：左邊尺寸鏈太靠近 match line，這張圖的 MATCH LINE 不該有箭頭。原因：左邊尺寸鏈的點 2～5 是 ES 格線的端點（`check_rebuild` 的 `DPOISEQ 2..5 section=grid attapos=E -314290`）——格線點的深度取格線自己的端點（投影線要伸到格線，刻意的），ES 的橫線從 ES.1 起畫、在左框內 10mm，點就在框內（紙面 x≈297）。SORT DIM 後它是第一點，DOFFSET 15 從第一點量，尺寸線落在 282，離框 8mm（標準是 gridgap 3＋15＝18，右邊就是 18）。MatchObstacles 的帶子（線 ±6＝276..288）蓋住第一排，MATCH LINE 字被 MatchRow 推出四排、MatchArrow 補一支箭頭（`check_gap` 的 `MROW left row=4 row1hit=276.0,...288.0`）。修法（`89a0100`，LineNoAnnotation）：第一點在標準深度（框邊 ± gridgap）內側時，差距加回 DOFFSET（負的 dimshift），手拖往內的點也一樣；點與尺寸數字不動。有 REVI 的更新路徑照舊用 frozen 的線位置，已出的圖不會動。dump 多一行 `DIMINSIDE <dir> std= m1= shift=`（`check_rebuild`／`check_update`）。預期：左邊線移到 x≈272，MATCH LINE W314501 回到第一排、沒有箭頭。**等使用者重跑確認**（BOX 的圖也要用 Create Drawings 重建一次看）。
+- 第 1 項第一次測（2026-09-28，`error.png`＝BOX 的圖、`error1.png`＝同範圍的自建 view `/DR2/S2/V1`）：兩個差別是**同一個 bug**。自建 view 的 LIMITS 打在格線上（C＝N 292990、H＝N 301140），ES 格線（畫面上 EB.x）的 ES.A／ES.D 剛好壓在下／上緣；ES 的橫線只從 ES.1（p1，框內）畫到 ES.2（p2，右緣角落）。GridAnnotation 在「只有一個交點」那段判斷哪一端在框內用嚴格大於／小於，壓在邊上的 p1 被當成框外，Left 圓圈改掛 p2 → 跑到 view 中間的邊上（`check_grid` 的 `side=Left nppt=2 ... sheet=340`）；下方 MATCH LINE 字的第一排被那個圓圈佔住，被 MatchRow 推出去五排、加一支箭頭（`check_gap` 的 `MROW down row=5 row1hit=332.3,176.5..348.1,187.8`）。左邊 H／C 看起來「沒有線連到框」也是因為那條線其實是 ES.A／ES.D 的引線。修法（`0c754ee`）：壓在邊上 0.01mm 內算框內，兩端都算時取離交點遠的那端；BOX 的圖只有格線剛好壓在框邊時才會不同（原本也是錯的）。另外兩個不是 bug：最左的尺寸 301 vs 300 是 BOX 本身比使用者打的整數 LIMITS 寬約 1mm（下方尺寸鏈 301+1700+1960 vs 300+1700+1960）；框邊在 301140 卻印 `N301141` 兩張都一樣——Apply 本來就在範圍外加 0.025 再用 AVEVA 的 `stringRoundUpValue` 無條件進位，BOX 的路一直如此，沒動。使用者 22:13 重跑後 log 已證實：`check_grid` 的 ES.A／ES.D Left 變成 `nppt=1 sheet=240`、`check_gap` 的 `MROW down row=1`；畫面使用者確認 OK（2026-09-28）。
+- 同一次使用者另外指出（BOX 的圖與自建 view **都有**）：左邊尺寸鏈太靠近 match line，這張圖的 MATCH LINE 不該有箭頭。原因：左邊尺寸鏈的點 2～5 是 ES 格線的端點（`check_rebuild` 的 `DPOISEQ 2..5 section=grid attapos=E -314290`）——格線點的深度取格線自己的端點（投影線要伸到格線，刻意的），ES 的橫線從 ES.1 起畫、在左框內 10mm，點就在框內（紙面 x≈297）。SORT DIM 後它是第一點，DOFFSET 15 從第一點量，尺寸線落在 282，離框 8mm（標準是 gridgap 3＋15＝18，右邊就是 18）。MatchObstacles 的帶子（線 ±6＝276..288）蓋住第一排，MATCH LINE 字被 MatchRow 推出四排、MatchArrow 補一支箭頭（`check_gap` 的 `MROW left row=4 row1hit=276.0,...288.0`）。修法（`89a0100`，LineNoAnnotation）：第一點在標準深度（框邊 ± gridgap）內側時，差距加回 DOFFSET（負的 dimshift），手拖往內的點也一樣；點與尺寸數字不動。有 REVI 的更新路徑照舊用 frozen 的線位置，已出的圖不會動。dump 多一行 `DIMINSIDE <dir> std= m1= shift=`（`check_rebuild`／`check_update`）。**已實測 OK（2026-09-28，使用者，自建 view 22:27、BOX 用 Create Drawings 重建 22:29）**：BOX 那次 `DIMINSIDE left std=287.975 m1=298.000 shift=-10.02`，上／下 shift 0；右邊 `shift=-0.025`（ES.2 的端點比 BOX 的框邊內縮 0.025mm，超過門檻 0.01，線跟著往外 0.025mm，看不出來）；`MROW left row=1`、箭頭沒了。同一次 BOX 的圖 `MROW up row=0 … row1hit=378.3,445.6..392.3,455.6`：上方 MATCH LINE 字 12 排都找不到空的、留在第一排，擦到一個標籤的留白框（今天的修改沒動到上方，`DIMINSIDE up shift=0`），使用者看過說沒問題，沒追。
 - **待使用者決定**（2026-09-27 提出，還沒回答）：局部圖——view 只是某個大 BOX 範圍裡的一小塊時，大 BOX 越過 view 四邊，MatchSorted 邊外 50mm 的薄片會把它收成四邊的鄰圖，預期四邊都標 `SEE <大 BOX 的圖號>`（推論，沒實測）。要不要擋掉？可在第 1 項順便把 view 範圍縮小看實際結果再決定。
 - 已知限制：使用者自己加的 VSEC 切面不看；轉角度的 view，範圍取 LIMITS 投到紙上的外接矩形，會比實際大一點（多出來的只是空白）。
 - Notion 設計頁已加 toggle「使用者自建的 VIEW 套標註：Annotate Views（2026-09-26）」（2026-09-27，REST 寫入，block `3e8dd89e-3acd-813f-bbb7-e714a967583f`）：定案、操作流程、做法、踩到的坑、狀態與待辦。之後測完的項目要回去更新「五、狀態與待辦」。
@@ -181,11 +181,11 @@
 
 ## 換電腦
 **整個目錄複製過去（2026-09-24 使用者的做法）**：
-1. 複製整個 repo 目錄。`.git`（含只在本機的分支，例如 `feature/view-title`）、`bin/` 裡的 BlankPos.exe／RevCloud.exe（被 gitignore、不在 GitHub，但在目錄裡）、`.mcp.json`、未追蹤的 check／log 檔都會跟著過去，不用另外 push 或重建。到了新機器先 `git status`、`git branch -vv` 對一下。
+1. 複製整個 repo 目錄。`.git`（含只在本機的分支——2026-09-28 是 `feature/user-view`（進行中、沒 push）與 `try/speckit`）、`bin/` 裡的 BlankPos.exe／RevCloud.exe（被 gitignore、不在 GitHub，但在目錄裡）、`.mcp.json`、未追蹤的 check／log 檔都會跟著過去，不用另外 push 或重建。到了新機器先 `git status`、`git branch -vv` 對一下。
 2. 放到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
 3. **路徑寫死的地方**：28 處 PML 把除錯檔寫到 `L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check*.txt`（`DrawingPlan1.pmlfrm` 20 處，另有 GridAnnotation／LineNoAnnotation 各 2、FlowAnnotation／MatchGaps 各 1、`DrawingPlan.pmlfrm` 2）。新機器的 E3D 看到的 `L:` 要指到同一個目錄，否則 dump 靜靜寫不出來（Check 分頁會多一列「寫不出 check_box.txt」）。
 4. 使用者環境變數 `NOTION_TOKEN`：從舊機器抄同一個值（PowerShell `[Environment]::GetEnvironmentVariable('NOTION_TOKEN','User')`），設成新機器的 **User** 層，然後重開 VS Code。2026-09-24 這個 token 用 REST 是有效的；MCP 端點會回 403，照「這台機器」那條改走 REST。
-5. Claude Code 的 memory **不在 repo 目錄裡**：`%USERPROFILE%\.claude\projects\<repo路徑編碼>\memory\`，這台是 `C:\Users\tw.tseng\.claude\projects\d--E3D-pdms-prog-E3D2-1-PA-pmllibE3D2-1\memory\`（約 39 個檔）。要另外複製；新機器上 repo 路徑不同的話資料夾名稱也會不同，把檔案放進新名稱的資料夾。沒複製的話，本檔加 Notion 也夠開工。
+5. Claude Code 的 memory **不在 repo 目錄裡**：`%USERPROFILE%\.claude\projects\<repo路徑編碼>\memory\`，使用者目錄 `tw.tseng` 那台是 `C:\Users\tw.tseng\.claude\projects\d--E3D-pdms-prog-E3D2-1-PA-pmllibE3D2-1\memory\`（約 39 個檔），`egg` 那台是 `C:\Users\egg\...\memory\`（同一個資料夾名，2026-09-28 有 18 個檔——兩台的 memory 各自長，沒同步）。要另外複製；新機器上 repo 路徑不同的話資料夾名稱也會不同，把檔案放進新名稱的資料夾。沒複製的話，本檔加 Notion 也夠開工。
 
 **改用 git clone 的話**（不是整個複製）：
 1. `git clone https://github.com/tw-tseng/pml-draft.git`，只在本機的分支要先從舊機器 `git push -u origin <分支>` 再 `git checkout`（`git branch -vv` 沒有 `[origin/...]` 的就是只在本機）。
