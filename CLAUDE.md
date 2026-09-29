@@ -1,6 +1,10 @@
 # PA_pmllibE3D2.1 — AVEVA E3D 2.1 的 PML 程式庫
 
-## 目前進度（2026-09-28）
+## 目前進度（2026-09-29，換電腦前）
+- **換電腦時的狀態（2026-09-29 晚）**：在 `feature/elevation-view`（`9f6cc1a`，比 master 多 21 個 commit，**只在本機、沒 push**——整個目錄複製就會帶過去；用 clone 的話要先在舊機器 `git push -u origin feature/elevation-view`）。工作樹乾淨（只有未追蹤的 check／log／png）。
+  - **下一步＝在 E3D 重測立面** `/DWGNO-028/SS/S1/V3`：kill／`pml reload form DrawingPlan1`／`pml reload function DrawingPlan1LineNoAnnotation`（EquiAnnotation 也 reload）／show → Annotate Views。要驗的（`2132013`、`716ef62`、`9f6cc1a`，都還沒測）：上下邊直立管不帶 BOP；樓層高程在左邊柱位圓圈的位置、進左右尺寸鏈、管線號避開；立面管嘴沒有 (U)/(D)；左尺寸鏈不再有離 view 670mm 的點；D1201（臥式）只標左右鏈、直立式設備標上下鏈且點在垂直中心線上。
+  - 立面測完還要**回歸平面**：Create Drawings 重建一張 BOX 圖（例 `/DWGNO-002`）＋自建平面 view `/DR2/S2/V1`——LineNoAnnotation／`.WorldLimitsOfSheetRect()`／NozzleAnnotation 都是平面共用的（立面分支都用 `.IsElevTrans()` 擋，理論上平面不變）。都 OK 才 `--no-ff` 併回 master、push、更新 Notion 的「使用者自建的 VIEW」toggle。
+  - 使用者 2026-09-29 的規則補充：設備標哪條尺寸鏈看中心線方向（臥式→左右、直立式→上下、兩條都有→各一點），已照做。
 - `master` 已 push，2026-09-25 併了 `feature/view-title`（圖名，重建已實測 OK）、`feature/import-paliby`（Import PA-LIBY 鈕，已實測）與 `fix/flow-arrow-in-view`（流向箭頭不出 view，已實測）。2026-09-24 併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
 - DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；更新路徑（有 REVI 的圖改字、底線跟著改長短、舊圖補建）**使用者決定不測**：目前沒有這種情形（2026-09-25）。細節見「DRAFT：view 下方的圖名」。
 - Import PA-LIBY 鈕（原分支 `feature/import-paliby`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**）：View 分頁 Hatching Style 下方，細節見「目錄與命名」的 PA-LIBY 那條。
@@ -197,7 +201,7 @@
 
 ## 換電腦
 **整個目錄複製過去（2026-09-24 使用者的做法）**：
-1. 複製整個 repo 目錄。`.git`（含只在本機的分支——2026-09-29 是 `feature/elevation-view`（進行中、沒 push）與 `try/speckit`）、`bin/` 裡的 BlankPos.exe／RevCloud.exe（被 gitignore、不在 GitHub，但在目錄裡）、`.mcp.json`、未追蹤的 check／log 檔都會跟著過去，不用另外 push 或重建。到了新機器先 `git status`、`git branch -vv` 對一下。
+1. 複製整個 repo 目錄。`.git`（含只在本機的分支——2026-09-29 是 `feature/elevation-view`（進行中、沒 push，`9f6cc1a`）與 `try/speckit`）、`bin/` 裡的 BlankPos.exe／RevCloud.exe（被 gitignore、不在 GitHub，但在目錄裡）、`.mcp.json`、未追蹤的 check／log 檔都會跟著過去，不用另外 push 或重建。到了新機器先 `git status`、`git branch -vv` 對一下。
 2. 放到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
 3. **路徑寫死的地方**：28 處 PML 把除錯檔寫到 `L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check*.txt`（`DrawingPlan1.pmlfrm` 20 處，另有 GridAnnotation／LineNoAnnotation 各 2、FlowAnnotation／MatchGaps 各 1、`DrawingPlan.pmlfrm` 2）。新機器的 E3D 看到的 `L:` 要指到同一個目錄，否則 dump 靜靜寫不出來（Check 分頁會多一列「寫不出 check_box.txt」）。
 4. 使用者環境變數 `NOTION_TOKEN`：從舊機器抄同一個值（PowerShell `[Environment]::GetEnvironmentVariable('NOTION_TOKEN','User')`），設成新機器的 **User** 層，然後重開 VS Code。2026-09-24 這個 token 用 REST 是有效的；MCP 端點會回 403，照「這台機器」那條改走 REST。
