@@ -2700,16 +2700,6 @@ define method .AnnotateView(!it is string) is string
 	!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
 	!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
 	!this.UvLog('  frame ' & !this.viewLLsh & ' .. ' & !this.viewURsh & ' rcode=' & !rcode & ' vsca=' & !vsca)
-	------------------------------------------------------------------
-	-- 1:1 is what a view has before any scale is given to it. taken --
-	-- as it is, the frame holds 224mm of the model: /DR2/S2/V1 made --
-	-- again with its 6.7m limits drew a drawlist of 3 members and    --
-	-- would have been dimensioned and labelled on that (2026-09-29). --
-	-- the scale is the user's to set, so stop and say so            --
-	------------------------------------------------------------------
-	if (!this.vsca.geq(0.99)) then
-		return 'its scale is 1:1 (VSCA ' & !vsca & ') - give the view its scale in Draw first (or Auto Scale), then run it again'
-	endif
 
 	------------------------------------------------------------------
 	-- a plan looking down is the one view that carries east and      --
@@ -2778,7 +2768,32 @@ define method .AnnotateView(!it is string) is string
 	!fy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
 	!fy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
 	!lstr = !lminE.string() & 'mm ' & !lminN.string() & 'mm ' & !lminU.string() & 'mm ' & !lmaxE.string() & 'mm ' & !lmaxN.string() & 'mm ' & !lmaxU.string() & 'mm'
+
+	------------------------------------------------------------------
+	-- the scale: the one on the View tab, never the view's own      --
+	-- (user, 2026-09-29 -- a view made again in Draw came with VSCA --
+	-- 1, and setting AUTO there left it at 1). auto on the tab: the --
+	-- smallest standard scale of the tab's list that shows the      --
+	-- whole of the limits inside the frame the user drew. the frame --
+	-- stays where it is and the view's centre stays its centre, so  --
+	-- the limits are measured out from that centre, side by side    --
+	------------------------------------------------------------------
+	!ls0 = !this.SheetLimitsOfVolume(!lstr, !trans)
+	!serr = !this.UvSetScale(!vref, !trans, !ls0, !fx1, !fy1, !fx2, !fy2)
+	if (!serr.neq('')) then
+		return !serr
+	endif
+	$!vref
+	var !vsca vsca
+	!this.vsca = !vsca.real()
+	!trans = !this.ViewSheetTransform()
+	handle any
+		return 'its place on the sheet could not be read after the scale was set: ' & !!error.text
+	endhandle
 	!ls = !this.SheetLimitsOfVolume(!lstr, !trans)
+	if (!ls[1] lt !fx1 - 0.1 or !ls[3] gt !fx2 + 0.1 or !ls[2] lt !fy1 - 0.1 or !ls[4] gt !fy2 + 0.1) then
+		!this.UvLog('  NOTE the limits still reach past the frame at this scale - only the part inside is drawn')
+	endif
 	!bx1 = max(!fx1, !ls[1])
 	!by1 = max(!fy1, !ls[2])
 	!bx2 = min(!fx2, !ls[3])
@@ -3164,6 +3179,106 @@ define method .UvToLast(!vw is string)
 	last
 	handle any
 	endhandle
+endmethod
+
+------------------------------------------------------------------------
+-- gives view !vref the scale on the View tab. 'auto' there: the       --
+-- smallest standard scale of the tab's own list (1:n entries) at      --
+-- which the limits, measured out from the centre of the frame side    --
+-- by side, still fit inside the frame. !trans and !ls are the view    --
+-- and its limits on the sheet at the scale it has now -- how far a    --
+-- limit reaches is read off them and divided by that scale, so what   --
+-- VSCA or VRAT say does not matter. answers '' or why it could not    --
+--                                                                     --
+-- .selection('DTEXT'): the list has no rtext of its own, and a bare   --
+-- .selection() read the wrong one in Assign Numbers (2026-09-24)      --
+------------------------------------------------------------------------
+define method .UvSetScale(!vref is string, !trans is array, !ls is array, !fx1 is real, !fy1 is real, !fx2 is real, !fy2 is real) is string
+	!scalestr = !this.scaleopt.selection('DTEXT')
+	if (!scalestr.eqnocase('User Define')) then
+		!scalestr = !this.scaletext.val
+	endif
+	!scalestr = !scalestr.replace(' ', '')
+	!num = 0
+	!den = 0
+	!src = ''
+	if (!scalestr.eqnocase('auto')) then
+		------------------------------------------------------------------
+		-- sheet mm per world mm at the scale the view has now           --
+		------------------------------------------------------------------
+		!v0 = sqrt(!trans[5] * !trans[5] + !trans[6] * !trans[6])
+		if (!v0 le 0) then
+			return 'auto scale: the scale the view has now could not be measured'
+		endif
+		!l1 = !ls[1].string('D6').replace('mm', '').real()
+		!l2 = !ls[2].string('D6').replace('mm', '').real()
+		!l3 = !ls[3].string('D6').replace('mm', '').real()
+		!l4 = !ls[4].string('D6').replace('mm', '').real()
+		!hw = (!fx2 - !fx1) * 0.5
+		!hh = (!fy2 - !fy1) * 0.5
+		!ax = max(!trans[1] - !l1, !l3 - !trans[1])
+		!ay = max(!trans[2] - !l2, !l4 - !trans[2])
+		!needx = !ax / !v0 / !hw
+		!needy = !ay / !v0 / !hh
+		!need = max(!needx, !needy)
+		!opts = !this.scaleopt.dtext
+		do !sc values !opts
+			if (!sc.matchwild('1:*')) then
+				!d = 0
+				!d = !sc.after(':').real()
+				handle any
+					!d = 0
+				endhandle
+				if (!d gt 0 and !d geq !need * 0.999999) then
+					if (!den eq 0 or !d lt !den) then
+						!den = !d
+					endif
+				endif
+			endif
+		enddo
+		if (!den eq 0) then
+			return 'auto scale: the limits need 1:' & !need.string('D1') & ', more than any scale on the View tab list'
+		endif
+		!num = 1
+		!src = 'auto, the limits need 1:' & !need.string('D2')
+	else
+		------------------------------------------------------------------
+		-- read the way .Apply() reads it: both halves of a ratio, a    --
+		-- bare number as 1:that                                         --
+		------------------------------------------------------------------
+		!num = 1
+		if (!scalestr.matchwild('*:*')) then
+			!num = 0
+			!num = !scalestr.before(':').real()
+			handle any
+				!num = 0
+			endhandle
+			!den = !scalestr.after(':').real()
+			handle any
+				!den = 0
+			endhandle
+		else
+			!den = !scalestr.real()
+			handle any
+				!den = 0
+			endhandle
+		endif
+		if (!num le 0 or !den le 0) then
+			return 'Drawing Scale on the View tab is not a ratio: ' & !scalestr & ' - pick one from the list, or User Define with a ratio such as 1:30'
+		endif
+		!src = 'View tab'
+	endif
+	$!vref
+	VRAT $!num $!den
+	handle any
+		!vs = !num / !den
+		VSCAL $!vs
+		handle any
+			return 'its scale could not be set to ' & !num.string() & ':' & !den.string() & ': ' & !!error.text
+		endhandle
+	endhandle
+	!this.UvLog('  scale ' & !num.string() & ':' & !den.string() & ' (' & !src & ')')
+	return ''
 endmethod
 
 ------------------------------------------------------------------------
