@@ -1166,19 +1166,83 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!pipegroups.append(!newpipegroup)
 				endif
 			enddo
+			!picks = object array()
 			do !gi from 1 to !pipegroups.size()
 				if (!pipegroups[!gi].size() eq 1) then
-					!result.append(!pipegroups[!gi][1])
+					!picks.append(!pipegroups[!gi][1])
 				else
 					if (!dir.eq('right')) then
-						!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'max', !pipegroups[!gi], !viewdir))
+						!picks.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'max', !pipegroups[!gi], !viewdir))
 					elseif (!dir.eq('left')) then
-						!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'min', !pipegroups[!gi], !viewdir))
+						!picks.append(!!DrawingPlan1.CheckDimensionAttachPoint('x', 'min', !pipegroups[!gi], !viewdir))
 					elseif (!dir.eq('down')) then
-						!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'min', !pipegroups[!gi], !viewdir))
+						!picks.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'min', !pipegroups[!gi], !viewdir))
 					elseif (!dir.eq('up')) then
-						!result.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'max', !pipegroups[!gi], !viewdir))
+						!picks.append(!!DrawingPlan1.CheckDimensionAttachPoint('y', 'max', !pipegroups[!gi], !viewdir))
 					endif
+				endif
+			enddo
+			--------------------------------------------------------------------
+			-- two DIFFERENT pipes on the very same spot along the dimension   --
+			-- (1mm of the model, the !dimtol below): one above the other, at  --
+			-- the same plan position. each with a point of its own measured   --
+			-- a 0 between them (user, 2026-09-29, /DR2/S2/V1 up side:         --
+			-- Copy-of-20-A-33 and Copy-of-50-B-9 both at sheet x 343.786).    --
+			-- the one deepest into the view keeps the point, so its           --
+			-- projection line runs past the others as well; the others go    --
+			-- through as label-only entries -- their labels are still drawn,  --
+			-- they just take no point. pipes merely crowded together, not on  --
+			-- the same spot, keep a point each as before (user rule,          --
+			-- 2026-08-31)                                                     --
+			--------------------------------------------------------------------
+			!samtol = 1 * !!DrawingPlan1.vsca
+			if (!dir.eq('right') or !dir.eq('left')) then
+				!alix = 1
+				!dpix = 2
+			else
+				!alix = 2
+				!dpix = 1
+			endif
+			do !pa from 1 to !picks.size()
+				!alA = !picks[!pa].split('~').getindexed(!alix).real()
+				!dpA = !picks[!pa].split('~').getindexed(!dpix).real()
+				!lonly = false
+				do !pb from 1 to !picks.size()
+					if (!pb.eq(!pa)) then
+						skip
+					endif
+					!alB = !picks[!pb].split('~').getindexed(!alix).real()
+					!ald = !alA - !alB
+					if (abs(!ald) le !samtol) then
+						!dpB = !picks[!pb].split('~').getindexed(!dpix).real()
+						!dpd = !dpB - !dpA
+						!bdeeper = false
+						if (abs(!dpd) le 0.000001) then
+							if (!pb lt !pa) then
+								!bdeeper = true
+							endif
+						elseif (!dir.eq('up') or !dir.eq('right')) then
+							if (!dpd lt 0) then
+								!bdeeper = true
+							endif
+						else
+							if (!dpd gt 0) then
+								!bdeeper = true
+							endif
+						endif
+						if (!bdeeper) then
+							!lonly = true
+							break
+						endif
+					endif
+				enddo
+				if (!lonly) then
+					!result.append(!picks[!pa] & '~LABELONLY')
+					if (!dbgln) then
+						!dbgf.writerecord('SAMESPOT ' & !dir & ' label only mem=' & !picks[!pa].split('~').getindexed(3).split('!').getindexed(4) & ' pipe=' & !picks[!pa].split('~').getindexed(3).split('!').getindexed(5) & ' along=' & !alA.string() & ' kept=' & !picks[!pb].split('~').getindexed(3).split('!').getindexed(5))
+					endif
+				else
+					!result.append(!picks[!pa])
 				endif
 			enddo
 
