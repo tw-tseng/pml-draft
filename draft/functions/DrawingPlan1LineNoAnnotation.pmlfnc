@@ -328,8 +328,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bminN = !wlim[2]
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'min', 'max')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 
 		$!vw
 		var !mems coll all bran members within $!vlfm to $!vlto
@@ -404,7 +405,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							!useit = false
 						elseif (!crossenu.neq('')) then
 							!crosspos = object position(!crossenu)
-							!crosspos.up = !memenupos.position().up
+							--------------------------------------------------------------
+							-- a plan's crossing takes the fitting's U; an elevation's  --
+							-- crossing is on the box edge and its U is the edge's own  --
+							-- (2026-09-29)                                             --
+							--------------------------------------------------------------
+							if (not(!!DrawingPlan1.IsElevTrans(!trans))) then
+								!crosspos.up = !memenupos.position().up
+							endif
 							---------------------------------------------------------------
 							-- not !crosspos.string(): a POSITION built with object       --
 							-- position(<string>) stringifies back with a 'WRT /*' tail,   --
@@ -580,8 +588,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
 		!tempvl  = !!DrawingPlan1.maxU - 10
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'max-10', 'max')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 
 		$!vw
 		var !mems coll all bran members within $!vlfm to $!vlto
@@ -642,8 +651,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
 		!tempvl  = !!DrawingPlan1.minU + 10
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'min', 'min+10')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 
 		$!vw
 		var !mems coll all bran members within $!vlfm to $!vlto
@@ -705,8 +715,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bminN = !wlim[2]
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'min+10', 'max-10')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 
 		$!vw
 		var !mems coll all elbo within $!vlfm to $!vlto
@@ -756,8 +767,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bminN = !wlim[2]
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'min+10', 'max-10')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 		----------------------------------------------------------------------
 		-- the equipment below is collected over the whole of the box and    --
 		-- not, like everything else on this side, over the shallow band     --
@@ -776,8 +788,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!eqminN = !eqwlim[2]
 		!eqmaxE = !eqwlim[3]
 		!eqmaxN = !eqwlim[4]
-		!eqvlfm = 'E ' & $!eqminE & ' N ' & $!eqminN & ' U ' & $!tempvl
-		!eqvlto = 'E ' & $!eqmaxE & ' N ' & $!eqmaxN & ' U ' & $!tempvl1
+		!eqbv = !!DrawingPlan1.BandVol(!vwx1, !vwy1, !vwx2, !vwy2, !trans, 'min+10', 'max-10')
+		!eqvlfm = !eqbv[1]
+		!eqvlto = !eqbv[2]
 		----------------------------------------------------------------------
 		-- the drawing plan boxes themselves are NOT plant equipment and are --
 		-- never annotated. they live under /<projid>_DrawingPlanBox as EQUI --
@@ -989,7 +1002,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!memy = !memshpos.split().getindexed(4).replace('mm','').real()
 				if (!memx lt !vwx2 and !memx gt !vwx1) then
 					if (!memy lt !vwy2 and !memy gt !vwy1) then
-						if (!memenupos1.up lt !!DrawingPlan1.maxU and !memenupos1.up gt !!DrawingPlan1.minU) then
+						if (!!DrawingPlan1.InDepth(!memenupos1, !trans)) then
 							!x = !memx + 0.0000000001 * !j
 							!y = !memy + 0.0000000001 * !j
 							!memstr = !y & '~' & !x & '~type4!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
@@ -1007,7 +1020,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!memy = !memshpos.split().getindexed(4).replace('mm','').real()
 				if (!memx lt !vwx2 and !memx gt !vwx1) then
 					if (!memy lt !vwy2 and !memy gt !vwy1) then
-						if (!memenupos1.up lt !!DrawingPlan1.maxU and !memenupos1.up gt !!DrawingPlan1.minU) then
+						if (!!DrawingPlan1.InDepth(!memenupos1, !trans)) then
 							!x = !memx + 0.0000000001 * !j
 							!y = !memy + 0.0000000001 * !j
 							!memstr = !y & '~' & !x & '~type4!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe

@@ -256,6 +256,14 @@ layout form !!DrawingPlan1 dialog dock
 	member .wminE is real
 	member .wmaxN is real
 	member .wminN is real
+	------------------------------------------------------------------------
+	-- a section drawn by hand: how deep it reaches along its own viewing  --
+	-- direction, as p . d for d the horizontal normal .BandVol() uses. set --
+	-- by .AnnotateSection() and read only when the view is an elevation  --
+	-- (2026-09-29)                                                        --
+	------------------------------------------------------------------------
+	member .depthmin is real
+	member .depthmax is real
 
 	member .intersections is array    $( intersections of the current refgln only  $)
 	member .allintersections is array $( intersections of every refgln of the drawing, used by !!DrawingPlan1LineNoAnnotation  $)
@@ -3246,6 +3254,50 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	!this.maxN = !this.wmaxN
 
 	------------------------------------------------------------------
+	-- how deep the section reaches along its viewing direction: the  --
+	-- box's corners (or the limits') measured along d, the           --
+	-- horizontal normal to the view that .BandVol() and .InDepth()   --
+	-- use                                                            --
+	------------------------------------------------------------------
+	!t5 = !trans[5].string('D9').replace('mm', '').real()
+	!t7 = !trans[7].string('D9').replace('mm', '').real()
+	!ts = sqrt(!t5 * !t5 + !t7 * !t7)
+	!ddE = 0 - !t7 / !ts
+	!ddN = !t5 / !ts
+	!dpts = object array()
+	if (!corners.size() eq 8) then
+		!dpts = !corners
+	else
+		!dle = object array()
+		!dle.append(!lminE.string('D3').replace('mm', ''))
+		!dle.append(!lmaxE.string('D3').replace('mm', ''))
+		!dln = object array()
+		!dln.append(!lminN.string('D3').replace('mm', ''))
+		!dln.append(!lmaxN.string('D3').replace('mm', ''))
+		do !ie from 1 to 2
+			do !in from 1 to 2
+				!dpts.append('E ' & !dle[!ie] & ' N ' & !dln[!in] & ' U 0 WRT /*')
+			enddo
+		enddo
+	endif
+	!dfirst = true
+	do !dp values !dpts
+		!dpo = object position(!dp)
+		!dv = !dpo.east.value() * !ddE + !dpo.north.value() * !ddN
+		if (!dfirst) then
+			!this.depthmin = !dv
+			!this.depthmax = !dv
+			!dfirst = false
+		else
+			!this.depthmin = min(!this.depthmin, !dv)
+			!this.depthmax = max(!this.depthmax, !dv)
+		endif
+	enddo
+	!this.depthmin = !this.depthmin - 0.025
+	!this.depthmax = !this.depthmax + 0.025
+	!this.UvLog('  depth along the view ' & !this.depthmin.string('D1') & ' .. ' & !this.depthmax.string('D1'))
+
+	------------------------------------------------------------------
 	-- the title's two blanks are the user's to fill in: what they    --
 	-- typed there last time is read before the old title goes, and   --
 	-- written back into the new one                                  --
@@ -3274,6 +3326,16 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	handle any
 		!warn.append('update design: ' & !!error.text)
 	endhandle
+	------------------------------------------------------------------
+	-- the passes, the plan's in the plan's order (user, 2026-09-29:  --
+	-- four dimension chains and the pipe numbers styled as on the    --
+	-- plan; no match line). the grid bubbles go along the top only   --
+	-- and hand the column lines to the dimension chains; the floor   --
+	-- levels go down the left, outside the left chain and its labels --
+	------------------------------------------------------------------
+	!this.intersections = object array()
+	!this.allintersections = object array()
+	!!DrawingPlan1BoxChanged = true
 	!this.UvToLast(!vw)
 	!nbub = 0
 	!nbub = !this.SectionGridBubbles(!vw)
@@ -3281,7 +3343,16 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 		!warn.append('grid bubbles: ' & !!error.text)
 	endhandle
 	!this.UvLog('  grid bubbles: ' & !nbub.string())
-	$!vw
+	!this.UvToLast(!vw)
+	!!DrawingPlan1LineNoAnnotation(!vw, 0, 0)
+	handle any
+		!warn.append('line numbers: ' & !!error.text)
+	endhandle
+	!this.UvToLast(!vw)
+	!!DrawingPlan1EquiAnnotation(!vw, !this.wminE.string(), !this.wminN.string(), !this.minU.string(), !this.wmaxE.string(), !this.wmaxN.string(), !this.maxU.string())
+	handle any
+		!warn.append('equipment: ' & !!error.text)
+	endhandle
 	!this.UvToLast(!vw)
 	!nlev = 0
 	!nlev = !this.SectionLevels(!vw)
@@ -3289,14 +3360,7 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 		!warn.append('levels: ' & !!error.text)
 	endhandle
 	!this.UvLog('  levels: ' & !nlev.string())
-	$!vw
 
-	------------------------------------------------------------------
-	-- the labels, the way the plan's component labels go: the view  --
-	-- out to DXF first, bubbles and levels in it and no labels yet,  --
-	-- then every label noted in WriteLabelToText.txt, BlankPos finds --
-	-- each a clear spot, and .PlaceLabelFromSpace() moves it there   --
-	------------------------------------------------------------------
 	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
 	if !ff.exists() then
 		!ff.deletefile()
@@ -3308,39 +3372,77 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	handle any
 		!warn.append('DXF for BlankPos: ' & !!error.text)
 	endhandle
-	!nlab = 0
-	!nlab = !this.SectionLabels(!vw)
-	handle any
-		!warn.append('labels: ' & !!error.text)
-	endhandle
-	!this.UvLog('  labels: ' & !nlab.string())
-	if (!nlab gt 0) then
-		!this.RunBlankPos()
+	if (!this.redutog.val) then
+		!this.UvToLast(!vw)
+		!this.ReduAnnotation(!vw)
 		handle any
-			!warn.append('BlankPos: ' & !!error.text)
+			!warn.append('reducers: ' & !!error.text)
 		endhandle
-		!ff = object file(!this.blankdir & 'LabelSpace.txt')
-		if !ff.exists() then
-			!ff.open('read')
-			!lines = !ff.readfile()
-			!ff.close()
-			do !i from 1 to !lines.size()
-				!this.PlaceLabelFromSpace(!lines[!i], !this.rcode, false)
-				handle any
-					!warn.append('label placement: ' & !!error.text)
-				endhandle
-			enddo
-			!this.UvLog('  BlankPos placed ' & !lines.size().string() & ' label(s)')
-		else
-			!this.UvLog('  BlankPos wrote no LabelSpace.txt')
-		endif
 	endif
+	if (!this.nozztog.val) then
+		!this.UvToLast(!vw)
+		!this.NozzleAnnotation(!vw)
+		handle any
+			!warn.append('nozzles: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.valvtog.val) then
+		!this.UvToLast(!vw)
+		!this.ValveAnnotation(!vw)
+		handle any
+			!warn.append('valves: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.insttog.val) then
+		!this.UvToLast(!vw)
+		!this.InstAnnotation(!vw)
+		handle any
+			!warn.append('instruments: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.supttog.val) then
+		!this.UvToLast(!vw)
+		!this.SuptAnnotation(!vw)
+		handle any
+			!warn.append('supports: ' & !!error.text)
+		endhandle
+	endif
+	!this.AppendDimLines(!vw)
+	handle any
+		!warn.append('dimension lines for BlankPos: ' & !!error.text)
+	endhandle
+	!this.RunBlankPos()
+	handle any
+		!warn.append('BlankPos: ' & !!error.text)
+	endhandle
+	!ff = object file(!this.blankdir & 'LabelSpace.txt')
+	if !ff.exists() then
+		!ff.open('read')
+		!lines = !ff.readfile()
+		!ff.close()
+		do !i from 1 to !lines.size()
+			!this.PlaceLabelFromSpace(!lines[!i], !this.rcode, false)
+			handle any
+				!warn.append('label placement: ' & !!error.text)
+			endhandle
+		enddo
+	endif
+	!!DrawingPlan1MatchGaps(!vw)
+	handle any
+		!warn.append('projection line gaps: ' & !!error.text)
+	endhandle
 	$!vw
 
-	!top = min(!this.viewLLsh.part(4).replace('mm', '').real(), !this.viewURsh.part(4).replace('mm', '').real())
+	!top = !this.TitleTopNow()
 	!this.SectionTitle(!vw, !top, !old1, !old3)
 	handle any
 		!warn.append('title: ' & !!error.text)
+	endhandle
+	$!vw
+	!this.UvToLast(!vw)
+	!!DrawingPlan1FlowAnnotation(!vw)
+	handle any
+		!warn.append('flow arrows: ' & !!error.text)
 	endhandle
 	$!vw
 
@@ -3970,6 +4072,16 @@ define method .SectionGridBubbles(!vw is string) is real
 			!gpush = !gstack.real()
 			!gby = !gby + !gpush
 			!!DrawingPlan1GridBubbles.append('Top~' & string(!gbx) & '~' & string(!gby) & '~' & !gid)
+			------------------------------------------------------------
+			-- the column line for the top and bottom dimension chains, --
+			-- where it meets the cut; .allintersections is what        --
+			-- !!DrawingPlan1LineNoAnnotation dimensions grids from     --
+			------------------------------------------------------------
+			!gxs = !sx1.string('D3').replace('mm', '')
+			!gyt = !ytop.string('D3').replace('mm', '')
+			!gyb = !this.boxLLsh.part(4).replace('mm', '').real().string('D3')
+			!this.allintersections.append('boxUlinesh-E ' & !gxs & 'mm N ' & !gyt & 'mm U 0mm')
+			!this.allintersections.append('boxDlinesh-E ' & !gxs & 'mm N ' & !gyb & 'mm U 0mm')
 			!x = 0
 			!y = !gby - !sy1
 			!xap = 0
@@ -4027,7 +4139,7 @@ endmethod
 ------------------------------------------------------------------------
 define method .SectionLevels(!vw is string) is real
 	!llen = 40
-	!lgap = 2
+	!lgap = 3
 	!tri = 3
 	!th = 3
 	if (not(!this.lineheitx.val.unset())) then
@@ -4198,8 +4310,20 @@ define method .SectionLevels(!vw is string) is real
 		return 0
 	endhandle
 	!made = 0
-	!xa = !bx1 - !lgap - !llen
-	!xb = !bx1 - !lgap
+	------------------------------------------------------------------
+	-- outside the left dimension chain and its pipe numbers: what   --
+	-- !!DrawingPlan1LineNoAnnotation says that side reaches         --
+	------------------------------------------------------------------
+	!lband = 0
+	!lband = !this.labbandleft
+	handle any
+		!lband = 0
+	endhandle
+	if (!lband.unset()) then
+		!lband = 0
+	endif
+	!xb = !bx1 - !lband - !lgap
+	!xa = !xb - !llen
 	!xas = !xa.string('D3').replace('mm', '')
 	!xbs = !xb.string('D3').replace('mm', '')
 	!tx1 = !xa + !tri * 0.5
@@ -4255,235 +4379,6 @@ define method .SectionLevels(!vw is string) is real
 		!made = !made + 1
 		!this.UvLog('    level ' & !ut & ' at sheet y ' & !ys0)
 	enddo
-	return !made
-endmethod
-
-------------------------------------------------------------------------
--- a label layer of a section, <view>/<!lname>, dressed the way the    --
--- nozzle labels' layer is (yellow text, cyan leader, no frame) at     --
--- character height !chei mm                                            --
-------------------------------------------------------------------------
-define method .SectionLabelLayer(!vw is string, !lname is string, !chei is real)
-	$!vw
-	NEW LAYE $!vw/$!lname
-	Purpose NOZZ
-	Lvisibility true
-	Font 1
-	Lterminator Off
-	Justification Centre
-	Alignment Hbody
-	Dterminator Arrows
-	Tsize 2mm
-	Chosht 6mm
-	Asubtended 0
-	Pjustification Towards
-	Overshoot 2mm
-	Plclearance 0mm
-	Doffset 25mm
-	Dmspacing 0mm
-	!cheicomp = !chei.string('D2') & 'mm'
-	Cheight $!cheicomp
-	Lleader true
-	Lframe false
-	Lshape Straight
-	Gbox 0mm
-	Cspacing 0
-	Lspacing 0
-	Llclearance 0mm
-	Xyscale 1 1
-	Xyposition 10mm 10mm
-	Bpoffset 0mm 0mm
-	Blnk true
-	Bmargin 0mm
-	Trsf unset
-	Fterminator Default
-	NLStyle Solid
-	NLColour Cyan
-	FStyle SolidFilled
-	FColour Cyan
-	Txcolour yellow
-	LLStyle Solid
-	LLColour Cyan
-	LFStyle Solid
-	LFColour Cyan
-	DLStyle Solid
-	DLColour Grey
-	PLStyle Solid
-	PLColour Grey
-	MStyle Off
-	MColour Cyan
-	CHStyle Off
-	CHColour Grey
-endmethod
-
-------------------------------------------------------------------------
--- stage 4 of a section: every pipe and every piece of equipment in   --
--- the section gets its name on a leader (user, 2026-09-29).          --
---                                                                    --
--- a label hangs off an element whose own POS lies in the section --  --
--- inside the world box of the limits and inside the cut on the       --
--- sheet -- because .PlaceLabelFromSpace() measures the label from    --
--- the POS of its DDNA. for a pipe that is one of its fittings, the   --
--- middle one of those inside; a pipe with none inside (straight tube --
--- right through) is logged and left out. for equipment it is the     --
--- equipment itself when its origin is inside, else the middle one of --
--- its nozzles and primitives that are. the text is the name as it    --
--- stands, pipes at the pipe label height on <view>/ateLABP, equipment --
--- at the equipment label height on <view>/ateLABE.                   --
---                                                                    --
--- every label also goes to WriteLabelToText.txt the way the nozzle   --
--- labels do, for BlankPos to move into the clear. answers how many   --
-------------------------------------------------------------------------
-define method .SectionLabels(!vw is string) is real
-	!bx1 = !this.boxLLsh.part(2).replace('mm', '').real()
-	!by1 = !this.boxLLsh.part(4).replace('mm', '').real()
-	!bx2 = !this.boxURsh.part(2).replace('mm', '').real()
-	!by2 = !this.boxURsh.part(4).replace('mm', '').real()
-	!we1 = !this.wminE.string('D3').replace('mm', '').real()
-	!wn1 = !this.wminN.string('D3').replace('mm', '').real()
-	!wu1 = !this.minU.string('D3').replace('mm', '').real()
-	!we2 = !this.wmaxE.string('D3').replace('mm', '').real()
-	!wn2 = !this.wmaxN.string('D3').replace('mm', '').real()
-	!wu2 = !this.maxU.string('D3').replace('mm', '').real()
-	!hp = 3
-	if (not(!this.lineheitx.val.unset())) then
-		!hp = !this.lineheitx.val
-	endif
-	!he = 4
-	!he = !this.equiheitx.val
-	handle any
-		!he = 4
-	endhandle
-
-	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
-	!ff.open('append')
-	!made = 0
-
-	------------------------------------------------------------------
-	-- the elements to label, and for each the candidates it may      --
-	-- hang off                                                       --
-	------------------------------------------------------------------
-	!kinds = object array()
-	!kinds.append('PIPE')
-	!kinds.append('EQUI')
-	do !kind values !kinds
-		if (!kind.eq('PIPE')) then
-			!lname = 'ateLABP'
-			!h = !hp
-		else
-			!lname = 'ateLABE'
-			!h = !he
-		endif
-		!this.SectionLabelLayer(!vw, !lname, !h)
-		handle any
-			!this.UvLog('  labels: layer ' & !lname & ' could not be made: ' & !!error.text)
-			skip
-		endhandle
-		!owners = object array()
-		var !owners coll all $!kind within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
-		handle any
-			!this.UvLog('  labels: ' & !kind & ' could not be collected: ' & !!error.text)
-			skip
-		endhandle
-		!this.UvLog('    labels: ' & !owners.size().string() & ' ' & !kind & ' in the box')
-		do !own values !owners
-			!oname = ''
-			var !oname namn of $!own
-			handle any
-				skip
-			endhandle
-			!cands = object array()
-			if (!kind.eq('PIPE')) then
-				var !cands coll all (ELBO BEND TEE CROS VALV VTWA VFWA FLAN REDU CAP COUP OLET INST PCOM FBLI FILT TRAP UNIO) for $!own
-				handle any
-					!this.UvLog('      PIPE ' & !oname & ': fittings could not be collected: ' & !!error.text)
-					!cands = object array()
-				endhandle
-			else
-				!cands.append(!own)
-				!prims = object array()
-				var !prims coll all (NOZZ CYLI BOX CONE DISH SNOU PYRA CTOR RTOR SLCY EXTR REVO) for $!own
-				handle any
-					!prims = object array()
-				endhandle
-				do !pm values !prims
-					!cands.append(!pm)
-				enddo
-			endif
-			------------------------------------------------------------
-			-- the ones inside, in order                                --
-			------------------------------------------------------------
-			!ins = object array()
-			!insh = object array()
-			!origin = false
-			do !ci from 1 to !cands.size()
-				!cd = !cands[!ci]
-				!cps = ''
-				var !cps ( pos of $!cd wrt worl )
-				handle any
-					skip
-				endhandle
-				!cpo = object position(!cps)
-				!ce1 = !cpo.east.value()
-				!cn1 = !cpo.north.value()
-				!cu1 = !cpo.up.value()
-				if (!ce1 lt !we1 or !ce1 gt !we2 or !cn1 lt !wn1 or !cn1 gt !wn2 or !cu1 lt !wu1 or !cu1 gt !wu2) then
-					skip
-				endif
-				var !csh shpos of $!cpo
-				handle any
-					skip
-				endhandle
-				!sx = !csh.part(2).replace('mm', '').real()
-				!sy = !csh.part(4).replace('mm', '').real()
-				if (!sx lt !bx1 or !sx gt !bx2 or !sy lt !by1 or !sy gt !by2) then
-					skip
-				endif
-				if (!kind.eq('EQUI') and !ci eq 1) then
-					!origin = true
-				endif
-				!ins.append(!cd)
-				!insh.append(!csh)
-			enddo
-			if (!ins.size() eq 0) then
-				!this.UvLog('      ' & !kind & ' ' & !oname & ': nothing of it inside to hang a label on')
-				skip
-			endif
-			!pick = 1
-			if (not(!origin)) then
-				!pick = (!ins.size() + 1) / 2
-				!pick = !pick.int()
-				if (!pick lt 1) then
-					!pick = 1
-				endif
-			endif
-			!el = !ins[!pick]
-			!elsh = !insh[!pick]
-
-			$!vw/$!lname
-			NEW GLAB
-			DDNA $!el
-			Btext |$!oname|
-			Justification Centre
-			Alignment Hbody
-			ABSO
-			AT $!elsh
-			XYPO 5 5
-			handle any
-				!this.UvLog('      ' & !kind & ' ' & !oname & ': label failed: ' & !!error.text)
-				skip
-			endhandle
-			var !label ref
-			!shposx = !elsh.part(2).replace('mm', '')
-			!shposy = !elsh.part(4).replace('mm', '')
-			!height = !h + 0.5
-			!width = !oname.length() * !height * 0.65
-			!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
-			!made = !made + 1
-			!this.UvLog('      ' & !kind & ' ' & !oname & ' on ' & !el & ' at ' & !elsh)
-		enddo
-	enddo
-	!ff.close()
 	return !made
 endmethod
 
@@ -8175,6 +8070,7 @@ endmethod
 --         checked a second time                                         --
 --   11, 12  sheet x, y of a 1mm step up: 0 on a plan, full length on   --
 --         an elevation or a section (2026-09-29)                        --
+--   13    up of the centre of the view                                   --
 -- CE must be the view or an element inside it                           --
 --------------------------------------------------------------------------
 define method .ViewSheetTransform() is array
@@ -8201,6 +8097,7 @@ define method .ViewSheetTransform() is array
 	var !tempsh shpos of $!tempp
 	!trans[11] = (!tempsh.part(2).replace('mm', '').real() - !c0x) / 1000
 	!trans[12] = (!tempsh.part(4).replace('mm', '').real() - !c0y) / 1000
+	!trans[13] = !cen.up
 	----------------------------------------------------------------------
 	-- square means east lies along one of the two sheet axes and north  --
 	-- along the other one. compared as squares to keep clear of sqrt    --
@@ -8267,6 +8164,159 @@ define method .SheetBandOfSide(!dir is string, !depth is real) is array
 	!band[3] = !x2
 	!band[4] = !y2
 	return !band
+endmethod
+
+------------------------------------------------------------------------
+-- true when !trans (.ViewSheetTransform()) is an elevation or a      --
+-- section: up comes out on the sheet at least half as long as east  --
+-- and north together. on a plan it is 0                              --
+------------------------------------------------------------------------
+define method .IsElevTrans(!trans is array) is boolean
+	!u2 = 0
+	!u2 = !trans[11] * !trans[11] + !trans[12] * !trans[12]
+	handle any
+		return false
+	endhandle
+	!h2 = !trans[5] * !trans[5] + !trans[6] * !trans[6] + !trans[7] * !trans[7] + !trans[8] * !trans[8]
+	if (!u2 gt !h2 * 0.25) then
+		return true
+	endif
+	return false
+endmethod
+
+------------------------------------------------------------------------
+-- the world volume !!DrawingPlan1LineNoAnnotation collects in: a      --
+-- rectangle on the sheet, x1 y1 x2 y2, taken through a depth. the    --
+-- depth runs 'min', 'min+10', 'max-10' or 'max' at each end (!lo,    --
+-- !hi). answers the two corners as 'E .. N .. U ..' strings, [1] the --
+-- from and [2] the to.                                               --
+--                                                                    --
+-- a plan looks down, so the depth is U: .minU / .maxU, 10mm in where --
+-- asked, and the rectangle is east and north through                 --
+-- .WorldLimitsOfSheetRect() -- the very strings the function used to --
+-- build for itself.                                                  --
+--                                                                    --
+-- an elevation looks level: the sheet's y is U and its x runs along  --
+-- h, the horizontal direction lying in the view; the depth runs      --
+-- along d, the horizontal normal to it, between .depthmin and        --
+-- .depthmax (set by .AnnotateSection()). the volume is the world box --
+-- round the rectangle's two ends at both depths (2026-09-29)         --
+------------------------------------------------------------------------
+define method .BandVol(!x1 is real, !y1 is real, !x2 is real, !y2 is real, !trans is array, !lo is string, !hi is string) is array
+	!r = object array()
+	if (not(!this.IsElevTrans(!trans))) then
+		!wlim = !this.WorldLimitsOfSheetRect(!x1, !y1, !x2, !y2, !trans)
+		!bminE = !wlim[1]
+		!bminN = !wlim[2]
+		!bmaxE = !wlim[3]
+		!bmaxN = !wlim[4]
+		!ulo = !this.minU
+		if (!lo.eq('min+10')) then
+			!ulo = !this.minU + 10
+		elseif (!lo.eq('max-10')) then
+			!ulo = !this.maxU - 10
+		elseif (!lo.eq('max')) then
+			!ulo = !this.maxU
+		endif
+		!uhi = !this.maxU
+		if (!hi.eq('min+10')) then
+			!uhi = !this.minU + 10
+		elseif (!hi.eq('max-10')) then
+			!uhi = !this.maxU - 10
+		elseif (!hi.eq('min')) then
+			!uhi = !this.minU
+		endif
+		!r[1] = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!ulo
+		!r[2] = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!uhi
+		return !r
+	endif
+	!t5 = !trans[5].string('D9').replace('mm', '').real()
+	!t7 = !trans[7].string('D9').replace('mm', '').real()
+	!t12 = !trans[12].string('D9').replace('mm', '').real()
+	!s2 = !t5 * !t5 + !t7 * !t7
+	!s = sqrt(!s2)
+	!hE = !t5 / !s
+	!hN = !t7 / !s
+	!dE = 0 - !hN
+	!dN = !hE
+	!cx = !trans[1].string('D6').replace('mm', '').real()
+	!cy = !trans[2].string('D6').replace('mm', '').real()
+	!cE = !trans[3].string('D6').replace('mm', '').real()
+	!cN = !trans[4].string('D6').replace('mm', '').real()
+	!cU = !trans[13].string('D6').replace('mm', '').real()
+	!cd = !cE * !dE + !cN * !dN
+	!dmin = !this.depthmin
+	!dmax = !this.depthmax
+	!dlo = !dmin
+	if (!lo.eq('min+10')) then
+		!dlo = !dmin + 10
+	elseif (!lo.eq('max-10')) then
+		!dlo = !dmax - 10
+	elseif (!lo.eq('max')) then
+		!dlo = !dmax
+	endif
+	!dhi = !dmax
+	if (!hi.eq('min+10')) then
+		!dhi = !dmin + 10
+	elseif (!hi.eq('max-10')) then
+		!dhi = !dmax - 10
+	elseif (!hi.eq('min')) then
+		!dhi = !dmin
+	endif
+	!a1 = (!x1 - !cx) / !s
+	!a2 = (!x2 - !cx) / !s
+	!u1 = !cU + (!y1 - !cy) / !t12
+	!u2 = !cU + (!y2 - !cy) / !t12
+	!es = object array()
+	!ns = object array()
+	do !ia from 1 to 2
+		!aa = !a1
+		if (!ia eq 2) then
+			!aa = !a2
+		endif
+		do !id from 1 to 2
+			!dd = !dlo - !cd
+			if (!id eq 2) then
+				!dd = !dhi - !cd
+			endif
+			!es.append(!cE + !aa * !hE + !dd * !dE)
+			!ns.append(!cN + !aa * !hN + !dd * !dN)
+		enddo
+	enddo
+	!emin = min(min(!es[1], !es[2]), min(!es[3], !es[4]))
+	!emax = max(max(!es[1], !es[2]), max(!es[3], !es[4]))
+	!nmin = min(min(!ns[1], !ns[2]), min(!ns[3], !ns[4]))
+	!nmax = max(max(!ns[1], !ns[2]), max(!ns[3], !ns[4]))
+	!umin = min(!u1, !u2)
+	!umax = max(!u1, !u2)
+	!r[1] = 'E ' & !emin.string('D3') & ' N ' & !nmin.string('D3') & ' U ' & !umin.string('D3')
+	!r[2] = 'E ' & !emax.string('D3') & ' N ' & !nmax.string('D3') & ' U ' & !umax.string('D3')
+	return !r
+endmethod
+
+------------------------------------------------------------------------
+-- whether !p lies inside the drawing's depth, strictly: on a plan     --
+-- between .minU and .maxU, as the open-ended branches were always     --
+-- tested; on an elevation between .depthmin and .depthmax along d    --
+-- (see .BandVol())                                                   --
+------------------------------------------------------------------------
+define method .InDepth(!p is position, !trans is array) is boolean
+	if (not(!this.IsElevTrans(!trans))) then
+		if (!p.up lt !this.maxU and !p.up gt !this.minU) then
+			return true
+		endif
+		return false
+	endif
+	!t5 = !trans[5].string('D9').replace('mm', '').real()
+	!t7 = !trans[7].string('D9').replace('mm', '').real()
+	!s = sqrt(!t5 * !t5 + !t7 * !t7)
+	!dE = 0 - !t7 / !s
+	!dN = !t5 / !s
+	!pd = !p.east.value() * !dE + !p.north.value() * !dN
+	if (!pd gt !this.depthmin and !pd lt !this.depthmax) then
+		return true
+	endif
+	return false
 endmethod
 
 ------------------------------------------------------------------------
