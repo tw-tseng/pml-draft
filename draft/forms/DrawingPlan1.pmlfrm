@@ -3113,27 +3113,71 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	handle any
 		return 'its limits could not be read: ' & !!error.text
 	endhandle
+	------------------------------------------------------------------
+	-- a section is often given no limits at all, only its six       --
+	-- section planes (VSEC), the box the user sees (user,            --
+	-- 2026-09-29: one cut or two, there are always six). they come   --
+	-- after the limits the user typed and before the ones E3D works  --
+	-- out for itself off the drawlist                                --
+	------------------------------------------------------------------
+	!corners = object array()
 	!lsrc = 'none'
 	if (!vl.vwlimitsSet()) then
 		!lsrc = 'VWLIMITS'
 	elseif (!vl.cdlimitsSet()) then
 		!lsrc = 'CDLIMITS'
-	elseif (!vl.viewVolumeSet()) then
-		!lsrc = 'VVOL'
-	elseif (!vl.vlimitsSet()) then
-		!lsrc = 'VLIMITS'
+	else
+		!verr = !this.VsecBox(!vref, !corners)
+		if (!verr.eq('')) then
+			!lsrc = 'VSEC'
+		else
+			!this.UvLog('  section planes: ' & !verr)
+			if (!vl.viewVolumeSet()) then
+				!lsrc = 'VVOL'
+			elseif (!vl.vlimitsSet()) then
+				!lsrc = 'VLIMITS'
+			endif
+		endif
 	endif
 	if (!lsrc.eq('none')) then
-		!this.UvLog('  limits: none of VWLIMITS, :CDLIMITS, VVOL, VLIMITS is set')
-		return 'has no limits to work from'
+		!this.UvLog('  limits: none of VWLIMITS, :CDLIMITS, six VSEC planes, VVOL, VLIMITS')
+		return 'has no limits and no box of six section planes to work from'
 	endif
-	!lim = !vl.getViewLimitsArray()
-	!lminE = min(!lim[1], !lim[4])
-	!lminN = min(!lim[2], !lim[5])
-	!lminU = min(!lim[3], !lim[6])
-	!lmaxE = max(!lim[1], !lim[4])
-	!lmaxN = max(!lim[2], !lim[5])
-	!lmaxU = max(!lim[3], !lim[6])
+	if (!lsrc.eq('VSEC')) then
+		------------------------------------------------------------
+		-- the world box round the eight corners of the planes'    --
+		-- box, which is turned when the planes are                --
+		------------------------------------------------------------
+		do !ci from 1 to 8
+			!cp = object position(!corners[!ci])
+			!ce1 = !cp.east.value()
+			!cn1 = !cp.north.value()
+			!cu1 = !cp.up.value()
+			if (!ci eq 1) then
+				!lminE = !ce1
+				!lminN = !cn1
+				!lminU = !cu1
+				!lmaxE = !ce1
+				!lmaxN = !cn1
+				!lmaxU = !cu1
+			else
+				!lminE = min(!lminE, !ce1)
+				!lminN = min(!lminN, !cn1)
+				!lminU = min(!lminU, !cu1)
+				!lmaxE = max(!lmaxE, !ce1)
+				!lmaxN = max(!lmaxN, !cn1)
+				!lmaxU = max(!lmaxU, !cu1)
+			endif
+		enddo
+	else
+		!lim = !vl.getViewLimitsArray()
+		!lminE = min(!lim[1], !lim[4])
+		!lminN = min(!lim[2], !lim[5])
+		!lminU = min(!lim[3], !lim[6])
+		!lmaxE = max(!lim[1], !lim[4])
+		!lmaxN = max(!lim[2], !lim[5])
+		!lmaxU = max(!lim[3], !lim[6])
+	endif
 	!this.UvLog('  section, limits (' & !lsrc & ') E ' & !lminE.string('D1') & ' N ' & !lminN.string('D1') & ' U ' & !lminU.string('D1') & ' TO E ' & !lmaxE.string('D1') & ' N ' & !lmaxN.string('D1') & ' U ' & !lmaxU.string('D1'))
 	if (!lmaxE - !lminE lt 1 or !lmaxN - !lminN lt 1 or !lmaxU - !lminU lt 1) then
 		return 'its limits (' & !lsrc & ') are flat or empty'
@@ -3153,7 +3197,11 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	!fx2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
 	!fy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
 	!fy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
-	!ls0 = !this.SheetBoxOfLimits(!lcd)
+	if (!corners.size() eq 8) then
+		!ls0 = !this.SheetBoxOfPoints(!corners)
+	else
+		!ls0 = !this.SheetBoxOfLimits(!lcd)
+	endif
 	!serr = !this.UvSetScale(!vref, !trans, !ls0, !fx1, !fy1, !fx2, !fy2)
 	if (!serr.neq('')) then
 		return !serr
@@ -3161,7 +3209,11 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	$!vref
 	var !vsca vsca
 	!this.vsca = !vsca.real()
-	!ls = !this.SheetBoxOfLimits(!lcd)
+	if (!corners.size() eq 8) then
+		!ls = !this.SheetBoxOfPoints(!corners)
+	else
+		!ls = !this.SheetBoxOfLimits(!lcd)
+	endif
 	!bx1 = max(!fx1, !ls[1])
 	!by1 = max(!fy1, !ls[2])
 	!bx2 = min(!fx2, !ls[3])
@@ -3246,6 +3298,151 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 endmethod
 
 ------------------------------------------------------------------------
+-- the box the six section planes of view !vref make (VSEC -> PLRF ->  --
+-- a plane with POS and NORM, the way AVEVA's own Set View Limits and  --
+-- Quick Grid Plane View put them there: two planes to an axis). the   --
+-- planes are paired off by their normals, parallel within 0.1 of a    --
+-- percent, and the eight corners solved for (Cramer's rule), so a     --
+-- turned box comes out turned. corners go into !corners as position  --
+-- strings 'E .. N .. U .. WRT /*'. answers '' or why there is no box  --
+------------------------------------------------------------------------
+define method .VsecBox(!vref is string, !corners is array) is string
+	var !vsecs coll all vsec for $!vref
+	handle any
+		return 'could not be collected: ' & !!error.text
+	endhandle
+	!px = object array()
+	!py = object array()
+	!pz = object array()
+	!qx = object array()
+	!qy = object array()
+	!qz = object array()
+	do !vs values !vsecs
+		!pl = ''
+		var !pl plrf of $!vs
+		handle any
+			skip
+		endhandle
+		!pp = ''
+		var !pp pos of $!pl wrt /*
+		handle any
+			!this.UvLog('    VSEC ' & !vs & ' plane ' & !pl & ': no POS - ' & !!error.text)
+			skip
+		endhandle
+		!pn = ''
+		var !pn norm of $!pl wrt /*
+		handle any
+			!this.UvLog('    VSEC ' & !vs & ' plane ' & !pl & ': no NORM - ' & !!error.text)
+			skip
+		endhandle
+		!ppo = object position(!pp)
+		!pdo = object direction(!pn)
+		!px.append(!ppo.east.value())
+		!py.append(!ppo.north.value())
+		!pz.append(!ppo.up.value())
+		!qx.append(!pdo.east)
+		!qy.append(!pdo.north)
+		!qz.append(!pdo.up)
+		!this.UvLog('    VSEC ' & !vs & ' plane ' & !pl & ' pos ' & !pp & ' norm ' & !pn)
+	enddo
+	!np = !px.size()
+	if (!np ne 6) then
+		return !np.string() & ' section plane(s) found, 6 are needed'
+	endif
+
+	------------------------------------------------------------------
+	-- pair them off: a partner is the next unpaired plane whose     --
+	-- normal is parallel, either way round                          --
+	------------------------------------------------------------------
+	!mate = object array()
+	do !i from 1 to 6
+		!mate[!i] = 0
+	enddo
+	!pa = object array()
+	!pb = object array()
+	do !i from 1 to 6
+		if (!mate[!i] ne 0) then
+			skip
+		endif
+		do !j from 1 to 6
+			if (!j le !i or !mate[!j] ne 0) then
+				skip
+			endif
+			!dot = !qx[!i] * !qx[!j] + !qy[!i] * !qy[!j] + !qz[!i] * !qz[!j]
+			if (abs(!dot) ge 0.999) then
+				!mate[!i] = !j
+				!mate[!j] = !i
+				!pa.append(!i)
+				!pb.append(!j)
+				break
+			endif
+		enddo
+	enddo
+	if (!pa.size() ne 3) then
+		return 'the six planes do not pair off into three parallel pairs'
+	endif
+
+	------------------------------------------------------------------
+	-- each pair: its normal n (the first plane's) and where the two  --
+	-- planes cross it, n . P                                         --
+	------------------------------------------------------------------
+	!nx = object array()
+	!ny = object array()
+	!nz = object array()
+	!d1 = object array()
+	!d2 = object array()
+	do !k from 1 to 3
+		!ia = !pa[!k]
+		!ib = !pb[!k]
+		!nx[!k] = !qx[!ia]
+		!ny[!k] = !qy[!ia]
+		!nz[!k] = !qz[!ia]
+		!d1[!k] = !nx[!k] * !px[!ia] + !ny[!k] * !py[!ia] + !nz[!k] * !pz[!ia]
+		!d2[!k] = !nx[!k] * !px[!ib] + !ny[!k] * !py[!ib] + !nz[!k] * !pz[!ib]
+	enddo
+	------------------------------------------------------------------
+	-- n2 x n3, n3 x n1, n1 x n2 and the determinant n1 . (n2 x n3)  --
+	------------------------------------------------------------------
+	!c1x = !ny[2] * !nz[3] - !nz[2] * !ny[3]
+	!c1y = !nz[2] * !nx[3] - !nx[2] * !nz[3]
+	!c1z = !nx[2] * !ny[3] - !ny[2] * !nx[3]
+	!c2x = !ny[3] * !nz[1] - !nz[3] * !ny[1]
+	!c2y = !nz[3] * !nx[1] - !nx[3] * !nz[1]
+	!c2z = !nx[3] * !ny[1] - !ny[3] * !nx[1]
+	!c3x = !ny[1] * !nz[2] - !nz[1] * !ny[2]
+	!c3y = !nz[1] * !nx[2] - !nx[1] * !nz[2]
+	!c3z = !nx[1] * !ny[2] - !ny[1] * !nx[2]
+	!det = !nx[1] * !c1x + !ny[1] * !c1y + !nz[1] * !c1z
+	if (abs(!det) lt 0.001) then
+		return 'the three pairs of planes do not close a box'
+	endif
+	do !a from 1 to 2
+		!da = !d1[1]
+		if (!a eq 2) then
+			!da = !d2[1]
+		endif
+		do !b from 1 to 2
+			!db = !d1[2]
+			if (!b eq 2) then
+				!db = !d2[2]
+			endif
+			do !c from 1 to 2
+				!dc = !d1[3]
+				if (!c eq 2) then
+					!dc = !d2[3]
+				endif
+				!xe = (!da * !c1x + !db * !c2x + !dc * !c3x) / !det
+				!xn = (!da * !c1y + !db * !c2y + !dc * !c3y) / !det
+				!xu = (!da * !c1z + !db * !c2z + !dc * !c3z) / !det
+				!corners.append('E ' & !xe.string('D3') & ' N ' & !xn.string('D3') & ' U ' & !xu.string('D3') & ' WRT /*')
+			enddo
+		enddo
+	enddo
+	!this.UvLog('    box of the planes, first corner ' & !corners[1] & ', last ' & !corners[8])
+	return ''
+endmethod
+
+------------------------------------------------------------------------
 -- the limits, min E N U then max E N U, on the sheet of the view that --
 -- is CE: all eight corners through SHPOS, and the rectangle round     --
 -- them, x1 y1 x2 y2 as plain numbers. SHPOS does the projection      --
@@ -3261,30 +3458,43 @@ define method .SheetBoxOfLimits(!lim is array) is array
 	!us = object array()
 	!us.append(!lim[3].string('D3').replace('mm', ''))
 	!us.append(!lim[6].string('D3').replace('mm', ''))
-	!r = object array()
-	!first = true
+	!pts = object array()
 	do !ie from 1 to 2
 		do !in from 1 to 2
 			do !iu from 1 to 2
-				!pstr = 'E ' & !es[!ie] & ' N ' & !ns[!in] & ' U ' & !us[!iu] & ' WRT /*'
-				!pp = object position(!pstr)
-				var !psh shpos of $!pp
-				!px = !psh.part(2).replace('mm', '').real()
-				!py = !psh.part(4).replace('mm', '').real()
-				if (!first) then
-					!r[1] = !px
-					!r[2] = !py
-					!r[3] = !px
-					!r[4] = !py
-					!first = false
-				else
-					!r[1] = min(!r[1], !px)
-					!r[2] = min(!r[2], !py)
-					!r[3] = max(!r[3], !px)
-					!r[4] = max(!r[4], !py)
-				endif
+				!pts.append('E ' & !es[!ie] & ' N ' & !ns[!in] & ' U ' & !us[!iu] & ' WRT /*')
 			enddo
 		enddo
+	enddo
+	!r = !this.SheetBoxOfPoints(!pts)
+	return !r
+endmethod
+
+------------------------------------------------------------------------
+-- the rectangle on the sheet of the view that is CE round points     --
+-- !pts, position strings 'E .. N .. U .. WRT /*': x1 y1 x2 y2 as      --
+-- plain numbers                                                      --
+------------------------------------------------------------------------
+define method .SheetBoxOfPoints(!pts is array) is array
+	!r = object array()
+	!first = true
+	do !pstr values !pts
+		!pp = object position(!pstr)
+		var !psh shpos of $!pp
+		!px = !psh.part(2).replace('mm', '').real()
+		!py = !psh.part(4).replace('mm', '').real()
+		if (!first) then
+			!r[1] = !px
+			!r[2] = !py
+			!r[3] = !px
+			!r[4] = !py
+			!first = false
+		else
+			!r[1] = min(!r[1], !px)
+			!r[2] = min(!r[2], !py)
+			!r[3] = max(!r[3], !px)
+			!r[4] = max(!r[4], !py)
+		endif
 	enddo
 	return !r
 endmethod
