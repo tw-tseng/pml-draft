@@ -3307,10 +3307,32 @@ endmethod
 -- strings 'E .. N .. U .. WRT /*'. answers '' or why there is no box  --
 ------------------------------------------------------------------------
 define method .VsecBox(!vref is string, !corners is array) is string
+	!vsecs = object array()
 	var !vsecs coll all vsec for $!vref
 	handle any
 		return 'could not be collected: ' & !!error.text
 	endhandle
+	!this.UvLog('    ' & !vsecs.size().string() & ' VSEC(s) under the view')
+	------------------------------------------------------------------
+	-- the six Set View Limits puts there, FR (from) and TO on each  --
+	-- of E, N and U: <view>/FREP/VSEC .. <view>/TOUP/VSEC. the     --
+	-- user's own cuts (VS1, VS2 on /DWGNO-002/SS/S1/V2) lie inside --
+	-- that box and are no part of it (2026-09-29). without the six --
+	-- names, a view with exactly six planes of any names will do   --
+	------------------------------------------------------------------
+	!tags = object array()
+	!tags.append('FREP')
+	!tags.append('TOEP')
+	!tags.append('FRNP')
+	!tags.append('TONP')
+	!tags.append('FRUP')
+	!tags.append('TOUP')
+	!lpx = object array()
+	!lpy = object array()
+	!lpz = object array()
+	!lqx = object array()
+	!lqy = object array()
+	!lqz = object array()
 	!px = object array()
 	!py = object array()
 	!pz = object array()
@@ -3318,36 +3340,74 @@ define method .VsecBox(!vref is string, !corners is array) is string
 	!qy = object array()
 	!qz = object array()
 	do !vs values !vsecs
-		!pl = ''
-		var !pl plrf of $!vs
+		!vsn = ''
+		var !vsn name of $!vs
 		handle any
+			!vsn = !vs
+		endhandle
+		!vsd = !vs.dbref()
+		handle any
+			!this.UvLog('    VSEC ' & !vsn & ': ' & !!error.text)
 			skip
 		endhandle
+		!plr = !vsd.plrf
+		handle any
+			!this.UvLog('    VSEC ' & !vsn & ': no PLRF - ' & !!error.text)
+			skip
+		endhandle
+		if (!plr.badref()) then
+			!this.UvLog('    VSEC ' & !vsn & ': PLRF not set')
+			skip
+		endif
+		!pl = !plr.string()
 		!pp = ''
 		var !pp pos of $!pl wrt /*
 		handle any
-			!this.UvLog('    VSEC ' & !vs & ' plane ' & !pl & ': no POS - ' & !!error.text)
+			!this.UvLog('    VSEC ' & !vsn & ' plane ' & !pl & ': no POS - ' & !!error.text)
 			skip
 		endhandle
 		!pn = ''
 		var !pn norm of $!pl wrt /*
 		handle any
-			!this.UvLog('    VSEC ' & !vs & ' plane ' & !pl & ': no NORM - ' & !!error.text)
+			!this.UvLog('    VSEC ' & !vsn & ' plane ' & !pl & ': no NORM - ' & !!error.text)
 			skip
 		endhandle
 		!ppo = object position(!pp)
 		!pdo = object direction(!pn)
+		!islim = false
+		do !tg values !tags
+			if (!vsn.matchwild('*/' & !tg & '/VSEC')) then
+				!islim = true
+				break
+			endif
+		enddo
+		if (!islim) then
+			!lpx.append(!ppo.east.value())
+			!lpy.append(!ppo.north.value())
+			!lpz.append(!ppo.up.value())
+			!lqx.append(!pdo.east)
+			!lqy.append(!pdo.north)
+			!lqz.append(!pdo.up)
+		endif
 		!px.append(!ppo.east.value())
 		!py.append(!ppo.north.value())
 		!pz.append(!ppo.up.value())
 		!qx.append(!pdo.east)
 		!qy.append(!pdo.north)
 		!qz.append(!pdo.up)
-		!this.UvLog('    VSEC ' & !vs & ' plane ' & !pl & ' pos ' & !pp & ' norm ' & !pn)
+		!this.UvLog('    VSEC ' & !vsn & ' limits=' & !islim.string() & ' plane ' & !pl & ' pos ' & !pp & ' norm ' & !pn)
 	enddo
+	if (!lpx.size() eq 6) then
+		!px = !lpx
+		!py = !lpy
+		!pz = !lpz
+		!qx = !lqx
+		!qy = !lqy
+		!qz = !lqz
+	endif
 	!np = !px.size()
 	if (!np ne 6) then
-		return !np.string() & ' section plane(s) found, 6 are needed'
+		return !np.string() & ' section plane(s) read and ' & !lpx.size().string() & ' of them the FR/TO limit planes - six are needed'
 	endif
 
 	------------------------------------------------------------------
