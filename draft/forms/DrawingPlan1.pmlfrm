@@ -2650,28 +2650,13 @@ define method .AnnotateView(!it is string) is string
 	endif
 	var !vref ref
 
-	------------------------------------------------------------------
-	-- a name first: everything this program hangs off a view is    --
-	-- found again as <view>/<name>                                  --
-	------------------------------------------------------------------
 	!isns = 'false'
 	var !isns isnamed
-	if (not(!isns.boolean())) then
-		!nn = !this.UvNewName()
-		$!vref
-		if (!nn.eq('')) then
-			return 'has no name, and no free name could be made for it'
+	if (!isns.boolean()) then
+		var !vw name
+		if (!vw.matchwild('*/SS/S1/V1')) then
+			return 'made by Create Drawings from a box - use Create Drawings for it'
 		endif
-		name $!nn
-		handle any
-			return 'has no name, and NAME ' & !nn & ' was refused: ' & !!error.text
-		endhandle
-		!this.UvLog('  named ' & !nn)
-	endif
-	var !vw name
-	var !vwnn namn
-	if (!vw.matchwild('*/SS/S1/V1')) then
-		return 'made by Create Drawings from a box - use Create Drawings for it'
 	endif
 
 	------------------------------------------------------------------
@@ -2723,6 +2708,27 @@ define method .AnnotateView(!it is string) is string
 	if (!trans[9] lt !en * 0.99) then
 		return 'not a plan view looking down (elevations and sections are not done yet)'
 	endif
+
+	------------------------------------------------------------------
+	-- a name: everything this program hangs off a view is found     --
+	-- again as <view>/<name>. given only now, once the view is known --
+	-- to be one this program will draw on: a section refused above  --
+	-- used to come away renamed all the same (2026-09-29)           --
+	------------------------------------------------------------------
+	if (not(!isns.boolean())) then
+		!nn = !this.UvNewName()
+		$!vref
+		if (!nn.eq('')) then
+			return 'has no name, and no free name could be made for it'
+		endif
+		name $!nn
+		handle any
+			return 'has no name, and NAME ' & !nn & ' was refused: ' & !!error.text
+		endhandle
+		!this.UvLog('  named ' & !nn)
+	endif
+	var !vw name
+	var !vwnn namn
 
 	------------------------------------------------------------------
 	-- its limits, as E3D itself decides them                         --
