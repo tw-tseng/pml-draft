@@ -1962,6 +1962,17 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (!labparts.size().geq(6)) then
 					!labwantbop = !labparts.getindexed(6)
 				endif
+				---------------------------------------------------------------------
+				-- an elevation (2026-09-29, user): a pipe crossing the top or      --
+				-- bottom edge runs up and down, and a BOP figure there is only the --
+				-- edge's own U. only the left and right edges -- level pipes --    --
+				-- keep it, as a plan's crossings do                                --
+				---------------------------------------------------------------------
+				if (!labwantbop.eqnocase('y') and (!dir.eq('up') or !dir.eq('down'))) then
+					if (!!DrawingPlan1.IsElevTrans(!trans)) then
+						!labwantbop = 'n'
+					endif
+				endif
 				if (!labwantbop.eqnocase('y')) then
 					if (!type.eqnocase('BRAN')) then
 						!labbop = !bopu
