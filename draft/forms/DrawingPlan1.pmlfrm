@@ -3971,14 +3971,18 @@ endmethod
 -- cut are marked.                                                    --
 --                                                                    --
 -- each mark, on the sheet, left of the cut: a cyan leader !llen long --
--- ending at the cut's left edge, a filled cyan triangle standing on  --
--- its outer end with its point on the line, and the height in yellow --
+-- ending !lgap short of the cut's left edge, a hollow cyan triangle  --
+-- on its outer end with its point on the line, and the height in     --
+-- yellow. 40mm and hollow since the user saw the first version, 20mm --
+-- and filled, run into a member standing on the cut's edge (2026-09-29) --
+-- --
 -- above the line at the pipe label height, signed the way the plan   --
 -- title signs its elevation. all of it in a NOTE <view>/ateLEVEL, so  --
 -- .UvClearOwn() clears it on a rerun. answers how many were made     --
 ------------------------------------------------------------------------
 define method .SectionLevels(!vw is string) is real
-	!llen = 20
+	!llen = 40
+	!lgap = 2
 	!tri = 3
 	!th = 3
 	if (not(!this.lineheitx.val.unset())) then
@@ -4149,9 +4153,10 @@ define method .SectionLevels(!vw is string) is real
 		return 0
 	endhandle
 	!made = 0
-	!xa = !bx1 - !llen
+	!xa = !bx1 - !lgap - !llen
+	!xb = !bx1 - !lgap
 	!xas = !xa.string('D3').replace('mm', '')
-	!xbs = !bx1.string('D3').replace('mm', '')
+	!xbs = !xb.string('D3').replace('mm', '')
 	!tx1 = !xa + !tri * 0.5
 	!tx2 = !xa + !tri * 1.5
 	!txm = !xa + !tri
@@ -4179,10 +4184,13 @@ define method .SectionLevels(!vw is string) is real
 			endhandle
 		endhandle
 		$!nt
-		new outl lclosed true fstyle SystemStyle 9 NLColour cyan FColour cyan
+		new outl lclosed true NLColour cyan
 		handle any
 			!this.UvLog('  level ' & !ut & ' triangle failed: ' & !!error.text)
 		elsehandle none
+			FStyle Off
+			handle any
+			endhandle
 			!v1 = !txm.string('D3').replace('mm', '')
 			!v2 = !tx1.string('D3').replace('mm', '')
 			!v3 = !tx2.string('D3').replace('mm', '')
