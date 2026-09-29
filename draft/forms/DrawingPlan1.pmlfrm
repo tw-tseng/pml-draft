@@ -3282,6 +3282,14 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	endhandle
 	!this.UvLog('  grid bubbles: ' & !nbub.string())
 	$!vw
+	!this.UvToLast(!vw)
+	!nlev = 0
+	!nlev = !this.SectionLevels(!vw)
+	handle any
+		!warn.append('levels: ' & !!error.text)
+	endhandle
+	!this.UvLog('  levels: ' & !nlev.string())
+	$!vw
 
 	!top = min(!this.viewLLsh.part(4).replace('mm', '').real(), !this.viewURsh.part(4).replace('mm', '').real())
 	!this.SectionTitle(!vw, !top, !old1, !old3)
@@ -3950,6 +3958,193 @@ define method .SectionGridBubbles(!vw is string) is real
 			handle any
 			endhandle
 		enddo
+	enddo
+	return !made
+endmethod
+
+------------------------------------------------------------------------
+-- stage 3 of a section: the floor levels down the left (+20000,      --
+-- +16400 .. of section_view.png; the user wants the floors first,   --
+-- 2026-09-29). a floor is a level GRIDPL of the drawlist's grids --   --
+-- one whose normal points up or down -- at its own U; two grids at  --
+-- one height (within 1mm) give one mark, and only heights inside the --
+-- cut are marked.                                                    --
+--                                                                    --
+-- each mark, on the sheet, left of the cut: a cyan leader !llen long --
+-- ending at the cut's left edge, a filled cyan triangle standing on  --
+-- its outer end with its point on the line, and the height in yellow --
+-- above the line at the pipe label height, signed the way the plan   --
+-- title signs its elevation. all of it in a NOTE <view>/ateLEVEL, so  --
+-- .UvClearOwn() clears it on a rerun. answers how many were made     --
+------------------------------------------------------------------------
+define method .SectionLevels(!vw is string) is real
+	!llen = 20
+	!tri = 3
+	!th = 3
+	if (not(!this.lineheitx.val.unset())) then
+		!th = !this.lineheitx.val
+	endif
+	!bx1 = !this.boxULsh.part(2).replace('mm', '').real()
+	!by1 = !this.boxLLsh.part(4).replace('mm', '').real()
+	!by2 = !this.boxULsh.part(4).replace('mm', '').real()
+
+	------------------------------------------------------------------
+	-- any point of the view's plane at height U lands at the same   --
+	-- sheet y: the first corner of the cut, read back into the      --
+	-- world, gives the E and N to put the heights on                --
+	------------------------------------------------------------------
+	$!vw
+	!csh = 'x ' & string(!bx1) & ' y ' & string(!by1)
+	var !cenu enupos of $!csh
+	!ceno = object position(!cenu)
+	!ce0 = !ceno.east.value().string('D3')
+	!cn0 = !ceno.north.value().string('D3')
+
+	!gridels = object array()
+	!idlpath = !vw & '/DRAWLIST/DRWG'
+	var !addes coll all adde for $!idlpath
+	handle any
+		!addes = object array()
+	endhandle
+	do !adde values !addes
+		!type = ''
+		var !type type of idna of $!adde
+		handle any
+			skip
+		endhandle
+		if (!type.eq('REFGRD')) then
+			var !idna idna of $!adde
+			var !temps coll all gridel for $!idna
+			handle any
+				skip
+			endhandle
+			do !temp values !temps
+				!gridels.append(!temp)
+			enddo
+		endif
+	enddo
+
+	!us = object array()
+	!ys = object array()
+	do !gridel values !gridels
+		var !gridpls coll all gridpl for $!gridel
+		handle any
+			skip
+		endhandle
+		do !gp values !gridpls
+			!gpr = !gp.dbref()
+			!level = false
+			!gori = !gpr.orientation
+			handle any
+			elsehandle none
+				!gz = !gori.zDir()
+				handle any
+				elsehandle none
+					!gzw = !gz.wrt(world)
+					handle any
+					elsehandle none
+						!gzu = abs(!gzw.up)
+						if (!gzu gt 0.99) then
+							!level = true
+						endif
+					endhandle
+				endhandle
+			endhandle
+			if (not(!level)) then
+				skip
+			endif
+			var !gpos pos of $!gp wrt worl
+			handle any
+				skip
+			endhandle
+			!gpo = object position(!gpos)
+			!gu = !gpo.up.value()
+			!dup = false
+			do !ku values !us
+				!dd = !ku - !gu
+				if (abs(!dd) le 1) then
+					!dup = true
+					break
+				endif
+			enddo
+			if (!dup) then
+				skip
+			endif
+			!pstr = 'E ' & !ce0 & ' N ' & !cn0 & ' U ' & !gu.string('D3') & ' WRT /*'
+			!pp = object position(!pstr)
+			var !psh shpos of $!pp
+			handle any
+				skip
+			endhandle
+			!py = !psh.part(4).replace('mm', '').real()
+			if (!py lt !by1 - 0.01 or !py gt !by2 + 0.01) then
+				skip
+			endif
+			!us.append(!gu)
+			!ys.append(!py)
+		enddo
+	enddo
+
+	!nt = !vw & '/ateLEVEL'
+	$!vw
+	new note $!nt
+	handle any
+		!this.UvLog('  levels: the note could not be made: ' & !!error.text)
+		return 0
+	endhandle
+	!made = 0
+	!xa = !bx1 - !llen
+	!xas = !xa.string('D3').replace('mm', '')
+	!xbs = !bx1.string('D3').replace('mm', '')
+	!tx1 = !xa + !tri * 0.5
+	!tx2 = !xa + !tri * 1.5
+	!txm = !xa + !tri
+	!xts = !xa + !tri * 2 + 1
+	!ths = !th.string('D2').replace('mm', '')
+	do !k from 1 to !us.size()
+		!y = !ys[!k]
+		!ys0 = !y.string('D3').replace('mm', '')
+		!yt = !y + !tri * 0.866
+		!yts = !yt.string('D3').replace('mm', '')
+		!ytx = !y + 1
+		!ytxs = !ytx.string('D3').replace('mm', '')
+		!u = !us[!k]
+		!ut = !u.string('D0').replace('mm', '')
+		if (!u ge 0) then
+			!ut = '+' & !ut
+		endif
+		$!nt
+		new stra fpt x $!xas y $!ys0 tpt x $!xbs y $!ys0
+		handle any
+			!this.UvLog('  level ' & !ut & ' line failed: ' & !!error.text)
+		elsehandle none
+			NLColour cyan
+			handle any
+			endhandle
+		endhandle
+		$!nt
+		new outl lclosed true fstyle SystemStyle 9 NLColour cyan FColour cyan
+		handle any
+			!this.UvLog('  level ' & !ut & ' triangle failed: ' & !!error.text)
+		elsehandle none
+			!v1 = !txm.string('D3').replace('mm', '')
+			!v2 = !tx1.string('D3').replace('mm', '')
+			!v3 = !tx2.string('D3').replace('mm', '')
+			new VRTX at X ($!v1) Y ($!ys0)
+			new VRTX at X ($!v2) Y ($!yts)
+			new VRTX at X ($!v3) Y ($!yts)
+			handle any
+				!this.UvLog('  level ' & !ut & ' triangle corners failed: ' & !!error.text)
+			endhandle
+		endhandle
+		$!nt
+		!xtss = !xts.string('D3').replace('mm', '')
+		new texp btext |$!ut| origin x $!xtss y $!ytxs cheitx |$!ths| alig bbody just left txcolour yellow font 1
+		handle any
+			!this.UvLog('  level ' & !ut & ' text failed: ' & !!error.text)
+		endhandle
+		!made = !made + 1
+		!this.UvLog('    level ' & !ut & ' at sheet y ' & !ys0)
 	enddo
 	return !made
 endmethod
