@@ -945,6 +945,45 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							!sideE = !lrside
 							!sideN = !udside
 						endif
+						------------------------------------------------------------
+						-- an elevation (2026-09-29): its two centre lines are the  --
+						-- view's horizontal axis -- E or N, whichever the sheet's  --
+						-- x follows -- and U, as EquiAnnotation draws them. the    --
+						-- first reaches the left or right chain, the second the    --
+						-- top or bottom one; the plan's E / N reading above sent   --
+						-- the bottom chain to the end of the vessel                --
+						------------------------------------------------------------
+						if (!!DrawingPlan1.IsElevTrans(!trans)) then
+							!hext = !ewid
+							if (abs(!trans[7]) gt abs(!trans[5])) then
+								!hext = !nlen
+							endif
+							!vext = !wvol.part(3).real() - !wvol.part(6).real()
+							!vext = abs(!vext)
+							!wantE = true
+							!wantN = true
+							if (!hext gt !vext) then
+								if (!vext gt 0) then
+									!ratio = !hext / !vext
+									if (!ratio gt 3) then
+										!wantN = false
+									endif
+								else
+									!wantN = false
+								endif
+							else
+								if (!hext gt 0) then
+									!ratio = !vext / !hext
+									if (!ratio gt 3) then
+										!wantE = false
+									endif
+								else
+									!wantE = false
+								endif
+							endif
+							!sideE = !lrside
+							!sideN = !udside
+						endif
 						!take = false
 						if (!wantE and !dir.eq(!sideE)) then
 							!take = true
@@ -1794,6 +1833,52 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!ey1 = !ey + !ede1 * !trans[6] + !edn1 * !trans[8]
 					!ex2 = !ex + !ede2 * !trans[5] + !edn2 * !trans[7]
 					!ey2 = !ey + !ede2 * !trans[6] + !edn2 * !trans[8]
+					----------------------------------------------------------------
+					-- an elevation (2026-09-29): E and N come out on the sheet's  --
+					-- x only, so the left and right chains take the line along    --
+					-- the horizontal axis and the top and bottom ones the U line  --
+					-- -- the plan's pick above measured D1201's N line off the   --
+					-- bottom chain and put the point at the end of the vessel     --
+					----------------------------------------------------------------
+					if (!!DrawingPlan1.IsElevTrans(!trans)) then
+						!et5 = !trans[5].string('D9').replace('mm', '').real()
+						!et7 = !trans[7].string('D9').replace('mm', '').real()
+						!et11 = !trans[11].string('D9').replace('mm', '').real()
+						!et12 = !trans[12].string('D9').replace('mm', '').real()
+						if (!dir.eq('right') or !dir.eq('left')) then
+							!ea5 = abs(!et5)
+							!ea7 = abs(!et7)
+							!eusee = false
+							if (!ea5 geq !ea7) then
+								!eusee = true
+							endif
+							if (!eusee) then
+								!eh1 = !ewvol.part(4).replace('mm', '').real() + !eoff - !eoe
+								!eh2 = !ewvol.part(1).replace('mm', '').real() - !eoff - !eoe
+								!ehs = !et5
+							else
+								!eh1 = !ewvol.part(5).replace('mm', '').real() + !eoff - !eon
+								!eh2 = !ewvol.part(2).replace('mm', '').real() - !eoff - !eon
+								!ehs = !et7
+							endif
+							!ex1 = !ex + !eh1 * !ehs
+							!ey1 = !ey
+							!ex2 = !ex + !eh2 * !ehs
+							!ey2 = !ey
+						else
+							!eusee = false
+							!eou = !mempos.part(6).replace('mm', '').real()
+							if (!mempos.part(5).eqnocase('D')) then
+								!eou = !eou * -1
+							endif
+							!eu1 = !ewvol.part(6).replace('mm', '').real() + !eoff - !eou
+							!eu2 = !ewvol.part(3).replace('mm', '').real() - !eoff - !eou
+							!ex1 = !ex + !eu1 * !et11
+							!ey1 = !ey + !eu1 * !et12
+							!ex2 = !ex + !eu2 * !et11
+							!ey2 = !ey + !eu2 * !et12
+						endif
+					endif
 					-- the equipment position is wanted again below, and the winner --
 					-- is about to be written over !ex / !ey                         --
 					!eox = !ex

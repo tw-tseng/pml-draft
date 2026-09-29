@@ -3357,6 +3357,15 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	------------------------------------------------------------------
 	!this.intersections = object array()
 	!this.allintersections = object array()
+	------------------------------------------------------------------
+	-- no match line on a section, so !!DrawingPlan1MatchTicks does  --
+	-- not run and its list still held the last plan's ticks: one of --
+	-- them went onto the left chain as a point 670mm off the view   --
+	-- (2026-09-29). MatchGaps reads the same list, and the match    --
+	-- line texts !!DrawingPlan1MatchLine leaves                      --
+	------------------------------------------------------------------
+	!!DrawingPlan1MatchTickPos = object array()
+	!!DrawingPlan1MatchTexts = object array()
 	!!DrawingPlan1BoxChanged = true
 	!this.UvToLast(!vw)
 	!nbub = 0
