@@ -3103,6 +3103,27 @@ define method .AnnotateView(!it is string) is string
 endmethod
 
 ------------------------------------------------------------------------
+-- the line and the command the last error came from, for a warning:  --
+-- '(47,8) No digit after / in REFNO' from the equipment pass said    --
+-- nothing of where (2026-09-29)                                       --
+------------------------------------------------------------------------
+define method .ErrWhere() is string
+	!w = ''
+	!el = ''
+	!el = !!error.line.string()
+	handle any
+		!el = '?'
+	endhandle
+	!ec = ''
+	!ec = !!error.command
+	handle any
+		!ec = '?'
+	endhandle
+	!w = ' [line ' & !el & ': ' & !ec & ']'
+	return !w
+endmethod
+
+------------------------------------------------------------------------
 -- an elevation or a section drawn by hand (user, 2026-09-29, the       --
 -- sample is section_view.png): grid bubbles along the top, the floor  --
 -- levels down the left, every pipe and every piece of equipment       --
@@ -3324,7 +3345,7 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	$!vw
 	update design
 	handle any
-		!warn.append('update design: ' & !!error.text)
+		!warn.append('update design: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	------------------------------------------------------------------
 	-- the passes, the plan's in the plan's order (user, 2026-09-29:  --
@@ -3340,24 +3361,24 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	!nbub = 0
 	!nbub = !this.SectionGridBubbles(!vw)
 	handle any
-		!warn.append('grid bubbles: ' & !!error.text)
+		!warn.append('grid bubbles: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	!this.UvLog('  grid bubbles: ' & !nbub.string())
 	!this.UvToLast(!vw)
 	!!DrawingPlan1LineNoAnnotation(!vw, 0, 0)
 	handle any
-		!warn.append('line numbers: ' & !!error.text)
+		!warn.append('line numbers: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	!this.UvToLast(!vw)
 	!!DrawingPlan1EquiAnnotation(!vw, !this.wminE.string(), !this.wminN.string(), !this.minU.string(), !this.wmaxE.string(), !this.wmaxN.string(), !this.maxU.string())
 	handle any
-		!warn.append('equipment: ' & !!error.text)
+		!warn.append('equipment: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	!this.UvToLast(!vw)
 	!nlev = 0
 	!nlev = !this.SectionLevels(!vw)
 	handle any
-		!warn.append('levels: ' & !!error.text)
+		!warn.append('levels: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	!this.UvLog('  levels: ' & !nlev.string())
 
@@ -3370,50 +3391,50 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	$!vw
 	LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF '$!bpdxf'
 	handle any
-		!warn.append('DXF for BlankPos: ' & !!error.text)
+		!warn.append('DXF for BlankPos: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	if (!this.redutog.val) then
 		!this.UvToLast(!vw)
 		!this.ReduAnnotation(!vw)
 		handle any
-			!warn.append('reducers: ' & !!error.text)
+			!warn.append('reducers: ' & !!error.text & !this.ErrWhere())
 		endhandle
 	endif
 	if (!this.nozztog.val) then
 		!this.UvToLast(!vw)
 		!this.NozzleAnnotation(!vw)
 		handle any
-			!warn.append('nozzles: ' & !!error.text)
+			!warn.append('nozzles: ' & !!error.text & !this.ErrWhere())
 		endhandle
 	endif
 	if (!this.valvtog.val) then
 		!this.UvToLast(!vw)
 		!this.ValveAnnotation(!vw)
 		handle any
-			!warn.append('valves: ' & !!error.text)
+			!warn.append('valves: ' & !!error.text & !this.ErrWhere())
 		endhandle
 	endif
 	if (!this.insttog.val) then
 		!this.UvToLast(!vw)
 		!this.InstAnnotation(!vw)
 		handle any
-			!warn.append('instruments: ' & !!error.text)
+			!warn.append('instruments: ' & !!error.text & !this.ErrWhere())
 		endhandle
 	endif
 	if (!this.supttog.val) then
 		!this.UvToLast(!vw)
 		!this.SuptAnnotation(!vw)
 		handle any
-			!warn.append('supports: ' & !!error.text)
+			!warn.append('supports: ' & !!error.text & !this.ErrWhere())
 		endhandle
 	endif
 	!this.AppendDimLines(!vw)
 	handle any
-		!warn.append('dimension lines for BlankPos: ' & !!error.text)
+		!warn.append('dimension lines for BlankPos: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	!this.RunBlankPos()
 	handle any
-		!warn.append('BlankPos: ' & !!error.text)
+		!warn.append('BlankPos: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	!ff = object file(!this.blankdir & 'LabelSpace.txt')
 	if !ff.exists() then
@@ -3423,26 +3444,26 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 		do !i from 1 to !lines.size()
 			!this.PlaceLabelFromSpace(!lines[!i], !this.rcode, false)
 			handle any
-				!warn.append('label placement: ' & !!error.text)
+				!warn.append('label placement: ' & !!error.text & !this.ErrWhere())
 			endhandle
 		enddo
 	endif
 	!!DrawingPlan1MatchGaps(!vw)
 	handle any
-		!warn.append('projection line gaps: ' & !!error.text)
+		!warn.append('projection line gaps: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	$!vw
 
 	!top = !this.TitleTopNow()
 	!this.SectionTitle(!vw, !top, !old1, !old3)
 	handle any
-		!warn.append('title: ' & !!error.text)
+		!warn.append('title: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	$!vw
 	!this.UvToLast(!vw)
 	!!DrawingPlan1FlowAnnotation(!vw)
 	handle any
-		!warn.append('flow arrows: ' & !!error.text)
+		!warn.append('flow arrows: ' & !!error.text & !this.ErrWhere())
 	endhandle
 	$!vw
 
@@ -8326,6 +8347,23 @@ endmethod
 -- returns min E, min N, max E, max N                                  --
 ------------------------------------------------------------------------
 define method .WorldLimitsOfSheetRect(!x1 is real, !y1 is real, !x2 is real, !y2 is real, !trans is array) is array
+	------------------------------------------------------------------
+	-- an elevation has no east / north inverse -- its determinant is  --
+	-- 0 and the formula below divided by it (2026-09-29, the first    --
+	-- section with dimension chains). its volume is .BandVol()'s,     --
+	-- through the whole depth                                        --
+	------------------------------------------------------------------
+	if (!this.IsElevTrans(!trans)) then
+		!bv = !this.BandVol(!x1, !y1, !x2, !y2, !trans, 'min', 'max')
+		!p1 = !bv[1].split()
+		!p2 = !bv[2].split()
+		!elim = object array()
+		!elim[1] = !p1[2].real()
+		!elim[2] = !p1[4].real()
+		!elim[3] = !p2[2].real()
+		!elim[4] = !p2[4].real()
+		return !elim
+	endif
 	!xs = object array()
 	!ys = object array()
 	!xs[1] = !x1
