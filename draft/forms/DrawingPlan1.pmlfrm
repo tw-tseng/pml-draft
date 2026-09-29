@@ -4024,6 +4024,7 @@ define method .SectionLevels(!vw is string) is real
 		endif
 	enddo
 
+	!this.UvLog('    levels: ' & !gridels.size().string() & ' GRIDEL(s) in the drawlist grids')
 	!us = object array()
 	!ys = object array()
 	do !gridel values !gridels
@@ -4032,31 +4033,69 @@ define method .SectionLevels(!vw is string) is real
 			skip
 		endhandle
 		do !gp values !gridpls
+			!gpn = ''
+			var !gpn namn of $!gp
+			handle any
+				!gpn = !gp
+			endhandle
 			!gpr = !gp.dbref()
+			------------------------------------------------------------
+			-- level or not: the plane's Z first through the objects,  --
+			-- AVEVA's way; that failing, its ORI read as text, which  --
+			-- says 'Z is U' (or D) for a level. the first run found   --
+			-- no level at all and said nothing why (2026-09-29), so   --
+			-- every plane now goes to check_userview                  --
+			------------------------------------------------------------
 			!level = false
+			!how = ''
+			!gzu = -1
 			!gori = !gpr.orientation
 			handle any
+				!how = 'orientation: ' & !!error.text
 			elsehandle none
 				!gz = !gori.zDir()
 				handle any
+					!how = 'zDir: ' & !!error.text
 				elsehandle none
 					!gzw = !gz.wrt(world)
 					handle any
+						!how = 'wrt: ' & !!error.text
 					elsehandle none
 						!gzu = abs(!gzw.up)
+						!how = 'zDir up ' & !gzu.string('D3')
 						if (!gzu gt 0.99) then
 							!level = true
 						endif
 					endhandle
 				endhandle
 			endhandle
+			if (!gzu lt 0) then
+				!goris = ''
+				var !goris ori of $!gp wrt worl
+				handle any
+					!how = !how & ' / ori: ' & !!error.text
+				elsehandle none
+					!how = !how & ' / ori ' & !goris
+					!gzs = ''
+					!gzsp = !goris.after('Z is ').trim().split()
+					if (!gzsp.size() gt 0) then
+						!gzs = !gzsp[1]
+					endif
+					if (!gzs.eq('U') or !gzs.eq('D')) then
+						!level = true
+					endif
+				endhandle
+			endif
+			!gpos = ''
+			var !gpos pos of $!gp wrt worl
+			handle any
+				!this.UvLog('    GRIDPL ' & !gpn & ' ' & !how & ' level=' & !level.string() & ' no POS: ' & !!error.text)
+				skip
+			endhandle
+			!this.UvLog('    GRIDPL ' & !gpn & ' ' & !how & ' level=' & !level.string() & ' pos ' & !gpos)
 			if (not(!level)) then
 				skip
 			endif
-			var !gpos pos of $!gp wrt worl
-			handle any
-				skip
-			endhandle
 			!gpo = object position(!gpos)
 			!gu = !gpo.up.value()
 			!dup = false
@@ -4078,6 +4117,7 @@ define method .SectionLevels(!vw is string) is real
 			endhandle
 			!py = !psh.part(4).replace('mm', '').real()
 			if (!py lt !by1 - 0.01 or !py gt !by2 + 0.01) then
+				!this.UvLog('      U ' & !gu.string('D1') & ' at sheet y ' & !py.string('D2') & ' is outside the cut')
 				skip
 			endif
 			!us.append(!gu)
