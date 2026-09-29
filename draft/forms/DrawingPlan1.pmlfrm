@@ -2678,10 +2678,27 @@ define method .AnnotateView(!it is string) is string
 	-- the frame on the sheet, the way the update path reads a view  --
 	-- it did not place itself                                       --
 	------------------------------------------------------------------
-	!rcode = !this.UvReadFrame()
-	!this.rcode = !rcode
+	var !shxypos shxypos
+	var !size size
+	var !rcode rcode
 	var !vsca vsca
+	!this.rcode = !rcode
 	!this.vsca = !vsca.real()
+	if !rcode.eqnocase('up') then
+		!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+		!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+		!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+		!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+	else
+		!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+		!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+		!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+		!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+	endif
+	!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
+	!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
+	!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
+	!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
 	!this.UvLog('  frame ' & !this.viewLLsh & ' .. ' & !this.viewURsh & ' rcode=' & !rcode & ' vsca=' & !vsca)
 
 	------------------------------------------------------------------
@@ -2883,62 +2900,6 @@ define method .AnnotateView(!it is string) is string
 	!this.wmaxE = !wl[3] + 0.025
 	!this.wmaxN = !wl[4] + 0.025
 	!this.UvLog('  box centre E ' & !ec.string('D1') & ' N ' & !nc.string('D1') & '  X ' & !xlen.string('D1') & '  Y ' & !ylen.string('D1') & '  world E ' & !this.wminE.string('D1') & ' .. ' & !this.wmaxE.string('D1') & '  N ' & !this.wminN.string('D1') & ' .. ' & !this.wmaxN.string('D1') & '  U ' & !this.minU.string('D1') & ' .. ' & !this.maxU.string('D1'))
-
-	------------------------------------------------------------------
-	-- the frame pulled in to the cut, as a drawing made from a box   --
-	-- has it: the view draws its grid lines right out to the frame,  --
-	-- so a frame wider than the limits showed them again outside the --
-	-- match lines -- /DR2/S2/V1 turned 10 deg, frame x 249..473, cut --
-	-- 258.6..463.4 (user, 2026-09-29, side by side with the box's    --
-	-- own drawing). SIZE shrinks to the cut, and XYPOS and THPOS     --
-	-- move together to its centre, so the drawing itself does not    --
-	-- move on the sheet; ONPOS goes to 0 the way .Apply() has it     --
-	------------------------------------------------------------------
-	!cw = !bx2 - !bx1
-	!chh = !by2 - !by1
-	!fw = !fx2 - !fx1 - 0.05
-	!fh = !fy2 - !fy1 - 0.05
-	if (!fw - !cw gt 0.1 or !fh - !chh gt 0.1) then
-		!ccx = (!bx1 + !bx2) * 0.5
-		!ccy = (!by1 + !by2) * 0.5
-		!ece = !ec.string('D3').replace('mm', '')
-		!ecn = !nc.string('D3').replace('mm', '')
-		!thu = !lmaxU
-		$!vref
-		var !thp thposition
-		handle any
-		elsehandle none
-			!thpo = object position(!thp)
-			handle any
-			elsehandle none
-				!thu = !thpo.up.value()
-				handle any
-					!thu = !lmaxU
-				endhandle
-			endhandle
-		endhandle
-		if (!rcode.eqnocase('up')) then
-			size $!cw $!chh
-		else
-			size $!chh $!cw
-		endif
-		handle any
-			return 'its frame could not be pulled in to the limits (SIZE): ' & !!error.text
-		endhandle
-		Onposition 0mm 0mm
-		handle any
-		endhandle
-		thposition E $!ece N $!ecn U $!thu
-		handle any
-			return 'its frame could not be pulled in to the limits (THPOS): ' & !!error.text
-		endhandle
-		xyposition X $!ccx Y $!ccy
-		handle any
-			return 'its frame could not be pulled in to the limits (XYPOS): ' & !!error.text
-		endhandle
-		!rcode = !this.UvReadFrame()
-		!this.UvLog('  frame pulled in to the cut: ' & !this.viewLLsh & ' .. ' & !this.viewURsh & '  centre E ' & !ece & ' N ' & !ecn)
-	endif
 
 	------------------------------------------------------------------
 	-- clear what an earlier run left: this program's own layers and  --
@@ -3197,34 +3158,6 @@ define method .AnnotateView(!it is string) is string
 		return 'done, but ' & !warn.size().string() & ' step(s) failed, first: ' & !warn[1]
 	endif
 	return ''
-endmethod
-
-------------------------------------------------------------------------
--- the frame of the view that is CE, on the sheet, into .viewXXsh     --
--- and .viewXlinesh (0.025 outside it, the way .Apply() sets them).   --
--- read the way the update path reads a view it did not place itself. --
--- answers RCODE, which says which half of SIZE runs along sheet x    --
-------------------------------------------------------------------------
-define method .UvReadFrame() is string
-	var !shxypos shxypos
-	var !size size
-	var !rcode rcode
-	if !rcode.eqnocase('up') then
-		!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
-		!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
-		!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
-		!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
-	else
-		!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
-		!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
-		!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
-		!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
-	endif
-	!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
-	!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
-	!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
-	!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
-	return !rcode
 endmethod
 
 ------------------------------------------------------------------------
