@@ -384,7 +384,103 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 				!gidnow = ''
 			endhandle
 			!!DrawingPlan1GridIdNow = !gidnow
+
+			------------------------------------------------------------------
+			-- one crossing on the grid line itself (the !total = 1 case     --
+			-- below): which crossing that is, and which end of the line is  --
+			-- the inside one. worked out here because it also decides what  --
+			-- goes into .allintersections                                   --
+			--                                                               --
+			-- an end lying ON the border counts as inside (0.01mm). a view  --
+			-- drawn by hand with its limits typed on the grid lines         --
+			-- themselves put ES.A along the bottom edge: p1 at ES.1 inside, --
+			-- p2 at the corner, which is the crossing. the old strict test  --
+			-- read p1 as outside and hung the Left bubble off p2, in the    --
+			-- middle of the view, and the match line text moved out five    --
+			-- rows to get past it (user, 2026-09-28, check_grid /           --
+			-- check_gap). when both ends pass, the one farther from the     --
+			-- crossing is the inside end -- the other one IS the crossing   --
+			------------------------------------------------------------------
+			!gi = 0
+			!gii = 0
+			if (!!DrawingPlan1.intersections.size().geq(2)) then
+				!gon1 = !p12linesh.on(!!DrawingPlan1.intersections.getindexed(1).split('-').getindexed(2).position(), true)
+				!gon2 = !p12linesh.on(!!DrawingPlan1.intersections.getindexed(2).split('-').getindexed(2).position(), true)
+				if (!gon1 and not(!gon2)) then
+					!gi = 1
+					!gii = 2
+				elseif (!gon2 and not(!gon1)) then
+					!gi = 2
+					!gii = 1
+				endif
+			endif
+			!guse1 = true
+			!gstub = false
+			!gstubint = ''
+			if (!gi.gt(0)) then
+				!gtol = 0.01
+				!gxl = !!DrawingPlan1.boxULsh.position().east.value() - !gtol
+				!gxr = !!DrawingPlan1.boxURsh.position().east.value() + !gtol
+				!gyb = !!DrawingPlan1.boxLLsh.position().north.value() - !gtol
+				!gyt = !!DrawingPlan1.boxULsh.position().north.value() + !gtol
+				!g1x = !p1possh.position().east.value()
+				!g1y = !p1possh.position().north.value()
+				!g2x = !p2possh.position().east.value()
+				!g2y = !p2possh.position().north.value()
+				!gin1 = false
+				if (!g1x.gt(!gxl) and !g1x.lt(!gxr) and !g1y.gt(!gyb) and !g1y.lt(!gyt)) then
+					!gin1 = true
+				endif
+				!gin2 = false
+				if (!g2x.gt(!gxl) and !g2x.lt(!gxr) and !g2y.gt(!gyb) and !g2y.lt(!gyt)) then
+					!gin2 = true
+				endif
+				!gcr = !!DrawingPlan1.intersections.getindexed(!gi).split('-').getindexed(2).position()
+				!gcx = !gcr.east.value()
+				!gcy = !gcr.north.value()
+				!g1d = (!g1x - !gcx) * (!g1x - !gcx) + (!g1y - !gcy) * (!g1y - !gcy)
+				!g2d = (!g2x - !gcx) * (!g2x - !gcx) + (!g2y - !gcy) * (!g2y - !gcy)
+				!guse1 = !gin1
+				if (!gin1 and !gin2) then
+					!guse1 = !g1d.geq(!g2d)
+				endif
+				--------------------------------------------------------------
+				-- a line that only just pokes in over the border is not in  --
+				-- this view at all. ES.B..ES.D start at ES.1, which sits    --
+				-- 0.025mm inside the right border of /DWGNO-002 (the margin --
+				-- Apply adds round the box), and run east, out of the view. --
+				-- the far crossing, on the LEFT border, is only where the   --
+				-- endless line would cross: its bubble hung 274mm of leader --
+				-- off ES.1 and the left dimension reached its point in to   --
+				-- ES.1 as well, a projection line right across the drawing  --
+				-- on rows E, F and H -- and those points took the along     --
+				-- coordinate of the plant grid's own E, F and H crossings,  --
+				-- which then were left out (user, 2026-09-29). under 1mm    --
+				-- of paper: no bubble and no dimension on the far side. the --
+				-- near side, the border the line really touches, is kept    --
+				--------------------------------------------------------------
+				!gind = !g2d
+				if (!guse1) then
+					!gind = !g1d
+				endif
+				if (!gind.lt(1)) then
+					!gstub = true
+					!gstubint = !!DrawingPlan1.intersections.getindexed(!gii)
+					!dbggf = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+					!dbggf.open('append')
+					!dbggf.writerecord('GRIDSTUB id=' & !gidnow & ' inside=' & !gind.sqrt().string('D3') & ' dropped=' & !gstubint & ' gln=' & !refgln.string())
+					!dbggf.close()
+					handle any
+					endhandle
+				endif
+			endif
+
 			do !thisint values !!DrawingPlan1.intersections
+				if (!gstub) then
+					if (!thisint.eq(!gstubint)) then
+						skip
+					endif
+				endif
 				!thisintpt = !thisint.split('-').getindexed(2).position()
 				!thisend = !!DrawingPlan1.NearEndOfGrid(!p12linesh, !p1possh, !p2possh, !thisintpt)
 				!!DrawingPlan1.allintersections.append(!thisint & '~' & !thisend.string() & '~' & !refglnname & '/' & !gridplname)
@@ -419,60 +515,16 @@ define function !!DrawingPlan1GridAnnotation(!name is string)
 			-- and one of end point of grid is inside view limits    --
 			-----------------------------------------------------------
 			if (!total.eq(1)) then
-				if (!p12linesh.on(!!DrawingPlan1.intersections.getindexed(1).split('-').getindexed(2).position(), true)) then
-				  !i = 1
-					!ii = 2
-				else
-				  !i = 2
-					!ii = 1
-				endif
+				-- !gi / !gii, the inside end and !gstub: worked out above --
+				!i = !gi
+				!ii = !gii
 				!!DrawingPlan1.CreateGridSymbolwithIntersection(!i, !p12linesh, !p1possh, !p2possh, !refgln)
-				
-				-------------------------------------------------
-				-- check which end point is inside view limits --
-				-------------------------------------------------
-				---------------------------------------------------------------
-				-- an end lying ON the border counts as inside (0.01mm). a     --
-				-- view drawn by hand with its limits typed on the grid lines --
-				-- themselves put ES.A along the bottom edge: p1 at ES.1       --
-				-- inside, p2 at the corner, which is the crossing. the old    --
-				-- strict test read p1 as outside and hung the Left bubble    --
-				-- off p2, in the middle of the view, and the match line text --
-				-- moved out five rows to get past it (user, 2026-09-28,       --
-				-- check_grid / check_gap). when both ends pass, the one      --
-				-- farther from the crossing is the inside end -- the other   --
-				-- one IS the crossing                                         --
-				---------------------------------------------------------------
-				!gtol = 0.01
-				!gxl = !!DrawingPlan1.boxULsh.position().east.value() - !gtol
-				!gxr = !!DrawingPlan1.boxURsh.position().east.value() + !gtol
-				!gyb = !!DrawingPlan1.boxLLsh.position().north.value() - !gtol
-				!gyt = !!DrawingPlan1.boxULsh.position().north.value() + !gtol
-				!g1x = !p1possh.position().east.value()
-				!g1y = !p1possh.position().north.value()
-				!g2x = !p2possh.position().east.value()
-				!g2y = !p2possh.position().north.value()
-				!gin1 = false
-				if (!g1x.gt(!gxl) and !g1x.lt(!gxr) and !g1y.gt(!gyb) and !g1y.lt(!gyt)) then
-					!gin1 = true
-				endif
-				!gin2 = false
-				if (!g2x.gt(!gxl) and !g2x.lt(!gxr) and !g2y.gt(!gyb) and !g2y.lt(!gyt)) then
-					!gin2 = true
-				endif
-				!guse1 = !gin1
-				if (!gin1 and !gin2) then
-					!gcr = !!DrawingPlan1.intersections.getindexed(!i).split('-').getindexed(2).position()
-					!gcx = !gcr.east.value()
-					!gcy = !gcr.north.value()
-					!g1d = (!g1x - !gcx) * (!g1x - !gcx) + (!g1y - !gcy) * (!g1y - !gcy)
-					!g2d = (!g2x - !gcx) * (!g2x - !gcx) + (!g2y - !gcy) * (!g2y - !gcy)
-					!guse1 = !g1d.geq(!g2d)
-				endif
-				if (!guse1) then
-					!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p1possh, !p2possh, !refgln, 1)
-				else
-					!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p2possh, !p1possh, !refgln, 2)
+				if (not(!gstub)) then
+					if (!guse1) then
+						!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p1possh, !p2possh, !refgln, 1)
+					else
+						!!DrawingPlan1.CreateGridSymbol(!ii, !p12linesh, !p2possh, !p1possh, !refgln, 2)
+					endif
 				endif
 			endif
 			
