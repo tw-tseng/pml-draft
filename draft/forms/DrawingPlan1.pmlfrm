@@ -3352,7 +3352,8 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	-- four dimension chains and the pipe numbers styled as on the    --
 	-- plan; no match line). the grid bubbles go along the top only   --
 	-- and hand the column lines to the dimension chains; the floor   --
-	-- levels go down the left, outside the left chain and its labels --
+	-- levels go down the left where the plan's left column bubbles  --
+	-- go, and onto the left and right chains (user, 2026-09-29)      --
 	------------------------------------------------------------------
 	!this.intersections = object array()
 	!this.allintersections = object array()
@@ -3365,6 +3366,13 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	endhandle
 	!this.UvLog('  grid bubbles: ' & !nbub.string())
 	!this.UvToLast(!vw)
+	!nlev = 0
+	!nlev = !this.SectionLevels(!vw)
+	handle any
+		!warn.append('levels: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	!this.UvLog('  levels: ' & !nlev.string())
+	!this.UvToLast(!vw)
 	!!DrawingPlan1LineNoAnnotation(!vw, 0, 0)
 	handle any
 		!warn.append('line numbers: ' & !!error.text & !this.ErrWhere())
@@ -3374,13 +3382,6 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	handle any
 		!warn.append('equipment: ' & !!error.text & !this.ErrWhere())
 	endhandle
-	!this.UvToLast(!vw)
-	!nlev = 0
-	!nlev = !this.SectionLevels(!vw)
-	handle any
-		!warn.append('levels: ' & !!error.text & !this.ErrWhere())
-	endhandle
-	!this.UvLog('  levels: ' & !nlev.string())
 
 	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
 	if !ff.exists() then
@@ -4149,26 +4150,35 @@ endmethod
 -- one height (within 1mm) give one mark, and only heights inside the --
 -- cut are marked.                                                    --
 --                                                                    --
--- each mark, on the sheet, left of the cut: a cyan leader !llen long --
--- ending !lgap short of the cut's left edge, a hollow cyan triangle  --
--- on its outer end with its point on the line, and the height in     --
--- yellow. 40mm and hollow since the user saw the first version, 20mm --
--- and filled, run into a member standing on the cut's edge (2026-09-29) --
--- above the line at the pipe label height, signed the way the plan   --
+-- each mark, on the sheet, left of the cut where the plan's left     --
+-- column bubble goes: a cyan leader from the Grid tab's Gap out to   --
+-- its Distance, a hollow cyan triangle on its outer end with its     --
+-- point on the line, and the height in yellow above the line at the  --
+-- pipe label height, and a point on the left and right dimension     --
+-- chains (user, 2026-09-29). signed the way the plan                 --
 -- title signs its elevation. all of it in a NOTE <view>/ateLEVEL, so  --
 -- .UvClearOwn() clears it on a rerun. answers how many were made     --
 ------------------------------------------------------------------------
 define method .SectionLevels(!vw is string) is real
-	!llen = 40
-	!lgap = 3
 	!tri = 3
 	!th = 3
 	if (not(!this.lineheitx.val.unset())) then
 		!th = !this.lineheitx.val
 	endif
 	!bx1 = !this.boxULsh.part(2).replace('mm', '').real()
+	!bx2 = !this.boxURsh.part(2).replace('mm', '').real()
 	!by1 = !this.boxLLsh.part(4).replace('mm', '').real()
 	!by2 = !this.boxULsh.part(4).replace('mm', '').real()
+	!gdist = 50
+	!gdist = !this.griddist.val
+	handle any
+		!gdist = 50
+	endhandle
+	!ggap = 3
+	!ggap = !this.gridgap.val
+	handle any
+		!ggap = 3
+	endhandle
 
 	------------------------------------------------------------------
 	-- any point of the view's plane at height U lands at the same   --
@@ -4332,19 +4342,17 @@ define method .SectionLevels(!vw is string) is real
 	endhandle
 	!made = 0
 	------------------------------------------------------------------
-	-- outside the left dimension chain and its pipe numbers: what   --
-	-- !!DrawingPlan1LineNoAnnotation says that side reaches         --
+	-- where the plan puts a left column bubble (user, 2026-09-29):  --
+	-- the line starts the Grid tab's Gap off the cut and runs out   --
+	-- to its Distance, the triangle on the outer end. the level     --
+	-- also goes into !!DrawingPlan1GridBubbles as a Left bubble, so --
+	-- the pipe numbers keep off it as they keep off a bubble, and   --
+	-- into .allintersections on the left and right edges, so both   --
+	-- chains dimension it as they dimension a column line. this     --
+	-- runs before !!DrawingPlan1LineNoAnnotation for that           --
 	------------------------------------------------------------------
-	!lband = 0
-	!lband = !this.labbandleft
-	handle any
-		!lband = 0
-	endhandle
-	if (!lband.unset()) then
-		!lband = 0
-	endif
-	!xb = !bx1 - !lband - !lgap
-	!xa = !xb - !llen
+	!xb = !bx1 - !ggap
+	!xa = !bx1 - !gdist
 	!xas = !xa.string('D3').replace('mm', '')
 	!xbs = !xb.string('D3').replace('mm', '')
 	!tx1 = !xa + !tri * 0.5
@@ -4397,6 +4405,9 @@ define method .SectionLevels(!vw is string) is real
 		handle any
 			!this.UvLog('  level ' & !ut & ' text failed: ' & !!error.text)
 		endhandle
+		!!DrawingPlan1GridBubbles.append('Left~' & string(!xa) & '~' & string(!y) & '~' & !ut)
+		!this.allintersections.append('boxLlinesh-E ' & !bx1.string('D3') & 'mm N ' & !ys0 & 'mm U 0mm')
+		!this.allintersections.append('boxRlinesh-E ' & !bx2.string('D3') & 'mm N ' & !ys0 & 'mm U 0mm')
 		!made = !made + 1
 		!this.UvLog('    level ' & !ut & ' at sheet y ' & !ys0)
 	enddo
@@ -6593,6 +6604,19 @@ define method .NozzleAnnotation(!name is string)
 		!nzu.append(!aposobj.up.value())
 	enddo
 
+	------------------------------------------------------------------
+	-- an elevation shows the height itself: no (U) / (D) there      --
+	-- (user, 2026-09-29)                                            --
+	------------------------------------------------------------------
+	!nzelev = false
+	!nztrans = !this.ViewSheetTransform()
+	handle any
+	elsehandle none
+		!nzelev = !this.IsElevTrans(!nztrans)
+		handle any
+			!nzelev = false
+		endhandle
+	endhandle
 	do !k from 1 to !nzrefs.size()
 		!nozz = !nzrefs[!k]
 		!apos1 = !nzsh[!k]
@@ -6622,7 +6646,9 @@ define method .NozzleAnnotation(!name is string)
 			endif
 		enddo
 		!nzsuf = ''
-		if (!nzbelow and not(!nzabove)) then
+		if (!nzelev) then
+			!nzsuf = ''
+		elseif (!nzbelow and not(!nzabove)) then
 			!nzsuf = '(U)'
 		elseif (!nzabove and not(!nzbelow)) then
 			!nzsuf = '(D)'
