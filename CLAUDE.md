@@ -5,6 +5,7 @@
 - DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；更新路徑（有 REVI 的圖改字、底線跟著改長短、舊圖補建）**使用者決定不測**：目前沒有這種情形（2026-09-25）。細節見「DRAFT：view 下方的圖名」。
 - Import PA-LIBY 鈕（原分支 `feature/import-paliby`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**）：View 分頁 Hatching Style 下方，細節見「目錄與命名」的 PA-LIBY 那條。
 - 流向箭頭畫到 view 外（原分支 `fix/flow-arrow-in-view`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**），細節見「DRAFT：流向箭頭不出 view」。
+- **進行中（2026-09-29）**：分支 `feature/elevation-view`（從 master `4ec29f4` 開出，**只在本機、沒 push**）——自建 VIEW 的立面／SECTION。依據是「DRAFT：使用者自建的 VIEW」最後一條的 SECTION 樣圖。還沒動程式。
 - 使用者自建 VIEW 套標註（原分支 `feature/user-view`，**2026-09-29 併回 master、分支已刪，已在 E3D 實測**）：Drawing 分頁下方「Views drawn by hand」→ Annotate Views。實測過：有名字／沒名字、重跑、一張 SHEE 多個 view、旁邊有 BOX、轉角度、混 SECTION（被擋下）、表單比例固定與 auto。途中修的 **BOX 的圖也有** 的 bug：格線壓框邊時圓圈掛錯端、左尺寸鏈第一點在框內時尺寸線太靠框、格線只在框邊內一點點時左邊投影線橫跨整張圖、同一點兩條管子標 0；另外 keyplan 沒設不畫方塊、同點管嘴加 (U)/(D)。沒測（使用者決定）：範圍來自 VVOL／VLIMITS（沒設 limits 的 view 本來就不處理）。**待使用者決定**：局部圖要不要擋。**下一步**：立面／SECTION（樣圖見「DRAFT：使用者自建的 VIEW」最後一條）。
 - 切分支的坑：E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**，切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
 - 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
@@ -186,7 +187,7 @@
 
 ## 換電腦
 **整個目錄複製過去（2026-09-24 使用者的做法）**：
-1. 複製整個 repo 目錄。`.git`（含只在本機的分支——2026-09-29 只剩 `try/speckit`）、`bin/` 裡的 BlankPos.exe／RevCloud.exe（被 gitignore、不在 GitHub，但在目錄裡）、`.mcp.json`、未追蹤的 check／log 檔都會跟著過去，不用另外 push 或重建。到了新機器先 `git status`、`git branch -vv` 對一下。
+1. 複製整個 repo 目錄。`.git`（含只在本機的分支——2026-09-29 是 `feature/elevation-view`（進行中、沒 push）與 `try/speckit`）、`bin/` 裡的 BlankPos.exe／RevCloud.exe（被 gitignore、不在 GitHub，但在目錄裡）、`.mcp.json`、未追蹤的 check／log 檔都會跟著過去，不用另外 push 或重建。到了新機器先 `git status`、`git branch -vv` 對一下。
 2. 放到 E3D 的 PMLLIB 搜尋路徑下，E3D 裡 `pml rehash all`。
 3. **路徑寫死的地方**：28 處 PML 把除錯檔寫到 `L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check*.txt`（`DrawingPlan1.pmlfrm` 20 處，另有 GridAnnotation／LineNoAnnotation 各 2、FlowAnnotation／MatchGaps 各 1、`DrawingPlan.pmlfrm` 2）。新機器的 E3D 看到的 `L:` 要指到同一個目錄，否則 dump 靜靜寫不出來（Check 分頁會多一列「寫不出 check_box.txt」）。
 4. 使用者環境變數 `NOTION_TOKEN`：從舊機器抄同一個值（PowerShell `[Environment]::GetEnvironmentVariable('NOTION_TOKEN','User')`），設成新機器的 **User** 層，然後重開 VS Code。2026-09-24 這個 token 用 REST 是有效的；MCP 端點會回 403，照「這台機器」那條改走 REST。
