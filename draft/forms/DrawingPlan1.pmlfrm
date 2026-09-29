@@ -2700,6 +2700,16 @@ define method .AnnotateView(!it is string) is string
 	!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
 	!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
 	!this.UvLog('  frame ' & !this.viewLLsh & ' .. ' & !this.viewURsh & ' rcode=' & !rcode & ' vsca=' & !vsca)
+	------------------------------------------------------------------
+	-- 1:1 is what a view has before any scale is given to it. taken --
+	-- as it is, the frame holds 224mm of the model: /DR2/S2/V1 made --
+	-- again with its 6.7m limits drew a drawlist of 3 members and    --
+	-- would have been dimensioned and labelled on that (2026-09-29). --
+	-- the scale is the user's to set, so stop and say so            --
+	------------------------------------------------------------------
+	if (!this.vsca.geq(0.99)) then
+		return 'its scale is 1:1 (VSCA ' & !vsca & ') - give the view its scale in Draw first (or Auto Scale), then run it again'
+	endif
 
 	------------------------------------------------------------------
 	-- a plan looking down is the one view that carries east and      --
@@ -3020,11 +3030,7 @@ define method .AnnotateView(!it is string) is string
 		!warn.append('update design: ' & !!error.text)
 	endhandle
 
-	$!vw
-	1
-	last
-	handle any
-	endhandle
+	!this.UvToLast(!vw)
 	!!DrawingPlan1GridAnnotation(!vw)
 	handle any
 		!warn.append('grid: ' & !!error.text)
@@ -3034,20 +3040,12 @@ define method .AnnotateView(!it is string) is string
 	handle any
 		!warn.append('match ticks: ' & !!error.text)
 	endhandle
-	$!vw
-	1
-	last
-	handle any
-	endhandle
+	!this.UvToLast(!vw)
 	!!DrawingPlan1LineNoAnnotation(!vw, !xlen, !ylen)
 	handle any
 		!warn.append('line numbers: ' & !!error.text)
 	endhandle
-	$!vw
-	1
-	last
-	handle any
-	endhandle
+	!this.UvToLast(!vw)
 	!!DrawingPlan1EquiAnnotation(!vw, !this.minE.string(), !this.minN.string(), !this.minU.string(), !this.maxE.string(), !this.maxN.string(), !this.maxU.string())
 	handle any
 		!warn.append('equipment: ' & !!error.text)
@@ -3070,55 +3068,35 @@ define method .AnnotateView(!it is string) is string
 		!warn.append('DXF for BlankPos: ' & !!error.text)
 	endhandle
 	if (!this.redutog.val) then
-		$!vw
-		1
-		last
-		handle any
-		endhandle
+		!this.UvToLast(!vw)
 		!this.ReduAnnotation(!vw)
 		handle any
 			!warn.append('reducers: ' & !!error.text)
 		endhandle
 	endif
 	if (!this.nozztog.val) then
-		$!vw
-		1
-		last
-		handle any
-		endhandle
+		!this.UvToLast(!vw)
 		!this.NozzleAnnotation(!vw)
 		handle any
 			!warn.append('nozzles: ' & !!error.text)
 		endhandle
 	endif
 	if (!this.valvtog.val) then
-		$!vw
-		1
-		last
-		handle any
-		endhandle
+		!this.UvToLast(!vw)
 		!this.ValveAnnotation(!vw)
 		handle any
 			!warn.append('valves: ' & !!error.text)
 		endhandle
 	endif
 	if (!this.insttog.val) then
-		$!vw
-		1
-		last
-		handle any
-		endhandle
+		!this.UvToLast(!vw)
 		!this.InstAnnotation(!vw)
 		handle any
 			!warn.append('instruments: ' & !!error.text)
 		endhandle
 	endif
 	if (!this.supttog.val) then
-		$!vw
-		1
-		last
-		handle any
-		endhandle
+		!this.UvToLast(!vw)
 		!this.SuptAnnotation(!vw)
 		handle any
 			!warn.append('supports: ' & !!error.text)
@@ -3151,11 +3129,7 @@ define method .AnnotateView(!it is string) is string
 	handle any
 		!warn.append('view title: ' & !!error.text)
 	endhandle
-	$!vw
-	1
-	last
-	handle any
-	endhandle
+	!this.UvToLast(!vw)
 	!!DrawingPlan1FlowAnnotation(!vw)
 	handle any
 		!warn.append('flow arrows: ' & !!error.text)
@@ -3169,6 +3143,27 @@ define method .AnnotateView(!it is string) is string
 		return 'done, but ' & !warn.size().string() & ' step(s) failed, first: ' & !warn[1]
 	endif
 	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- CE to the last member of view !vw, so the next NEW goes in after   --
+-- everything already there -- or on the view itself when it has no   --
+-- members at all. a view drawn by hand has none of its own, and once --
+-- .UvClearOwn() has taken last run's layers away a bare '1' stopped  --
+-- the whole view on '(2,113) List exhausted' (2026-09-29). 'last'    --
+-- is only tried after '1' went through: from the view itself it      --
+-- would go to the view's last SIBLING -- another view on the sheet   --
+------------------------------------------------------------------------
+define method .UvToLast(!vw is string)
+	$!vw
+	1
+	handle any
+		$!vw
+		return
+	endhandle
+	last
+	handle any
+	endhandle
 endmethod
 
 ------------------------------------------------------------------------
