@@ -3360,20 +3360,46 @@ define method .VsecBox(!vref is string, !corners is array) is string
 			skip
 		endif
 		!pl = !plr.string()
+		------------------------------------------------------------
+		-- 'wrt worl', the way every other VAR here reads a        --
+		-- position: 'wrt /*' came back (47,15) Syntax error on all --
+		-- eight planes (2026-09-29). failing that, the plane's own --
+		-- attributes as objects, AVEVA's way (!plane.position)     --
+		------------------------------------------------------------
 		!pp = ''
-		var !pp pos of $!pl wrt /*
+		!pperr = ''
+		var !pp pos of $!pl wrt worl
 		handle any
-			!this.UvLog('    VSEC ' & !vsn & ' plane ' & !pl & ': no POS - ' & !!error.text)
-			skip
+			!pperr = !!error.text
+			!pp = ''
 		endhandle
+		if (!pp.eq('')) then
+			!ppo = !plr.position.wrt(world)
+			handle any
+				!this.UvLog('    VSEC ' & !vsn & ' plane ' & !pl & ': no POS - ' & !pperr & ' / ' & !!error.text)
+				skip
+			endhandle
+			!pp = !ppo.string()
+		else
+			!ppo = object position(!pp)
+		endif
 		!pn = ''
-		var !pn norm of $!pl wrt /*
+		!pnerr = ''
+		var !pn norm of $!pl wrt worl
 		handle any
-			!this.UvLog('    VSEC ' & !vsn & ' plane ' & !pl & ': no NORM - ' & !!error.text)
-			skip
+			!pnerr = !!error.text
+			!pn = ''
 		endhandle
-		!ppo = object position(!pp)
-		!pdo = object direction(!pn)
+		if (!pn.eq('')) then
+			!pdo = !plr.norm.wrt(world)
+			handle any
+				!this.UvLog('    VSEC ' & !vsn & ' plane ' & !pl & ': no NORM - ' & !pnerr & ' / ' & !!error.text)
+				skip
+			endhandle
+			!pn = !pdo.string()
+		else
+			!pdo = object direction(!pn)
+		endif
 		!islim = false
 		do !tg values !tags
 			if (!vsn.matchwild('*/' & !tg & '/VSEC')) then
