@@ -5080,6 +5080,11 @@ define method .NozzleAnnotation(!name is string)
 	!ff.open('append')
 
 	var !nozzs coll $!this.nozztext1.val within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	!nzrefs = object array()
+	!nzsh = object array()
+	!nzx = object array()
+	!nzy = object array()
+	!nzu = object array()
 	do !nozz values !nozzs
 		var !apos ( pos of $!nozz wrt worl )
 		var !apos1 shpos of $!apos
@@ -5092,9 +5097,52 @@ define method .NozzleAnnotation(!name is string)
 		if (not(!this.InViewOnSheet(!apos1))) then
 			skip
 		endif
+		!aposobj = object position(!apos)
+		!nzrefs.append(!nozz)
+		!nzsh.append(!apos1)
+		!nzx.append(!apos1.part(2).replace('mm', '').real())
+		!nzy.append(!apos1.part(4).replace('mm', '').real())
+		!nzu.append(!aposobj.up.value())
+	enddo
+
+	do !k from 1 to !nzrefs.size()
+		!nozz = !nzrefs[!k]
+		!apos1 = !nzsh[!k]
+		------------------------------------------------------------------
+		-- nozzles stacked on one plan point (N7 under N8 on the shell   --
+		-- of C1101) print their labels on top of each other and the     --
+		-- plan cannot tell which is which: the upper one gets (U), the  --
+		-- lower one (D) after its name (user, 2026-09-29). same point = --
+		-- within 0.5mm on the paper; a third one in between gets        --
+		-- neither, one at the same elevation does not count             --
+		------------------------------------------------------------------
+		!nzabove = false
+		!nzbelow = false
+		do !m from 1 to !nzrefs.size()
+			if (!m.eq(!k)) then
+				skip
+			endif
+			!ddx = !nzx[!m] - !nzx[!k]
+			!ddy = !nzy[!m] - !nzy[!k]
+			!dd2 = !ddx * !ddx + !ddy * !ddy
+			if (!dd2.lt(0.25)) then
+				if (!nzu[!m].gt(!nzu[!k] + 1)) then
+					!nzabove = true
+				elseif (!nzu[!m].lt(!nzu[!k] - 1)) then
+					!nzbelow = true
+				endif
+			endif
+		enddo
+		!nzsuf = ''
+		if (!nzbelow and not(!nzabove)) then
+			!nzsuf = ' (U)'
+		elseif (!nzabove and not(!nzbelow)) then
+			!nzsuf = ' (D)'
+		endif
+		!nzbtext = !this.nozztext2.val & !nzsuf
 		NEW GLAB
 		DDNA $!nozz
-		Btext |$!this.nozztext2.val|
+		Btext |$!nzbtext|
 		Justification Centre
 		Alignment Hbody
 		ABSO
