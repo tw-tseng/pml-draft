@@ -2702,11 +2702,30 @@ define method .AnnotateView(!it is string) is string
 	!n2 = !trans[7] * !trans[7] + !trans[8] * !trans[8]
 	!en = sqrt(!e2 * !n2)
 	!this.UvLog('  E/N map ' & !trans[5].string('D5') & ' ' & !trans[6].string('D5') & ' ' & !trans[7].string('D5') & ' ' & !trans[8].string('D5') & ' det=' & !trans[9].string('D7'))
-	if (!en le 0) then
-		return 'not a plan view looking down (elevations and sections are not done yet)'
+	------------------------------------------------------------------
+	-- an elevation or a section looks level: up comes out on the    --
+	-- sheet at full length -- as long as the horizontal direction   --
+	-- lying in the view, which is east and north together          --
+	-- (e2 + n2) -- and pointing up the sheet. anything else, a view --
+	-- looking up or a tilted one, is left alone (2026-09-29)        --
+	------------------------------------------------------------------
+	!u2 = !trans[11] * !trans[11] + !trans[12] * !trans[12]
+	!this.UvLog('  U map ' & !trans[11].string('D5') & ' ' & !trans[12].string('D5'))
+	!kind = ''
+	if (!en gt 0) then
+		if (!trans[9] ge !en * 0.99) then
+			!kind = 'plan'
+		endif
 	endif
-	if (!trans[9] lt !en * 0.99) then
-		return 'not a plan view looking down (elevations and sections are not done yet)'
+	if (!kind.eq('')) then
+		!h2 = !e2 + !n2
+		!ux = abs(!trans[11])
+		if (!u2 gt 0 and !u2 ge !h2 * 0.98 and !u2 le !h2 * 1.02 and !trans[12] gt 0 and !ux le !trans[12] * 0.02) then
+			!kind = 'elev'
+		endif
+	endif
+	if (!kind.eq('')) then
+		return 'neither a plan looking down nor an elevation / section standing upright on the sheet'
 	endif
 
 	------------------------------------------------------------------
@@ -2729,6 +2748,9 @@ define method .AnnotateView(!it is string) is string
 	endif
 	var !vw name
 	var !vwnn namn
+	if (!kind.eq('elev')) then
+		return !this.AnnotateSection(!vref, !vw, !trans)
+	endif
 
 	------------------------------------------------------------------
 	-- its limits, as E3D itself decides them                         --
@@ -2913,114 +2935,20 @@ define method .AnnotateView(!it is string) is string
 	-- below, the way .Apply() makes a drawing again -- the view      --
 	-- itself and everything else on it are not touched               --
 	------------------------------------------------------------------
-	!err = !this.UvClearOwn(!vw)
+	!warn = object array()
+	!lcd = object array()
+	!lcd.append(!lminE)
+	!lcd.append(!lminN)
+	!lcd.append(!lminU)
+	!lcd.append(!lmaxE)
+	!lcd.append(!lmaxN)
+	!lcd.append(!lmaxU)
+	!err = !this.UvLibrary(!vw, !lsrc, !lcd, !warn)
 	if (!err.neq('')) then
 		return !err
 	endif
 	$!vw
 	var !sh owner
-	var !dw owner of $!sh
-	$!dw
-	new liby $!vw/LIBY
-	handle any
-		return 'its library ' & !vw & '/LIBY could not be made: ' & !!error.text
-	endhandle
-	new dllb $!vw/DRAWLIST
-	handle any
-		return 'its drawlist library could not be made: ' & !!error.text
-	endhandle
-	new idli $!vw/DRAWLIST/DRWG
-	handle any
-		return 'its drawlist could not be made: ' & !!error.text
-	endhandle
-	!this.InstTemplate(!vw)
-	handle any
-		return 'its label templates could not be made: ' & !!error.text
-	endhandle
-
-	------------------------------------------------------------------
-	-- the drawlist, filled the way .Apply() fills one (user: take   --
-	-- everything in the range, grids included, and let the exclude  --
-	-- list on the View tab take out what is not wanted). a drawlist --
-	-- of its own: the one the view had may well be shared with      --
-	-- other views, and filling that would redraw them as well       --
-	------------------------------------------------------------------
-	!warn = object array()
-	$!vw/DRAWLIST/DRWG
-	add all zone within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
-	handle any
-		!warn.append('add zones: ' & !!error.text)
-	endhandle
-	add all REFGRD within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
-	handle any
-		!warn.append('add grids: ' & !!error.text)
-	endhandle
-	!excls = object array()
-	!excls = !this.excllist.dtext
-	handle any
-		!excls = object array()
-	endhandle
-	if (!excls.size().gt(0)) then
-		!idlname = !vw & '/DRAWLIST/DRWG'
-		!idli = object IDLIST(!idlname.dbref())
-		do !excl values !excls
-			!exclref = object DBREF()
-			!exclref = !excl.dbref()
-			handle any
-			endhandle
-			if (not(!exclref.badref())) then
-				!idli.remove(!exclref)
-				handle any
-				endhandle
-			endif
-		enddo
-		$!vw/DRAWLIST/DRWG
-	endif
-	limits E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
-	handle any
-		!warn.append('drawlist limits: ' & !!error.text)
-	endhandle
-	var !addn coll all adde for ce
-	handle any
-		!addn = object array()
-	endhandle
-	!this.UvLog('  drawlist ' & !vw & '/DRAWLIST/DRWG: ' & !addn.size().string() & ' member(s)')
-
-	$!vw
-	Idlname $!vw/DRAWLIST/DRWG
-	handle any
-		return 'IDLNAME could not be set to its new drawlist: ' & !!error.text
-	endhandle
-	------------------------------------------------------------------
-	-- a range that came from the drawlist (VVOL, VLIMITS) would move -
-	-- now that the drawlist is a different one, so it is written     --
-	-- down where the next run reads it first after VWLIMITS, the way --
-	-- .Apply() keeps its own                                         --
-	------------------------------------------------------------------
-	if (!lsrc.eq('VVOL') or !lsrc.eq('VLIMITS')) then
-		:CDLIMITS |FROM E $!lminE N $!lminN U $!lminU TO E $!lmaxE N $!lmaxN U $!lmaxU|
-		handle any
-			!warn.append(':CDLIMITS: ' & !!error.text)
-		endhandle
-	endif
-	if (!this.rrsftext.val.neq('')) then
-		rrsf $!this.rrsftext.val
-		handle any
-			!warn.append('representation style: ' & !!error.text)
-		endhandle
-	endif
-	if (!this.hrsftext.val.neq('')) then
-		hrsf $!this.hrsftext.val
-		handle any
-			!warn.append('hatching style: ' & !!error.text)
-		endhandle
-	endif
-	Agmode 'OFF'
-	handle any
-	endhandle
-	Agside 'All'
-	handle any
-	endhandle
 
 	------------------------------------------------------------------
 	-- the note the match line is drawn in. a NOTE is a sheet         --
@@ -3167,6 +3095,445 @@ define method .AnnotateView(!it is string) is string
 endmethod
 
 ------------------------------------------------------------------------
+-- an elevation or a section drawn by hand (user, 2026-09-29, the       --
+-- sample is section_view.png): grid bubbles along the top, the floor  --
+-- levels down the left, every pipe and every piece of equipment       --
+-- labelled on a leader, and three lines of title underneath --        --
+--     SECTION ....           green, underlined, the letter the user's --
+--     SCALE 1:50             yellow                                    --
+--     See Dwg. No. ....      yellow, the number the user's             --
+-- no dimension chains, no match lines.                                 --
+--                                                                      --
+-- stage 1 (this): the limits, the scale off the View tab, a library   --
+-- and drawlist of its own, the title. CE is the view, its frame is in --
+-- .viewXXsh already, !trans is .ViewSheetTransform() as it read it    --
+------------------------------------------------------------------------
+define method .AnnotateSection(!vref is string, !vw is string, !trans is array) is string
+	!vl = object DRAVIEWLIMITS(!vref.dbref())
+	handle any
+		return 'its limits could not be read: ' & !!error.text
+	endhandle
+	!lsrc = 'none'
+	if (!vl.vwlimitsSet()) then
+		!lsrc = 'VWLIMITS'
+	elseif (!vl.cdlimitsSet()) then
+		!lsrc = 'CDLIMITS'
+	elseif (!vl.viewVolumeSet()) then
+		!lsrc = 'VVOL'
+	elseif (!vl.vlimitsSet()) then
+		!lsrc = 'VLIMITS'
+	endif
+	if (!lsrc.eq('none')) then
+		!this.UvLog('  limits: none of VWLIMITS, :CDLIMITS, VVOL, VLIMITS is set')
+		return 'has no limits to work from'
+	endif
+	!lim = !vl.getViewLimitsArray()
+	!lminE = min(!lim[1], !lim[4])
+	!lminN = min(!lim[2], !lim[5])
+	!lminU = min(!lim[3], !lim[6])
+	!lmaxE = max(!lim[1], !lim[4])
+	!lmaxN = max(!lim[2], !lim[5])
+	!lmaxU = max(!lim[3], !lim[6])
+	!this.UvLog('  section, limits (' & !lsrc & ') E ' & !lminE.string('D1') & ' N ' & !lminN.string('D1') & ' U ' & !lminU.string('D1') & ' TO E ' & !lmaxE.string('D1') & ' N ' & !lmaxN.string('D1') & ' U ' & !lmaxU.string('D1'))
+	if (!lmaxE - !lminE lt 1 or !lmaxN - !lminN lt 1 or !lmaxU - !lminU lt 1) then
+		return 'its limits (' & !lsrc & ') are flat or empty'
+	endif
+	!lcd = object array()
+	!lcd.append(!lminE)
+	!lcd.append(!lminN)
+	!lcd.append(!lminU)
+	!lcd.append(!lmaxE)
+	!lcd.append(!lmaxN)
+	!lcd.append(!lmaxU)
+
+	------------------------------------------------------------------
+	-- the scale, then where the limits fall on the sheet at it       --
+	------------------------------------------------------------------
+	!fx1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+	!fx2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+	!fy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+	!fy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+	!ls0 = !this.SheetBoxOfLimits(!lcd)
+	!serr = !this.UvSetScale(!vref, !trans, !ls0, !fx1, !fy1, !fx2, !fy2)
+	if (!serr.neq('')) then
+		return !serr
+	endif
+	$!vref
+	var !vsca vsca
+	!this.vsca = !vsca.real()
+	!ls = !this.SheetBoxOfLimits(!lcd)
+	!bx1 = max(!fx1, !ls[1])
+	!by1 = max(!fy1, !ls[2])
+	!bx2 = min(!fx2, !ls[3])
+	!by2 = min(!fy2, !ls[4])
+	!this.UvLog('  cut x ' & !bx1.string('D2') & ' .. ' & !bx2.string('D2') & '  y ' & !by1.string('D2') & ' .. ' & !by2.string('D2') & '  (limits on the sheet x ' & !ls[1].string('D2') & ' .. ' & !ls[3].string('D2') & '  y ' & !ls[2].string('D2') & ' .. ' & !ls[4].string('D2') & ')')
+	if (!bx2 - !bx1 lt 1 or !by2 - !by1 lt 1) then
+		return 'its limits fall outside its frame'
+	endif
+	!bx1 = !bx1.string('D6').replace('mm', '').real()
+	!bx2 = !bx2.string('D6').replace('mm', '').real()
+	!by1 = !by1.string('D6').replace('mm', '').real()
+	!by2 = !by2.string('D6').replace('mm', '').real()
+	!this.boxULsh = 'x ' & string(!bx1) & ' y ' & string(!by2)
+	!this.boxURsh = 'x ' & string(!bx2) & ' y ' & string(!by2)
+	!this.boxLLsh = 'x ' & string(!bx1) & ' y ' & string(!by1)
+	!this.boxLRsh = 'x ' & string(!bx2) & ' y ' & string(!by1)
+	!this.boxUlinesh = object line(!this.boxULsh.position(), !this.boxURsh.position())
+	!this.boxDlinesh = object line(!this.boxLLsh.position(), !this.boxLRsh.position())
+	!this.boxRlinesh = object line(!this.boxLRsh.position(), !this.boxURsh.position())
+	!this.boxLlinesh = object line(!this.boxLLsh.position(), !this.boxULsh.position())
+
+	------------------------------------------------------------------
+	-- the drawlist takes the limits as they are: on an elevation     --
+	-- they are the depth of the section as well, which a cut on the  --
+	-- sheet cannot say                                               --
+	------------------------------------------------------------------
+	!this.wminE = !lminE - 0.025
+	!this.wminN = !lminN - 0.025
+	!this.minU = !lminU - 0.025
+	!this.wmaxE = !lmaxE + 0.025
+	!this.wmaxN = !lmaxN + 0.025
+	!this.maxU = !lmaxU + 0.025
+	!this.minE = !this.wminE
+	!this.minN = !this.wminN
+	!this.maxE = !this.wmaxE
+	!this.maxN = !this.wmaxN
+
+	------------------------------------------------------------------
+	-- the title's two blanks are the user's to fill in: what they    --
+	-- typed there last time is read before the old title goes, and   --
+	-- written back into the new one                                  --
+	------------------------------------------------------------------
+	!old1 = ''
+	!old3 = ''
+	!nt = !vw & '/VTITLE'
+	!onm = !nt & '/ELEV'
+	var !old1 btext of $!onm
+	handle any
+		!old1 = ''
+	endhandle
+	!onm = !nt & '/DWGNO'
+	var !old3 btext of $!onm
+	handle any
+		!old3 = ''
+	endhandle
+
+	!warn = object array()
+	!err = !this.UvLibrary(!vw, !lsrc, !lcd, !warn)
+	if (!err.neq('')) then
+		return !err
+	endif
+	$!vw
+	update design
+	handle any
+		!warn.append('update design: ' & !!error.text)
+	endhandle
+
+	!top = min(!this.viewLLsh.part(4).replace('mm', '').real(), !this.viewURsh.part(4).replace('mm', '').real())
+	!this.SectionTitle(!vw, !top, !old1, !old3)
+	handle any
+		!warn.append('title: ' & !!error.text)
+	endhandle
+	$!vw
+
+	do !w values !warn
+		!this.UvLog('  WARN ' & !w)
+	enddo
+	if (!warn.size().gt(0)) then
+		return 'done, but ' & !warn.size().string() & ' step(s) failed, first: ' & !warn[1]
+	endif
+	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- the limits, min E N U then max E N U, on the sheet of the view that --
+-- is CE: all eight corners through SHPOS, and the rectangle round     --
+-- them, x1 y1 x2 y2 as plain numbers. SHPOS does the projection      --
+-- itself, so it is right for a plan and an elevation alike            --
+------------------------------------------------------------------------
+define method .SheetBoxOfLimits(!lim is array) is array
+	!es = object array()
+	!es.append(!lim[1].string('D3').replace('mm', ''))
+	!es.append(!lim[4].string('D3').replace('mm', ''))
+	!ns = object array()
+	!ns.append(!lim[2].string('D3').replace('mm', ''))
+	!ns.append(!lim[5].string('D3').replace('mm', ''))
+	!us = object array()
+	!us.append(!lim[3].string('D3').replace('mm', ''))
+	!us.append(!lim[6].string('D3').replace('mm', ''))
+	!r = object array()
+	!first = true
+	do !ie from 1 to 2
+		do !in from 1 to 2
+			do !iu from 1 to 2
+				!pstr = 'E ' & !es[!ie] & ' N ' & !ns[!in] & ' U ' & !us[!iu] & ' WRT /*'
+				!pp = object position(!pstr)
+				var !psh shpos of $!pp
+				!px = !psh.part(2).replace('mm', '').real()
+				!py = !psh.part(4).replace('mm', '').real()
+				if (!first) then
+					!r[1] = !px
+					!r[2] = !py
+					!r[3] = !px
+					!r[4] = !py
+					!first = false
+				else
+					!r[1] = min(!r[1], !px)
+					!r[2] = min(!r[2], !py)
+					!r[3] = max(!r[3], !px)
+					!r[4] = max(!r[4], !py)
+				endif
+			enddo
+		enddo
+	enddo
+	return !r
+endmethod
+
+------------------------------------------------------------------------
+-- the title under a section (section_view.png, user 2026-09-29):      --
+--     SECTION A11                green, match line height, underlined --
+--     SCALE 1:50                 yellow, pipe label height            --
+--     See Dwg. No. 4-00780-...   yellow, pipe label height            --
+-- the letter and the drawing number are the user's to type: left as  --
+-- blanks the first time, and !old1 / !old3 -- what the user had typed --
+-- before a rerun -- put back when there are any. the underline is as  --
+-- wide as the first line with its blank, the way .ViewTitleAt() sizes --
+-- its own. a NOTE <view>/VTITLE with ELEV, ULINE, SCALE and DWGNO in  --
+-- it, so .UvClearOwn() clears it with the rest                        --
+------------------------------------------------------------------------
+define method .SectionTitle(!vw is string, !top is real, !old1 is string, !old3 is string)
+	!t1 = 'SECTION    '
+	if (!old1.trim().neq('')) then
+		!t1 = !old1
+	endif
+	!t3 = 'See Dwg. No.                              '
+	if (!old3.trim().neq('')) then
+		!t3 = !old3
+	endif
+	!vs = !this.vsca
+	!t2 = 'SCALE'
+	if (!vs gt 0 and !vs lt 1) then
+		!den = 1 / !vs
+		!t2 = 'SCALE 1:' & !den.string('D0').replace('mm', '')
+	elseif (!vs ge 1) then
+		!t2 = 'SCALE ' & !vs.string('D0').replace('mm', '') & ':1'
+	endif
+	!this.TitleLog('STITLE ' & !vw & ' top=' & !top.string('D3') & ' t1=[' & !t1 & '] t2=' & !t2 & ' t3=[' & !t3 & ']')
+
+	!h = !this.TitleHeights()
+	!h1 = !h[1]
+	!h2 = !h[2]
+	!xl = !this.viewLLsh.part(2).replace('mm', '').real()
+	!xr = !this.viewLRsh.part(2).replace('mm', '').real()
+	!cx = (!xl + !xr) * 0.5
+	!rows = !this.TitleRows(!top)
+	!y1 = !rows[1]
+	!yu = !rows[2]
+	!y2 = !rows[3]
+	!y3 = !y2 - 1.5 * !h2
+	!w = !this.TitleWidth(!t1, !h1)
+	!xa = !cx - !w * 0.5
+	!xb = !cx + !w * 0.5
+
+	!cxs = !cx.string('D3').replace('mm', '')
+	!y1s = !y1.string('D3').replace('mm', '')
+	!yus = !yu.string('D3').replace('mm', '')
+	!y2s = !y2.string('D3').replace('mm', '')
+	!y3s = !y3.string('D3').replace('mm', '')
+	!xas = !xa.string('D3').replace('mm', '')
+	!xbs = !xb.string('D3').replace('mm', '')
+	!h1s = !h1.string('D2').replace('mm', '')
+	!h2s = !h2.string('D2').replace('mm', '')
+
+	!nt = !vw & '/VTITLE'
+	$!vw
+	new note $!nt
+	handle any
+		!this.TitleLog('  new note failed: ' & !!error.text)
+		return
+	endhandle
+
+	!made = true
+	new texp $!nt/ELEV btext |$!t1| origin x $!cxs y $!y1s cheitx |$!h1s| alig bbody just center font 1
+	handle any
+		!made = false
+		!this.TitleLog('  ELEV failed: ' & !!error.text)
+	endhandle
+	if (!made) then
+		!colok = true
+		txcolour 20
+		handle any
+			!colok = false
+		endhandle
+		if (not(!colok)) then
+			txcolour green
+			handle any
+			endhandle
+		endif
+	endif
+
+	$!nt
+	!made = true
+	new stra $!nt/ULINE fpt x $!xas y $!yus tpt x $!xbs y $!yus
+	handle any
+		!made = false
+		!this.TitleLog('  ULINE failed: ' & !!error.text)
+	endhandle
+	if (!made) then
+		!colok = true
+		NLColour 20
+		handle any
+			!colok = false
+		endhandle
+		if (not(!colok)) then
+			NLColour green
+			handle any
+			endhandle
+		endif
+	endif
+
+	$!nt
+	new texp $!nt/SCALE btext |$!t2| origin x $!cxs y $!y2s cheitx |$!h2s| alig bbody just center txcolour yellow font 1
+	handle any
+		!this.TitleLog('  SCALE failed: ' & !!error.text)
+	endhandle
+
+	$!nt
+	new texp $!nt/DWGNO btext |$!t3| origin x $!cxs y $!y3s cheitx |$!h2s| alig bbody just center txcolour yellow font 1
+	handle any
+		!this.TitleLog('  DWGNO failed: ' & !!error.text)
+	endhandle
+	!this.TitleLog('  made: cx=' & !cxs & ' y1=' & !y1s & ' yu=' & !yus & ' y2=' & !y2s & ' y3=' & !y3s & ' uline ' & !xas & '..' & !xbs)
+endmethod
+
+------------------------------------------------------------------------
+-- the library a view drawn by hand works from, made again from     --
+-- scratch: what an earlier run left is cleared first, then its own  --
+-- LIBY, drawlist (filled over .wminE .. .wmaxE, .minU .. .maxU the  --
+-- way .Apply() fills one), label templates, IDLN, the styles. !lim  --
+-- is the view's limits, min E N U then max E N U, written down as   --
+-- :CDLIMITS when they came from VVOL / VLIMITS. steps that fail     --
+-- without stopping go into !warn. answers '' or what stopped it.    --
+-- the plan and the elevation both use it (2026-09-29)                --
+------------------------------------------------------------------------
+define method .UvLibrary(!vw is string, !lsrc is string, !lim is array, !warn is array) is string
+	!lminE = !lim[1]
+	!lminN = !lim[2]
+	!lminU = !lim[3]
+	!lmaxE = !lim[4]
+	!lmaxN = !lim[5]
+	!lmaxU = !lim[6]
+	!err = !this.UvClearOwn(!vw)
+	if (!err.neq('')) then
+		return !err
+	endif
+	$!vw
+	var !sh owner
+	var !dw owner of $!sh
+	$!dw
+	new liby $!vw/LIBY
+	handle any
+		return 'its library ' & !vw & '/LIBY could not be made: ' & !!error.text
+	endhandle
+	new dllb $!vw/DRAWLIST
+	handle any
+		return 'its drawlist library could not be made: ' & !!error.text
+	endhandle
+	new idli $!vw/DRAWLIST/DRWG
+	handle any
+		return 'its drawlist could not be made: ' & !!error.text
+	endhandle
+	!this.InstTemplate(!vw)
+	handle any
+		return 'its label templates could not be made: ' & !!error.text
+	endhandle
+
+	------------------------------------------------------------------
+	-- the drawlist, filled the way .Apply() fills one (user: take   --
+	-- everything in the range, grids included, and let the exclude  --
+	-- list on the View tab take out what is not wanted). a drawlist --
+	-- of its own: the one the view had may well be shared with      --
+	-- other views, and filling that would redraw them as well       --
+	------------------------------------------------------------------
+	$!vw/DRAWLIST/DRWG
+	add all zone within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	handle any
+		!warn.append('add zones: ' & !!error.text)
+	endhandle
+	add all REFGRD within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	handle any
+		!warn.append('add grids: ' & !!error.text)
+	endhandle
+	!excls = object array()
+	!excls = !this.excllist.dtext
+	handle any
+		!excls = object array()
+	endhandle
+	if (!excls.size().gt(0)) then
+		!idlname = !vw & '/DRAWLIST/DRWG'
+		!idli = object IDLIST(!idlname.dbref())
+		do !excl values !excls
+			!exclref = object DBREF()
+			!exclref = !excl.dbref()
+			handle any
+			endhandle
+			if (not(!exclref.badref())) then
+				!idli.remove(!exclref)
+				handle any
+				endhandle
+			endif
+		enddo
+		$!vw/DRAWLIST/DRWG
+	endif
+	limits E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	handle any
+		!warn.append('drawlist limits: ' & !!error.text)
+	endhandle
+	var !addn coll all adde for ce
+	handle any
+		!addn = object array()
+	endhandle
+	!this.UvLog('  drawlist ' & !vw & '/DRAWLIST/DRWG: ' & !addn.size().string() & ' member(s)')
+
+	$!vw
+	Idlname $!vw/DRAWLIST/DRWG
+	handle any
+		return 'IDLNAME could not be set to its new drawlist: ' & !!error.text
+	endhandle
+	------------------------------------------------------------------
+	-- a range that came from the drawlist (VVOL, VLIMITS) would move -
+	-- now that the drawlist is a different one, so it is written     --
+	-- down where the next run reads it first after VWLIMITS, the way --
+	-- .Apply() keeps its own                                         --
+	------------------------------------------------------------------
+	if (!lsrc.eq('VVOL') or !lsrc.eq('VLIMITS')) then
+		:CDLIMITS |FROM E $!lminE N $!lminN U $!lminU TO E $!lmaxE N $!lmaxN U $!lmaxU|
+		handle any
+			!warn.append(':CDLIMITS: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.rrsftext.val.neq('')) then
+		rrsf $!this.rrsftext.val
+		handle any
+			!warn.append('representation style: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.hrsftext.val.neq('')) then
+		hrsf $!this.hrsftext.val
+		handle any
+			!warn.append('hatching style: ' & !!error.text)
+		endhandle
+	endif
+	Agmode 'OFF'
+	handle any
+	endhandle
+	Agside 'All'
+	handle any
+	endhandle
+	return ''
+endmethod
+
+------------------------------------------------------------------------
 -- CE to the last member of view !vw, so the next NEW goes in after   --
 -- everything already there -- or on the view itself when it has no   --
 -- members at all. a view drawn by hand has none of its own, and once --
@@ -3210,9 +3577,17 @@ define method .UvSetScale(!vref is string, !trans is array, !ls is array, !fx1 i
 	!src = ''
 	if (!scalestr.eqnocase('auto')) then
 		------------------------------------------------------------------
-		-- sheet mm per world mm at the scale the view has now           --
+		-- sheet mm per world mm at the scale the view has now: the      --
+		-- longest of east, north and up on the sheet, whichever of them --
+		-- lies in the view's plane -- east on a plan, up on an          --
+		-- elevation, where east may well come out 0 (2026-09-29)        --
 		------------------------------------------------------------------
-		!v0 = sqrt(!trans[5] * !trans[5] + !trans[6] * !trans[6])
+		!ve2 = !trans[5] * !trans[5] + !trans[6] * !trans[6]
+		!vn2 = !trans[7] * !trans[7] + !trans[8] * !trans[8]
+		!vu2 = !trans[11] * !trans[11] + !trans[12] * !trans[12]
+		!vm2 = max(!ve2, !vn2)
+		!vm2 = max(!vm2, !vu2)
+		!v0 = sqrt(!vm2)
 		if (!v0 le 0) then
 			return 'auto scale: the scale the view has now could not be measured'
 		endif
@@ -6717,6 +7092,8 @@ endmethod
 --         box is orthogonal to the world, whatever rcode is. the world  --
 --         box of a band is then the band itself and nothing has to be   --
 --         checked a second time                                         --
+--   11, 12  sheet x, y of a 1mm step up: 0 on a plan, full length on   --
+--         an elevation or a section (2026-09-29)                        --
 -- CE must be the view or an element inside it                           --
 --------------------------------------------------------------------------
 define method .ViewSheetTransform() is array
@@ -6739,6 +7116,10 @@ define method .ViewSheetTransform() is array
 	!trans[7] = (!tempsh.part(2).replace('mm', '').real() - !c0x) / 1000
 	!trans[8] = (!tempsh.part(4).replace('mm', '').real() - !c0y) / 1000
 	!trans[9] = !trans[5] * !trans[8] - !trans[7] * !trans[6]
+	!tempp = !cen.offset(object direction('U'), 1000)
+	var !tempsh shpos of $!tempp
+	!trans[11] = (!tempsh.part(2).replace('mm', '').real() - !c0x) / 1000
+	!trans[12] = (!tempsh.part(4).replace('mm', '').real() - !c0y) / 1000
 	----------------------------------------------------------------------
 	-- square means east lies along one of the two sheet axes and north  --
 	-- along the other one. compared as squares to keep clear of sqrt    --
