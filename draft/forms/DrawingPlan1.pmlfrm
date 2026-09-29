@@ -3274,6 +3274,14 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	handle any
 		!warn.append('update design: ' & !!error.text)
 	endhandle
+	!this.UvToLast(!vw)
+	!nbub = 0
+	!nbub = !this.SectionGridBubbles(!vw)
+	handle any
+		!warn.append('grid bubbles: ' & !!error.text)
+	endhandle
+	!this.UvLog('  grid bubbles: ' & !nbub.string())
+	$!vw
 
 	!top = min(!this.viewLLsh.part(4).replace('mm', '').real(), !this.viewURsh.part(4).replace('mm', '').real())
 	!this.SectionTitle(!vw, !top, !old1, !old3)
@@ -3694,6 +3702,256 @@ define method .SectionTitle(!vw is string, !top is real, !old1 is string, !old3 
 		!this.TitleLog('  DWGNO failed: ' & !!error.text)
 	endhandle
 	!this.TitleLog('  made: cx=' & !cxs & ' y1=' & !y1s & ' yu=' & !yus & ' y2=' & !y2s & ' y3=' & !y3s & ' uline ' & !xas & '..' & !xbs)
+endmethod
+
+------------------------------------------------------------------------
+-- stage 2 of a section: the grid bubbles along the top (the A and B  --
+-- of section_view.png). a column line of the section is a vertical   --
+-- grid plane the view looks along, and on the sheet that plane is    --
+-- one vertical line. it is found through the plane's trace on a      --
+-- level: a REFGLN lying level (both ends at one U) whose two ends    --
+-- land on one spot of the sheet, and whose own plane (GRDREF) stands --
+-- upright -- a level's trace on a wall of the grid would pass the    --
+-- first two tests as well. the refglns are the ones the plan takes,  --
+-- those of the first GRIDPL of each GRIDEL of the drawlist's grids.  --
+--                                                                    --
+-- the bubble is the plan's: a SLAB on the refgln's first end, the    --
+-- REFGRD/ID template (it prints IDPLANE of the GRDREF), its circle   --
+-- Distance above the top of the cut and its leader from Gap above    --
+-- it, both off the Grid tab. two bubbles with one number on one spot --
+-- are one; two numbers on one spot stack (!!DrawingPlan1GridStack).  --
+-- the layer is <view>/ateGRID, cleared with the rest on a rerun.    --
+-- every bubble goes to check_grid.txt. answers how many were made    --
+------------------------------------------------------------------------
+define method .SectionGridBubbles(!vw is string) is real
+	!!DrawingPlan1GridBubbles = object array()
+	!dbg = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+	!dbg.open('overwrite')
+	!dbg.writerecord('SECTIONGRID ' & !vw)
+	!dbg.close()
+	handle any
+	endhandle
+
+	NEW LAYE $!vw/ateGRID
+	Purpose GRIDA
+	Lvisibility true
+	Font 1
+	Justification Left
+	Alignment Template
+	Tsiztx '5mm'
+	Chostx '6mm'
+	Asubtended 0degree
+	Pjustification Towards
+	Oshttx '2mm'
+	Plcltx '0mm'
+	Doffset 25mm
+	Dmsptx '0mm'
+	Lleader true
+	Lframe true
+	Lshape Straight
+	Gboxtx '1mm'
+	Llcltx '0mm'
+	Xyscale 1 1
+	Xyposition 25mm 25mm
+	Blnk false
+	Bmargin 0mm
+	Trsf Nulref
+	Txcolour Yellow
+	NLStyle Solid
+	NLColour Cyan
+	FStyle Off
+	FColour Grey
+	LLStyle Chained
+	LLColour Cyan
+	LFStyle Solid
+	LFColour Cyan
+	DLStyle Solid
+	DLColour Cyan
+	PLStyle Solid
+	PLColour Cyan
+	MColour Cyan
+	CHStyle Off
+	CHColour Grey
+	!cheigridv = 4
+	!cheigridv = !this.gridhei.val
+	handle any
+		!cheigridv = 4
+	endhandle
+	!cheigrid = !cheigridv.string('D2') & 'mm'
+	Cheitx '$!cheigrid'
+
+	!bx1 = !this.boxULsh.part(2).replace('mm', '').real()
+	!bx2 = !this.boxURsh.part(2).replace('mm', '').real()
+	!ytop = !this.boxULsh.part(4).replace('mm', '').real()
+	!gdist = 50
+	!gdist = !this.griddist.val
+	handle any
+		!gdist = 50
+	endhandle
+	!ggap = 3
+	!ggap = !this.gridgap.val
+	handle any
+		!ggap = 3
+	endhandle
+
+	!gridels = object array()
+	!idlpath = !vw & '/DRAWLIST/DRWG'
+	var !addes coll all adde for $!idlpath
+	handle any
+		!addes = object array()
+	endhandle
+	do !adde values !addes
+		!type = ''
+		var !type type of idna of $!adde
+		handle any
+			skip
+		endhandle
+		if (!type.eq('REFGRD')) then
+			var !idna idna of $!adde
+			var !temps coll all gridel for $!idna
+			handle any
+				skip
+			endhandle
+			do !temp values !temps
+				!gridels.append(!temp)
+			enddo
+		endif
+	enddo
+
+	!made = 0
+	do !gridel values !gridels
+		var !gridpls coll all gridpl for $!gridel
+		handle any
+			skip
+		endhandle
+		if (!gridpls.size() eq 0) then
+			skip
+		endif
+		var !refglns coll all refgln for $!gridpls[1]
+		handle any
+			skip
+		endhandle
+		do !refgln values !refglns
+			var !p1pos p1 pos of $!refgln wrt worl
+			handle any
+				skip
+			endhandle
+			var !p2pos p2 pos of $!refgln wrt worl
+			handle any
+				skip
+			endhandle
+			!p1o = object position(!p1pos)
+			!p2o = object position(!p2pos)
+			!du = !p1o.up.value() - !p2o.up.value()
+			if (abs(!du) gt 1) then
+				skip
+			endif
+			var !p1sh shpos of $!p1o
+			handle any
+				skip
+			endhandle
+			var !p2sh shpos of $!p2o
+			handle any
+				skip
+			endhandle
+			!sx1 = !p1sh.part(2).replace('mm', '').real()
+			!sy1 = !p1sh.part(4).replace('mm', '').real()
+			!sx2 = !p2sh.part(2).replace('mm', '').real()
+			!sy2 = !p2sh.part(4).replace('mm', '').real()
+			!dsx = !sx1 - !sx2
+			!dsy = !sy1 - !sy2
+			if (abs(!dsx) gt 0.05 or abs(!dsy) gt 0.05) then
+				skip
+			endif
+			if (!sx1 lt !bx1 - 0.01 or !sx1 gt !bx2 + 0.01) then
+				skip
+			endif
+			------------------------------------------------------------
+			-- its own plane must stand upright                         --
+			------------------------------------------------------------
+			!upright = true
+			!rgr = !refgln.dbref()
+			!gpl = !rgr.grdref
+			handle any
+				!gpl = object DBREF()
+			endhandle
+			if (not(!gpl.badref())) then
+				!gori = !gpl.orientation
+				handle any
+				elsehandle none
+					!gz = !gori.zDir()
+					handle any
+					elsehandle none
+						!gzw = !gz.wrt(world)
+						handle any
+						elsehandle none
+							!gzu = abs(!gzw.up)
+							if (!gzu gt 0.01) then
+								!upright = false
+							endif
+						endhandle
+					endhandle
+				endhandle
+			endif
+			if (not(!upright)) then
+				skip
+			endif
+
+			!gid = ''
+			var !gid idplane of grdref of $!refgln
+			handle any
+				!gid = ''
+			endhandle
+			!!DrawingPlan1GridIdNow = !gid
+			!gbx = !sx1
+			!gby = !ytop + !gdist
+			!gstack = '0'
+			!gstack = !!DrawingPlan1GridStack('Top', !gbx, !gby, !gid)
+			handle any
+				!gstack = '0'
+			endhandle
+			if (!gstack.eq('SKIP')) then
+				skip
+			endif
+			!gpush = !gstack.real()
+			!gby = !gby + !gpush
+			!!DrawingPlan1GridBubbles.append('Top~' & string(!gbx) & '~' & string(!gby) & '~' & !gid)
+			!x = 0
+			!y = !gby - !sy1
+			!xap = 0
+			!yap = !ytop + !ggap - !sy1
+			if (!this.rcode.eqnocase('left')) then
+				!tempxy = !x
+				!x = !y
+				!y = !tempxy * -1
+				!tempxy = !xap
+				!xap = !yap
+				!yap = !tempxy * -1
+			endif
+			$!vw/ateGRID
+			NEW SLAB
+			DDNA $!refgln
+			NPPT 1
+			TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+			XYPO $!x $!y
+			APOF $!xap $!yap
+			Agside |Top|
+			if (!gpush.gt(0)) then
+				Lleader false
+			endif
+			if (!this.rcode.eqnocase('left')) then
+				Adegrees -90
+			endif
+			!made = !made + 1
+			!dbg = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+			!dbg.open('append')
+			!dbg.writerecord('SECBUB id=' & !gid & ' sheet=' & !gbx.string('D3') & ' ' & !gby.string('D3') & ' end=' & !sx1.string('D3') & ' ' & !sy1.string('D3') & ' push=' & !gpush.string('D1') & ' gln=' & !refgln)
+			!dbg.close()
+			handle any
+			endhandle
+		enddo
+	enddo
+	return !made
 endmethod
 
 ------------------------------------------------------------------------
