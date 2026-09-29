@@ -3975,7 +3975,6 @@ endmethod
 -- on its outer end with its point on the line, and the height in     --
 -- yellow. 40mm and hollow since the user saw the first version, 20mm --
 -- and filled, run into a member standing on the cut's edge (2026-09-29) --
--- --
 -- above the line at the pipe label height, signed the way the plan   --
 -- title signs its elevation. all of it in a NOTE <view>/ateLEVEL, so  --
 -- .UvClearOwn() clears it on a rerun. answers how many were made     --
