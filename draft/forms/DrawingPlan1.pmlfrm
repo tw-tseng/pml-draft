@@ -1486,7 +1486,13 @@ define method .Apply()
 				-------------------------------------------
 				$!name/SS/S1/V1
 				new note
-				if (!this.keytext1.val neq '' and !this.keytext2.val neq '' and !this.keytext3.val neq '' and !this.keytext4.val neq '' and !this.keytext5.val neq '') then
+				-----------------------------------------------------------------
+				-- no KeyPlan overlay (the OLAY above is only made when there  --
+				-- is one): no highlight box either. the other fields have     --
+				-- defaults, so on their own the box was still drawn, alone    --
+				-- in the empty KEYPLAN corner of the sheet (user, 2026-09-29) --
+				-----------------------------------------------------------------
+				if (!this.keyovertext.val.neq('') and !this.keytext1.val neq '' and !this.keytext2.val neq '' and !this.keytext3.val neq '' and !this.keytext4.val neq '' and !this.keytext5.val neq '') then
 					$!name/SS/S1/V1
 
 					----------------------------------------------------------------------
