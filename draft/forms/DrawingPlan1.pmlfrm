@@ -3191,21 +3191,15 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 	!lcd.append(!lmaxU)
 
 	------------------------------------------------------------------
-	-- the scale, then where the limits fall on the sheet at it       --
+	-- the scale is the view's own, whatever it is, 1:1 included: a  --
+	-- section keeps what the user gave it, the View tab's Drawing    --
+	-- Scale is for plans only (user, 2026-09-29). then where the     --
+	-- limits fall on the sheet at it                                 --
 	------------------------------------------------------------------
 	!fx1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
 	!fx2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
 	!fy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
 	!fy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
-	if (!corners.size() eq 8) then
-		!ls0 = !this.SheetBoxOfPoints(!corners)
-	else
-		!ls0 = !this.SheetBoxOfLimits(!lcd)
-	endif
-	!serr = !this.UvSetScale(!vref, !trans, !ls0, !fx1, !fy1, !fx2, !fy2)
-	if (!serr.neq('')) then
-		return !serr
-	endif
 	$!vref
 	var !vsca vsca
 	!this.vsca = !vsca.real()
