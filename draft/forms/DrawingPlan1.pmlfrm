@@ -3378,7 +3378,7 @@ define method .VsecBox(!vref is string, !corners is array) is string
 		------------------------------------------------------------
 		!pp = ''
 		!pperr = ''
-		var !pp pos of $!pl wrt worl
+		var !pp ( pos of $!pl wrt worl )
 		handle any
 			!pperr = !!error.text
 			!pp = ''
@@ -3395,7 +3395,7 @@ define method .VsecBox(!vref is string, !corners is array) is string
 		endif
 		!pn = ''
 		!pnerr = ''
-		var !pn norm of $!pl wrt worl
+		var !pn ( norm of $!pl wrt worl )
 		handle any
 			!pnerr = !!error.text
 			!pn = ''
@@ -4086,17 +4086,33 @@ define method .SectionLevels(!vw is string) is real
 					endif
 				endhandle
 			endif
+			------------------------------------------------------------
+			-- its place through the objects, AVEVA's way; a bare      --
+			-- 'var !x pos of .. wrt worl' is (47,15) Syntax error on  --
+			-- every plane (2026-09-29) -- the one VAR that reads POS   --
+			-- in this form puts it in brackets, and that is the       --
+			-- fallback                                                 --
+			------------------------------------------------------------
 			!gpos = ''
-			var !gpos pos of $!gp wrt worl
+			!gperr = ''
+			!gpo = !gpr.position.wrt(world)
 			handle any
-				!this.UvLog('    GRIDPL ' & !gpn & ' ' & !how & ' level=' & !level.string() & ' no POS: ' & !!error.text)
-				skip
+				!gperr = !!error.text
+			elsehandle none
+				!gpos = !gpo.string()
 			endhandle
+			if (!gpos.eq('')) then
+				var !gpos ( pos of $!gp wrt worl )
+				handle any
+					!this.UvLog('    GRIDPL ' & !gpn & ' ' & !how & ' level=' & !level.string() & ' no POS: ' & !gperr & ' / ' & !!error.text)
+					skip
+				endhandle
+				!gpo = object position(!gpos)
+			endif
 			!this.UvLog('    GRIDPL ' & !gpn & ' ' & !how & ' level=' & !level.string() & ' pos ' & !gpos)
 			if (not(!level)) then
 				skip
 			endif
-			!gpo = object position(!gpos)
 			!gu = !gpo.up.value()
 			!dup = false
 			do !ku values !us
