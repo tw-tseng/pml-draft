@@ -5135,9 +5135,9 @@ define method .NozzleAnnotation(!name is string)
 		enddo
 		!nzsuf = ''
 		if (!nzbelow and not(!nzabove)) then
-			!nzsuf = ' (U)'
+			!nzsuf = '(U)'
 		elseif (!nzabove and not(!nzbelow)) then
-			!nzsuf = ' (D)'
+			!nzsuf = '(D)'
 		endif
 		!nzbtext = !this.nozztext2.val & !nzsuf
 		NEW GLAB
