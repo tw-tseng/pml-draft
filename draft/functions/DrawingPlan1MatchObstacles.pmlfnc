@@ -27,6 +27,7 @@
 -- directly                                                       --
 -------------------------------------------------------------------
 define function !!DrawingPlan1MatchObstacles(!name is string)
+	!vw = !!DrawingPlan1ViewPath(!name)
 	!!DrawingPlan1MatchObst = object array()
 	!clear = 2
 	-------------------------------------------------------------
@@ -99,7 +100,7 @@ define function !!DrawingPlan1MatchObstacles(!name is string)
 	-------------------------------------------------------------
 	-- the labels already standing: grid bubbles, at this point  --
 	-------------------------------------------------------------
-	$!name/SS/S1/V1
+	$!vw
 	handle any
 		return
 	endhandle
@@ -172,7 +173,7 @@ define function !!DrawingPlan1MatchObstacles(!name is string)
 		!y2 = !y2 + !clear + 1
 		!!DrawingPlan1MatchObst.append(!x1.string() & '~' & !y1.string() & '~' & !x2.string() & '~' & !y2.string())
 	enddo
-	$!name/SS/S1/V1
+	$!vw
 	handle any
 	endhandle
 endfunction

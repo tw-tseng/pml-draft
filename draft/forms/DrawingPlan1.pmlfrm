@@ -34,7 +34,26 @@ layout form !!DrawingPlan1 dialog dock
 			text .dest     'Destination'     at xmin.hiera ymax.hiera+0.5 width 33 is string 
 			button .desbut 'CE'              at xmax.dest+0.1 ymin.dest width 6 call '!This.desce()'
 			button .apply  'Create Drawings' at xmin.dest ymax.dest+0.5 width 23 call '!This.Apply()'
-			button .Cancel 'Cancel'          at xmax.apply+15 ymin.apply width 12 call '!This.Close()'
+			----------------------------------------------------------------
+			-- views drawn by hand in Draw, annotated where they stand      --
+			-- (.AnnotateViews()). Add CE takes a VIEW, or every view of a  --
+			-- SHEE or DRWG                                                 --
+			----------------------------------------------------------------
+			frame .uvframe 'Views drawn by hand (plan only for now)' at xmin.dest ymax.apply+1.2
+				list .uvlist 'Views' multiple width 36 height 6
+				button .uvadd 'Add CE'     at xmax.uvlist+0.5 ymin.uvlist+0.75 width 12 call '!This.UvAddCe()'
+				button .uvrem 'Remove'     at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
+				button .uvall 'Remove All' at xmin.uvadd ymax.uvrem+0.3 width 12 call '!This.UvRemoveAll()'
+				button .uvgo 'Annotate Views' at xmin.uvlist ymax.uvlist+0.3 width 23 call '!This.AnnotateViews()'
+				----------------------------------------------------------
+				-- closes the whole form. beside Annotate Views, in the   --
+				-- column of Add CE / Remove / Remove All (user,          --
+				-- 2026-09-27); it used to sit after Create Drawings, and --
+				-- went missing there once this frame was added           --
+				----------------------------------------------------------
+				button .Cancel 'Cancel' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
+				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
+			exit
 		exit
 		frame .viewframe 'View' width 40
 			text .frametext 'Backing Sheet' tagwidth 20 width 30 is string 
@@ -856,6 +875,9 @@ define method .Apply()
 		!!alert.error('Cannot verify office network connection - Create Drawings is only available inside the company network')
 		return
 	endif
+	if (not(!this.FunctionsReady())) then
+		return
+	endif
 	if (not(!this.EnsurePaLiby())) then
 		return
 	endif
@@ -1111,53 +1133,7 @@ define method .Apply()
 				------------------------------------------
 				-- create instrument template reference --
 				------------------------------------------
-				$!name/SS/LIBY
-				new lalb $!name/SS/LALB
-				new sytm $!name/SS/LALB/NAME_CIRC
-				XYPS X 0mm Y 0mm
-				JUST Centre
-				ALIGN Hbody
-				FONT 1
-				CHEITX '3mm'
-				CSPATX '0'
-				LSPATX '0'
-				TXCOLO 1
-				NLSTYL Solid
-				NLCOLO 1
-				LLSTYL Solid
-				LLCOLO 1
-				FSTYLE Off
-				FCOLOUR 1
-				MCOLOUR 1
-				LZCOLO 1
-				LZLSTY Solid
-				LZVIS true
-				LZPRIN true
-				
-				NEW CIRCLE
-				Origin Centre Offset X 0mm Y 0mm
-				-- bubble size from the Annotation tab. .insttext3 'Diameter'  --
-				-- had no reader at all until now: field, default and Save     --
-				-- record existed, nothing consumed it, and the circle was     --
-				-- this literal (same shape as .gridhei, 2026-09-08)           --
-				!instdiav = !this.insttext3.val
-				!instdia = !instdiav.string('D2') & 'mm'
-				DIAM $!instdia
-				NLSTYL Solid
-				NLCOLO 5
-				FSTYLE Off
-				FCOLOUR 1
-				
-				NEW TEXTPRIMITIVE
-				Origin Offset X 0mm Y 0mm
-				FONT 1
-				CHEITX '1.5mm'
-				CSPATX '0'
-				LSPATX '0'
-				JUST Centre
-				ALIGN Hbody
-				BTEX |$!this.insttext2.val|
-				TXCOLO 5
+				!this.InstTemplate(!name & '/SS')
 				
 				new shee $!name/SS/S1
 				IDLN $!name/SS/DRAWLIST/DRWG
@@ -1510,7 +1486,13 @@ define method .Apply()
 				-------------------------------------------
 				$!name/SS/S1/V1
 				new note
-				if (!this.keytext1.val neq '' and !this.keytext2.val neq '' and !this.keytext3.val neq '' and !this.keytext4.val neq '' and !this.keytext5.val neq '') then
+				-----------------------------------------------------------------
+				-- no KeyPlan overlay (the OLAY above is only made when there  --
+				-- is one): no highlight box either. the other fields have     --
+				-- defaults, so on their own the box was still drawn, alone    --
+				-- in the empty KEYPLAN corner of the sheet (user, 2026-09-29) --
+				-----------------------------------------------------------------
+				if (!this.keyovertext.val.neq('') and !this.keytext1.val neq '' and !this.keytext2.val neq '' and !this.keytext3.val neq '' and !this.keytext4.val neq '' and !this.keytext5.val neq '') then
 					$!name/SS/S1/V1
 
 					----------------------------------------------------------------------
@@ -2490,6 +2472,960 @@ define method .Apply()
 		---------------------------------------------------------------------
 		!this.WriteRevInfo(!name, !equistr)
 	enddo
+endmethod
+
+------------------------------------------------------------------------
+-- VIEWS DRAWN BY HAND (user, 2026-09-26)                               --
+--                                                                      --
+-- a VIEW somebody made in Draw is given this program's annotation as  --
+-- it stands, instead of a drawing made from a box. the view keeps its --
+-- place on the sheet, its size, scale and turn; its range is its own  --
+-- limits (AVEVA's DRAVIEWLIMITS: VWLIMITS, else :CDLIMITS, else VVOL, --
+-- else VLIMITS), cut down to the view frame on the sheet. from this   --
+-- form it takes the drawlist, filled the way .Apply() fills one       --
+-- (every ZONE and REFGRD in the range, less the View tab's exclude    --
+-- list), the representation and hatching styles, and every           --
+-- annotation setting. it does not get a backing sheet, border texts,  --
+-- keyplan or north arrow -- the sheet stays the user's -- and the     --
+-- view is never moved (.RecenterView() is not run)                    --
+--                                                                      --
+-- plan views looking down only for now. elevations and sections come  --
+-- once plans work                                                      --
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+-- Add CE: a VIEW goes in as itself, a SHEE or a DRWG puts in every     --
+-- VIEW under it (user: a sheet of many views should not have to be    --
+-- picked one view at a time). a row is the view's name, or its refno  --
+-- while it has none -- both navigate straight to it. views Create     --
+-- Drawings made from a box (<box>/SS/S1/V1) are left out: they are    --
+-- that path's, and have a box to be made again from                   --
+------------------------------------------------------------------------
+define method .UvAddCe()
+	!typ = ''
+	var !typ type
+	handle any
+		!typ = ''
+	endhandle
+	!vs = object array()
+	if (!typ.eq('VIEW')) then
+		var !vref ref
+		!vs.append(!vref)
+	elseif (!typ.eq('SHEE') or !typ.eq('DRWG')) then
+		var !vs coll all view for ce
+		handle any
+			!vs = object array()
+		endhandle
+	else
+		!!alert.error('Navigate to a VIEW, or to the SHEE or DRWG that holds the views, first')
+		return
+	endif
+	!items = !this.uvlist.dtext
+	!added = 0
+	!own = 0
+	!dup = 0
+	do !v values !vs
+		!isns = 'false'
+		var !isns isnamed of $!v
+		handle any
+			!isns = 'false'
+		endhandle
+		!vn = !v
+		if (!isns.boolean()) then
+			var !vn name of $!v
+		endif
+		if (!vn.matchwild('*/SS/S1/V1')) then
+			!own = !own + 1
+		elseif (!items.find(!vn).size().gt(0)) then
+			!dup = !dup + 1
+		else
+			!items.append(!vn)
+			!added = !added + 1
+		endif
+	enddo
+	!this.uvlist.dtext = !items
+	if (!added.eq(0)) then
+		!msg = 'No view added'
+		if (!vs.size().eq(0)) then
+			!msg = !msg & ' - there is no VIEW under CE'
+		endif
+		if (!dup.gt(0)) then
+			!msg = !msg & ' - ' & !dup.string() & ' already in the list'
+		endif
+		if (!own.gt(0)) then
+			!msg = !msg & ' - ' & !own.string() & ' made by Create Drawings from a box (use Create Drawings for those)'
+		endif
+		!!alert.message(!msg)
+	elseif (!own.gt(0)) then
+		!!alert.message(!added.string() & ' view(s) added, ' & !own.string() & ' left out: made by Create Drawings from a box (use Create Drawings for those)')
+	endif
+endmethod
+
+define method .UvRemove()
+	!strs = !this.uvlist.selection()
+	if (!strs.size().gt(0)) then
+		do !str values !strs
+			!this.uvlist.clear(!str)
+		enddo
+	else
+		!!alert.error('Select one or more views in the list first')
+	endif
+endmethod
+
+define method .UvRemoveAll()
+	!this.uvlist.clear()
+endmethod
+
+------------------------------------------------------------------------
+-- every view in the list, one after the other. a view that fails is   --
+-- reported and the next one carries on; every step of every view goes --
+-- to check_userview.txt, overwritten at the start of each run         --
+------------------------------------------------------------------------
+define method .AnnotateViews()
+	if (not(!this.CheckCompanyNetwork())) then
+		!!alert.error('Cannot verify office network connection - Annotate Views is only available inside the company network')
+		return
+	endif
+	if (not(!this.FunctionsReady())) then
+		return
+	endif
+	!items = !this.uvlist.dtext
+	if (!items.size().eq(0)) then
+		!!alert.error('Add the views first: navigate to a VIEW, or to its SHEE or DRWG, and press Add CE')
+		return
+	endif
+	if (not(!this.EnsurePaLiby())) then
+		return
+	endif
+	!f = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_userview.txt')
+	!f.open('overwrite')
+	handle any
+	elsehandle none
+		!f.writerecord('ANNOTATE VIEWS ' & !items.size().string() & ' view(s)')
+		!f.close()
+	endhandle
+	!ok = 0
+	!fails = object array()
+	do !it values !items
+		!this.UvLog('VIEW ' & !it)
+		!msg = ''
+		!msg = !this.AnnotateView(!it)
+		handle any
+			!msg = 'stopped: ' & !!error.text
+		endhandle
+		if (!msg.eq('')) then
+			!ok = !ok + 1
+			!this.UvLog('  DONE')
+		else
+			!fails.append(!it & ': ' & !msg)
+			!this.UvLog('  ' & !msg)
+		endif
+	enddo
+	!res = !ok.string() & ' of ' & !items.size().string() & ' view(s) annotated'
+	!this.uvresult.val = !res
+	if (!fails.size().gt(0)) then
+		!txt = !res & ' - see check_userview.txt'
+		do !fl values !fails
+			!txt = !txt & ' | ' & !fl
+		enddo
+		!!alert.warning(!txt)
+	else
+		!!alert.message(!res)
+	endif
+endmethod
+
+------------------------------------------------------------------------
+-- one view. answers '' when it went through, otherwise what stopped  --
+-- it, or 'done, but ...' when it went through with a step failing    --
+------------------------------------------------------------------------
+define method .AnnotateView(!it is string) is string
+	$!it
+	handle any
+		return 'not found - deleted or renamed since it was put in the list'
+	endhandle
+	!typ = ''
+	var !typ type
+	if (!typ.neq('VIEW')) then
+		return 'not a VIEW but a ' & !typ
+	endif
+	var !vref ref
+
+	!isns = 'false'
+	var !isns isnamed
+	if (!isns.boolean()) then
+		var !vw name
+		if (!vw.matchwild('*/SS/S1/V1')) then
+			return 'made by Create Drawings from a box - use Create Drawings for it'
+		endif
+	endif
+
+	------------------------------------------------------------------
+	-- the frame on the sheet, the way the update path reads a view  --
+	-- it did not place itself                                       --
+	------------------------------------------------------------------
+	var !shxypos shxypos
+	var !size size
+	var !rcode rcode
+	var !vsca vsca
+	!this.rcode = !rcode
+	!this.vsca = !vsca.real()
+	if !rcode.eqnocase('up') then
+		!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+		!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(2).real().value() * 0.5 + 0.025)
+		!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(1).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+		!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(1).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(2).real().value() * 0.5 - 0.025)
+	else
+		!this.viewULsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+		!this.viewURsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() + !size.part(1).real().value() * 0.5 + 0.025)
+		!this.viewLLsh = 'x ' & string(!shxypos.part(1).real().value() - !size.part(2).real().value() * 0.5 - 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+		!this.viewLRsh = 'x ' & string(!shxypos.part(1).real().value() + !size.part(2).real().value() * 0.5 + 0.025) & ' y ' & string(!shxypos.part(2).real().value() - !size.part(1).real().value() * 0.5 - 0.025)
+	endif
+	!this.viewUlinesh = object line(!this.viewULsh.position(), !this.viewURsh.position())
+	!this.viewDlinesh = object line(!this.viewLLsh.position(), !this.viewLRsh.position())
+	!this.viewRlinesh = object line(!this.viewLRsh.position(), !this.viewURsh.position())
+	!this.viewLlinesh = object line(!this.viewLLsh.position(), !this.viewULsh.position())
+	!this.UvLog('  frame ' & !this.viewLLsh & ' .. ' & !this.viewURsh & ' rcode=' & !rcode & ' vsca=' & !vsca)
+
+	------------------------------------------------------------------
+	-- a plan looking down is the one view that carries east and      --
+	-- north onto the sheet at full length, square to each other and  --
+	-- the right way round: the determinant of the E/N -> sheet map   --
+	-- is then +|E||N|. an elevation or a section flattens one of the --
+	-- two (determinant near 0), a view looking up mirrors them       --
+	-- (negative)                                                     --
+	------------------------------------------------------------------
+	!trans = !this.ViewSheetTransform()
+	handle any
+		return 'its place on the sheet could not be read: ' & !!error.text
+	endhandle
+	!e2 = !trans[5] * !trans[5] + !trans[6] * !trans[6]
+	!n2 = !trans[7] * !trans[7] + !trans[8] * !trans[8]
+	!en = sqrt(!e2 * !n2)
+	!this.UvLog('  E/N map ' & !trans[5].string('D5') & ' ' & !trans[6].string('D5') & ' ' & !trans[7].string('D5') & ' ' & !trans[8].string('D5') & ' det=' & !trans[9].string('D7'))
+	if (!en le 0) then
+		return 'not a plan view looking down (elevations and sections are not done yet)'
+	endif
+	if (!trans[9] lt !en * 0.99) then
+		return 'not a plan view looking down (elevations and sections are not done yet)'
+	endif
+
+	------------------------------------------------------------------
+	-- a name: everything this program hangs off a view is found     --
+	-- again as <view>/<name>. given only now, once the view is known --
+	-- to be one this program will draw on: a section refused above  --
+	-- used to come away renamed all the same (2026-09-29)           --
+	------------------------------------------------------------------
+	if (not(!isns.boolean())) then
+		!nn = !this.UvNewName()
+		$!vref
+		if (!nn.eq('')) then
+			return 'has no name, and no free name could be made for it'
+		endif
+		name $!nn
+		handle any
+			return 'has no name, and NAME ' & !nn & ' was refused: ' & !!error.text
+		endhandle
+		!this.UvLog('  named ' & !nn)
+	endif
+	var !vw name
+	var !vwnn namn
+
+	------------------------------------------------------------------
+	-- its limits, as E3D itself decides them                         --
+	------------------------------------------------------------------
+	!vl = object DRAVIEWLIMITS(!vref.dbref())
+	handle any
+		return 'its limits could not be read: ' & !!error.text
+	endhandle
+	!lsrc = 'none'
+	if (!vl.vwlimitsSet()) then
+		!lsrc = 'VWLIMITS'
+	elseif (!vl.cdlimitsSet()) then
+		!lsrc = 'CDLIMITS'
+	elseif (!vl.viewVolumeSet()) then
+		!lsrc = 'VVOL'
+	elseif (!vl.vlimitsSet()) then
+		!lsrc = 'VLIMITS'
+	endif
+	if (!lsrc.eq('none')) then
+		!this.UvLog('  limits: none of VWLIMITS, :CDLIMITS, VVOL, VLIMITS is set')
+		return 'has no limits to work from'
+	endif
+	!lim = !vl.getViewLimitsArray()
+	!lminE = min(!lim[1], !lim[4])
+	!lminN = min(!lim[2], !lim[5])
+	!lminU = min(!lim[3], !lim[6])
+	!lmaxE = max(!lim[1], !lim[4])
+	!lmaxN = max(!lim[2], !lim[5])
+	!lmaxU = max(!lim[3], !lim[6])
+	!this.UvLog('  limits (' & !lsrc & ') E ' & !lminE.string('D1') & ' N ' & !lminN.string('D1') & ' U ' & !lminU.string('D1') & ' TO E ' & !lmaxE.string('D1') & ' N ' & !lmaxN.string('D1') & ' U ' & !lmaxU.string('D1'))
+	if (!lmaxE - !lminE lt 1 or !lmaxN - !lminN lt 1 or !lmaxU - !lminU lt 1) then
+		return 'its limits (' & !lsrc & ') are flat or empty'
+	endif
+
+	------------------------------------------------------------------
+	-- where the drawing is cut, on the sheet: the frame, pulled in  --
+	-- to where the limits end. this is the box edge of a drawing    --
+	-- made from a box -- the match line, the dimension chains and   --
+	-- BlankPos all work off it                                      --
+	------------------------------------------------------------------
+	!fx1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+	!fx2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+	!fy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+	!fy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+	!lstr = !lminE.string() & 'mm ' & !lminN.string() & 'mm ' & !lminU.string() & 'mm ' & !lmaxE.string() & 'mm ' & !lmaxN.string() & 'mm ' & !lmaxU.string() & 'mm'
+
+	------------------------------------------------------------------
+	-- the scale: the one on the View tab, never the view's own      --
+	-- (user, 2026-09-29 -- a view made again in Draw came with VSCA --
+	-- 1, and setting AUTO there left it at 1). auto on the tab: the --
+	-- smallest standard scale of the tab's list that shows the      --
+	-- whole of the limits inside the frame the user drew. the frame --
+	-- stays where it is and the view's centre stays its centre, so  --
+	-- the limits are measured out from that centre, side by side    --
+	------------------------------------------------------------------
+	!ls0 = !this.SheetLimitsOfVolume(!lstr, !trans)
+	!serr = !this.UvSetScale(!vref, !trans, !ls0, !fx1, !fy1, !fx2, !fy2)
+	if (!serr.neq('')) then
+		return !serr
+	endif
+	$!vref
+	var !vsca vsca
+	!this.vsca = !vsca.real()
+	!trans = !this.ViewSheetTransform()
+	handle any
+		return 'its place on the sheet could not be read after the scale was set: ' & !!error.text
+	endhandle
+	!ls = !this.SheetLimitsOfVolume(!lstr, !trans)
+	if (!ls[1] lt !fx1 - 0.1 or !ls[3] gt !fx2 + 0.1 or !ls[2] lt !fy1 - 0.1 or !ls[4] gt !fy2 + 0.1) then
+		!this.UvLog('  NOTE the limits still reach past the frame at this scale - only the part inside is drawn')
+	endif
+	!bx1 = max(!fx1, !ls[1])
+	!by1 = max(!fy1, !ls[2])
+	!bx2 = min(!fx2, !ls[3])
+	!by2 = min(!fy2, !ls[4])
+	!this.UvLog('  cut x ' & !bx1.string('D2') & ' .. ' & !bx2.string('D2') & '  y ' & !by1.string('D2') & ' .. ' & !by2.string('D2') & '  (limits on the sheet x ' & !ls[1].string('D2') & ' .. ' & !ls[3].string('D2') & '  y ' & !ls[2].string('D2') & ' .. ' & !ls[4].string('D2') & ')')
+	if (!bx2 - !bx1 lt 1 or !by2 - !by1 lt 1) then
+		return 'its limits fall outside its frame'
+	endif
+	------------------------------------------------------------------
+	-- plain numbers from here on. the limits came back through      --
+	-- .ViewSheetTransform(), whose centre is a POSITION's east and  --
+	-- north, and so carry mm: the box strings came out 'x 260.11mm  --
+	-- y 483.90mm', everything reading them back got a length, and   --
+	-- FlowAnnotation's sort key went to the .NET sort as '...mm' --  --
+	-- 'input string was not in a correct format' (2026-09-27, the   --
+	-- first view tried). the box path's corners are plain numbers   --
+	-- (.value() / replace('mm', '')), and so are these now          --
+	------------------------------------------------------------------
+	!bx1 = !bx1.string('D6').replace('mm', '').real()
+	!bx2 = !bx2.string('D6').replace('mm', '').real()
+	!by1 = !by1.string('D6').replace('mm', '').real()
+	!by2 = !by2.string('D6').replace('mm', '').real()
+	!this.boxULsh = 'x ' & string(!bx1) & ' y ' & string(!by2)
+	!this.boxURsh = 'x ' & string(!bx2) & ' y ' & string(!by2)
+	!this.boxLLsh = 'x ' & string(!bx1) & ' y ' & string(!by1)
+	!this.boxLRsh = 'x ' & string(!bx2) & ' y ' & string(!by1)
+	!this.boxUlinesh = object line(!this.boxULsh.position(), !this.boxURsh.position())
+	!this.boxDlinesh = object line(!this.boxLLsh.position(), !this.boxLRsh.position())
+	!this.boxRlinesh = object line(!this.boxLRsh.position(), !this.boxURsh.position())
+	!this.boxLlinesh = object line(!this.boxLLsh.position(), !this.boxULsh.position())
+
+	------------------------------------------------------------------
+	-- the same rectangle in the world, and from it the members      --
+	-- .Apply() reads off a box: its X runs along the sheet x, its Y --
+	-- along the sheet y, and which of the two counts as the east    --
+	-- one is decided the way .Apply() decides it                    --
+	------------------------------------------------------------------
+	!dx = !bx1 - !trans[1]
+	!dy = !by1 - !trans[2]
+	!e1 = !trans[3] + (!dx * !trans[8] - !dy * !trans[7]) / !trans[9]
+	!n1 = !trans[4] + (!dy * !trans[5] - !dx * !trans[6]) / !trans[9]
+	!dx = !bx2 - !trans[1]
+	!e2 = !trans[3] + (!dx * !trans[8] - !dy * !trans[7]) / !trans[9]
+	!n2 = !trans[4] + (!dy * !trans[5] - !dx * !trans[6]) / !trans[9]
+	!dx = !bx1 - !trans[1]
+	!dy = !by2 - !trans[2]
+	!e3 = !trans[3] + (!dx * !trans[8] - !dy * !trans[7]) / !trans[9]
+	!n3 = !trans[4] + (!dy * !trans[5] - !dx * !trans[6]) / !trans[9]
+	!dx = (!bx1 + !bx2) * 0.5 - !trans[1]
+	!dy = (!by1 + !by2) * 0.5 - !trans[2]
+	!ec = !trans[3] + (!dx * !trans[8] - !dy * !trans[7]) / !trans[9]
+	!nc = !trans[4] + (!dy * !trans[5] - !dx * !trans[6]) / !trans[9]
+	!xE = !e2 - !e1
+	!xN = !n2 - !n1
+	!xlen = sqrt(!xE * !xE + !xN * !xN)
+	!yE = !e3 - !e1
+	!yN = !n3 - !n1
+	!ylen = sqrt(!yE * !yE + !yN * !yN)
+	if (!xlen lt 1 or !ylen lt 1) then
+		return 'the cut rectangle comes out flat in the world'
+	endif
+	!xE = !xE / !xlen
+	!xN = !xN / !xlen
+	!yE = !yE / !ylen
+	!yN = !yN / !ylen
+	if (abs(!yE) gt abs(!yN)) then
+		!efE = !yE
+		!efN = !yN
+		!elen = !ylen
+		!nfE = !xE
+		!nfN = !xN
+		!nlen = !xlen
+	else
+		!efE = !xE
+		!efN = !xN
+		!elen = !xlen
+		!nfE = !yE
+		!nfN = !yN
+		!nlen = !ylen
+	endif
+	if (!efE lt 0) then
+		!efE = 0 - !efE
+		!efN = 0 - !efN
+	endif
+	if (!nfN lt 0) then
+		!nfE = 0 - !nfE
+		!nfN = 0 - !nfN
+	endif
+	!he = !elen * 0.5 + 0.025
+	!hn = !nlen * 0.5 + 0.025
+	!maxE1 = !ec + !efE * !he
+	!minE1 = !ec - !efE * !he
+	!maxN1 = !nc + !nfN * !hn
+	!minN1 = !nc - !nfN * !hn
+	!this.maxE = max(!maxE1, !minE1)
+	!this.minE = min(!maxE1, !minE1)
+	!this.maxN = max(!maxN1, !minN1)
+	!this.minN = min(!maxN1, !minN1)
+	!this.maxU = !lmaxU + 0.025
+	!this.minU = !lminU - 0.025
+	!wl = !this.WorldLimitsOfSheetRect(!bx1, !by1, !bx2, !by2, !trans)
+	!this.wminE = !wl[1] - 0.025
+	!this.wminN = !wl[2] - 0.025
+	!this.wmaxE = !wl[3] + 0.025
+	!this.wmaxN = !wl[4] + 0.025
+	!this.UvLog('  box centre E ' & !ec.string('D1') & ' N ' & !nc.string('D1') & '  X ' & !xlen.string('D1') & '  Y ' & !ylen.string('D1') & '  world E ' & !this.wminE.string('D1') & ' .. ' & !this.wmaxE.string('D1') & '  N ' & !this.wminN.string('D1') & ' .. ' & !this.wmaxN.string('D1') & '  U ' & !this.minU.string('D1') & ' .. ' & !this.maxU.string('D1'))
+
+	------------------------------------------------------------------
+	-- clear what an earlier run left: this program's own layers and  --
+	-- notes on the view, then its library. made again from scratch   --
+	-- below, the way .Apply() makes a drawing again -- the view      --
+	-- itself and everything else on it are not touched               --
+	------------------------------------------------------------------
+	!err = !this.UvClearOwn(!vw)
+	if (!err.neq('')) then
+		return !err
+	endif
+	$!vw
+	var !sh owner
+	var !dw owner of $!sh
+	$!dw
+	new liby $!vw/LIBY
+	handle any
+		return 'its library ' & !vw & '/LIBY could not be made: ' & !!error.text
+	endhandle
+	new dllb $!vw/DRAWLIST
+	handle any
+		return 'its drawlist library could not be made: ' & !!error.text
+	endhandle
+	new idli $!vw/DRAWLIST/DRWG
+	handle any
+		return 'its drawlist could not be made: ' & !!error.text
+	endhandle
+	!this.InstTemplate(!vw)
+	handle any
+		return 'its label templates could not be made: ' & !!error.text
+	endhandle
+
+	------------------------------------------------------------------
+	-- the drawlist, filled the way .Apply() fills one (user: take   --
+	-- everything in the range, grids included, and let the exclude  --
+	-- list on the View tab take out what is not wanted). a drawlist --
+	-- of its own: the one the view had may well be shared with      --
+	-- other views, and filling that would redraw them as well       --
+	------------------------------------------------------------------
+	!warn = object array()
+	$!vw/DRAWLIST/DRWG
+	add all zone within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	handle any
+		!warn.append('add zones: ' & !!error.text)
+	endhandle
+	add all REFGRD within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	handle any
+		!warn.append('add grids: ' & !!error.text)
+	endhandle
+	!excls = object array()
+	!excls = !this.excllist.dtext
+	handle any
+		!excls = object array()
+	endhandle
+	if (!excls.size().gt(0)) then
+		!idlname = !vw & '/DRAWLIST/DRWG'
+		!idli = object IDLIST(!idlname.dbref())
+		do !excl values !excls
+			!exclref = object DBREF()
+			!exclref = !excl.dbref()
+			handle any
+			endhandle
+			if (not(!exclref.badref())) then
+				!idli.remove(!exclref)
+				handle any
+				endhandle
+			endif
+		enddo
+		$!vw/DRAWLIST/DRWG
+	endif
+	limits E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	handle any
+		!warn.append('drawlist limits: ' & !!error.text)
+	endhandle
+	var !addn coll all adde for ce
+	handle any
+		!addn = object array()
+	endhandle
+	!this.UvLog('  drawlist ' & !vw & '/DRAWLIST/DRWG: ' & !addn.size().string() & ' member(s)')
+
+	$!vw
+	Idlname $!vw/DRAWLIST/DRWG
+	handle any
+		return 'IDLNAME could not be set to its new drawlist: ' & !!error.text
+	endhandle
+	------------------------------------------------------------------
+	-- a range that came from the drawlist (VVOL, VLIMITS) would move -
+	-- now that the drawlist is a different one, so it is written     --
+	-- down where the next run reads it first after VWLIMITS, the way --
+	-- .Apply() keeps its own                                         --
+	------------------------------------------------------------------
+	if (!lsrc.eq('VVOL') or !lsrc.eq('VLIMITS')) then
+		:CDLIMITS |FROM E $!lminE N $!lminN U $!lminU TO E $!lmaxE N $!lmaxN U $!lmaxU|
+		handle any
+			!warn.append(':CDLIMITS: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.rrsftext.val.neq('')) then
+		rrsf $!this.rrsftext.val
+		handle any
+			!warn.append('representation style: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.hrsftext.val.neq('')) then
+		hrsf $!this.hrsftext.val
+		handle any
+			!warn.append('hatching style: ' & !!error.text)
+		endhandle
+	endif
+	Agmode 'OFF'
+	handle any
+	endhandle
+	Agside 'All'
+	handle any
+	endhandle
+
+	------------------------------------------------------------------
+	-- the note the match line is drawn in. a NOTE is a sheet         --
+	-- element -- the one a VIEW owns is a VNOT -- so NEW NOTE on a   --
+	-- view makes it under the sheet, and on a drawing made from a    --
+	-- box the match line simply uses NOTE 1 of the sheet. this sheet --
+	-- is the user's and may hold their notes and other views, so the --
+	-- view gets a note of its own and the match line is sent to it   --
+	-- by name (DrawingPlan1MatchLine). the first version looked for  --
+	-- its notes under the view, never found last run's, and the next --
+	-- run stopped on 'Name .../ateNOTE already used' (2026-09-27)    --
+	------------------------------------------------------------------
+	$!sh
+	new note $!vw/ateNOTE
+	handle any
+		return 'its note could not be made: ' & !!error.text
+	endhandle
+
+	------------------------------------------------------------------
+	-- and the passes, in .Apply()'s order                           --
+	------------------------------------------------------------------
+	!this.intersections = object array()
+	!this.allintersections = object array()
+	!!DrawingPlan1BoxChanged = true
+	$!vw
+	update design
+	handle any
+		!warn.append('update design: ' & !!error.text)
+	endhandle
+
+	!this.UvToLast(!vw)
+	!!DrawingPlan1GridAnnotation(!vw)
+	handle any
+		!warn.append('grid: ' & !!error.text)
+	endhandle
+	$!vw
+	!!DrawingPlan1MatchTicks(!vw, !vwnn)
+	handle any
+		!warn.append('match ticks: ' & !!error.text)
+	endhandle
+	!this.UvToLast(!vw)
+	!!DrawingPlan1LineNoAnnotation(!vw, !xlen, !ylen)
+	handle any
+		!warn.append('line numbers: ' & !!error.text)
+	endhandle
+	!this.UvToLast(!vw)
+	!!DrawingPlan1EquiAnnotation(!vw, !this.minE.string(), !this.minN.string(), !this.minU.string(), !this.maxE.string(), !this.maxN.string(), !this.maxU.string())
+	handle any
+		!warn.append('equipment: ' & !!error.text)
+	endhandle
+	$!vw
+	!!DrawingPlan1MatchLine(!vw, !vwnn)
+	handle any
+		!warn.append('match line: ' & !!error.text)
+	endhandle
+
+	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
+	if !ff.exists() then
+		!ff.deletefile()
+	endif
+	!this.suptstack = object array()
+	!bpdxf = !this.blankdir & 'BlankPos1.dxf'
+	$!vw
+	LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF '$!bpdxf'
+	handle any
+		!warn.append('DXF for BlankPos: ' & !!error.text)
+	endhandle
+	if (!this.redutog.val) then
+		!this.UvToLast(!vw)
+		!this.ReduAnnotation(!vw)
+		handle any
+			!warn.append('reducers: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.nozztog.val) then
+		!this.UvToLast(!vw)
+		!this.NozzleAnnotation(!vw)
+		handle any
+			!warn.append('nozzles: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.valvtog.val) then
+		!this.UvToLast(!vw)
+		!this.ValveAnnotation(!vw)
+		handle any
+			!warn.append('valves: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.insttog.val) then
+		!this.UvToLast(!vw)
+		!this.InstAnnotation(!vw)
+		handle any
+			!warn.append('instruments: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.supttog.val) then
+		!this.UvToLast(!vw)
+		!this.SuptAnnotation(!vw)
+		handle any
+			!warn.append('supports: ' & !!error.text)
+		endhandle
+	endif
+	!this.AppendDimLines(!vw)
+	handle any
+		!warn.append('dimension lines for BlankPos: ' & !!error.text)
+	endhandle
+	!this.RunBlankPos()
+	!ff = object file(!this.blankdir & 'LabelSpace.txt')
+	if !ff.exists() then
+		!ff.open('read')
+		!lines = !ff.readfile()
+		do !i From 1 to !lines.size()
+			!this.PlaceLabelFromSpace(!lines[!i], !rcode, false)
+			handle any
+				!warn.append('label placement: ' & !!error.text)
+			endhandle
+		enddo
+		!ff.close()
+	endif
+
+	!!DrawingPlan1MatchGaps(!vw)
+	handle any
+		!warn.append('match line gaps: ' & !!error.text)
+	endhandle
+	$!vw
+	!this.ViewTitleAt(!vw, !lmaxU, !this.TitleTopNow())
+	handle any
+		!warn.append('view title: ' & !!error.text)
+	endhandle
+	!this.UvToLast(!vw)
+	!!DrawingPlan1FlowAnnotation(!vw)
+	handle any
+		!warn.append('flow arrows: ' & !!error.text)
+	endhandle
+	$!vw
+
+	do !w values !warn
+		!this.UvLog('  WARN ' & !w)
+	enddo
+	if (!warn.size().gt(0)) then
+		return 'done, but ' & !warn.size().string() & ' step(s) failed, first: ' & !warn[1]
+	endif
+	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- CE to the last member of view !vw, so the next NEW goes in after   --
+-- everything already there -- or on the view itself when it has no   --
+-- members at all. a view drawn by hand has none of its own, and once --
+-- .UvClearOwn() has taken last run's layers away a bare '1' stopped  --
+-- the whole view on '(2,113) List exhausted' (2026-09-29). 'last'    --
+-- is only tried after '1' went through: from the view itself it      --
+-- would go to the view's last SIBLING -- another view on the sheet   --
+------------------------------------------------------------------------
+define method .UvToLast(!vw is string)
+	$!vw
+	1
+	handle any
+		$!vw
+		return
+	endhandle
+	last
+	handle any
+	endhandle
+endmethod
+
+------------------------------------------------------------------------
+-- gives view !vref the scale on the View tab. 'auto' there: the       --
+-- smallest standard scale of the tab's own list (1:n entries) at      --
+-- which the limits, measured out from the centre of the frame side    --
+-- by side, still fit inside the frame. !trans and !ls are the view    --
+-- and its limits on the sheet at the scale it has now -- how far a    --
+-- limit reaches is read off them and divided by that scale, so what   --
+-- VSCA or VRAT say does not matter. answers '' or why it could not    --
+--                                                                     --
+-- .selection('DTEXT'): the list has no rtext of its own, and a bare   --
+-- .selection() read the wrong one in Assign Numbers (2026-09-24)      --
+------------------------------------------------------------------------
+define method .UvSetScale(!vref is string, !trans is array, !ls is array, !fx1 is real, !fy1 is real, !fx2 is real, !fy2 is real) is string
+	!scalestr = !this.scaleopt.selection('DTEXT')
+	if (!scalestr.eqnocase('User Define')) then
+		!scalestr = !this.scaletext.val
+	endif
+	!scalestr = !scalestr.replace(' ', '')
+	!num = 0
+	!den = 0
+	!src = ''
+	if (!scalestr.eqnocase('auto')) then
+		------------------------------------------------------------------
+		-- sheet mm per world mm at the scale the view has now           --
+		------------------------------------------------------------------
+		!v0 = sqrt(!trans[5] * !trans[5] + !trans[6] * !trans[6])
+		if (!v0 le 0) then
+			return 'auto scale: the scale the view has now could not be measured'
+		endif
+		!l1 = !ls[1].string('D6').replace('mm', '').real()
+		!l2 = !ls[2].string('D6').replace('mm', '').real()
+		!l3 = !ls[3].string('D6').replace('mm', '').real()
+		!l4 = !ls[4].string('D6').replace('mm', '').real()
+		!hw = (!fx2 - !fx1) * 0.5
+		!hh = (!fy2 - !fy1) * 0.5
+		!ax = max(!trans[1] - !l1, !l3 - !trans[1])
+		!ay = max(!trans[2] - !l2, !l4 - !trans[2])
+		!needx = !ax / !v0 / !hw
+		!needy = !ay / !v0 / !hh
+		!need = max(!needx, !needy)
+		!opts = !this.scaleopt.dtext
+		do !sc values !opts
+			if (!sc.matchwild('1:*')) then
+				!d = 0
+				!d = !sc.after(':').real()
+				handle any
+					!d = 0
+				endhandle
+				if (!d gt 0 and !d geq !need * 0.999999) then
+					if (!den eq 0 or !d lt !den) then
+						!den = !d
+					endif
+				endif
+			endif
+		enddo
+		if (!den eq 0) then
+			return 'auto scale: the limits need 1:' & !need.string('D1') & ', more than any scale on the View tab list'
+		endif
+		!num = 1
+		!src = 'auto, the limits need 1:' & !need.string('D2')
+	else
+		------------------------------------------------------------------
+		-- read the way .Apply() reads it: both halves of a ratio, a    --
+		-- bare number as 1:that                                         --
+		------------------------------------------------------------------
+		!num = 1
+		if (!scalestr.matchwild('*:*')) then
+			!num = 0
+			!num = !scalestr.before(':').real()
+			handle any
+				!num = 0
+			endhandle
+			!den = !scalestr.after(':').real()
+			handle any
+				!den = 0
+			endhandle
+		else
+			!den = !scalestr.real()
+			handle any
+				!den = 0
+			endhandle
+		endif
+		if (!num le 0 or !den le 0) then
+			return 'Drawing Scale on the View tab is not a ratio: ' & !scalestr & ' - pick one from the list, or User Define with a ratio such as 1:30'
+		endif
+		!src = 'View tab'
+	endif
+	$!vref
+	VRAT $!num $!den
+	handle any
+		!vs = !num / !den
+		VSCAL $!vs
+		handle any
+			return 'its scale could not be set to ' & !num.string() & ':' & !den.string() & ': ' & !!error.text
+		endhandle
+	endhandle
+	!this.UvLog('  scale ' & !num.string() & ':' & !den.string() & ' (' & !src & ')')
+	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- what an earlier run of .AnnotateView() left on view !vw: the layers --
+-- and notes named <view>/ate..., the view title <view>/VTITLE, and   --
+-- the library <view>/LIBY. nothing else on the view is looked at.   --
+-- answers '' or why it could not                                     --
+------------------------------------------------------------------------
+define method .UvClearOwn(!vw is string) is string
+	!pat = !vw & '/ate*'
+	!gone = 0
+	var !lays coll all laye for $!vw
+	handle any
+		!lays = object array()
+	endhandle
+	do !l values !lays
+		!ln = ''
+		var !ln name of $!l
+		handle any
+			skip
+		endhandle
+		if (!ln.matchwild(!pat)) then
+			$!l
+			handle any
+				skip
+			endhandle
+			delete laye
+			handle any
+				return 'its old layer ' & !ln & ' could not be deleted: ' & !!error.text
+			endhandle
+			!gone = !gone + 1
+		endif
+	enddo
+	------------------------------------------------------------------
+	-- the notes are the sheet's, not the view's (a NOTE is a sheet   --
+	-- element): <view>/ateNOTE and <view>/VTITLE are found among the --
+	-- sheet's notes by name. the pattern ends in a slash before ate, --
+	-- so /S2/V1 does not reach the notes of /S2/V10                  --
+	------------------------------------------------------------------
+	!ttl = !vw & '/VTITLE'
+	var !vsh owner of $!vw
+	var !notes coll all note for $!vsh
+	handle any
+		!notes = object array()
+	endhandle
+	do !nte values !notes
+		!ln = ''
+		var !ln name of $!nte
+		handle any
+			skip
+		endhandle
+		if (!ln.matchwild(!pat) or !ln.eq(!ttl)) then
+			$!nte
+			handle any
+				skip
+			endhandle
+			delete note
+			handle any
+				return 'its old note ' & !ln & ' could not be deleted: ' & !!error.text
+			endhandle
+			!gone = !gone + 1
+		endif
+	enddo
+	!lib = !vw & '/LIBY'
+	$!lib
+	handle any
+	elsehandle none
+		delete liby
+		handle any
+			return 'its old library ' & !lib & ' could not be deleted: ' & !!error.text
+		endhandle
+		!gone = !gone + 1
+	endhandle
+	!this.UvLog('  cleared ' & !gone.string() & ' element(s) of an earlier run')
+	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- a name for an unnamed view, CE being the view: <sheet>/V<n> when   --
+-- the sheet has a name, the first n free; otherwise /VIEW-<refno>.   --
+-- answers '' when neither is free                                    --
+------------------------------------------------------------------------
+define method .UvNewName() is string
+	var !vref ref
+	var !sh owner
+	!shns = 'false'
+	var !shns isnamed of $!sh
+	handle any
+		!shns = 'false'
+	endhandle
+	if (!shns.boolean()) then
+		var !shnm name of $!sh
+		do !k from 1 to 99
+			!cand = !shnm & '/V' & !k.string()
+			if (not(!this.NameExists(!cand))) then
+				return !cand
+			endif
+		enddo
+	endif
+	!cand = '/VIEW-' & !vref.replace('=', '').replace('/', '-')
+	if (not(!this.NameExists(!cand))) then
+		return !cand
+	endif
+	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- every annotation pass starts with DrawingPlan1ViewPath and some     --
+-- with DrawingPlan1LibPath. a .pmlfnc PML has not been told about     --
+-- (no PML REHASH ALL since it was added) answers 'Function not found' --
+-- on every pass -- after Create Drawings has already deleted the old  --
+-- drawing (reported 2026-09-27: all twelve steps of a view failed     --
+-- that way). asked once up front instead, before anything is touched  --
+------------------------------------------------------------------------
+define method .FunctionsReady() is boolean
+	!probe = ''
+	!probe = !!DrawingPlan1ViewPath('/')
+	handle any
+		!!alert.error('PML cannot find DrawingPlan1ViewPath - run PML REHASH ALL on the command line, then try again. Nothing has been changed.')
+		return false
+	endhandle
+	!probe = !!DrawingPlan1LibPath('/')
+	handle any
+		!!alert.error('PML cannot find DrawingPlan1LibPath - run PML REHASH ALL on the command line, then try again. Nothing has been changed.')
+		return false
+	endhandle
+	return true
+endmethod
+
+define method .UvLog(!msg is string)
+	!f = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_userview.txt')
+	!f.open('append')
+	handle any
+		return
+	endhandle
+	!f.writerecord(!msg)
+	handle any
+	endhandle
+	!f.close()
+	handle any
+	endhandle
 endmethod
 
 ------------------------------------------------------------------------
@@ -3930,6 +4866,16 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 		return
 	endif
 	!topu = !bw.part(6).replace('mm', '').real()
+	!this.ViewTitleAt(!name, !topu, !top)
+endmethod
+
+------------------------------------------------------------------------
+-- the rest of .ViewTitle(), with the elevation handed over instead of --
+-- read off a box: a view drawn by hand has no box, its top is the top --
+-- of its limits (.AnnotateView())                                     --
+------------------------------------------------------------------------
+define method .ViewTitleAt(!name is string, !topu is real, !top is real)
+	!vw = !!DrawingPlan1ViewPath(!name)
 	!elev = !topu.string('D0').replace('mm', '')
 	if (!topu ge 0) then
 		!elev = '+' & !elev
@@ -3937,7 +4883,7 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 	!t1 = 'PLAN at ELEVATION ' & !elev
 
 	!vs = 0
-	$!name/SS/S1/V1
+	$!vw
 	var !vsstr vsca
 	handle any
 		!vsstr = ''
@@ -3956,7 +4902,7 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 
 	!this.TitleLog('VTITLE ' & !name & ' top=' & !top.string('D3') & ' t1=' & !t1 & ' t2=' & !t2)
 
-	!nt = !name & '/SS/S1/V1/VTITLE'
+	!nt = !vw & '/VTITLE'
 	!elevnm = !nt & '/ELEV'
 	!scalenm = !nt & '/SCALE'
 	!exists = true
@@ -4036,7 +4982,7 @@ define method .ViewTitle(!name is string, !box is string, !top is real)
 	-- -- a number not in the colour dictionary is (61,604) and must   --
 	-- not cost the text itself -- and fall back to green              --
 	------------------------------------------------------------------
-	$!name/SS/S1/V1
+	$!vw
 	new note $!nt
 	handle any
 		!this.TitleLog('  new note failed: ' & !!error.text)
@@ -4188,7 +5134,8 @@ define method .TitleLog(!msg is string)
 endmethod
 
 define method .NozzleAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateNOZZ
+	!vw = !!DrawingPlan1ViewPath(!name)
+	NEW LAYE $!vw/ateNOZZ
 	Purpose NOZZ
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -4249,6 +5196,11 @@ define method .NozzleAnnotation(!name is string)
 	!ff.open('append')
 
 	var !nozzs coll $!this.nozztext1.val within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	!nzrefs = object array()
+	!nzsh = object array()
+	!nzx = object array()
+	!nzy = object array()
+	!nzu = object array()
 	do !nozz values !nozzs
 		var !apos ( pos of $!nozz wrt worl )
 		var !apos1 shpos of $!apos
@@ -4261,9 +5213,52 @@ define method .NozzleAnnotation(!name is string)
 		if (not(!this.InViewOnSheet(!apos1))) then
 			skip
 		endif
+		!aposobj = object position(!apos)
+		!nzrefs.append(!nozz)
+		!nzsh.append(!apos1)
+		!nzx.append(!apos1.part(2).replace('mm', '').real())
+		!nzy.append(!apos1.part(4).replace('mm', '').real())
+		!nzu.append(!aposobj.up.value())
+	enddo
+
+	do !k from 1 to !nzrefs.size()
+		!nozz = !nzrefs[!k]
+		!apos1 = !nzsh[!k]
+		------------------------------------------------------------------
+		-- nozzles stacked on one plan point (N7 under N8 on the shell   --
+		-- of C1101) print their labels on top of each other and the     --
+		-- plan cannot tell which is which: the upper one gets (U), the  --
+		-- lower one (D) after its name (user, 2026-09-29). same point = --
+		-- within 0.5mm on the paper; a third one in between gets        --
+		-- neither, one at the same elevation does not count             --
+		------------------------------------------------------------------
+		!nzabove = false
+		!nzbelow = false
+		do !m from 1 to !nzrefs.size()
+			if (!m.eq(!k)) then
+				skip
+			endif
+			!ddx = !nzx[!m] - !nzx[!k]
+			!ddy = !nzy[!m] - !nzy[!k]
+			!dd2 = !ddx * !ddx + !ddy * !ddy
+			if (!dd2.lt(0.25)) then
+				if (!nzu[!m].gt(!nzu[!k] + 1)) then
+					!nzabove = true
+				elseif (!nzu[!m].lt(!nzu[!k] - 1)) then
+					!nzbelow = true
+				endif
+			endif
+		enddo
+		!nzsuf = ''
+		if (!nzbelow and not(!nzabove)) then
+			!nzsuf = '(U)'
+		elseif (!nzabove and not(!nzbelow)) then
+			!nzsuf = '(D)'
+		endif
+		!nzbtext = !this.nozztext2.val & !nzsuf
 		NEW GLAB
 		DDNA $!nozz
-		Btext |$!this.nozztext2.val|
+		Btext |$!nzbtext|
 		Justification Centre
 		Alignment Hbody
 		ABSO
@@ -4852,7 +5847,8 @@ define method .northarrowpick()
 endmethod
 
 define method .ValveAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateVALV
+	!vw = !!DrawingPlan1ViewPath(!name)
+	NEW LAYE $!vw/ateVALV
 	Purpose VALV
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -4953,7 +5949,8 @@ define method .ValveAnnotation(!name is string)
 endmethod
 
 define method .ReduAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateREDU
+	!vw = !!DrawingPlan1ViewPath(!name)
+	NEW LAYE $!vw/ateREDU
 	Purpose REDU
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -5067,8 +6064,68 @@ define method .ReduAnnotation(!name is string)
 
 endmethod
 
+------------------------------------------------------------------------
+-- the instrument bubble, NAME_CIRC, in the label library !lib/LALB   --
+-- (the LIBY !lib/LIBY has to exist). lifted out of .Apply() as it    --
+-- was, so the view drawn by hand (.AnnotateView()) makes exactly the --
+-- same bubble in a library of its own: !lib is <drawing>/SS for a    --
+-- box, the view itself for a view (DrawingPlan1LibPath). CE is left  --
+-- inside the new SYTM, the way the inline code left it               --
+------------------------------------------------------------------------
+define method .InstTemplate(!lib is string)
+	$!lib/LIBY
+	new lalb $!lib/LALB
+	new sytm $!lib/LALB/NAME_CIRC
+	XYPS X 0mm Y 0mm
+	JUST Centre
+	ALIGN Hbody
+	FONT 1
+	CHEITX '3mm'
+	CSPATX '0'
+	LSPATX '0'
+	TXCOLO 1
+	NLSTYL Solid
+	NLCOLO 1
+	LLSTYL Solid
+	LLCOLO 1
+	FSTYLE Off
+	FCOLOUR 1
+	MCOLOUR 1
+	LZCOLO 1
+	LZLSTY Solid
+	LZVIS true
+	LZPRIN true
+	
+	NEW CIRCLE
+	Origin Centre Offset X 0mm Y 0mm
+	-- bubble size from the Annotation tab. .insttext3 'Diameter'  --
+	-- had no reader at all until now: field, default and Save     --
+	-- record existed, nothing consumed it, and the circle was     --
+	-- this literal (same shape as .gridhei, 2026-09-08)           --
+	!instdiav = !this.insttext3.val
+	!instdia = !instdiav.string('D2') & 'mm'
+	DIAM $!instdia
+	NLSTYL Solid
+	NLCOLO 5
+	FSTYLE Off
+	FCOLOUR 1
+	
+	NEW TEXTPRIMITIVE
+	Origin Offset X 0mm Y 0mm
+	FONT 1
+	CHEITX '1.5mm'
+	CSPATX '0'
+	LSPATX '0'
+	JUST Centre
+	ALIGN Hbody
+	BTEX |$!this.insttext2.val|
+	TXCOLO 5
+endmethod
+
 define method .InstAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateINST
+	!vw = !!DrawingPlan1ViewPath(!name)
+	!lib = !!DrawingPlan1LibPath(!name)
+	NEW LAYE $!vw/ateINST
 	Purpose INST
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -5133,7 +6190,7 @@ define method .InstAnnotation(!name is string)
 	----------------------------------------------------------------
 	!instdiav = !this.insttext3.val
 	!instdia = !instdiav.string('D2') & 'mm'
-	$!name/SS/LALB/NAME_CIRC
+	$!lib/LALB/NAME_CIRC
 	handle any
 	elsehandle none
 		var !ncircs coll all circle for ce
@@ -5149,7 +6206,7 @@ define method .InstAnnotation(!name is string)
 	-- back onto the layer: the NEW SLABs below are created under  --
 	-- whatever CE is left here                                    --
 	----------------------------------------------------------------
-	$!name/SS/S1/V1/ateINST
+	$!vw/ateINST
 	handle any
 	endhandle
 	
@@ -5169,7 +6226,7 @@ define method .InstAnnotation(!name is string)
 		endif
 		NEW SLAB
 		DDNA $!inst
-		tmrf $!name/SS/LALB/NAME_CIRC
+		tmrf $!lib/LALB/NAME_CIRC
 		Font 1
 		Blnk true
 		Bmargin 0mm
@@ -6579,7 +7636,9 @@ $)
 endmethod
 
 define method .SuptAnnotation(!name is string)
-	NEW LAYE $!name/SS/S1/V1/ateSUPT
+	!vw = !!DrawingPlan1ViewPath(!name)
+	!lib = !!DrawingPlan1LibPath(!name)
+	NEW LAYE $!vw/ateSUPT
 	Purpose SUPT
 	Lvisibility true
 	Ucode mm  Distance  mm  Bore Nominal 
@@ -6637,12 +7696,12 @@ define method .SuptAnnotation(!name is string)
 	Function unset
   
   if not(!this.supttog1.val) then
-    $!name/SS/LALB
+    $!lib/LALB
     handle any
-      $!name/SS/LIBY
-      new lalb $!name/SS/LALB
+      $!lib/LIBY
+      new lalb $!lib/LALB
     endhandle
-    new sytm $!name/SS/LALB/NAME_SUPT
+    new sytm $!lib/LALB/NAME_SUPT
     XYPS X 0mm Y 0mm
     JUST Centre
     ALIGN Hbody
@@ -6676,7 +7735,7 @@ define method .SuptAnnotation(!name is string)
     ALIGN Hbody
     BTEX |#STEX|
     TXCOLO 5
-    !this.supttmp = |$!name/SS/LALB/NAME_SUPT|
+    !this.supttmp = |$!lib/LALB/NAME_SUPT|
   endif
 	
 	------------------------------------------------------------------
@@ -6695,7 +7754,7 @@ define method .SuptAnnotation(!name is string)
 
 	var !insts coll all atta with isnamed within E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
 	do !inst values !insts
-		$!name/SS/S1/V1/ateSUPT
+		$!vw/ateSUPT
 		------------------------------------------------------------------
 		-- see the note in .NozzleAnnotation() -- the volume above is    --
 		-- the world box containing the drawing box, the sheet position  --
@@ -6824,7 +7883,7 @@ define method .SuptAnnotation(!name is string)
 			!inst  = !snames[!ik]
 			!stext = !stexts[!ik]
 			!apos1 = !sposs[!ik]
-			$!name/SS/S1/V1/ateSUPT
+			$!vw/ateSUPT
 			NEW SLAB
 			DDNA $!inst
 			!ce = ref
@@ -6886,15 +7945,17 @@ endmethod
 -- create support template reference --
 ---------------------------------------
 define method .SuptAnnotation(!name is string, !stext is string)
-	$!name/SS/LIBY
-	$!name/SS/LALB
+	!vw = !!DrawingPlan1ViewPath(!name)
+	!lib = !!DrawingPlan1LibPath(!name)
+	$!lib/LIBY
+	$!lib/LALB
 	handle any
-		new lalb $!name/SS/LALB
+		new lalb $!lib/LALB
 	endhandle
 	!slen = !stext.length()
-	$!name/SS/LALB/NAME_SUPT$!slen
+	$!lib/LALB/NAME_SUPT$!slen
 	handle any
-		new sytm $!name/SS/LALB/NAME_SUPT$!slen
+		new sytm $!lib/LALB/NAME_SUPT$!slen
 		XYPS X 100mm Y 100mm
 		JUST Centre
 		ALIGN Hbody
@@ -6949,5 +8010,5 @@ define method .SuptAnnotation(!name is string, !stext is string)
 		BTEX |#STEX|
 		TXCOLO 5
 	endhandle
-	!this.supttmp = |$!name/SS/LALB/NAME_SUPT$!slen|
+	!this.supttmp = |$!lib/LALB/NAME_SUPT$!slen|
 endmethod

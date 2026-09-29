@@ -30,15 +30,28 @@
 -- and titles, so those are told apart by their wording instead   --
 -- -- only the match line writes 'MATCH LINE ...' or 'SEE ...'    --
 -------------------------------------------------------------------
-define function !!DrawingPlan1MatchCollect()
+define function !!DrawingPlan1MatchCollect(!ownnote is string)
 	!!DrawingPlan1MatchCandRefs = object array()
 	!!DrawingPlan1MatchCandSigs = object array()
 	!!DrawingPlan1MatchClaims = object array()
 
-	note 1
-	handle any
-		return
-	endhandle
+	----------------------------------------------------------------
+	-- the note the match line lives in. a drawing made from a box   --
+	-- has it as NOTE 1 of its sheet. a view drawn by hand shares its --
+	-- sheet with the user's own notes and maybe other views, so it  --
+	-- has one of its own, <view>/ateNOTE, handed over by name        --
+	----------------------------------------------------------------
+	if (!ownnote.eq('')) then
+		note 1
+		handle any
+			return
+		endhandle
+	else
+		$!ownnote
+		handle any
+			return
+		endhandle
+	endif
 	!noteref = ce
 
 	var !mlstras coll all stra with nlstyle eq 8029 and nlcolour eq 16 for ce

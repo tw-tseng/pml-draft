@@ -77,8 +77,9 @@ define function !!DrawingPlan1MatchArrow(!dir is string, !equistr is string, !po
 	endhandle
 	!!DrawingPlan1MatchArrowN = !k
 	!name  = '/' & !equistr
-	!aname = !name & '/SS/S1/V1/MLARR_' & !dir & '_' & !k.string()
-	!lname = !name & '/SS/S1/V1/ateMATCH'
+	!vw = !!DrawingPlan1ViewPath(!name)
+	!aname = !vw & '/MLARR_' & !dir & '_' & !k.string()
+	!lname = !vw & '/ateMATCH'
 	!isvert = false
 	if (!dir.eq('left') or !dir.eq('right')) then
 		!isvert = true

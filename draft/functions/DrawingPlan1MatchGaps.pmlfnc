@@ -38,6 +38,7 @@
 -- have to line up with                                                --
 ------------------------------------------------------------------------
 define function !!DrawingPlan1MatchGaps(!name is string)
+	!vw = !!DrawingPlan1ViewPath(!name)
 	!dirlist = 'right left down up'
 	----------------------------------------------------------------------
 	-- how long every break is, in sheet mm.                             --
@@ -140,7 +141,7 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	!gbxs = object array()
 	!gbys = object array()
 	!gbok = true
-	$!name/SS/S1/V1/ateGRID
+	$!vw/ateGRID
 	handle any
 		!gbok = false
 	endhandle
@@ -274,7 +275,7 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	!clrerr = ''
 	do !cj from 1 to 4
 		!cdir = !dirlist.part(!cj)
-		$!name/SS/S1/V1/ateLINE_$!cdir
+		$!vw/ateLINE_$!cdir
 		handle any
 			skip
 		endhandle
@@ -380,13 +381,13 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 		--                          LDIM the point hangs off            --
 		--   a grid bubble       -> its leader, gapped on the SLAB      --
 		------------------------------------------------------------------
-		!ldimpath = !name & '/SS/S1/V1/ateLINE_' & !dir
+		!ldimpath = !vw & '/ateLINE_' & !dir
 		------------------------------------------------------------------
 		-- the dimension points are read in a pass of their own:         --
 		-- navigating to each one moves CE, and it is the LDIM that has  --
 		-- to be collected from                                          --
 		------------------------------------------------------------------
-		$!name/SS/S1/V1/ateLINE_$!dir
+		$!vw/ateLINE_$!dir
 		handle any
 			skip
 		endhandle
@@ -609,7 +610,7 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	endhandle
 	!lbrefs = object array()
 	!lbok = true
-	$!name/SS/S1/V1
+	$!vw
 	handle any
 		!lbok = false
 	endhandle
@@ -817,7 +818,7 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 				!gdone = false
 				!gnav  = true
 				!gerr  = ''
-				!gon   = !name & '/SS/S1/V1/ateLINE_' & !ddir
+				!gon   = !vw & '/ateLINE_' & !ddir
 				$!gon
 				handle any
 					!gnav = false
