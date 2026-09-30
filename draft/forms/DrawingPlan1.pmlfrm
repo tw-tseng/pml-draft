@@ -283,6 +283,12 @@ layout form !!DrawingPlan1 dialog dock
 	member .crossu is real
 	member .crossuok is boolean
 	member .crossslope is boolean
+	------------------------------------------------------------------------
+	-- things the user should know about a view that still went through,  --
+	-- shown with the result of Annotate Views at the end -- never a      --
+	-- dialog of their own, never a stop (user, 2026-09-30)               --
+	------------------------------------------------------------------------
+	member .uvnotes is array
 
 	member .intersections is array    $( intersections of the current refgln only  $)
 	member .allintersections is array $( intersections of every refgln of the drawing, used by !!DrawingPlan1LineNoAnnotation  $)
@@ -2634,6 +2640,7 @@ define method .AnnotateViews()
 	endhandle
 	!ok = 0
 	!fails = object array()
+	!this.uvnotes = object array()
 	do !it values !items
 		!this.UvLog('VIEW ' & !it)
 		!msg = ''
@@ -2651,10 +2658,13 @@ define method .AnnotateViews()
 	enddo
 	!res = !ok.string() & ' of ' & !items.size().string() & ' view(s) annotated'
 	!this.uvresult.val = !res
-	if (!fails.size().gt(0)) then
+	if (!fails.size().gt(0) or !this.uvnotes.size().gt(0)) then
 		!txt = !res & ' - see check_userview.txt'
 		do !fl values !fails
 			!txt = !txt & ' | ' & !fl
+		enddo
+		do !fl values !this.uvnotes
+			!txt = !txt & ' | NOTE ' & !fl
 		enddo
 		!!alert.warning(!txt)
 	else
@@ -4335,7 +4345,29 @@ define method .PlanVsecCuts(!vref is string, !trans is array, !rect is array, !u
 					endif
 				endif
 			else
-				!how = 'oblique on the sheet, not cutting'
+				------------------------------------------------------
+				-- turned against the view: its cut can not be one of --
+				-- the drawing's straight edges, and a small angle    --
+				-- hardly shows on the sheet while pipes are still    --
+				-- labelled where the plane has cut them away. said   --
+				-- with the result at the end (user, 2026-09-30)      --
+				------------------------------------------------------
+				!amx = abs(!mx)
+				!amy = abs(!my)
+				if (!amx ge !amy) then
+					!skw = ATAN(!amy / !amx)
+				else
+					!skw = ATAN(!amx / !amy)
+				endif
+				!how = 'turned ' & !skw.string('D2') & ' deg against the view, not cutting'
+				if (!log) then
+					!vwname = !vref
+					var !vwname name of $!vref
+					handle any
+						!vwname = !vref
+					endhandle
+					!this.uvnotes.append(!vwname & ': section plane ' & !vsn & ' is turned ' & !skw.string('D2') & ' deg against the view - its edge is not followed and pipes it cuts off may still be labelled; turn the view to match the plane and run again')
+				endif
 			endif
 		else
 			!how = 'sloping, not cutting'
