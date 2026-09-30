@@ -2786,27 +2786,68 @@ define method .AnnotateView(!it is string) is string
 	handle any
 		return 'its limits could not be read: ' & !!error.text
 	endhandle
+	------------------------------------------------------------------
+	-- a view given only its six section planes (Set View Limits'    --
+	-- FR/TO VSECs) and no limits works from their box, as a section --
+	-- does (user, 2026-09-30: /DWGNO-028/SS/S1/V2 as a plan, 'has   --
+	-- no limits to work from'). the box is the world box round its  --
+	-- corners; .PlanVsecCuts() below then follows the planes        --
+	-- themselves where the view is turned with them                 --
+	------------------------------------------------------------------
+	!pcorners = object array()
 	!lsrc = 'none'
 	if (!vl.vwlimitsSet()) then
 		!lsrc = 'VWLIMITS'
 	elseif (!vl.cdlimitsSet()) then
 		!lsrc = 'CDLIMITS'
-	elseif (!vl.viewVolumeSet()) then
-		!lsrc = 'VVOL'
-	elseif (!vl.vlimitsSet()) then
-		!lsrc = 'VLIMITS'
+	else
+		!verr = !this.VsecBox(!vref, !pcorners)
+		if (!verr.eq('')) then
+			!lsrc = 'VSEC'
+		else
+			!this.UvLog('  section planes: ' & !verr)
+			if (!vl.viewVolumeSet()) then
+				!lsrc = 'VVOL'
+			elseif (!vl.vlimitsSet()) then
+				!lsrc = 'VLIMITS'
+			endif
+		endif
 	endif
 	if (!lsrc.eq('none')) then
-		!this.UvLog('  limits: none of VWLIMITS, :CDLIMITS, VVOL, VLIMITS is set')
-		return 'has no limits to work from'
+		!this.UvLog('  limits: none of VWLIMITS, :CDLIMITS, six VSEC planes, VVOL, VLIMITS')
+		return 'has no limits and no box of six section planes to work from'
 	endif
-	!lim = !vl.getViewLimitsArray()
-	!lminE = min(!lim[1], !lim[4])
-	!lminN = min(!lim[2], !lim[5])
-	!lminU = min(!lim[3], !lim[6])
-	!lmaxE = max(!lim[1], !lim[4])
-	!lmaxN = max(!lim[2], !lim[5])
-	!lmaxU = max(!lim[3], !lim[6])
+	if (!lsrc.eq('VSEC')) then
+		do !ci from 1 to 8
+			!cp = object position(!pcorners[!ci])
+			!ce1 = !cp.east.value()
+			!cn1 = !cp.north.value()
+			!cu1 = !cp.up.value()
+			if (!ci eq 1) then
+				!lminE = !ce1
+				!lminN = !cn1
+				!lminU = !cu1
+				!lmaxE = !ce1
+				!lmaxN = !cn1
+				!lmaxU = !cu1
+			else
+				!lminE = min(!lminE, !ce1)
+				!lminN = min(!lminN, !cn1)
+				!lminU = min(!lminU, !cu1)
+				!lmaxE = max(!lmaxE, !ce1)
+				!lmaxN = max(!lmaxN, !cn1)
+				!lmaxU = max(!lmaxU, !cu1)
+			endif
+		enddo
+	else
+		!lim = !vl.getViewLimitsArray()
+		!lminE = min(!lim[1], !lim[4])
+		!lminN = min(!lim[2], !lim[5])
+		!lminU = min(!lim[3], !lim[6])
+		!lmaxE = max(!lim[1], !lim[4])
+		!lmaxN = max(!lim[2], !lim[5])
+		!lmaxU = max(!lim[3], !lim[6])
+	endif
 	!this.UvLog('  limits (' & !lsrc & ') E ' & !lminE.string('D1') & ' N ' & !lminN.string('D1') & ' U ' & !lminU.string('D1') & ' TO E ' & !lmaxE.string('D1') & ' N ' & !lmaxN.string('D1') & ' U ' & !lmaxU.string('D1'))
 	if (!lmaxE - !lminE lt 1 or !lmaxN - !lminN lt 1 or !lmaxU - !lminU lt 1) then
 		return 'its limits (' & !lsrc & ') are flat or empty'
