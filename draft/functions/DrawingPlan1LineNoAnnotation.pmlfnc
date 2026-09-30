@@ -406,12 +406,18 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 						elseif (!crossenu.neq('')) then
 							!crosspos = object position(!crossenu)
 							--------------------------------------------------------------
-							-- a plan's crossing takes the fitting's U; an elevation's  --
-							-- crossing is on the box edge and its U is the edge's own  --
-							-- (2026-09-29)                                             --
+							-- a plan's crossing takes the tube's own centre height     --
+							-- there -- the WOP EL the label prints (user, 2026-09-30)  --
+							-- -- and the fitting's where that could not be worked out; --
+							-- an elevation's crossing is on the box edge and its U is  --
+							-- the edge's own (2026-09-29)                              --
 							--------------------------------------------------------------
 							if (not(!!DrawingPlan1.IsElevTrans(!trans))) then
-								!crosspos.up = !memenupos.position().up
+								if (!!DrawingPlan1.crossuok) then
+									!crosspos.up = !!DrawingPlan1.crossu
+								else
+									!crosspos.up = !memenupos.position().up
+								endif
 							endif
 							---------------------------------------------------------------
 							-- not !crosspos.string(): a POSITION built with object       --
@@ -2104,15 +2110,16 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					endif
 				endif
 				---------------------------------------------------------------------
-				-- an elevation's left and right edges (user, 2026-09-30): the      --
-				-- chain measures U, and the point is where the pipe crosses the    --
-				-- border -- on a sloping pipe not the height of the fitting the    --
-				-- BOP came from (100-A-18: BOP from an elbow outside the view,     --
-				-- 107233, point at 107354). the text gives the point's own centre  --
-				-- height instead, as WOP (working point) EL                        --
+				-- the point's own centre height, as WOP (working point) EL, and    --
+				-- not the BOP of the fitting (user, 2026-09-30). on a section the  --
+				-- 100-A-18 point was where the sloping pipe crosses the right      --
+				-- border, 107354, while its BOP came from an elbow outside the     --
+				-- view, 107233; a plan's crossings the same (user: 'the plan as    --
+				-- well'). the point's U is the tube's own there -- see             --
+				-- .CrossingOfTube() -- the element's where there is no tube        --
 				---------------------------------------------------------------------
-				if (!labwantbop.eqnocase('y') and (!dir.eq('left') or !dir.eq('right'))) then
-					if (!!DrawingPlan1.IsElevTrans(!trans) and not(!type.eqnocase('EQUI'))) then
+				if (!labwantbop.eqnocase('y')) then
+					if (not(!type.eqnocase('EQUI'))) then
 						!labwantbop = 'n'
 						!labbop = !attapos.up.nint().value()
 						!labhasbop = true

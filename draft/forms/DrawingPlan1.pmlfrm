@@ -263,6 +263,14 @@ layout form !!DrawingPlan1 dialog dock
 	-- (2026-09-29)                                                        --
 	------------------------------------------------------------------------
 	member .depthmin is real
+	------------------------------------------------------------------------
+	-- the centre height of the tube where .CrossingOfTube() last found it --
+	-- crossing the border, read along the tube itself (a sloping pipe is  --
+	-- not at its fitting's height there). .crossuok says whether it was   --
+	-- worked out (2026-09-30, WOP EL)                                     --
+	------------------------------------------------------------------------
+	member .crossu is real
+	member .crossuok is boolean
 	member .depthmax is real
 
 	member .intersections is array    $( intersections of the current refgln only  $)
@@ -8522,6 +8530,7 @@ endmethod
 --------------------------------------------------------------------------
 define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) is string
 	!answer = ''
+	!this.crossuok = false
 	!ok = true
 	!stpos = ''
 	!stdir = ''
@@ -8658,6 +8667,22 @@ define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) 
 		endhandle
 		if (!ok) then
 			!answer = !crossenu
+			------------------------------------------------------------
+			-- and the tube's own centre height there: as far along   --
+			-- the tube as the crossing is along its sheet image. the --
+			-- label prints it as WOP EL (user, 2026-09-30)            --
+			------------------------------------------------------------
+			!cs1 = !p1sh.position()
+			!cs2 = !p2sh.position()
+			!ccs = !crosssh.position()
+			!cslen = !cs1.distance(!cs2)
+			if (!cslen gt 0.001) then
+				!ct = !cs1.distance(!ccs) / !cslen
+				!cu1 = !p1.up
+				!cu2 = !p2.up
+				!this.crossu = !cu1 + !ct * (!cu2 - !cu1)
+				!this.crossuok = true
+			endif
 		endif
 	endif
 	------------------------------------------------------------------------
