@@ -3218,6 +3218,64 @@ define method .AnnotateSection(!vref is string, !vw is string, !trans is array) 
 		!lmaxN = max(!lim[2], !lim[5])
 		!lmaxU = max(!lim[3], !lim[6])
 	endif
+	------------------------------------------------------------------
+	-- the user's own section planes, front and back (user,          --
+	-- 2026-09-30, pmode.png): any VSEC besides the six limit planes  --
+	-- with PMODE Standard keeps the side its plane's normal points   --
+	-- to, Reversed the other side, Off nothing. they cut the box     --
+	-- down, and with it the drawlist and how deep pipes and          --
+	-- equipment are looked for. limits given as numbers become the  --
+	-- same eight corners first                                       --
+	------------------------------------------------------------------
+	if (!corners.size() ne 8) then
+		!ces = object array()
+		!ces.append(!lminE)
+		!ces.append(!lmaxE)
+		!cns = object array()
+		!cns.append(!lminN)
+		!cns.append(!lmaxN)
+		!cus = object array()
+		!cus.append(!lminU)
+		!cus.append(!lmaxU)
+		!corners = object array()
+		do !ia from 1 to 2
+			do !ib from 1 to 2
+				do !ic from 1 to 2
+					!corners.append('E ' & !ces[!ia].string('D3') & ' N ' & !cns[!ib].string('D3') & ' U ' & !cus[!ic].string('D3') & ' WRT /*')
+				enddo
+			enddo
+		enddo
+	endif
+	!ncut = 0
+	!ncut = !this.VsecCuts(!vref, !corners, !lsrc)
+	handle any
+		!this.UvLog('  section cuts: ' & !!error.text & !this.ErrWhere())
+		!ncut = 0
+	endhandle
+	if (!ncut gt 0) then
+		do !ci from 1 to 8
+			!cp = object position(!corners[!ci])
+			!ce1 = !cp.east.value()
+			!cn1 = !cp.north.value()
+			!cu1 = !cp.up.value()
+			if (!ci eq 1) then
+				!lminE = !ce1
+				!lminN = !cn1
+				!lminU = !cu1
+				!lmaxE = !ce1
+				!lmaxN = !cn1
+				!lmaxU = !cu1
+			else
+				!lminE = min(!lminE, !ce1)
+				!lminN = min(!lminN, !cn1)
+				!lminU = min(!lminU, !cu1)
+				!lmaxE = max(!lmaxE, !ce1)
+				!lmaxN = max(!lmaxN, !cn1)
+				!lmaxU = max(!lmaxU, !cu1)
+			endif
+		enddo
+		!this.UvLog('  limits (' & !lsrc & ') cut by ' & !ncut.string() & ' section plane(s)')
+	endif
 	!this.UvLog('  section, limits (' & !lsrc & ') E ' & !lminE.string('D1') & ' N ' & !lminN.string('D1') & ' U ' & !lminU.string('D1') & ' TO E ' & !lmaxE.string('D1') & ' N ' & !lmaxN.string('D1') & ' U ' & !lmaxU.string('D1'))
 	if (!lmaxE - !lminE lt 1 or !lmaxN - !lminN lt 1 or !lmaxU - !lminU lt 1) then
 		return 'its limits (' & !lsrc & ') are flat or empty'
@@ -3726,6 +3784,266 @@ define method .VsecBox(!vref is string, !corners is array) is string
 	enddo
 	!this.UvLog('    box of the planes, first corner ' & !corners[1] & ', last ' & !corners[8])
 	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- where section plane !vs is, into !out: E N U of its POS, then E N U --
+-- of its NORM, then the plane's own name; answers '' or why not. read --
+-- the way .VsecBox() reads them (VAR in brackets, then the objects)   --
+------------------------------------------------------------------------
+define method .VsecPlane(!vs is string, !out is array) is string
+	!vsd = !vs.dbref()
+	handle any
+		return !!error.text
+	endhandle
+	!plr = !vsd.plrf
+	handle any
+		return 'no PLRF - ' & !!error.text
+	endhandle
+	if (!plr.badref()) then
+		return 'PLRF not set'
+	endif
+	!pl = !plr.string()
+	!pp = ''
+	var !pp ( pos of $!pl wrt worl )
+	handle any
+		!pp = ''
+	endhandle
+	if (!pp.eq('')) then
+		!ppo = !plr.position.wrt(world)
+		handle any
+			return 'no POS - ' & !!error.text
+		endhandle
+	else
+		!ppo = object position(!pp)
+	endif
+	!pn = ''
+	var !pn ( norm of $!pl wrt worl )
+	handle any
+		!pn = ''
+	endhandle
+	if (!pn.eq('')) then
+		!pdo = !plr.norm.wrt(world)
+		handle any
+			return 'no NORM - ' & !!error.text
+		endhandle
+	else
+		!pdo = object direction(!pn)
+	endif
+	!out.append(!ppo.east.value())
+	!out.append(!ppo.north.value())
+	!out.append(!ppo.up.value())
+	!out.append(!pdo.east)
+	!out.append(!pdo.north)
+	!out.append(!pdo.up)
+	!out.append(!pl)
+	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- the user's own section planes cut the box !corners (eight position  --
+-- strings, corner (a,b,c) at index (a-1)*4 + (b-1)*2 + c, each of a, b --
+-- and c one side of a pair of faces). every VSEC of view !vref which  --
+-- is not one of the six limit planes, with PMODE:                     --
+--     Standard  keeps the side the plane's normal points to           --
+--     Reversed  keeps the other side                                   --
+--     Off       nothing                                                --
+-- (user, 2026-09-30, pmode.png: VS1 at W 312456, normal E, Standard -- --
+-- the E side goes into the drawlist). a plane square to a pair of     --
+-- faces moves that face in; an oblique one is left out and logged,   --
+-- which only draws more, never less. when the box itself came from   --
+-- six untagged planes (!lsrc VSEC without the FR/TO names) every      --
+-- plane is part of it and nothing is cut. answers how many cut        --
+------------------------------------------------------------------------
+define method .VsecCuts(!vref is string, !corners is array, !lsrc is string) is real
+	!vsecs = object array()
+	var !vsecs coll all vsec for $!vref
+	handle any
+		return 0
+	endhandle
+	!tags = object array()
+	!tags.append('FREP')
+	!tags.append('TOEP')
+	!tags.append('FRNP')
+	!tags.append('TONP')
+	!tags.append('FRUP')
+	!tags.append('TOUP')
+	!extra = object array()
+	!extran = object array()
+	!ntag = 0
+	do !vs values !vsecs
+		!vsn = ''
+		var !vsn name of $!vs
+		handle any
+			!vsn = !vs
+		endhandle
+		!islim = false
+		do !tg values !tags
+			if (!vsn.matchwild('*/' & !tg & '/VSEC')) then
+				!islim = true
+				break
+			endif
+		enddo
+		if (!islim) then
+			!ntag = !ntag + 1
+		else
+			!extra.append(!vs)
+			!extran.append(!vsn)
+		endif
+	enddo
+	if (!lsrc.eq('VSEC') and !ntag ne 6) then
+		return 0
+	endif
+	!cx = object array()
+	!cy = object array()
+	!cz = object array()
+	do !ci from 1 to 8
+		!cp = object position(!corners[!ci])
+		!cx[!ci] = !cp.east.value()
+		!cy[!ci] = !cp.north.value()
+		!cz[!ci] = !cp.up.value()
+	enddo
+	!steps = object array()
+	!steps.append(4)
+	!steps.append(2)
+	!steps.append(1)
+	!ncut = 0
+	do !k from 1 to !extra.size()
+		!vs = !extra[!k]
+		!vsn = !extran[!k]
+		!pm = ''
+		!vsd = !vs.dbref()
+		!pm = !vsd.pmod
+		handle any
+			var !pm pmode of $!vs
+			handle any
+				!this.UvLog('    cut ' & !vsn & ': PMODE could not be read - ' & !!error.text)
+				skip
+			endhandle
+		endhandle
+		!pm = !pm.string().upcase()
+		if (!pm.matchwild('OFF*')) then
+			!this.UvLog('    cut ' & !vsn & ': PMODE Off, not cutting')
+			skip
+		endif
+		!sg = 1
+		if (!pm.matchwild('REV*')) then
+			!sg = -1
+		elseif (not(!pm.matchwild('STA*'))) then
+			!this.UvLog('    cut ' & !vsn & ': PMODE ' & !pm & ' not known, not cutting')
+			skip
+		endif
+		!pv = object array()
+		!perr = !this.VsecPlane(!vs, !pv)
+		if (!perr.neq('')) then
+			!this.UvLog('    cut ' & !vsn & ': ' & !perr)
+			skip
+		endif
+		!qx = !pv[4] * !sg
+		!qy = !pv[5] * !sg
+		!qz = !pv[6] * !sg
+		----------------------------------------------------------
+		-- which pair of faces the plane is square to: its normal --
+		-- square to the other two edges of the box                --
+		----------------------------------------------------------
+		!kp = 0
+		do !kk from 1 to 3
+			!sq = true
+			do !ko from 1 to 3
+				if (!ko eq !kk) then
+					skip
+				endif
+				!j2 = 1 + !steps[!ko]
+				!ex = !cx[!j2] - !cx[1]
+				!ey = !cy[!j2] - !cy[1]
+				!ez = !cz[!j2] - !cz[1]
+				!el = sqrt(!ex * !ex + !ey * !ey + !ez * !ez)
+				if (!el gt 0) then
+					!ed = !qx * !ex + !qy * !ey + !qz * !ez
+					!edr = !ed / !el
+					if (abs(!edr) gt 0.001) then
+						!sq = false
+					endif
+				endif
+			enddo
+			if (!sq) then
+				!kp = !kk
+				break
+			endif
+		enddo
+		if (!kp eq 0) then
+			!this.UvLog('    cut ' & !vsn & ' (' & !pm & ', plane ' & !pv[7] & '): oblique to the box, not cutting')
+			skip
+		endif
+		----------------------------------------------------------
+		-- how far each corner is on the kept side; along each of --
+		-- the four edges of that pair, a corner on the wrong     --
+		-- side moves to where the plane crosses the edge         --
+		----------------------------------------------------------
+		!t = object array()
+		do !ci from 1 to 8
+			!t[!ci] = !qx * (!cx[!ci] - !pv[1]) + !qy * (!cy[!ci] - !pv[2]) + !qz * (!cz[!ci] - !pv[3])
+		enddo
+		!st = !steps[!kp]
+		!moved = false
+		!empty = false
+		!nx = object array()
+		!ny = object array()
+		!nz = object array()
+		do !ci from 1 to 8
+			!nx[!ci] = !cx[!ci]
+			!ny[!ci] = !cy[!ci]
+			!nz[!ci] = !cz[!ci]
+		enddo
+		do !ci from 1 to 8
+			!ci0 = !ci - 1
+			!st2 = 2 * !st
+			!cq = !ci0 / !st2
+			!cqi = !cq.int()
+			!bit = !ci0 - !cqi * !st2
+			if (!bit ge !st) then
+				skip
+			endif
+			!cj = !ci + !st
+			!ti = !t[!ci]
+			!tj = !t[!cj]
+			if (!ti lt 0 and !tj lt 0) then
+				!empty = true
+			elseif (!ti lt 0) then
+				!f = !ti / (!ti - !tj)
+				!nx[!ci] = !cx[!ci] + !f * (!cx[!cj] - !cx[!ci])
+				!ny[!ci] = !cy[!ci] + !f * (!cy[!cj] - !cy[!ci])
+				!nz[!ci] = !cz[!ci] + !f * (!cz[!cj] - !cz[!ci])
+				!moved = true
+			elseif (!tj lt 0) then
+				!f = !tj / (!tj - !ti)
+				!nx[!cj] = !cx[!cj] + !f * (!cx[!ci] - !cx[!cj])
+				!ny[!cj] = !cy[!cj] + !f * (!cy[!ci] - !cy[!cj])
+				!nz[!cj] = !cz[!cj] + !f * (!cz[!ci] - !cz[!cj])
+				!moved = true
+			endif
+		enddo
+		if (!empty) then
+			!this.UvLog('    cut ' & !vsn & ' (' & !pm & ', plane ' & !pv[7] & '): would leave nothing, not cutting')
+			skip
+		endif
+		if (not(!moved)) then
+			!this.UvLog('    cut ' & !vsn & ' (' & !pm & ', plane ' & !pv[7] & '): the box is already on its kept side')
+			skip
+		endif
+		!cx = !nx
+		!cy = !ny
+		!cz = !nz
+		!ncut = !ncut + 1
+		!this.UvLog('    cut ' & !vsn & ' (' & !pm & ', plane ' & !pv[7] & ' at E ' & !pv[1].string('D1') & ' N ' & !pv[2].string('D1') & ' U ' & !pv[3].string('D1') & ', kept side E ' & !qx.string('D3') & ' N ' & !qy.string('D3') & ' U ' & !qz.string('D3') & ')')
+	enddo
+	if (!ncut gt 0) then
+		do !ci from 1 to 8
+			!corners[!ci] = 'E ' & !cx[!ci].string('D3') & ' N ' & !cy[!ci].string('D3') & ' U ' & !cz[!ci].string('D3') & ' WRT /*'
+		enddo
+		!this.UvLog('    box after the cuts, first corner ' & !corners[1] & ', last ' & !corners[8])
+	endif
+	return !ncut
 endmethod
 
 ------------------------------------------------------------------------
