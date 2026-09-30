@@ -2073,6 +2073,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				---------------------------------------------------------------------
 				!labbop = 0
 				!labhasbop = false
+				!labwop = false
 				---------------------------------------------------------------------
 				-- field 6 of the record is the 'this one wants a BOP figure' flag, --
 				-- and only the TYPE 1 pipe records carry it (:330). every other    --
@@ -2100,6 +2101,22 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				if (!labwantbop.eqnocase('y') and (!dir.eq('up') or !dir.eq('down'))) then
 					if (!!DrawingPlan1.IsElevTrans(!trans)) then
 						!labwantbop = 'n'
+					endif
+				endif
+				---------------------------------------------------------------------
+				-- an elevation's left and right edges (user, 2026-09-30): the      --
+				-- chain measures U, and the point is where the pipe crosses the    --
+				-- border -- on a sloping pipe not the height of the fitting the    --
+				-- BOP came from (100-A-18: BOP from an elbow outside the view,     --
+				-- 107233, point at 107354). the text gives the point's own centre  --
+				-- height instead, as WOP (working point) EL                        --
+				---------------------------------------------------------------------
+				if (!labwantbop.eqnocase('y') and (!dir.eq('left') or !dir.eq('right'))) then
+					if (!!DrawingPlan1.IsElevTrans(!trans) and not(!type.eqnocase('EQUI'))) then
+						!labwantbop = 'n'
+						!labbop = !attapos.up.nint().value()
+						!labhasbop = true
+						!labwop = true
 					endif
 				endif
 				if (!labwantbop.eqnocase('y')) then
@@ -2134,10 +2151,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!labtext = '#PIPE(c2:)'
 					!labchei = !glabchei
 					if (!labhasbop) then
+						!labkind = ' BOP EL'
+						if (!labwop) then
+							!labkind = ' WOP EL'
+						endif
 						if (!labbop.geq(0)) then
-							!labtext = !labtext & ' BOP EL+' & !labbop.string()
+							!labtext = !labtext & !labkind & '+' & !labbop.string()
 						else
-							!labtext = !labtext & ' BOP EL' & !labbop.string()
+							!labtext = !labtext & !labkind & !labbop.string()
 						endif
 					endif
 				endif
