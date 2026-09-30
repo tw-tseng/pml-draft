@@ -1,6 +1,7 @@
 # PA_pmllibE3D2.1 — AVEVA E3D 2.1 的 PML 程式庫
 
 ## 目前進度（2026-09-30）
+- **進行中（2026-09-30）**：分支 `feature/uv-matchline-toggle`（從 master 開、只在本機）——「Views drawn by hand」框加勾選 **Match lines**（`.uvmatch`，預設勾），不勾就不跑 MatchTicks 與 MatchLine（沒有 match line 框線、`MATCH LINE`／`SEE` 字、尺寸鏈上的 tick 點），`!!DrawingPlan1MatchTickPos`／`MatchTexts` 先清空，MatchGaps 照跑。給局部圖用（使用者，2026-09-30：原本提議 Match Line Text Height 設 0，但那個字高也是平面／SECTION 圖名綠字的字高，而且是整張表單共用、會連 BOX 圖一起關，改成專用勾選，使用者同意）。只影響 Annotate Views，Create Drawings 照舊。框名去掉「(plan only for now)」。**還沒實測。**
 - **自建 VIEW 的立面／SECTION（原分支 `feature/elevation-view`，2026-09-30 併回 master 並 push、分支已刪）**。立面 `/DWGNO-028/SS/S1/V3` 使用者已看過 OK：四邊尺寸鏈、樓層高程進尺寸鏈、設備（臥式／直立式標哪條鏈）、坡度管 WOP／水平管 BOP（平面立面同規則）、同點規則含框邊穿越點、前後截面 PMODE。併回主線後使用者重轉平面圖，**平面回歸已確認 OK**（使用者，2026-09-30）。這支分支動到的平面共用程式（日後查問題時的線索）：LineNoAnnotation（`.BandVol()`、同點規則含框邊穿越點、BOP/WOP 旗標）、`.CrossingOfTube()`（`.crossu`）、`.WorldLimitsOfSheetRect()`、NozzleAnnotation。樓層高程字的位置（`447dde1`，字底離線 0.5mm）已實測 OK（使用者，2026-09-30）。
 
 - （2026-09-29 晚換電腦前的交接，已過時：當時分支沒 push、下列項目都還沒測，現在都已處理）
