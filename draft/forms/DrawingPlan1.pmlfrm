@@ -4703,7 +4703,14 @@ define method .SectionLevels(!vw is string) is real
 		!ys0 = !y.string('D3').replace('mm', '')
 		!yt = !y + !tri * 0.866
 		!yts = !yt.string('D3').replace('mm', '')
-		!ytx = !y + 1
+		------------------------------------------------------------
+		-- the capitals' foot 0.5mm above the line (user,           --
+		-- 2026-09-30: lower, nearer the line). ALIG BBODY puts the --
+		-- origin 0.29 of the height below the capitals (measured   --
+		-- on the view title, 2026-09-25), so the old +1 left them  --
+		-- about 1.9mm up at 3mm text                               --
+		------------------------------------------------------------
+		!ytx = !y + 0.5 - 0.29 * !th
 		!ytxs = !ytx.string('D3').replace('mm', '')
 		!u = !us[!k]
 		!ut = !u.string('D0').replace('mm', '')
