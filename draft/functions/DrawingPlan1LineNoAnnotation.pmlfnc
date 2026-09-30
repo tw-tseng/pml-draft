@@ -1137,7 +1137,51 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		do !i from !dels.size() to 1 by -1
 			!sortedtypes.remove(!dels[!i])
 		enddo
-		
+		--------------------------------------------------------------------
+		-- the same spot rule as the clusters below (SAMESPOT), for the    --
+		-- border crossings already in !result: two DIFFERENT pipes        --
+		-- crossing the border within 1mm of the model of each other get   --
+		-- one point, the first keeps it and the others go through as      --
+		-- label-only. on a section 100-A-15 and 100-A-18, both sloping,   --
+		-- crossed the right border 0.7mm apart and measured a '1'         --
+		-- between them (user, 2026-09-30)                                 --
+		--------------------------------------------------------------------
+		!samtol1 = 1 * !!DrawingPlan1.vsca
+		!alix1 = 2
+		if (!dir.eq('right') or !dir.eq('left')) then
+			!alix1 = 1
+		endif
+		if (!result.size() gt 1) then
+			do !ra from 2 to !result.size()
+				!rA = !result[!ra]
+				if (!rA.split('~').size() gt 3) then
+					skip
+				endif
+				!alA = !rA.split('~').getindexed(!alix1).real()
+				!pA = !rA.split('~').getindexed(3).split('!').getindexed(5)
+				!rbmax = !ra - 1
+				do !rb from 1 to !rbmax
+					!rB = !result[!rb]
+					if (!rB.split('~').size() gt 3) then
+						skip
+					endif
+					!pB = !rB.split('~').getindexed(3).split('!').getindexed(5)
+					if (!pB.eq(!pA)) then
+						skip
+					endif
+					!alB = !rB.split('~').getindexed(!alix1).real()
+					!dAB = !alB - !alA
+					if (abs(!dAB) le !samtol1) then
+						!result[!ra] = !rA & '~LABELONLY'
+						if (!dbgln) then
+							!dbgf.writerecord('SAMESPOT ' & !dir & ' crossing label only pipe=' & !pA & ' along=' & !alA.string() & ' kept=' & !pB)
+						endif
+						break
+					endif
+				enddo
+			enddo
+		endif
+
 	$(
 		do !i from 1 to !sortedtypes.size()
 			$p $!sortedtypes[$!i]
