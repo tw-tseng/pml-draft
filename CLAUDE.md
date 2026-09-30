@@ -12,7 +12,7 @@
   - 使用者 2026-09-29 的規則補充：設備標哪條尺寸鏈看中心線方向（臥式→左右、直立式→上下、兩條都有→各一點），已照做。
   - 2026-09-30 使用者（error.png，`/DWGNO-028/SS/S1/V3` 右尺寸鏈）：設備標註 OK。另外三件：100-A-15、100-A-18 是**有坡度的管**，右鏈的點在它們穿過右框邊的地方（U 107354.4／107353.7，差 0.7mm），BOP 字卻是從彎頭讀的（-18 的彎頭在框外，BOP 107233），150-A-19 是水平管、點在中心 107317——所以看起來「同高的標不同點、不同高的標在一起」、中間量出 `37`（-18 中心減 -19 中心）和 `1`。使用者決定：**點不動（框邊穿越點）、量管中心；立面左右鏈的字改成那一點的中心高度，叫 `WOP EL+…`（working point）**，不是 BOP。另外框邊穿越點（TYPE 1，`!result`）也套同一點規則（不同管子 1mm 模型內只留第一個點、其他 `~LABELONLY`，log `SAMESPOT <dir> crossing`），BOX 的平面圖一樣適用（`77039e7`）。WOP 在標籤那段（`!labwop`）。立面實測 OK（使用者，2026-09-30，另修了兩個執行錯：同點規則的 `!rA` 撞到迴圈計數 `!ra`——PML 變數不分大小寫；EquiAnnotation 把實數寫進字串陣列）。**最後的規則（使用者，2026-09-30，推翻「立面左右全 WOP」與「平面全 WOP」兩個中間版本）：不分平面立面，水平管標 BOP，坡度管標框邊那點的中心高、寫 `WOP EL`**。坡度＝`.CrossingOfTube()` 看管子兩端 U 差 >1mm（`.crossslope`），記在 TYPE 1 紀錄第 6 欄（`y`＝BOP、`w`＝WOP，`!elflag`）；立面上下邊仍不標高程。平面的尺寸點 U 原本借管件的高度（`!crosspos.up = 管件 U`），坡度管不準，改成 `.CrossingOfTube()` 沿管子內插穿越點的中心高（`.crossu`／`.crossuok`，紙面上穿越點在管子影像上的比例 × 兩端 U 差），算不出來才退回管件高度。**已實測 OK**（使用者，2026-09-30「坡度高程看起來沒問題了」）；有 REVI 的舊圖更新時坡度管的字會從 BOP 變 WOP（會出修訂雲）。
 - `master` 已 push，2026-09-25 併了 `feature/view-title`（圖名，重建已實測 OK）、`feature/import-paliby`（Import PA-LIBY 鈕，已實測）與 `fix/flow-arrow-in-view`（流向箭頭不出 view，已實測）。2026-09-24 併進去而且**都已在 E3D 實測**：Move Face 多選＋Snap、Split 多選、Name 分頁（取代 Info）＋Assign Numbers 三個修正與第三個方向、Pick 分頁圍住選取物建 BOX、分層分排改看範圍。
-- DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；更新路徑（有 REVI 的圖改字、底線跟著改長短、舊圖補建）**使用者決定不測**：目前沒有這種情形（2026-09-25）。細節見「DRAFT：view 下方的圖名」。
+- DRAFT view 下方的圖名（原分支 `feature/view-title`，2026-09-25 併回 master、分支已刪）：重建一張圖使用者實測 OK；更新路徑（有 REVI 的圖，框頂面高度或比例變了，圖名跟著改）**2026-09-30 使用者實測 OK**。細節見「DRAFT：view 下方的圖名」。
 - Import PA-LIBY 鈕（原分支 `feature/import-paliby`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**）：View 分頁 Hatching Style 下方，細節見「目錄與命名」的 PA-LIBY 那條。
 - 流向箭頭畫到 view 外（原分支 `fix/flow-arrow-in-view`，2026-09-25 併回 master、分支已刪，**已在 E3D 實測**），細節見「DRAFT：流向箭頭不出 view」。
 - **立面／SECTION 的完整紀錄（2026-09-29～30，已併回 master）**：原分支 `feature/elevation-view`（從 master `4ec29f4` 開出）——自建 VIEW 的立面／SECTION。依據是 repo 根目錄的 `section_view.png`（使用者給的 SECTION 樣圖）。使用者的決定（2026-09-29）：左側先標**樓層高度**（格線的水平 GRIDPL）；圖名 `SECTION ____` 與 `See Dwg. No. ____` 的空白由使用者自己填，程式留空格；**每條管線與每台設備都標**。分四階段：① 認得立面＋範圍／比例／drawlist／三行圖名 ② 頂部格線圓圈 ③ 左側樓層高程 ④ 管線與設備引線標註。① 已寫（還沒實測）：`.ViewSheetTransform()` 多回傳 [11][12]＝往上 1mm 在紙上的位移；AnnotateView 判斷 plan／elev（U 在紙上全長＝e2+n2、朝上、x 分量 ≤2%），其他回 `neither a plan looking down nor an elevation...`；elev 在命名後轉 `.AnnotateSection()`。建 LIBY／drawlist 那段從 AnnotateView 原封不動抽成 `.UvLibrary()`（平面也走它，要順便確認平面沒壞）；`.UvSetScale()` 的 v0 改取 E/N/U 三軸在紙上最長的。立面範圍：LIMITS 8 個角 SHPOS 的外接框（`.SheetBoxOfLimits()`）；drawlist 直接用 LIMITS（含深度）。`.SectionTitle()`：NOTE `<view>/VTITLE` 裡 ELEV（`SECTION    `）、ULINE、SCALE、DWGNO（`See Dwg. No.` 加空格）；重跑前先讀舊的 ELEV／DWGNO 字，重建時沿用（使用者填的字不會被清掉）。
@@ -29,7 +29,7 @@
 - 切分支的坑：E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**，切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
 - 舊項目都已確認：Grid 分頁 Top/Bottom U 併入分層（使用者 2026-09-30 測過 OK）、「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）使用者 2026-09-30 說目前看起來沒問題。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
-- 使用者決定不做的（別再提）：SECTION 斜的前後截面（使用者：不會發生，2026-09-30）、設備中心線延伸到 matchline（2026-09-30）、複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）、圖名更新路徑的實測（目前沒有這種情形）。
+- 使用者決定不做的（別再提）：SECTION 斜的前後截面（使用者：不會發生，2026-09-30）、設備中心線延伸到 matchline（2026-09-30）、複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）。
 - 合作方式：一個功能一支分支，使用者在 E3D 實測後才 `--no-ff` 併回 master 並 push；每次改完 `.pmlfrm` 提醒 kill／reload／show；使用者回報時截圖放 repo 根目錄 `error.png`，除錯看 `check*.txt`（`check_box.txt`＝Check 分頁、`check_batch.txt`＝Assign Numbers、`check4.txt`＝RecenterView、`check_title.txt`＝view 下方的圖名、`check_liby.txt`＝匯入 PA-LIBY、`check_userview.txt`＝自建 VIEW 的 Annotate Views）。
 
 ## 目錄與命名
@@ -130,7 +130,7 @@
 - Notion 設計頁已加 toggle「使用者自建的 VIEW 套標註：Annotate Views（2026-09-26）」（2026-09-27，REST 寫入，block `3e8dd89e-3acd-813f-bbb7-e714a967583f`）：定案、操作流程、做法、踩到的坑、狀態與待辦。之後測完的項目要回去更新「五、狀態與待辦」。
 - 使用者給的 SECTION 樣圖（2026-09-26，之後做立面時的依據）：頂部格線圈圈（A、B）；左側高程標記（+21795 …），每個高程一條橫線；設備名、管線號用引線標註；圖名三行：`SECTION A`（綠、底線）、`SCALE 1:50`、`See Dwg. No. <平面圖號>`；**沒有尺寸鏈、沒有 match line**。
 
-## DRAFT：view 下方的圖名（2026-09-24，2026-09-25 併回 master，**重建已實測 OK；更新路徑使用者決定不測**）
+## DRAFT：view 下方的圖名（2026-09-24，2026-09-25 併回 master，**重建與更新路徑都已實測 OK**）
 - 2026-09-25 第一次實測：底線有、兩行字都沒有。原因是 `cheitx $!h1s`（沒引號的數字 `4.00`）——repo 裡其他三十幾處 `cheitx` 全部帶引號（`|4|`、`'3mm'`），CHEITX 吃文字，整行被拒絕、又被 `handle any` 吃掉，所以沒報錯。底線用 fpt/tpt 不經過 CHEITX 才建得出來。**`cheitx` 一律 `|...|` 或 `'...'`。**
 - 同一次一起改的：顏色拆成獨立一行、設不上就退回 `green`（AVEVA 先例 `assyboundbox.pmlfnc:173`，顏色字典沒有那個號碼是 `(61,604)`；截圖底線偏白，顏色 20 在這台可能不存在）；`alig base` → `alig bbody`（6113 行的 MATCH LINE 字就是用 bbody，畫面上看得到）；更新路徑找到 VTITLE 卻缺 ELEV／SCALE 的話刪掉整個 NOTE 重建（不然第一版留下的空 NOTE 永遠補不回來）；每一步寫進 `check_title.txt`（`.TitleLog()`，append，一張圖一段）。
 - 使用者要求：view 正下方兩行，置中對齊 view。上行 `PLAN at ELEVATION +<框頂面 U>`，顏色 20、字高＝Match Line Text Height（`.matchhei`）、有底線；下行 `SCALE 1:n`，黃色、字高＝Pipe Label Height（`.lineheitx`）。高程取**框頂面**（`WVOL` part 6），**直接用 E3D 的 U**、帶正負號（使用者選的）；比例讀 view 自己的 `VSCA`，fit 或手選都一樣。
@@ -140,7 +140,7 @@
 - 間距照使用者畫的 `error.png`（字寬＝線長；字底→線 0.21 倍大寫高、線→黃字頂 0.29 倍），換成綠字字高：字底→線 **0.18×h1**、線→黃字頂 **0.25×h1**（4mm 時 0.7／1.0mm），上方標註→綠字頂 5mm 不變。全在 `.TitleRows()`，`TitleDepth()` 跟 `ViewTitle()` 都從它拿；底線長度在 `.TitleWidth()`。**要再調就調這兩個方法的係數**，量法：截圖用 PIL 逐列找綠／黃像素的範圍，底線長度當比例尺。
 - 更新路徑改了字，底線長度跟著改（`.TitleLine()`：讀 ELEV 自己的 `chei`、以原底線中點為中心、y 不動）；字的位置仍不動，所以第二次實測以前建的圖要**重建**才會用到新間距。
 - 已實測 OK（2026-09-25，使用者，第三次）：重建一張圖，兩行字、顏色、字高、間距、底線長度。
-- 沒測，使用者決定不測（2026-09-25，目前沒有這種情形）：有 REVI 的圖更新後字有沒有跟著框頂面變、位置不動、底線長度跟著字改；舊圖第一次更新時補建；第一版留下的空 VTITLE 會被刪掉重建。
+- **更新路徑已實測 OK（使用者，2026-09-30）**：有版次的舊圖更新，框頂面高度或比例變了，圖名跟著改。原本（2026-09-25）使用者決定不測的範圍：有 REVI 的圖更新後字有沒有跟著框頂面變、位置不動、底線長度跟著字改；舊圖第一次更新時補建；第一版留下的空 VTITLE 會被刪掉重建。
 
 ## DRAFT：流向箭頭不出 view（2026-09-25 併回 master，**已在 E3D 實測**）
 - 使用者回報：50-B-9 的箭頭整支畫在 view 左邊界外。`check_flow.txt` 那張圖（`/=23718/1695`）三個箭頭 x=320.0／340.3／360.9；截圖上三個箭頭**尾巴**在 233／295／358px，間距跟 check_flow 的放置點成比例（約 3.06px/mm），頭或中心都對不上——**符號原點在尾巴，箭頭從放置點往流向（tube 的 p1→p2）伸出去**，WELD-ARR 在 Scale 1 約 7.2～7.5mm。
