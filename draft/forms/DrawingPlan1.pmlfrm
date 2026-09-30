@@ -39,7 +39,7 @@ layout form !!DrawingPlan1 dialog dock
 			-- (.AnnotateViews()). Add CE takes a VIEW, or every view of a  --
 			-- SHEE or DRWG                                                 --
 			----------------------------------------------------------------
-			frame .uvframe 'Views drawn by hand (plan only for now)' at xmin.dest ymax.apply+1.2
+			frame .uvframe 'Views drawn by hand' at xmin.dest ymax.apply+1.2
 				list .uvlist 'Views' multiple width 36 height 6
 				button .uvadd 'Add CE'     at xmax.uvlist+0.5 ymin.uvlist+0.75 width 12 call '!This.UvAddCe()'
 				button .uvrem 'Remove'     at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
@@ -194,7 +194,15 @@ layout form !!DrawingPlan1 dialog dock
 				toggle .supttog  'Create Label'
 				toggle .supttog1 'Flat Oval Frame'
 			exit
-			frame .userframe 'User Defined' at xmin.annotext ymax.suptframe+0.1
+			----------------------------------------------------------
+			-- off: no match line, no MATCH LINE / SEE texts, no tick --
+			-- points on the chains -- for a local view standing      --
+			-- inside a bigger box (user, 2026-09-30; under Support   --
+			-- on this tab, the user's place for it). Annotate Views  --
+			-- only; Create Drawings keeps them                       --
+			----------------------------------------------------------
+			toggle .uvmatch 'Match Lines (Annotate Views)' at xmin.annotext ymax.suptframe+0.1
+			frame .userframe 'User Defined' at xmin.annotext ymax.uvmatch+0.1
 				toggle .usertog 'Create Label'
 				text .usertext1 'Rule'   tagwidth 12 at xmin.usertog ymax.usertog+0.1 width 40 is string
 				text .usertext2 'Format' tagwidth 12 at xmin.usertog ymax.usertext1+0.1 width 40 is string
@@ -275,6 +283,12 @@ layout form !!DrawingPlan1 dialog dock
 	member .crossu is real
 	member .crossuok is boolean
 	member .crossslope is boolean
+	------------------------------------------------------------------------
+	-- things the user should know about a view that still went through,  --
+	-- shown with the result of Annotate Views at the end -- never a      --
+	-- dialog of their own, never a stop (user, 2026-09-30)               --
+	------------------------------------------------------------------------
+	member .uvnotes is array
 
 	member .intersections is array    $( intersections of the current refgln only  $)
 	member .allintersections is array $( intersections of every refgln of the drawing, used by !!DrawingPlan1LineNoAnnotation  $)
@@ -379,6 +393,7 @@ define method .DrawingPlan1()
 	!this.equiheitx.val = 4
 	!this.dimheitx.val = 3
 	!this.matchhei.val = |4|
+	!this.uvmatch.val = true
 	!this.autoplace.val=TRUE
 	!this.insttog.val=TRUE
 	!this.insttext1.val = |ALL INST WITH ISNAMED|
@@ -2625,6 +2640,7 @@ define method .AnnotateViews()
 	endhandle
 	!ok = 0
 	!fails = object array()
+	!this.uvnotes = object array()
 	do !it values !items
 		!this.UvLog('VIEW ' & !it)
 		!msg = ''
@@ -2642,10 +2658,13 @@ define method .AnnotateViews()
 	enddo
 	!res = !ok.string() & ' of ' & !items.size().string() & ' view(s) annotated'
 	!this.uvresult.val = !res
-	if (!fails.size().gt(0)) then
+	if (!fails.size().gt(0) or !this.uvnotes.size().gt(0)) then
 		!txt = !res & ' - see check_userview.txt'
 		do !fl values !fails
 			!txt = !txt & ' | ' & !fl
+		enddo
+		do !fl values !this.uvnotes
+			!txt = !txt & ' | NOTE ' & !fl
 		enddo
 		!!alert.warning(!txt)
 	else
@@ -2778,27 +2797,68 @@ define method .AnnotateView(!it is string) is string
 	handle any
 		return 'its limits could not be read: ' & !!error.text
 	endhandle
+	------------------------------------------------------------------
+	-- a view given only its six section planes (Set View Limits'    --
+	-- FR/TO VSECs) and no limits works from their box, as a section --
+	-- does (user, 2026-09-30: /DWGNO-028/SS/S1/V2 as a plan, 'has   --
+	-- no limits to work from'). the box is the world box round its  --
+	-- corners; .PlanVsecCuts() below then follows the planes        --
+	-- themselves where the view is turned with them                 --
+	------------------------------------------------------------------
+	!pcorners = object array()
 	!lsrc = 'none'
 	if (!vl.vwlimitsSet()) then
 		!lsrc = 'VWLIMITS'
 	elseif (!vl.cdlimitsSet()) then
 		!lsrc = 'CDLIMITS'
-	elseif (!vl.viewVolumeSet()) then
-		!lsrc = 'VVOL'
-	elseif (!vl.vlimitsSet()) then
-		!lsrc = 'VLIMITS'
+	else
+		!verr = !this.VsecBox(!vref, !pcorners)
+		if (!verr.eq('')) then
+			!lsrc = 'VSEC'
+		else
+			!this.UvLog('  section planes: ' & !verr)
+			if (!vl.viewVolumeSet()) then
+				!lsrc = 'VVOL'
+			elseif (!vl.vlimitsSet()) then
+				!lsrc = 'VLIMITS'
+			endif
+		endif
 	endif
 	if (!lsrc.eq('none')) then
-		!this.UvLog('  limits: none of VWLIMITS, :CDLIMITS, VVOL, VLIMITS is set')
-		return 'has no limits to work from'
+		!this.UvLog('  limits: none of VWLIMITS, :CDLIMITS, six VSEC planes, VVOL, VLIMITS')
+		return 'has no limits and no box of six section planes to work from'
 	endif
-	!lim = !vl.getViewLimitsArray()
-	!lminE = min(!lim[1], !lim[4])
-	!lminN = min(!lim[2], !lim[5])
-	!lminU = min(!lim[3], !lim[6])
-	!lmaxE = max(!lim[1], !lim[4])
-	!lmaxN = max(!lim[2], !lim[5])
-	!lmaxU = max(!lim[3], !lim[6])
+	if (!lsrc.eq('VSEC')) then
+		do !ci from 1 to 8
+			!cp = object position(!pcorners[!ci])
+			!ce1 = !cp.east.value()
+			!cn1 = !cp.north.value()
+			!cu1 = !cp.up.value()
+			if (!ci eq 1) then
+				!lminE = !ce1
+				!lminN = !cn1
+				!lminU = !cu1
+				!lmaxE = !ce1
+				!lmaxN = !cn1
+				!lmaxU = !cu1
+			else
+				!lminE = min(!lminE, !ce1)
+				!lminN = min(!lminN, !cn1)
+				!lminU = min(!lminU, !cu1)
+				!lmaxE = max(!lmaxE, !ce1)
+				!lmaxN = max(!lmaxN, !cn1)
+				!lmaxU = max(!lmaxU, !cu1)
+			endif
+		enddo
+	else
+		!lim = !vl.getViewLimitsArray()
+		!lminE = min(!lim[1], !lim[4])
+		!lminN = min(!lim[2], !lim[5])
+		!lminU = min(!lim[3], !lim[6])
+		!lmaxE = max(!lim[1], !lim[4])
+		!lmaxN = max(!lim[2], !lim[5])
+		!lmaxU = max(!lim[3], !lim[6])
+	endif
 	!this.UvLog('  limits (' & !lsrc & ') E ' & !lminE.string('D1') & ' N ' & !lminN.string('D1') & ' U ' & !lminU.string('D1') & ' TO E ' & !lmaxE.string('D1') & ' N ' & !lmaxN.string('D1') & ' U ' & !lmaxU.string('D1'))
 	if (!lmaxE - !lminE lt 1 or !lmaxN - !lminN lt 1 or !lmaxU - !lminU lt 1) then
 		return 'its limits (' & !lsrc & ') are flat or empty'
@@ -2826,6 +2886,18 @@ define method .AnnotateView(!it is string) is string
 	-- the limits are measured out from that centre, side by side    --
 	------------------------------------------------------------------
 	!ls0 = !this.SheetLimitsOfVolume(!lstr, !trans)
+	------------------------------------------------------------------
+	-- the view's own section planes cut the limits down first, so   --
+	-- auto fits what is really drawn (see .PlanVsecCuts())          --
+	------------------------------------------------------------------
+	!ur0 = object array()
+	!ur0.append(!lminU)
+	!ur0.append(!lmaxU)
+	!nc0 = 0
+	!nc0 = !this.PlanVsecCuts(!vref, !trans, !ls0, !ur0, false)
+	handle any
+		!nc0 = 0
+	endhandle
 	!serr = !this.UvSetScale(!vref, !trans, !ls0, !fx1, !fy1, !fx2, !fy2)
 	if (!serr.neq('')) then
 		return !serr
@@ -2838,6 +2910,28 @@ define method .AnnotateView(!it is string) is string
 		return 'its place on the sheet could not be read after the scale was set: ' & !!error.text
 	endhandle
 	!ls = !this.SheetLimitsOfVolume(!lstr, !trans)
+	------------------------------------------------------------------
+	-- the view's own section planes (user, 2026-09-30: a turned     --
+	-- plan may be cut on two sides by planes turned with it, which  --
+	-- the limits -- east and north only -- cannot follow)           --
+	------------------------------------------------------------------
+	!urng = object array()
+	!urng.append(!lminU)
+	!urng.append(!lmaxU)
+	!ncut = 0
+	!ncut = !this.PlanVsecCuts(!vref, !trans, !ls, !urng, true)
+	handle any
+		!this.UvLog('  section cuts: ' & !!error.text & !this.ErrWhere())
+		!ncut = 0
+	endhandle
+	if (!ncut gt 0) then
+		!lminU = !urng[1]
+		!lmaxU = !urng[2]
+		!this.UvLog('  limits cut by ' & !ncut.string() & ' section plane(s): U ' & !lminU.string('D1') & ' .. ' & !lmaxU.string('D1'))
+		if (!lmaxU - !lminU lt 1) then
+			return 'its section planes leave no depth'
+		endif
+	endif
 	if (!ls[1] lt !fx1 - 0.1 or !ls[3] gt !fx2 + 0.1 or !ls[2] lt !fy1 - 0.1 or !ls[4] gt !fy2 + 0.1) then
 		!this.UvLog('  NOTE the limits still reach past the frame at this scale - only the part inside is drawn')
 	endif
@@ -2955,6 +3049,16 @@ define method .AnnotateView(!it is string) is string
 	-- itself and everything else on it are not touched               --
 	------------------------------------------------------------------
 	!warn = object array()
+	------------------------------------------------------------------
+	-- cut by section planes: the drawlist over the world box of the --
+	-- cut, not over the whole limits                                --
+	------------------------------------------------------------------
+	if (!ncut gt 0) then
+		!lminE = max(!lminE, !this.wminE)
+		!lminN = max(!lminN, !this.wminN)
+		!lmaxE = min(!lmaxE, !this.wmaxE)
+		!lmaxN = min(!lmaxN, !this.wmaxN)
+	endif
 	!lcd = object array()
 	!lcd.append(!lminE)
 	!lcd.append(!lminN)
@@ -3003,11 +3107,29 @@ define method .AnnotateView(!it is string) is string
 	handle any
 		!warn.append('grid: ' & !!error.text)
 	endhandle
-	$!vw
-	!!DrawingPlan1MatchTicks(!vw, !vwnn)
+	------------------------------------------------------------------
+	-- Match lines unticked (user, 2026-09-30): a local view inside a --
+	-- bigger box would only say SEE <that box> on all four sides. no --
+	-- ticks, so no tick points on the chains, and no match line; the --
+	-- lists the later passes read are emptied, not left to the last  --
+	-- drawing                                                        --
+	------------------------------------------------------------------
+	!uvm = true
+	!uvm = !this.uvmatch.val
 	handle any
-		!warn.append('match ticks: ' & !!error.text)
+		!uvm = true
 	endhandle
+	!!DrawingPlan1MatchTickPos = object array()
+	!!DrawingPlan1MatchTexts = object array()
+	if (!uvm) then
+		$!vw
+		!!DrawingPlan1MatchTicks(!vw, !vwnn)
+		handle any
+			!warn.append('match ticks: ' & !!error.text)
+		endhandle
+	else
+		!this.UvLog('  match lines: off (the form)')
+	endif
 	!this.UvToLast(!vw)
 	!!DrawingPlan1LineNoAnnotation(!vw, !xlen, !ylen)
 	handle any
@@ -3018,11 +3140,13 @@ define method .AnnotateView(!it is string) is string
 	handle any
 		!warn.append('equipment: ' & !!error.text)
 	endhandle
-	$!vw
-	!!DrawingPlan1MatchLine(!vw, !vwnn)
-	handle any
-		!warn.append('match line: ' & !!error.text)
-	endhandle
+	if (!uvm) then
+		$!vw
+		!!DrawingPlan1MatchLine(!vw, !vwnn)
+		handle any
+			!warn.append('match line: ' & !!error.text)
+		endhandle
+	endif
 
 	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
 	if !ff.exists() then
@@ -4043,6 +4167,224 @@ define method .VsecCuts(!vref is string, !corners is array, !lsrc is string) is 
 		enddo
 		!this.UvLog('    box after the cuts, first corner ' & !corners[1] & ', last ' & !corners[8])
 	endif
+	return !ncut
+endmethod
+
+------------------------------------------------------------------------
+-- a plan's own section planes (user, 2026-09-30): every VSEC of view  --
+-- !vref with PMODE Standard (keeps the side its normal points to) or  --
+-- Reversed (the other side) -- the six Set View Limits planes too,    --
+-- which on a turned view may be turned with it. Off does nothing.     --
+--     a level plane (normal up or down)  cuts the depth, !urng =      --
+--                                         [min U, max U]              --
+--     an upright plane whose trace on    moves that edge of !rect =   --
+--     the sheet runs along x or y        [x1, y1, x2, y2], sheet mm   --
+--     anything else                      is logged and left out --    --
+--                                         it only draws more          --
+-- !trans is .ViewSheetTransform() at the scale the rect is at. a cut  --
+-- that would leave nothing is left out. !log: write each plane to    --
+-- check_userview. answers how many cut                                --
+------------------------------------------------------------------------
+define method .PlanVsecCuts(!vref is string, !trans is array, !rect is array, !urng is array, !log is boolean) is real
+	!vsecs = object array()
+	var !vsecs coll all vsec for $!vref
+	handle any
+		return 0
+	endhandle
+	if (!vsecs.size() eq 0) then
+		return 0
+	endif
+	!t1 = !trans[1].string('D6').replace('mm', '').real()
+	!t2 = !trans[2].string('D6').replace('mm', '').real()
+	!t3 = !trans[3].string('D6').replace('mm', '').real()
+	!t4 = !trans[4].string('D6').replace('mm', '').real()
+	!t5 = !trans[5].string('D9').replace('mm', '').real()
+	!t6 = !trans[6].string('D9').replace('mm', '').real()
+	!t7 = !trans[7].string('D9').replace('mm', '').real()
+	!t8 = !trans[8].string('D9').replace('mm', '').real()
+	!rx1 = !rect[1].string('D6').replace('mm', '').real()
+	!ry1 = !rect[2].string('D6').replace('mm', '').real()
+	!rx2 = !rect[3].string('D6').replace('mm', '').real()
+	!ry2 = !rect[4].string('D6').replace('mm', '').real()
+	!ulo = !urng[1]
+	!uhi = !urng[2]
+	!ncut = 0
+	do !vs values !vsecs
+		!vsn = ''
+		var !vsn name of $!vs
+		handle any
+			!vsn = !vs
+		endhandle
+		!pm = ''
+		!vsd = !vs.dbref()
+		!pm = !vsd.pmod
+		handle any
+			var !pm pmode of $!vs
+			handle any
+				if (!log) then
+					!this.UvLog('    cut ' & !vsn & ': PMODE could not be read - ' & !!error.text)
+				endif
+				skip
+			endhandle
+		endhandle
+		!pm = !pm.string().upcase()
+		if (!pm.matchwild('OFF*')) then
+			if (!log) then
+				!this.UvLog('    cut ' & !vsn & ': PMODE Off, not cutting')
+			endif
+			skip
+		endif
+		!sg = 1
+		if (!pm.matchwild('REV*')) then
+			!sg = -1
+		elseif (not(!pm.matchwild('STA*'))) then
+			if (!log) then
+				!this.UvLog('    cut ' & !vsn & ': PMODE ' & !pm & ' not known, not cutting')
+			endif
+			skip
+		endif
+		!pv = object array()
+		!perr = !this.VsecPlane(!vs, !pv)
+		if (!perr.neq('')) then
+			if (!log) then
+				!this.UvLog('    cut ' & !vsn & ': ' & !perr)
+			endif
+			skip
+		endif
+		!qe = !pv[4] * !sg
+		!qn = !pv[5] * !sg
+		!qu = !pv[6] * !sg
+		!how = ''
+		if (abs(!qu) ge 0.999) then
+			----------------------------------------------------
+			-- level: keeps above it when the kept side is up --
+			----------------------------------------------------
+			if (!qu gt 0) then
+				if (!pv[3] gt !ulo) then
+					if (!pv[3] ge !uhi - 1) then
+						!how = 'would leave no depth, not cutting'
+					else
+						!ulo = !pv[3]
+						!how = 'U from ' & !ulo.string('D1')
+					endif
+				else
+					!how = 'below the limits already'
+				endif
+			else
+				if (!pv[3] lt !uhi) then
+					if (!pv[3] le !ulo + 1) then
+						!how = 'would leave no depth, not cutting'
+					else
+						!uhi = !pv[3]
+						!how = 'U up to ' & !uhi.string('D1')
+					endif
+				else
+					!how = 'above the limits already'
+				endif
+			endif
+		elseif (abs(!qu) le 0.001) then
+			----------------------------------------------------
+			-- upright: the kept side's direction on the sheet, --
+			-- and the plane's trace through its point           --
+			----------------------------------------------------
+			!mx = !t5 * !qe + !t7 * !qn
+			!my = !t6 * !qe + !t8 * !qn
+			!ml = sqrt(!mx * !mx + !my * !my)
+			!pde = !pv[1] - !t3
+			!pdn = !pv[2] - !t4
+			!xp = !t1 + !pde * !t5 + !pdn * !t7
+			!yp = !t2 + !pde * !t6 + !pdn * !t8
+			if (!ml le 0) then
+				!how = 'no direction on the sheet, not cutting'
+			elseif (abs(!my) le 0.001 * !ml) then
+				if (!mx gt 0) then
+					if (!xp gt !rx1) then
+						if (!xp ge !rx2 - 1) then
+							!how = 'would leave nothing, not cutting'
+						else
+							!rx1 = !xp
+							!how = 'left edge to x ' & !rx1.string('D2')
+						endif
+					else
+						!how = 'outside the limits already'
+					endif
+				else
+					if (!xp lt !rx2) then
+						if (!xp le !rx1 + 1) then
+							!how = 'would leave nothing, not cutting'
+						else
+							!rx2 = !xp
+							!how = 'right edge to x ' & !rx2.string('D2')
+						endif
+					else
+						!how = 'outside the limits already'
+					endif
+				endif
+			elseif (abs(!mx) le 0.001 * !ml) then
+				if (!my gt 0) then
+					if (!yp gt !ry1) then
+						if (!yp ge !ry2 - 1) then
+							!how = 'would leave nothing, not cutting'
+						else
+							!ry1 = !yp
+							!how = 'bottom edge to y ' & !ry1.string('D2')
+						endif
+					else
+						!how = 'outside the limits already'
+					endif
+				else
+					if (!yp lt !ry2) then
+						if (!yp le !ry1 + 1) then
+							!how = 'would leave nothing, not cutting'
+						else
+							!ry2 = !yp
+							!how = 'top edge to y ' & !ry2.string('D2')
+						endif
+					else
+						!how = 'outside the limits already'
+					endif
+				endif
+			else
+				------------------------------------------------------
+				-- turned against the view: its cut can not be one of --
+				-- the drawing's straight edges, and a small angle    --
+				-- hardly shows on the sheet while pipes are still    --
+				-- labelled where the plane has cut them away. said   --
+				-- with the result at the end (user, 2026-09-30)      --
+				------------------------------------------------------
+				!amx = abs(!mx)
+				!amy = abs(!my)
+				if (!amx ge !amy) then
+					!skw = ATAN(!amy / !amx)
+				else
+					!skw = ATAN(!amx / !amy)
+				endif
+				!how = 'turned ' & !skw.string('D2') & ' deg against the view, not cutting'
+				if (!log) then
+					!vwname = !vref
+					var !vwname name of $!vref
+					handle any
+						!vwname = !vref
+					endhandle
+					!this.uvnotes.append(!vwname & ': section plane ' & !vsn & ' is turned ' & !skw.string('D2') & ' deg against the view - its edge is not followed and pipes it cuts off may still be labelled; turn the view to match the plane and run again')
+				endif
+			endif
+		else
+			!how = 'sloping, not cutting'
+		endif
+		if (!how.matchwild('U *') or !how.matchwild('* edge to *')) then
+			!ncut = !ncut + 1
+		endif
+		if (!log) then
+			!this.UvLog('    cut ' & !vsn & ' (' & !pm & ', plane ' & !pv[7] & ' at E ' & !pv[1].string('D1') & ' N ' & !pv[2].string('D1') & ' U ' & !pv[3].string('D1') & ', kept side E ' & !qe.string('D3') & ' N ' & !qn.string('D3') & ' U ' & !qu.string('D3') & '): ' & !how)
+		endif
+	enddo
+	!rect[1] = !rx1
+	!rect[2] = !ry1
+	!rect[3] = !rx2
+	!rect[4] = !ry2
+	!urng[1] = !ulo
+	!urng[2] = !uhi
 	return !ncut
 endmethod
 
