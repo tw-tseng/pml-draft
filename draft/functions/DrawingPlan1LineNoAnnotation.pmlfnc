@@ -376,6 +376,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- off the end of it                                             --
 					------------------------------------------------------------------
 					!useit = true
+					--------------------------------------------------------------
+					-- field 6 of the record: 'y' a BOP figure, 'w' a WOP one -- --
+					-- a sloping tube, whose height at the crossing is not its  --
+					-- fitting's (user, 2026-09-30: level pipes BOP, sloping    --
+					-- ones WOP)                                                --
+					--------------------------------------------------------------
+					!elflag = 'y'
 					if (!istube) then
 						!crossenu = !!DrawingPlan1.CrossingOfTube(!tubeelem, !mem, !dir)
 						if (!dbgln and !dir.eq('left')) then
@@ -412,6 +419,10 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							-- an elevation's crossing is on the box edge and its U is  --
 							-- the edge's own (2026-09-29)                              --
 							--------------------------------------------------------------
+							-- a sloping tube, plan or elevation: WOP, not BOP (user, 2026-09-30)
+							if (!!DrawingPlan1.crossuok and !!DrawingPlan1.crossslope) then
+								!elflag = 'w'
+							endif
 							if (not(!!DrawingPlan1.IsElevTrans(!trans))) then
 								if (!!DrawingPlan1.crossuok) then
 									!crosspos.up = !!DrawingPlan1.crossu
@@ -505,7 +516,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							----------------------------------------------------------------
 							!x = !memshx + 0.0000000001 * !j
 							!y = !memshy + 0.0000000001 * !j
-							!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!y'
+							!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!' & !elflag
 							!result[!j] = !memstr
 							!j = !j + 1
 							if (!dbgln and !dir.eq('left')) then
@@ -2104,7 +2115,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- edge's own U. only the left and right edges -- level pipes --    --
 				-- keep it, as a plan's crossings do                                --
 				---------------------------------------------------------------------
-				if (!labwantbop.eqnocase('y') and (!dir.eq('up') or !dir.eq('down'))) then
+				if (!labwantbop.neq('n') and (!dir.eq('up') or !dir.eq('down'))) then
 					if (!!DrawingPlan1.IsElevTrans(!trans)) then
 						!labwantbop = 'n'
 					endif
@@ -2116,9 +2127,15 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				-- border, 107354, while its BOP came from an elbow outside the     --
 				-- view, 107233; a plan's crossings the same (user: 'the plan as    --
 				-- well'). the point's U is the tube's own there -- see             --
-				-- .CrossingOfTube() -- the element's where there is no tube        --
+				-- .CrossingOfTube() -- the element's where there is no tube.       --
+				-- only a sloping pipe ('w'), plan or elevation alike: a level one  --
+				-- keeps its BOP (user, 2026-09-30)                                 --
 				---------------------------------------------------------------------
-				if (!labwantbop.eqnocase('y')) then
+				!labgowop = false
+				if (!labwantbop.eqnocase('w')) then
+					!labgowop = true
+				endif
+				if (!labgowop) then
 					if (not(!type.eqnocase('EQUI'))) then
 						!labwantbop = 'n'
 						!labbop = !attapos.up.nint().value()
