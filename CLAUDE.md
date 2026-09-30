@@ -1,7 +1,7 @@
 # PA_pmllibE3D2.1 — AVEVA E3D 2.1 的 PML 程式庫
 
 ## 目前進度（2026-09-30）
-- **自建 VIEW 的立面／SECTION（原分支 `feature/elevation-view`，2026-09-30 併回 master 並 push、分支已刪）**。立面 `/DWGNO-028/SS/S1/V3` 使用者已看過 OK：四邊尺寸鏈、樓層高程進尺寸鏈、設備（臥式／直立式標哪條鏈）、坡度管 WOP／水平管 BOP（平面立面同規則）、同點規則含框邊穿越點、前後截面 PMODE。併回主線後使用者重轉平面圖，**平面回歸已確認 OK**（使用者，2026-09-30）。這支分支動到的平面共用程式（日後查問題時的線索）：LineNoAnnotation（`.BandVol()`、同點規則含框邊穿越點、BOP/WOP 旗標）、`.CrossingOfTube()`（`.crossu`）、`.WorldLimitsOfSheetRect()`、NozzleAnnotation。樓層高程字的位置（`447dde1`，字底離線 0.5mm）改完沒再看過。
+- **自建 VIEW 的立面／SECTION（原分支 `feature/elevation-view`，2026-09-30 併回 master 並 push、分支已刪）**。立面 `/DWGNO-028/SS/S1/V3` 使用者已看過 OK：四邊尺寸鏈、樓層高程進尺寸鏈、設備（臥式／直立式標哪條鏈）、坡度管 WOP／水平管 BOP（平面立面同規則）、同點規則含框邊穿越點、前後截面 PMODE。併回主線後使用者重轉平面圖，**平面回歸已確認 OK**（使用者，2026-09-30）。這支分支動到的平面共用程式（日後查問題時的線索）：LineNoAnnotation（`.BandVol()`、同點規則含框邊穿越點、BOP/WOP 旗標）、`.CrossingOfTube()`（`.crossu`）、`.WorldLimitsOfSheetRect()`、NozzleAnnotation。樓層高程字的位置（`447dde1`，字底離線 0.5mm）已實測 OK（使用者，2026-09-30）。
 
 - （2026-09-29 晚換電腦前的交接，已過時：當時分支沒 push、下列項目都還沒測，現在都已處理）
   - **下一步＝在 E3D 重測立面** `/DWGNO-028/SS/S1/V3`：kill／`pml reload form DrawingPlan1`／`pml reload function DrawingPlan1LineNoAnnotation`（EquiAnnotation 也 reload）／show → Annotate Views。要驗的（`2132013`、`716ef62`、`9f6cc1a`，都還沒測）：上下邊直立管不帶 BOP；樓層高程在左邊柱位圓圈的位置、進左右尺寸鏈、管線號避開；立面管嘴沒有 (U)/(D)；左尺寸鏈不再有離 view 670mm 的點；D1201（臥式）只標左右鏈、直立式設備標上下鏈且點在垂直中心線上。
