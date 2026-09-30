@@ -52,14 +52,7 @@ layout form !!DrawingPlan1 dialog dock
 				-- went missing there once this frame was added           --
 				----------------------------------------------------------
 				button .Cancel 'Cancel' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
-				----------------------------------------------------------
-				-- off: no match line, no MATCH LINE / SEE texts, no tick --
-				-- points on the chains -- for a local view standing      --
-				-- inside a bigger box (user, 2026-09-30). Annotate Views --
-				-- only; Create Drawings keeps them                       --
-				----------------------------------------------------------
-				toggle .uvmatch 'Match lines' at xmin.uvgo ymax.uvgo+0.2
-				paragraph .uvresult at xmin.uvgo ymax.uvmatch+0.2 text ' ' width 50
+				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
 			exit
 		exit
 		frame .viewframe 'View' width 40
@@ -201,7 +194,15 @@ layout form !!DrawingPlan1 dialog dock
 				toggle .supttog  'Create Label'
 				toggle .supttog1 'Flat Oval Frame'
 			exit
-			frame .userframe 'User Defined' at xmin.annotext ymax.suptframe+0.1
+			----------------------------------------------------------
+			-- off: no match line, no MATCH LINE / SEE texts, no tick --
+			-- points on the chains -- for a local view standing      --
+			-- inside a bigger box (user, 2026-09-30; under Support   --
+			-- on this tab, the user's place for it). Annotate Views  --
+			-- only; Create Drawings keeps them                       --
+			----------------------------------------------------------
+			toggle .uvmatch 'Match Lines (Annotate Views)' at xmin.annotext ymax.suptframe+0.1
+			frame .userframe 'User Defined' at xmin.annotext ymax.uvmatch+0.1
 				toggle .usertog 'Create Label'
 				text .usertext1 'Rule'   tagwidth 12 at xmin.usertog ymax.usertog+0.1 width 40 is string
 				text .usertext2 'Format' tagwidth 12 at xmin.usertog ymax.usertext1+0.1 width 40 is string
