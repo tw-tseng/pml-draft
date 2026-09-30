@@ -256,6 +256,25 @@ layout form !!DrawingPlan1 dialog dock
 	member .wminE is real
 	member .wmaxN is real
 	member .wminN is real
+	------------------------------------------------------------------------
+	-- a section drawn by hand: how deep it reaches along its own viewing  --
+	-- direction, as p . d for d the horizontal normal .BandVol() uses. set --
+	-- by .AnnotateSection() and read only when the view is an elevation  --
+	-- (2026-09-29)                                                        --
+	------------------------------------------------------------------------
+	member .depthmin is real
+	member .depthmax is real
+	------------------------------------------------------------------------
+	-- the centre height of the tube where .CrossingOfTube() last found it --
+	-- crossing the border, read along the tube itself (a sloping pipe is  --
+	-- not at its fitting's height there). .crossuok says whether it was   --
+	-- worked out (2026-09-30, WOP EL). .crossslope: the tube's two ends   --
+	-- differ in height by more than 1mm -- a sloping pipe, which a plan   --
+	-- labels WOP instead of BOP                                           --
+	------------------------------------------------------------------------
+	member .crossu is real
+	member .crossuok is boolean
+	member .crossslope is boolean
 
 	member .intersections is array    $( intersections of the current refgln only  $)
 	member .allintersections is array $( intersections of every refgln of the drawing, used by !!DrawingPlan1LineNoAnnotation  $)
@@ -2702,11 +2721,30 @@ define method .AnnotateView(!it is string) is string
 	!n2 = !trans[7] * !trans[7] + !trans[8] * !trans[8]
 	!en = sqrt(!e2 * !n2)
 	!this.UvLog('  E/N map ' & !trans[5].string('D5') & ' ' & !trans[6].string('D5') & ' ' & !trans[7].string('D5') & ' ' & !trans[8].string('D5') & ' det=' & !trans[9].string('D7'))
-	if (!en le 0) then
-		return 'not a plan view looking down (elevations and sections are not done yet)'
+	------------------------------------------------------------------
+	-- an elevation or a section looks level: up comes out on the    --
+	-- sheet at full length -- as long as the horizontal direction   --
+	-- lying in the view, which is east and north together          --
+	-- (e2 + n2) -- and pointing up the sheet. anything else, a view --
+	-- looking up or a tilted one, is left alone (2026-09-29)        --
+	------------------------------------------------------------------
+	!u2 = !trans[11] * !trans[11] + !trans[12] * !trans[12]
+	!this.UvLog('  U map ' & !trans[11].string('D5') & ' ' & !trans[12].string('D5'))
+	!kind = ''
+	if (!en gt 0) then
+		if (!trans[9] ge !en * 0.99) then
+			!kind = 'plan'
+		endif
 	endif
-	if (!trans[9] lt !en * 0.99) then
-		return 'not a plan view looking down (elevations and sections are not done yet)'
+	if (!kind.eq('')) then
+		!h2 = !e2 + !n2
+		!ux = abs(!trans[11])
+		if (!u2 gt 0 and !u2 ge !h2 * 0.98 and !u2 le !h2 * 1.02 and !trans[12] gt 0 and !ux le !trans[12] * 0.02) then
+			!kind = 'elev'
+		endif
+	endif
+	if (!kind.eq('')) then
+		return 'neither a plan looking down nor an elevation / section standing upright on the sheet'
 	endif
 
 	------------------------------------------------------------------
@@ -2729,6 +2767,9 @@ define method .AnnotateView(!it is string) is string
 	endif
 	var !vw name
 	var !vwnn namn
+	if (!kind.eq('elev')) then
+		return !this.AnnotateSection(!vref, !vw, !trans)
+	endif
 
 	------------------------------------------------------------------
 	-- its limits, as E3D itself decides them                         --
@@ -2913,114 +2954,20 @@ define method .AnnotateView(!it is string) is string
 	-- below, the way .Apply() makes a drawing again -- the view      --
 	-- itself and everything else on it are not touched               --
 	------------------------------------------------------------------
-	!err = !this.UvClearOwn(!vw)
+	!warn = object array()
+	!lcd = object array()
+	!lcd.append(!lminE)
+	!lcd.append(!lminN)
+	!lcd.append(!lminU)
+	!lcd.append(!lmaxE)
+	!lcd.append(!lmaxN)
+	!lcd.append(!lmaxU)
+	!err = !this.UvLibrary(!vw, !lsrc, !lcd, !warn)
 	if (!err.neq('')) then
 		return !err
 	endif
 	$!vw
 	var !sh owner
-	var !dw owner of $!sh
-	$!dw
-	new liby $!vw/LIBY
-	handle any
-		return 'its library ' & !vw & '/LIBY could not be made: ' & !!error.text
-	endhandle
-	new dllb $!vw/DRAWLIST
-	handle any
-		return 'its drawlist library could not be made: ' & !!error.text
-	endhandle
-	new idli $!vw/DRAWLIST/DRWG
-	handle any
-		return 'its drawlist could not be made: ' & !!error.text
-	endhandle
-	!this.InstTemplate(!vw)
-	handle any
-		return 'its label templates could not be made: ' & !!error.text
-	endhandle
-
-	------------------------------------------------------------------
-	-- the drawlist, filled the way .Apply() fills one (user: take   --
-	-- everything in the range, grids included, and let the exclude  --
-	-- list on the View tab take out what is not wanted). a drawlist --
-	-- of its own: the one the view had may well be shared with      --
-	-- other views, and filling that would redraw them as well       --
-	------------------------------------------------------------------
-	!warn = object array()
-	$!vw/DRAWLIST/DRWG
-	add all zone within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
-	handle any
-		!warn.append('add zones: ' & !!error.text)
-	endhandle
-	add all REFGRD within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
-	handle any
-		!warn.append('add grids: ' & !!error.text)
-	endhandle
-	!excls = object array()
-	!excls = !this.excllist.dtext
-	handle any
-		!excls = object array()
-	endhandle
-	if (!excls.size().gt(0)) then
-		!idlname = !vw & '/DRAWLIST/DRWG'
-		!idli = object IDLIST(!idlname.dbref())
-		do !excl values !excls
-			!exclref = object DBREF()
-			!exclref = !excl.dbref()
-			handle any
-			endhandle
-			if (not(!exclref.badref())) then
-				!idli.remove(!exclref)
-				handle any
-				endhandle
-			endif
-		enddo
-		$!vw/DRAWLIST/DRWG
-	endif
-	limits E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
-	handle any
-		!warn.append('drawlist limits: ' & !!error.text)
-	endhandle
-	var !addn coll all adde for ce
-	handle any
-		!addn = object array()
-	endhandle
-	!this.UvLog('  drawlist ' & !vw & '/DRAWLIST/DRWG: ' & !addn.size().string() & ' member(s)')
-
-	$!vw
-	Idlname $!vw/DRAWLIST/DRWG
-	handle any
-		return 'IDLNAME could not be set to its new drawlist: ' & !!error.text
-	endhandle
-	------------------------------------------------------------------
-	-- a range that came from the drawlist (VVOL, VLIMITS) would move -
-	-- now that the drawlist is a different one, so it is written     --
-	-- down where the next run reads it first after VWLIMITS, the way --
-	-- .Apply() keeps its own                                         --
-	------------------------------------------------------------------
-	if (!lsrc.eq('VVOL') or !lsrc.eq('VLIMITS')) then
-		:CDLIMITS |FROM E $!lminE N $!lminN U $!lminU TO E $!lmaxE N $!lmaxN U $!lmaxU|
-		handle any
-			!warn.append(':CDLIMITS: ' & !!error.text)
-		endhandle
-	endif
-	if (!this.rrsftext.val.neq('')) then
-		rrsf $!this.rrsftext.val
-		handle any
-			!warn.append('representation style: ' & !!error.text)
-		endhandle
-	endif
-	if (!this.hrsftext.val.neq('')) then
-		hrsf $!this.hrsftext.val
-		handle any
-			!warn.append('hatching style: ' & !!error.text)
-		endhandle
-	endif
-	Agmode 'OFF'
-	handle any
-	endhandle
-	Agside 'All'
-	handle any
-	endhandle
 
 	------------------------------------------------------------------
 	-- the note the match line is drawn in. a NOTE is a sheet         --
@@ -3167,6 +3114,1779 @@ define method .AnnotateView(!it is string) is string
 endmethod
 
 ------------------------------------------------------------------------
+-- the line and the command the last error came from, for a warning:  --
+-- '(47,8) No digit after / in REFNO' from the equipment pass said    --
+-- nothing of where (2026-09-29)                                       --
+------------------------------------------------------------------------
+define method .ErrWhere() is string
+	!w = ''
+	!el = ''
+	!el = !!error.line.string()
+	handle any
+		!el = '?'
+	endhandle
+	!ec = ''
+	!ec = !!error.command
+	handle any
+		!ec = '?'
+	endhandle
+	!w = ' [line ' & !el & ': ' & !ec & ']'
+	return !w
+endmethod
+
+------------------------------------------------------------------------
+-- an elevation or a section drawn by hand (user, 2026-09-29, the       --
+-- sample is section_view.png): grid bubbles along the top, the floor  --
+-- levels down the left, every pipe and every piece of equipment       --
+-- labelled on a leader, and three lines of title underneath --        --
+--     SECTION ....           green, underlined, the letter the user's --
+--     SCALE 1:50             yellow                                    --
+--     See Dwg. No. ....      yellow, the number the user's             --
+-- no dimension chains, no match lines.                                 --
+--                                                                      --
+-- stage 1 (this): the limits, the scale off the View tab, a library   --
+-- and drawlist of its own, the title. CE is the view, its frame is in --
+-- .viewXXsh already, !trans is .ViewSheetTransform() as it read it    --
+------------------------------------------------------------------------
+define method .AnnotateSection(!vref is string, !vw is string, !trans is array) is string
+	!vl = object DRAVIEWLIMITS(!vref.dbref())
+	handle any
+		return 'its limits could not be read: ' & !!error.text
+	endhandle
+	------------------------------------------------------------------
+	-- a section is often given no limits at all, only its six       --
+	-- section planes (VSEC), the box the user sees (user,            --
+	-- 2026-09-29: one cut or two, there are always six). they come   --
+	-- after the limits the user typed and before the ones E3D works  --
+	-- out for itself off the drawlist                                --
+	------------------------------------------------------------------
+	!corners = object array()
+	!lsrc = 'none'
+	if (!vl.vwlimitsSet()) then
+		!lsrc = 'VWLIMITS'
+	elseif (!vl.cdlimitsSet()) then
+		!lsrc = 'CDLIMITS'
+	else
+		!verr = !this.VsecBox(!vref, !corners)
+		if (!verr.eq('')) then
+			!lsrc = 'VSEC'
+		else
+			!this.UvLog('  section planes: ' & !verr)
+			if (!vl.viewVolumeSet()) then
+				!lsrc = 'VVOL'
+			elseif (!vl.vlimitsSet()) then
+				!lsrc = 'VLIMITS'
+			endif
+		endif
+	endif
+	if (!lsrc.eq('none')) then
+		!this.UvLog('  limits: none of VWLIMITS, :CDLIMITS, six VSEC planes, VVOL, VLIMITS')
+		return 'has no limits and no box of six section planes to work from'
+	endif
+	if (!lsrc.eq('VSEC')) then
+		------------------------------------------------------------
+		-- the world box round the eight corners of the planes'    --
+		-- box, which is turned when the planes are                --
+		------------------------------------------------------------
+		do !ci from 1 to 8
+			!cp = object position(!corners[!ci])
+			!ce1 = !cp.east.value()
+			!cn1 = !cp.north.value()
+			!cu1 = !cp.up.value()
+			if (!ci eq 1) then
+				!lminE = !ce1
+				!lminN = !cn1
+				!lminU = !cu1
+				!lmaxE = !ce1
+				!lmaxN = !cn1
+				!lmaxU = !cu1
+			else
+				!lminE = min(!lminE, !ce1)
+				!lminN = min(!lminN, !cn1)
+				!lminU = min(!lminU, !cu1)
+				!lmaxE = max(!lmaxE, !ce1)
+				!lmaxN = max(!lmaxN, !cn1)
+				!lmaxU = max(!lmaxU, !cu1)
+			endif
+		enddo
+	else
+		!lim = !vl.getViewLimitsArray()
+		!lminE = min(!lim[1], !lim[4])
+		!lminN = min(!lim[2], !lim[5])
+		!lminU = min(!lim[3], !lim[6])
+		!lmaxE = max(!lim[1], !lim[4])
+		!lmaxN = max(!lim[2], !lim[5])
+		!lmaxU = max(!lim[3], !lim[6])
+	endif
+	------------------------------------------------------------------
+	-- the user's own section planes, front and back (user,          --
+	-- 2026-09-30, pmode.png): any VSEC besides the six limit planes  --
+	-- with PMODE Standard keeps the side its plane's normal points   --
+	-- to, Reversed the other side, Off nothing. they cut the box     --
+	-- down, and with it the drawlist and how deep pipes and          --
+	-- equipment are looked for. limits given as numbers become the  --
+	-- same eight corners first                                       --
+	------------------------------------------------------------------
+	if (!corners.size() ne 8) then
+		!ces = object array()
+		!ces.append(!lminE)
+		!ces.append(!lmaxE)
+		!cns = object array()
+		!cns.append(!lminN)
+		!cns.append(!lmaxN)
+		!cus = object array()
+		!cus.append(!lminU)
+		!cus.append(!lmaxU)
+		!corners = object array()
+		do !ia from 1 to 2
+			do !ib from 1 to 2
+				do !ic from 1 to 2
+					!corners.append('E ' & !ces[!ia].string('D3') & ' N ' & !cns[!ib].string('D3') & ' U ' & !cus[!ic].string('D3') & ' WRT /*')
+				enddo
+			enddo
+		enddo
+	endif
+	!ncut = 0
+	!ncut = !this.VsecCuts(!vref, !corners, !lsrc)
+	handle any
+		!this.UvLog('  section cuts: ' & !!error.text & !this.ErrWhere())
+		!ncut = 0
+	endhandle
+	if (!ncut gt 0) then
+		do !ci from 1 to 8
+			!cp = object position(!corners[!ci])
+			!ce1 = !cp.east.value()
+			!cn1 = !cp.north.value()
+			!cu1 = !cp.up.value()
+			if (!ci eq 1) then
+				!lminE = !ce1
+				!lminN = !cn1
+				!lminU = !cu1
+				!lmaxE = !ce1
+				!lmaxN = !cn1
+				!lmaxU = !cu1
+			else
+				!lminE = min(!lminE, !ce1)
+				!lminN = min(!lminN, !cn1)
+				!lminU = min(!lminU, !cu1)
+				!lmaxE = max(!lmaxE, !ce1)
+				!lmaxN = max(!lmaxN, !cn1)
+				!lmaxU = max(!lmaxU, !cu1)
+			endif
+		enddo
+		!this.UvLog('  limits (' & !lsrc & ') cut by ' & !ncut.string() & ' section plane(s)')
+	endif
+	!this.UvLog('  section, limits (' & !lsrc & ') E ' & !lminE.string('D1') & ' N ' & !lminN.string('D1') & ' U ' & !lminU.string('D1') & ' TO E ' & !lmaxE.string('D1') & ' N ' & !lmaxN.string('D1') & ' U ' & !lmaxU.string('D1'))
+	if (!lmaxE - !lminE lt 1 or !lmaxN - !lminN lt 1 or !lmaxU - !lminU lt 1) then
+		return 'its limits (' & !lsrc & ') are flat or empty'
+	endif
+	!lcd = object array()
+	!lcd.append(!lminE)
+	!lcd.append(!lminN)
+	!lcd.append(!lminU)
+	!lcd.append(!lmaxE)
+	!lcd.append(!lmaxN)
+	!lcd.append(!lmaxU)
+
+	------------------------------------------------------------------
+	-- the scale is the view's own, whatever it is, 1:1 included: a  --
+	-- section keeps what the user gave it, the View tab's Drawing    --
+	-- Scale is for plans only (user, 2026-09-29). then where the     --
+	-- limits fall on the sheet at it                                 --
+	------------------------------------------------------------------
+	!fx1 = min(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+	!fx2 = max(!this.viewLLsh.part(2).real(), !this.viewURsh.part(2).real())
+	!fy1 = min(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+	!fy2 = max(!this.viewLLsh.part(4).real(), !this.viewURsh.part(4).real())
+	$!vref
+	var !vsca vsca
+	!this.vsca = !vsca.real()
+	if (!corners.size() eq 8) then
+		!ls = !this.SheetBoxOfPoints(!corners)
+	else
+		!ls = !this.SheetBoxOfLimits(!lcd)
+	endif
+	!bx1 = max(!fx1, !ls[1])
+	!by1 = max(!fy1, !ls[2])
+	!bx2 = min(!fx2, !ls[3])
+	!by2 = min(!fy2, !ls[4])
+	!this.UvLog('  cut x ' & !bx1.string('D2') & ' .. ' & !bx2.string('D2') & '  y ' & !by1.string('D2') & ' .. ' & !by2.string('D2') & '  (limits on the sheet x ' & !ls[1].string('D2') & ' .. ' & !ls[3].string('D2') & '  y ' & !ls[2].string('D2') & ' .. ' & !ls[4].string('D2') & ')')
+	if (!bx2 - !bx1 lt 1 or !by2 - !by1 lt 1) then
+		return 'its limits fall outside its frame'
+	endif
+	!bx1 = !bx1.string('D6').replace('mm', '').real()
+	!bx2 = !bx2.string('D6').replace('mm', '').real()
+	!by1 = !by1.string('D6').replace('mm', '').real()
+	!by2 = !by2.string('D6').replace('mm', '').real()
+	!this.boxULsh = 'x ' & string(!bx1) & ' y ' & string(!by2)
+	!this.boxURsh = 'x ' & string(!bx2) & ' y ' & string(!by2)
+	!this.boxLLsh = 'x ' & string(!bx1) & ' y ' & string(!by1)
+	!this.boxLRsh = 'x ' & string(!bx2) & ' y ' & string(!by1)
+	!this.boxUlinesh = object line(!this.boxULsh.position(), !this.boxURsh.position())
+	!this.boxDlinesh = object line(!this.boxLLsh.position(), !this.boxLRsh.position())
+	!this.boxRlinesh = object line(!this.boxLRsh.position(), !this.boxURsh.position())
+	!this.boxLlinesh = object line(!this.boxLLsh.position(), !this.boxULsh.position())
+
+	------------------------------------------------------------------
+	-- the drawlist takes the limits as they are: on an elevation     --
+	-- they are the depth of the section as well, which a cut on the  --
+	-- sheet cannot say                                               --
+	------------------------------------------------------------------
+	!this.wminE = !lminE - 0.025
+	!this.wminN = !lminN - 0.025
+	!this.minU = !lminU - 0.025
+	!this.wmaxE = !lmaxE + 0.025
+	!this.wmaxN = !lmaxN + 0.025
+	!this.maxU = !lmaxU + 0.025
+	!this.minE = !this.wminE
+	!this.minN = !this.wminN
+	!this.maxE = !this.wmaxE
+	!this.maxN = !this.wmaxN
+
+	------------------------------------------------------------------
+	-- how deep the section reaches along its viewing direction: the  --
+	-- box's corners (or the limits') measured along d, the           --
+	-- horizontal normal to the view that .BandVol() and .InDepth()   --
+	-- use                                                            --
+	------------------------------------------------------------------
+	!t5 = !trans[5].string('D9').replace('mm', '').real()
+	!t7 = !trans[7].string('D9').replace('mm', '').real()
+	!ts = sqrt(!t5 * !t5 + !t7 * !t7)
+	!ddE = 0 - !t7 / !ts
+	!ddN = !t5 / !ts
+	!dpts = object array()
+	if (!corners.size() eq 8) then
+		!dpts = !corners
+	else
+		!dle = object array()
+		!dle.append(!lminE.string('D3').replace('mm', ''))
+		!dle.append(!lmaxE.string('D3').replace('mm', ''))
+		!dln = object array()
+		!dln.append(!lminN.string('D3').replace('mm', ''))
+		!dln.append(!lmaxN.string('D3').replace('mm', ''))
+		do !ie from 1 to 2
+			do !in from 1 to 2
+				!dpts.append('E ' & !dle[!ie] & ' N ' & !dln[!in] & ' U 0 WRT /*')
+			enddo
+		enddo
+	endif
+	!dfirst = true
+	do !dp values !dpts
+		!dpo = object position(!dp)
+		!dv = !dpo.east.value() * !ddE + !dpo.north.value() * !ddN
+		if (!dfirst) then
+			!this.depthmin = !dv
+			!this.depthmax = !dv
+			!dfirst = false
+		else
+			!this.depthmin = min(!this.depthmin, !dv)
+			!this.depthmax = max(!this.depthmax, !dv)
+		endif
+	enddo
+	!this.depthmin = !this.depthmin - 0.025
+	!this.depthmax = !this.depthmax + 0.025
+	!this.UvLog('  depth along the view ' & !this.depthmin.string('D1') & ' .. ' & !this.depthmax.string('D1'))
+
+	------------------------------------------------------------------
+	-- the title's two blanks are the user's to fill in: what they    --
+	-- typed there last time is read before the old title goes, and   --
+	-- written back into the new one                                  --
+	------------------------------------------------------------------
+	!old1 = ''
+	!old3 = ''
+	!nt = !vw & '/VTITLE'
+	!onm = !nt & '/ELEV'
+	var !old1 btext of $!onm
+	handle any
+		!old1 = ''
+	endhandle
+	!onm = !nt & '/DWGNO'
+	var !old3 btext of $!onm
+	handle any
+		!old3 = ''
+	endhandle
+
+	!warn = object array()
+	!err = !this.UvLibrary(!vw, !lsrc, !lcd, !warn)
+	if (!err.neq('')) then
+		return !err
+	endif
+	$!vw
+	update design
+	handle any
+		!warn.append('update design: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	------------------------------------------------------------------
+	-- the passes, the plan's in the plan's order (user, 2026-09-29:  --
+	-- four dimension chains and the pipe numbers styled as on the    --
+	-- plan; no match line). the grid bubbles go along the top only   --
+	-- and hand the column lines to the dimension chains; the floor   --
+	-- levels go down the left where the plan's left column bubbles  --
+	-- go, and onto the left and right chains (user, 2026-09-29)      --
+	------------------------------------------------------------------
+	!this.intersections = object array()
+	!this.allintersections = object array()
+	------------------------------------------------------------------
+	-- no match line on a section, so !!DrawingPlan1MatchTicks does  --
+	-- not run and its list still held the last plan's ticks: one of --
+	-- them went onto the left chain as a point 670mm off the view   --
+	-- (2026-09-29). MatchGaps reads the same list, and the match    --
+	-- line texts !!DrawingPlan1MatchLine leaves                      --
+	------------------------------------------------------------------
+	!!DrawingPlan1MatchTickPos = object array()
+	!!DrawingPlan1MatchTexts = object array()
+	!!DrawingPlan1BoxChanged = true
+	!this.UvToLast(!vw)
+	!nbub = 0
+	!nbub = !this.SectionGridBubbles(!vw)
+	handle any
+		!warn.append('grid bubbles: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	!this.UvLog('  grid bubbles: ' & !nbub.string())
+	!this.UvToLast(!vw)
+	!nlev = 0
+	!nlev = !this.SectionLevels(!vw)
+	handle any
+		!warn.append('levels: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	!this.UvLog('  levels: ' & !nlev.string())
+	!this.UvToLast(!vw)
+	!!DrawingPlan1LineNoAnnotation(!vw, 0, 0)
+	handle any
+		!warn.append('line numbers: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	!this.UvToLast(!vw)
+	!!DrawingPlan1EquiAnnotation(!vw, !this.wminE.string(), !this.wminN.string(), !this.minU.string(), !this.wmaxE.string(), !this.wmaxN.string(), !this.maxU.string())
+	handle any
+		!warn.append('equipment: ' & !!error.text & !this.ErrWhere())
+	endhandle
+
+	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
+	if !ff.exists() then
+		!ff.deletefile()
+	endif
+	!this.suptstack = object array()
+	!bpdxf = !this.blankdir & 'BlankPos1.dxf'
+	$!vw
+	LIEXEC /Draft_DXF_LI 'DXFOUT' OutputF '$!bpdxf'
+	handle any
+		!warn.append('DXF for BlankPos: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	if (!this.redutog.val) then
+		!this.UvToLast(!vw)
+		!this.ReduAnnotation(!vw)
+		handle any
+			!warn.append('reducers: ' & !!error.text & !this.ErrWhere())
+		endhandle
+	endif
+	if (!this.nozztog.val) then
+		!this.UvToLast(!vw)
+		!this.NozzleAnnotation(!vw)
+		handle any
+			!warn.append('nozzles: ' & !!error.text & !this.ErrWhere())
+		endhandle
+	endif
+	if (!this.valvtog.val) then
+		!this.UvToLast(!vw)
+		!this.ValveAnnotation(!vw)
+		handle any
+			!warn.append('valves: ' & !!error.text & !this.ErrWhere())
+		endhandle
+	endif
+	if (!this.insttog.val) then
+		!this.UvToLast(!vw)
+		!this.InstAnnotation(!vw)
+		handle any
+			!warn.append('instruments: ' & !!error.text & !this.ErrWhere())
+		endhandle
+	endif
+	if (!this.supttog.val) then
+		!this.UvToLast(!vw)
+		!this.SuptAnnotation(!vw)
+		handle any
+			!warn.append('supports: ' & !!error.text & !this.ErrWhere())
+		endhandle
+	endif
+	!this.AppendDimLines(!vw)
+	handle any
+		!warn.append('dimension lines for BlankPos: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	!this.RunBlankPos()
+	handle any
+		!warn.append('BlankPos: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	!ff = object file(!this.blankdir & 'LabelSpace.txt')
+	if !ff.exists() then
+		!ff.open('read')
+		!lines = !ff.readfile()
+		!ff.close()
+		do !i from 1 to !lines.size()
+			!this.PlaceLabelFromSpace(!lines[!i], !this.rcode, false)
+			handle any
+				!warn.append('label placement: ' & !!error.text & !this.ErrWhere())
+			endhandle
+		enddo
+	endif
+	!!DrawingPlan1MatchGaps(!vw)
+	handle any
+		!warn.append('projection line gaps: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	$!vw
+
+	!top = !this.TitleTopNow()
+	!this.SectionTitle(!vw, !top, !old1, !old3)
+	handle any
+		!warn.append('title: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	$!vw
+	!this.UvToLast(!vw)
+	!!DrawingPlan1FlowAnnotation(!vw)
+	handle any
+		!warn.append('flow arrows: ' & !!error.text & !this.ErrWhere())
+	endhandle
+	$!vw
+
+	do !w values !warn
+		!this.UvLog('  WARN ' & !w)
+	enddo
+	if (!warn.size().gt(0)) then
+		return 'done, but ' & !warn.size().string() & ' step(s) failed, first: ' & !warn[1]
+	endif
+	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- the box the six section planes of view !vref make (VSEC -> PLRF ->  --
+-- a plane with POS and NORM, the way AVEVA's own Set View Limits and  --
+-- Quick Grid Plane View put them there: two planes to an axis). the   --
+-- planes are paired off by their normals, parallel within 0.1 of a    --
+-- percent, and the eight corners solved for (Cramer's rule), so a     --
+-- turned box comes out turned. corners go into !corners as position  --
+-- strings 'E .. N .. U .. WRT /*'. answers '' or why there is no box  --
+------------------------------------------------------------------------
+define method .VsecBox(!vref is string, !corners is array) is string
+	!vsecs = object array()
+	var !vsecs coll all vsec for $!vref
+	handle any
+		return 'could not be collected: ' & !!error.text
+	endhandle
+	!this.UvLog('    ' & !vsecs.size().string() & ' VSEC(s) under the view')
+	------------------------------------------------------------------
+	-- the six Set View Limits puts there, FR (from) and TO on each  --
+	-- of E, N and U: <view>/FREP/VSEC .. <view>/TOUP/VSEC. the     --
+	-- user's own cuts (VS1, VS2 on /DWGNO-002/SS/S1/V2) lie inside --
+	-- that box and are no part of it (2026-09-29). without the six --
+	-- names, a view with exactly six planes of any names will do   --
+	------------------------------------------------------------------
+	!tags = object array()
+	!tags.append('FREP')
+	!tags.append('TOEP')
+	!tags.append('FRNP')
+	!tags.append('TONP')
+	!tags.append('FRUP')
+	!tags.append('TOUP')
+	!lpx = object array()
+	!lpy = object array()
+	!lpz = object array()
+	!lqx = object array()
+	!lqy = object array()
+	!lqz = object array()
+	!px = object array()
+	!py = object array()
+	!pz = object array()
+	!qx = object array()
+	!qy = object array()
+	!qz = object array()
+	do !vs values !vsecs
+		!vsn = ''
+		var !vsn name of $!vs
+		handle any
+			!vsn = !vs
+		endhandle
+		!vsd = !vs.dbref()
+		handle any
+			!this.UvLog('    VSEC ' & !vsn & ': ' & !!error.text)
+			skip
+		endhandle
+		!plr = !vsd.plrf
+		handle any
+			!this.UvLog('    VSEC ' & !vsn & ': no PLRF - ' & !!error.text)
+			skip
+		endhandle
+		if (!plr.badref()) then
+			!this.UvLog('    VSEC ' & !vsn & ': PLRF not set')
+			skip
+		endif
+		!pl = !plr.string()
+		------------------------------------------------------------
+		-- 'wrt worl', the way every other VAR here reads a        --
+		-- position: 'wrt /*' came back (47,15) Syntax error on all --
+		-- eight planes (2026-09-29). failing that, the plane's own --
+		-- attributes as objects, AVEVA's way (!plane.position)     --
+		------------------------------------------------------------
+		!pp = ''
+		!pperr = ''
+		var !pp ( pos of $!pl wrt worl )
+		handle any
+			!pperr = !!error.text
+			!pp = ''
+		endhandle
+		if (!pp.eq('')) then
+			!ppo = !plr.position.wrt(world)
+			handle any
+				!this.UvLog('    VSEC ' & !vsn & ' plane ' & !pl & ': no POS - ' & !pperr & ' / ' & !!error.text)
+				skip
+			endhandle
+			!pp = !ppo.string()
+		else
+			!ppo = object position(!pp)
+		endif
+		!pn = ''
+		!pnerr = ''
+		var !pn ( norm of $!pl wrt worl )
+		handle any
+			!pnerr = !!error.text
+			!pn = ''
+		endhandle
+		if (!pn.eq('')) then
+			!pdo = !plr.norm.wrt(world)
+			handle any
+				!this.UvLog('    VSEC ' & !vsn & ' plane ' & !pl & ': no NORM - ' & !pnerr & ' / ' & !!error.text)
+				skip
+			endhandle
+			!pn = !pdo.string()
+		else
+			!pdo = object direction(!pn)
+		endif
+		!islim = false
+		do !tg values !tags
+			if (!vsn.matchwild('*/' & !tg & '/VSEC')) then
+				!islim = true
+				break
+			endif
+		enddo
+		if (!islim) then
+			!lpx.append(!ppo.east.value())
+			!lpy.append(!ppo.north.value())
+			!lpz.append(!ppo.up.value())
+			!lqx.append(!pdo.east)
+			!lqy.append(!pdo.north)
+			!lqz.append(!pdo.up)
+		endif
+		!px.append(!ppo.east.value())
+		!py.append(!ppo.north.value())
+		!pz.append(!ppo.up.value())
+		!qx.append(!pdo.east)
+		!qy.append(!pdo.north)
+		!qz.append(!pdo.up)
+		!this.UvLog('    VSEC ' & !vsn & ' limits=' & !islim.string() & ' plane ' & !pl & ' pos ' & !pp & ' norm ' & !pn)
+	enddo
+	if (!lpx.size() eq 6) then
+		!px = !lpx
+		!py = !lpy
+		!pz = !lpz
+		!qx = !lqx
+		!qy = !lqy
+		!qz = !lqz
+	endif
+	!np = !px.size()
+	if (!np ne 6) then
+		return !np.string() & ' section plane(s) read and ' & !lpx.size().string() & ' of them the FR/TO limit planes - six are needed'
+	endif
+
+	------------------------------------------------------------------
+	-- pair them off: a partner is the next unpaired plane whose     --
+	-- normal is parallel, either way round                          --
+	------------------------------------------------------------------
+	!mate = object array()
+	do !i from 1 to 6
+		!mate[!i] = 0
+	enddo
+	!pa = object array()
+	!pb = object array()
+	do !i from 1 to 6
+		if (!mate[!i] ne 0) then
+			skip
+		endif
+		do !j from 1 to 6
+			if (!j le !i or !mate[!j] ne 0) then
+				skip
+			endif
+			!dot = !qx[!i] * !qx[!j] + !qy[!i] * !qy[!j] + !qz[!i] * !qz[!j]
+			if (abs(!dot) ge 0.999) then
+				!mate[!i] = !j
+				!mate[!j] = !i
+				!pa.append(!i)
+				!pb.append(!j)
+				break
+			endif
+		enddo
+	enddo
+	if (!pa.size() ne 3) then
+		return 'the six planes do not pair off into three parallel pairs'
+	endif
+
+	------------------------------------------------------------------
+	-- each pair: its normal n (the first plane's) and where the two  --
+	-- planes cross it, n . P                                         --
+	------------------------------------------------------------------
+	!nx = object array()
+	!ny = object array()
+	!nz = object array()
+	!d1 = object array()
+	!d2 = object array()
+	do !k from 1 to 3
+		!ia = !pa[!k]
+		!ib = !pb[!k]
+		!nx[!k] = !qx[!ia]
+		!ny[!k] = !qy[!ia]
+		!nz[!k] = !qz[!ia]
+		!d1[!k] = !nx[!k] * !px[!ia] + !ny[!k] * !py[!ia] + !nz[!k] * !pz[!ia]
+		!d2[!k] = !nx[!k] * !px[!ib] + !ny[!k] * !py[!ib] + !nz[!k] * !pz[!ib]
+	enddo
+	------------------------------------------------------------------
+	-- n2 x n3, n3 x n1, n1 x n2 and the determinant n1 . (n2 x n3)  --
+	------------------------------------------------------------------
+	!c1x = !ny[2] * !nz[3] - !nz[2] * !ny[3]
+	!c1y = !nz[2] * !nx[3] - !nx[2] * !nz[3]
+	!c1z = !nx[2] * !ny[3] - !ny[2] * !nx[3]
+	!c2x = !ny[3] * !nz[1] - !nz[3] * !ny[1]
+	!c2y = !nz[3] * !nx[1] - !nx[3] * !nz[1]
+	!c2z = !nx[3] * !ny[1] - !ny[3] * !nx[1]
+	!c3x = !ny[1] * !nz[2] - !nz[1] * !ny[2]
+	!c3y = !nz[1] * !nx[2] - !nx[1] * !nz[2]
+	!c3z = !nx[1] * !ny[2] - !ny[1] * !nx[2]
+	!det = !nx[1] * !c1x + !ny[1] * !c1y + !nz[1] * !c1z
+	if (abs(!det) lt 0.001) then
+		return 'the three pairs of planes do not close a box'
+	endif
+	do !a from 1 to 2
+		!da = !d1[1]
+		if (!a eq 2) then
+			!da = !d2[1]
+		endif
+		do !b from 1 to 2
+			!db = !d1[2]
+			if (!b eq 2) then
+				!db = !d2[2]
+			endif
+			do !c from 1 to 2
+				!dc = !d1[3]
+				if (!c eq 2) then
+					!dc = !d2[3]
+				endif
+				!xe = (!da * !c1x + !db * !c2x + !dc * !c3x) / !det
+				!xn = (!da * !c1y + !db * !c2y + !dc * !c3y) / !det
+				!xu = (!da * !c1z + !db * !c2z + !dc * !c3z) / !det
+				!corners.append('E ' & !xe.string('D3') & ' N ' & !xn.string('D3') & ' U ' & !xu.string('D3') & ' WRT /*')
+			enddo
+		enddo
+	enddo
+	!this.UvLog('    box of the planes, first corner ' & !corners[1] & ', last ' & !corners[8])
+	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- where section plane !vs is, into !out: E N U of its POS, then E N U --
+-- of its NORM, then the plane's own name; answers '' or why not. read --
+-- the way .VsecBox() reads them (VAR in brackets, then the objects)   --
+------------------------------------------------------------------------
+define method .VsecPlane(!vs is string, !out is array) is string
+	!vsd = !vs.dbref()
+	handle any
+		return !!error.text
+	endhandle
+	!plr = !vsd.plrf
+	handle any
+		return 'no PLRF - ' & !!error.text
+	endhandle
+	if (!plr.badref()) then
+		return 'PLRF not set'
+	endif
+	!pl = !plr.string()
+	!pp = ''
+	var !pp ( pos of $!pl wrt worl )
+	handle any
+		!pp = ''
+	endhandle
+	if (!pp.eq('')) then
+		!ppo = !plr.position.wrt(world)
+		handle any
+			return 'no POS - ' & !!error.text
+		endhandle
+	else
+		!ppo = object position(!pp)
+	endif
+	!pn = ''
+	var !pn ( norm of $!pl wrt worl )
+	handle any
+		!pn = ''
+	endhandle
+	if (!pn.eq('')) then
+		!pdo = !plr.norm.wrt(world)
+		handle any
+			return 'no NORM - ' & !!error.text
+		endhandle
+	else
+		!pdo = object direction(!pn)
+	endif
+	!out.append(!ppo.east.value())
+	!out.append(!ppo.north.value())
+	!out.append(!ppo.up.value())
+	!out.append(!pdo.east)
+	!out.append(!pdo.north)
+	!out.append(!pdo.up)
+	!out.append(!pl)
+	return ''
+endmethod
+
+------------------------------------------------------------------------
+-- the user's own section planes cut the box !corners (eight position  --
+-- strings, corner (a,b,c) at index (a-1)*4 + (b-1)*2 + c, each of a, b --
+-- and c one side of a pair of faces). every VSEC of view !vref which  --
+-- is not one of the six limit planes, with PMODE:                     --
+--     Standard  keeps the side the plane's normal points to           --
+--     Reversed  keeps the other side                                   --
+--     Off       nothing                                                --
+-- (user, 2026-09-30, pmode.png: VS1 at W 312456, normal E, Standard -- --
+-- the E side goes into the drawlist). a plane square to a pair of     --
+-- faces moves that face in; an oblique one is left out and logged,   --
+-- which only draws more, never less. when the box itself came from   --
+-- six untagged planes (!lsrc VSEC without the FR/TO names) every      --
+-- plane is part of it and nothing is cut. answers how many cut        --
+------------------------------------------------------------------------
+define method .VsecCuts(!vref is string, !corners is array, !lsrc is string) is real
+	!vsecs = object array()
+	var !vsecs coll all vsec for $!vref
+	handle any
+		return 0
+	endhandle
+	!tags = object array()
+	!tags.append('FREP')
+	!tags.append('TOEP')
+	!tags.append('FRNP')
+	!tags.append('TONP')
+	!tags.append('FRUP')
+	!tags.append('TOUP')
+	!extra = object array()
+	!extran = object array()
+	!ntag = 0
+	do !vs values !vsecs
+		!vsn = ''
+		var !vsn name of $!vs
+		handle any
+			!vsn = !vs
+		endhandle
+		!islim = false
+		do !tg values !tags
+			if (!vsn.matchwild('*/' & !tg & '/VSEC')) then
+				!islim = true
+				break
+			endif
+		enddo
+		if (!islim) then
+			!ntag = !ntag + 1
+		else
+			!extra.append(!vs)
+			!extran.append(!vsn)
+		endif
+	enddo
+	if (!lsrc.eq('VSEC') and !ntag ne 6) then
+		return 0
+	endif
+	!cx = object array()
+	!cy = object array()
+	!cz = object array()
+	do !ci from 1 to 8
+		!cp = object position(!corners[!ci])
+		!cx[!ci] = !cp.east.value()
+		!cy[!ci] = !cp.north.value()
+		!cz[!ci] = !cp.up.value()
+	enddo
+	!steps = object array()
+	!steps.append(4)
+	!steps.append(2)
+	!steps.append(1)
+	!ncut = 0
+	do !k from 1 to !extra.size()
+		!vs = !extra[!k]
+		!vsn = !extran[!k]
+		!pm = ''
+		!vsd = !vs.dbref()
+		!pm = !vsd.pmod
+		handle any
+			var !pm pmode of $!vs
+			handle any
+				!this.UvLog('    cut ' & !vsn & ': PMODE could not be read - ' & !!error.text)
+				skip
+			endhandle
+		endhandle
+		!pm = !pm.string().upcase()
+		if (!pm.matchwild('OFF*')) then
+			!this.UvLog('    cut ' & !vsn & ': PMODE Off, not cutting')
+			skip
+		endif
+		!sg = 1
+		if (!pm.matchwild('REV*')) then
+			!sg = -1
+		elseif (not(!pm.matchwild('STA*'))) then
+			!this.UvLog('    cut ' & !vsn & ': PMODE ' & !pm & ' not known, not cutting')
+			skip
+		endif
+		!pv = object array()
+		!perr = !this.VsecPlane(!vs, !pv)
+		if (!perr.neq('')) then
+			!this.UvLog('    cut ' & !vsn & ': ' & !perr)
+			skip
+		endif
+		!qx = !pv[4] * !sg
+		!qy = !pv[5] * !sg
+		!qz = !pv[6] * !sg
+		----------------------------------------------------------
+		-- which pair of faces the plane is square to: its normal --
+		-- square to the other two edges of the box                --
+		----------------------------------------------------------
+		!kp = 0
+		do !kk from 1 to 3
+			!sq = true
+			do !ko from 1 to 3
+				if (!ko eq !kk) then
+					skip
+				endif
+				!j2 = 1 + !steps[!ko]
+				!ex = !cx[!j2] - !cx[1]
+				!ey = !cy[!j2] - !cy[1]
+				!ez = !cz[!j2] - !cz[1]
+				!el = sqrt(!ex * !ex + !ey * !ey + !ez * !ez)
+				if (!el gt 0) then
+					!ed = !qx * !ex + !qy * !ey + !qz * !ez
+					!edr = !ed / !el
+					if (abs(!edr) gt 0.001) then
+						!sq = false
+					endif
+				endif
+			enddo
+			if (!sq) then
+				!kp = !kk
+				break
+			endif
+		enddo
+		if (!kp eq 0) then
+			!this.UvLog('    cut ' & !vsn & ' (' & !pm & ', plane ' & !pv[7] & '): oblique to the box, not cutting')
+			skip
+		endif
+		----------------------------------------------------------
+		-- how far each corner is on the kept side; along each of --
+		-- the four edges of that pair, a corner on the wrong     --
+		-- side moves to where the plane crosses the edge         --
+		----------------------------------------------------------
+		!t = object array()
+		do !ci from 1 to 8
+			!t[!ci] = !qx * (!cx[!ci] - !pv[1]) + !qy * (!cy[!ci] - !pv[2]) + !qz * (!cz[!ci] - !pv[3])
+		enddo
+		!st = !steps[!kp]
+		!moved = false
+		!empty = false
+		!nx = object array()
+		!ny = object array()
+		!nz = object array()
+		do !ci from 1 to 8
+			!nx[!ci] = !cx[!ci]
+			!ny[!ci] = !cy[!ci]
+			!nz[!ci] = !cz[!ci]
+		enddo
+		do !ci from 1 to 8
+			!ci0 = !ci - 1
+			!st2 = 2 * !st
+			!cq = !ci0 / !st2
+			!cqi = !cq.int()
+			!bit = !ci0 - !cqi * !st2
+			if (!bit ge !st) then
+				skip
+			endif
+			!cj = !ci + !st
+			!ti = !t[!ci]
+			!tj = !t[!cj]
+			if (!ti lt 0 and !tj lt 0) then
+				!empty = true
+			elseif (!ti lt 0) then
+				!f = !ti / (!ti - !tj)
+				!nx[!ci] = !cx[!ci] + !f * (!cx[!cj] - !cx[!ci])
+				!ny[!ci] = !cy[!ci] + !f * (!cy[!cj] - !cy[!ci])
+				!nz[!ci] = !cz[!ci] + !f * (!cz[!cj] - !cz[!ci])
+				!moved = true
+			elseif (!tj lt 0) then
+				!f = !tj / (!tj - !ti)
+				!nx[!cj] = !cx[!cj] + !f * (!cx[!ci] - !cx[!cj])
+				!ny[!cj] = !cy[!cj] + !f * (!cy[!ci] - !cy[!cj])
+				!nz[!cj] = !cz[!cj] + !f * (!cz[!ci] - !cz[!cj])
+				!moved = true
+			endif
+		enddo
+		if (!empty) then
+			!this.UvLog('    cut ' & !vsn & ' (' & !pm & ', plane ' & !pv[7] & '): would leave nothing, not cutting')
+			skip
+		endif
+		if (not(!moved)) then
+			!this.UvLog('    cut ' & !vsn & ' (' & !pm & ', plane ' & !pv[7] & '): the box is already on its kept side')
+			skip
+		endif
+		!cx = !nx
+		!cy = !ny
+		!cz = !nz
+		!ncut = !ncut + 1
+		!this.UvLog('    cut ' & !vsn & ' (' & !pm & ', plane ' & !pv[7] & ' at E ' & !pv[1].string('D1') & ' N ' & !pv[2].string('D1') & ' U ' & !pv[3].string('D1') & ', kept side E ' & !qx.string('D3') & ' N ' & !qy.string('D3') & ' U ' & !qz.string('D3') & ')')
+	enddo
+	if (!ncut gt 0) then
+		do !ci from 1 to 8
+			!corners[!ci] = 'E ' & !cx[!ci].string('D3') & ' N ' & !cy[!ci].string('D3') & ' U ' & !cz[!ci].string('D3') & ' WRT /*'
+		enddo
+		!this.UvLog('    box after the cuts, first corner ' & !corners[1] & ', last ' & !corners[8])
+	endif
+	return !ncut
+endmethod
+
+------------------------------------------------------------------------
+-- the limits, min E N U then max E N U, on the sheet of the view that --
+-- is CE: all eight corners through SHPOS, and the rectangle round     --
+-- them, x1 y1 x2 y2 as plain numbers. SHPOS does the projection      --
+-- itself, so it is right for a plan and an elevation alike            --
+------------------------------------------------------------------------
+define method .SheetBoxOfLimits(!lim is array) is array
+	!es = object array()
+	!es.append(!lim[1].string('D3').replace('mm', ''))
+	!es.append(!lim[4].string('D3').replace('mm', ''))
+	!ns = object array()
+	!ns.append(!lim[2].string('D3').replace('mm', ''))
+	!ns.append(!lim[5].string('D3').replace('mm', ''))
+	!us = object array()
+	!us.append(!lim[3].string('D3').replace('mm', ''))
+	!us.append(!lim[6].string('D3').replace('mm', ''))
+	!pts = object array()
+	do !ie from 1 to 2
+		do !in from 1 to 2
+			do !iu from 1 to 2
+				!pts.append('E ' & !es[!ie] & ' N ' & !ns[!in] & ' U ' & !us[!iu] & ' WRT /*')
+			enddo
+		enddo
+	enddo
+	!r = !this.SheetBoxOfPoints(!pts)
+	return !r
+endmethod
+
+------------------------------------------------------------------------
+-- the rectangle on the sheet of the view that is CE round points     --
+-- !pts, position strings 'E .. N .. U .. WRT /*': x1 y1 x2 y2 as      --
+-- plain numbers                                                      --
+------------------------------------------------------------------------
+define method .SheetBoxOfPoints(!pts is array) is array
+	!r = object array()
+	!first = true
+	do !pstr values !pts
+		!pp = object position(!pstr)
+		var !psh shpos of $!pp
+		!px = !psh.part(2).replace('mm', '').real()
+		!py = !psh.part(4).replace('mm', '').real()
+		if (!first) then
+			!r[1] = !px
+			!r[2] = !py
+			!r[3] = !px
+			!r[4] = !py
+			!first = false
+		else
+			!r[1] = min(!r[1], !px)
+			!r[2] = min(!r[2], !py)
+			!r[3] = max(!r[3], !px)
+			!r[4] = max(!r[4], !py)
+		endif
+	enddo
+	return !r
+endmethod
+
+------------------------------------------------------------------------
+-- the title under a section (section_view.png, user 2026-09-29):      --
+--     SECTION A11                green, match line height, underlined --
+--     SCALE 1:50                 yellow, pipe label height            --
+--     See Dwg. No. 4-00780-...   yellow, pipe label height            --
+-- the letter and the drawing number are the user's to type: left as  --
+-- blanks the first time, and !old1 / !old3 -- what the user had typed --
+-- before a rerun -- put back when there are any. the underline is as  --
+-- wide as the first line with its blank, the way .ViewTitleAt() sizes --
+-- its own. a NOTE <view>/VTITLE with ELEV, ULINE, SCALE and DWGNO in  --
+-- it, so .UvClearOwn() clears it with the rest                        --
+------------------------------------------------------------------------
+define method .SectionTitle(!vw is string, !top is real, !old1 is string, !old3 is string)
+	!t1 = 'SECTION    '
+	if (!old1.trim().neq('')) then
+		!t1 = !old1
+	endif
+	!t3 = 'See Dwg. No.                              '
+	if (!old3.trim().neq('')) then
+		!t3 = !old3
+	endif
+	!vs = !this.vsca
+	!t2 = 'SCALE'
+	if (!vs gt 0 and !vs lt 1) then
+		!den = 1 / !vs
+		!t2 = 'SCALE 1:' & !den.string('D0').replace('mm', '')
+	elseif (!vs ge 1) then
+		!t2 = 'SCALE ' & !vs.string('D0').replace('mm', '') & ':1'
+	endif
+	!this.TitleLog('STITLE ' & !vw & ' top=' & !top.string('D3') & ' t1=[' & !t1 & '] t2=' & !t2 & ' t3=[' & !t3 & ']')
+
+	!h = !this.TitleHeights()
+	!h1 = !h[1]
+	!h2 = !h[2]
+	!xl = !this.viewLLsh.part(2).replace('mm', '').real()
+	!xr = !this.viewLRsh.part(2).replace('mm', '').real()
+	!cx = (!xl + !xr) * 0.5
+	!rows = !this.TitleRows(!top)
+	!y1 = !rows[1]
+	!yu = !rows[2]
+	!y2 = !rows[3]
+	!y3 = !y2 - 1.5 * !h2
+	!w = !this.TitleWidth(!t1, !h1)
+	!xa = !cx - !w * 0.5
+	!xb = !cx + !w * 0.5
+
+	!cxs = !cx.string('D3').replace('mm', '')
+	!y1s = !y1.string('D3').replace('mm', '')
+	!yus = !yu.string('D3').replace('mm', '')
+	!y2s = !y2.string('D3').replace('mm', '')
+	!y3s = !y3.string('D3').replace('mm', '')
+	!xas = !xa.string('D3').replace('mm', '')
+	!xbs = !xb.string('D3').replace('mm', '')
+	!h1s = !h1.string('D2').replace('mm', '')
+	!h2s = !h2.string('D2').replace('mm', '')
+
+	!nt = !vw & '/VTITLE'
+	$!vw
+	new note $!nt
+	handle any
+		!this.TitleLog('  new note failed: ' & !!error.text)
+		return
+	endhandle
+
+	!made = true
+	new texp $!nt/ELEV btext |$!t1| origin x $!cxs y $!y1s cheitx |$!h1s| alig bbody just center font 1
+	handle any
+		!made = false
+		!this.TitleLog('  ELEV failed: ' & !!error.text)
+	endhandle
+	if (!made) then
+		!colok = true
+		txcolour 20
+		handle any
+			!colok = false
+		endhandle
+		if (not(!colok)) then
+			txcolour green
+			handle any
+			endhandle
+		endif
+	endif
+
+	$!nt
+	!made = true
+	new stra $!nt/ULINE fpt x $!xas y $!yus tpt x $!xbs y $!yus
+	handle any
+		!made = false
+		!this.TitleLog('  ULINE failed: ' & !!error.text)
+	endhandle
+	if (!made) then
+		!colok = true
+		NLColour 20
+		handle any
+			!colok = false
+		endhandle
+		if (not(!colok)) then
+			NLColour green
+			handle any
+			endhandle
+		endif
+	endif
+
+	$!nt
+	new texp $!nt/SCALE btext |$!t2| origin x $!cxs y $!y2s cheitx |$!h2s| alig bbody just center txcolour yellow font 1
+	handle any
+		!this.TitleLog('  SCALE failed: ' & !!error.text)
+	endhandle
+
+	$!nt
+	new texp $!nt/DWGNO btext |$!t3| origin x $!cxs y $!y3s cheitx |$!h2s| alig bbody just center txcolour yellow font 1
+	handle any
+		!this.TitleLog('  DWGNO failed: ' & !!error.text)
+	endhandle
+	!this.TitleLog('  made: cx=' & !cxs & ' y1=' & !y1s & ' yu=' & !yus & ' y2=' & !y2s & ' y3=' & !y3s & ' uline ' & !xas & '..' & !xbs)
+endmethod
+
+------------------------------------------------------------------------
+-- stage 2 of a section: the grid bubbles along the top (the A and B  --
+-- of section_view.png). a column line of the section is a vertical   --
+-- grid plane the view looks along, and on the sheet that plane is    --
+-- one vertical line. it is found through the plane's trace on a      --
+-- level: a REFGLN lying level (both ends at one U) whose two ends    --
+-- land on one spot of the sheet, and whose own plane (GRDREF) stands --
+-- upright -- a level's trace on a wall of the grid would pass the    --
+-- first two tests as well. the refglns are the ones the plan takes,  --
+-- those of the first GRIDPL of each GRIDEL of the drawlist's grids.  --
+--                                                                    --
+-- the bubble is the plan's: a SLAB on the refgln's first end, the    --
+-- REFGRD/ID template (it prints IDPLANE of the GRDREF), its circle   --
+-- Distance above the top of the cut and its leader from Gap above    --
+-- it, both off the Grid tab. two bubbles with one number on one spot --
+-- are one; two numbers on one spot stack (!!DrawingPlan1GridStack).  --
+-- the layer is <view>/ateGRID, cleared with the rest on a rerun.    --
+-- every bubble goes to check_grid.txt. answers how many were made    --
+------------------------------------------------------------------------
+define method .SectionGridBubbles(!vw is string) is real
+	!!DrawingPlan1GridBubbles = object array()
+	!dbg = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+	!dbg.open('overwrite')
+	!dbg.writerecord('SECTIONGRID ' & !vw)
+	!dbg.close()
+	handle any
+	endhandle
+
+	NEW LAYE $!vw/ateGRID
+	Purpose GRIDA
+	Lvisibility true
+	Font 1
+	Justification Left
+	Alignment Template
+	Tsiztx '5mm'
+	Chostx '6mm'
+	Asubtended 0degree
+	Pjustification Towards
+	Oshttx '2mm'
+	Plcltx '0mm'
+	Doffset 25mm
+	Dmsptx '0mm'
+	Lleader true
+	Lframe true
+	Lshape Straight
+	Gboxtx '1mm'
+	Llcltx '0mm'
+	Xyscale 1 1
+	Xyposition 25mm 25mm
+	Blnk false
+	Bmargin 0mm
+	Trsf Nulref
+	Txcolour Yellow
+	NLStyle Solid
+	NLColour Cyan
+	FStyle Off
+	FColour Grey
+	LLStyle Chained
+	LLColour Cyan
+	LFStyle Solid
+	LFColour Cyan
+	DLStyle Solid
+	DLColour Cyan
+	PLStyle Solid
+	PLColour Cyan
+	MColour Cyan
+	CHStyle Off
+	CHColour Grey
+	!cheigridv = 4
+	!cheigridv = !this.gridhei.val
+	handle any
+		!cheigridv = 4
+	endhandle
+	!cheigrid = !cheigridv.string('D2') & 'mm'
+	Cheitx '$!cheigrid'
+
+	!bx1 = !this.boxULsh.part(2).replace('mm', '').real()
+	!bx2 = !this.boxURsh.part(2).replace('mm', '').real()
+	!ytop = !this.boxULsh.part(4).replace('mm', '').real()
+	!gdist = 50
+	!gdist = !this.griddist.val
+	handle any
+		!gdist = 50
+	endhandle
+	!ggap = 3
+	!ggap = !this.gridgap.val
+	handle any
+		!ggap = 3
+	endhandle
+
+	!gridels = object array()
+	!idlpath = !vw & '/DRAWLIST/DRWG'
+	var !addes coll all adde for $!idlpath
+	handle any
+		!addes = object array()
+	endhandle
+	do !adde values !addes
+		!type = ''
+		var !type type of idna of $!adde
+		handle any
+			skip
+		endhandle
+		if (!type.eq('REFGRD')) then
+			var !idna idna of $!adde
+			var !temps coll all gridel for $!idna
+			handle any
+				skip
+			endhandle
+			do !temp values !temps
+				!gridels.append(!temp)
+			enddo
+		endif
+	enddo
+
+	!made = 0
+	do !gridel values !gridels
+		var !gridpls coll all gridpl for $!gridel
+		handle any
+			skip
+		endhandle
+		if (!gridpls.size() eq 0) then
+			skip
+		endif
+		var !refglns coll all refgln for $!gridpls[1]
+		handle any
+			skip
+		endhandle
+		do !refgln values !refglns
+			var !p1pos p1 pos of $!refgln wrt worl
+			handle any
+				skip
+			endhandle
+			var !p2pos p2 pos of $!refgln wrt worl
+			handle any
+				skip
+			endhandle
+			!p1o = object position(!p1pos)
+			!p2o = object position(!p2pos)
+			!du = !p1o.up.value() - !p2o.up.value()
+			if (abs(!du) gt 1) then
+				skip
+			endif
+			var !p1sh shpos of $!p1o
+			handle any
+				skip
+			endhandle
+			var !p2sh shpos of $!p2o
+			handle any
+				skip
+			endhandle
+			!sx1 = !p1sh.part(2).replace('mm', '').real()
+			!sy1 = !p1sh.part(4).replace('mm', '').real()
+			!sx2 = !p2sh.part(2).replace('mm', '').real()
+			!sy2 = !p2sh.part(4).replace('mm', '').real()
+			!dsx = !sx1 - !sx2
+			!dsy = !sy1 - !sy2
+			if (abs(!dsx) gt 0.05 or abs(!dsy) gt 0.05) then
+				skip
+			endif
+			if (!sx1 lt !bx1 - 0.01 or !sx1 gt !bx2 + 0.01) then
+				skip
+			endif
+			------------------------------------------------------------
+			-- its own plane must stand upright                         --
+			------------------------------------------------------------
+			!upright = true
+			!rgr = !refgln.dbref()
+			!gpl = !rgr.grdref
+			handle any
+				!gpl = object DBREF()
+			endhandle
+			if (not(!gpl.badref())) then
+				!gori = !gpl.orientation
+				handle any
+				elsehandle none
+					!gz = !gori.zDir()
+					handle any
+					elsehandle none
+						!gzw = !gz.wrt(world)
+						handle any
+						elsehandle none
+							!gzu = abs(!gzw.up)
+							if (!gzu gt 0.01) then
+								!upright = false
+							endif
+						endhandle
+					endhandle
+				endhandle
+			endif
+			if (not(!upright)) then
+				skip
+			endif
+
+			!gid = ''
+			var !gid idplane of grdref of $!refgln
+			handle any
+				!gid = ''
+			endhandle
+			!!DrawingPlan1GridIdNow = !gid
+			!gbx = !sx1
+			!gby = !ytop + !gdist
+			!gstack = '0'
+			!gstack = !!DrawingPlan1GridStack('Top', !gbx, !gby, !gid)
+			handle any
+				!gstack = '0'
+			endhandle
+			if (!gstack.eq('SKIP')) then
+				skip
+			endif
+			!gpush = !gstack.real()
+			!gby = !gby + !gpush
+			!!DrawingPlan1GridBubbles.append('Top~' & string(!gbx) & '~' & string(!gby) & '~' & !gid)
+			------------------------------------------------------------
+			-- the column line for the top and bottom dimension chains, --
+			-- where it meets the cut; .allintersections is what        --
+			-- !!DrawingPlan1LineNoAnnotation dimensions grids from     --
+			------------------------------------------------------------
+			!gxs = !sx1.string('D3').replace('mm', '')
+			!gyt = !ytop.string('D3').replace('mm', '')
+			!gyb = !this.boxLLsh.part(4).replace('mm', '').real().string('D3')
+			!this.allintersections.append('boxUlinesh-E ' & !gxs & 'mm N ' & !gyt & 'mm U 0mm')
+			!this.allintersections.append('boxDlinesh-E ' & !gxs & 'mm N ' & !gyb & 'mm U 0mm')
+			!x = 0
+			!y = !gby - !sy1
+			!xap = 0
+			!yap = !ytop + !ggap - !sy1
+			if (!this.rcode.eqnocase('left')) then
+				!tempxy = !x
+				!x = !y
+				!y = !tempxy * -1
+				!tempxy = !xap
+				!xap = !yap
+				!yap = !tempxy * -1
+			endif
+			$!vw/ateGRID
+			NEW SLAB
+			DDNA $!refgln
+			NPPT 1
+			TMRF /TT/DRA/PRJ/LABEL/REFGRD/ID
+			XYPO $!x $!y
+			APOF $!xap $!yap
+			Agside |Top|
+			if (!gpush.gt(0)) then
+				Lleader false
+			endif
+			if (!this.rcode.eqnocase('left')) then
+				Adegrees -90
+			endif
+			!made = !made + 1
+			!dbg = object file('L:\E3D\pdms_prog\E3D2.1\PA_pmllibE3D2.1\check_grid.txt')
+			!dbg.open('append')
+			!dbg.writerecord('SECBUB id=' & !gid & ' sheet=' & !gbx.string('D3') & ' ' & !gby.string('D3') & ' end=' & !sx1.string('D3') & ' ' & !sy1.string('D3') & ' push=' & !gpush.string('D1') & ' gln=' & !refgln)
+			!dbg.close()
+			handle any
+			endhandle
+		enddo
+	enddo
+	return !made
+endmethod
+
+------------------------------------------------------------------------
+-- stage 3 of a section: the floor levels down the left (+20000,      --
+-- +16400 .. of section_view.png; the user wants the floors first,   --
+-- 2026-09-29). a floor is a level GRIDPL of the drawlist's grids --   --
+-- one whose normal points up or down -- at its own U; two grids at  --
+-- one height (within 1mm) give one mark, and only heights inside the --
+-- cut are marked.                                                    --
+--                                                                    --
+-- each mark, on the sheet, left of the cut where the plan's left     --
+-- column bubble goes: a cyan leader from the Grid tab's Gap out to   --
+-- its Distance, a hollow cyan triangle on its outer end with its     --
+-- point on the line, and the height in yellow above the line at the  --
+-- pipe label height, and a point on the left and right dimension     --
+-- chains (user, 2026-09-29). signed the way the plan                 --
+-- title signs its elevation. all of it in a NOTE <view>/ateLEVEL, so  --
+-- .UvClearOwn() clears it on a rerun. answers how many were made     --
+------------------------------------------------------------------------
+define method .SectionLevels(!vw is string) is real
+	!tri = 3
+	!th = 3
+	if (not(!this.lineheitx.val.unset())) then
+		!th = !this.lineheitx.val
+	endif
+	!bx1 = !this.boxULsh.part(2).replace('mm', '').real()
+	!bx2 = !this.boxURsh.part(2).replace('mm', '').real()
+	!by1 = !this.boxLLsh.part(4).replace('mm', '').real()
+	!by2 = !this.boxULsh.part(4).replace('mm', '').real()
+	!gdist = 50
+	!gdist = !this.griddist.val
+	handle any
+		!gdist = 50
+	endhandle
+	!ggap = 3
+	!ggap = !this.gridgap.val
+	handle any
+		!ggap = 3
+	endhandle
+
+	------------------------------------------------------------------
+	-- any point of the view's plane at height U lands at the same   --
+	-- sheet y: the first corner of the cut, read back into the      --
+	-- world, gives the E and N to put the heights on                --
+	------------------------------------------------------------------
+	$!vw
+	!csh = 'x ' & string(!bx1) & ' y ' & string(!by1)
+	var !cenu enupos of $!csh
+	!ceno = object position(!cenu)
+	!ce0 = !ceno.east.value().string('D3')
+	!cn0 = !ceno.north.value().string('D3')
+
+	!gridels = object array()
+	!idlpath = !vw & '/DRAWLIST/DRWG'
+	var !addes coll all adde for $!idlpath
+	handle any
+		!addes = object array()
+	endhandle
+	do !adde values !addes
+		!type = ''
+		var !type type of idna of $!adde
+		handle any
+			skip
+		endhandle
+		if (!type.eq('REFGRD')) then
+			var !idna idna of $!adde
+			var !temps coll all gridel for $!idna
+			handle any
+				skip
+			endhandle
+			do !temp values !temps
+				!gridels.append(!temp)
+			enddo
+		endif
+	enddo
+
+	!this.UvLog('    levels: ' & !gridels.size().string() & ' GRIDEL(s) in the drawlist grids')
+	!us = object array()
+	!ys = object array()
+	do !gridel values !gridels
+		var !gridpls coll all gridpl for $!gridel
+		handle any
+			skip
+		endhandle
+		do !gp values !gridpls
+			!gpn = ''
+			var !gpn namn of $!gp
+			handle any
+				!gpn = !gp
+			endhandle
+			!gpr = !gp.dbref()
+			------------------------------------------------------------
+			-- level or not: the plane's Z first through the objects,  --
+			-- AVEVA's way; that failing, its ORI read as text, which  --
+			-- says 'Z is U' (or D) for a level. the first run found   --
+			-- no level at all and said nothing why (2026-09-29), so   --
+			-- every plane now goes to check_userview                  --
+			------------------------------------------------------------
+			!level = false
+			!how = ''
+			!gzu = -1
+			!gori = !gpr.orientation
+			handle any
+				!how = 'orientation: ' & !!error.text
+			elsehandle none
+				!gz = !gori.zDir()
+				handle any
+					!how = 'zDir: ' & !!error.text
+				elsehandle none
+					!gzw = !gz.wrt(world)
+					handle any
+						!how = 'wrt: ' & !!error.text
+					elsehandle none
+						!gzu = abs(!gzw.up)
+						!how = 'zDir up ' & !gzu.string('D3')
+						if (!gzu gt 0.99) then
+							!level = true
+						endif
+					endhandle
+				endhandle
+			endhandle
+			if (!gzu lt 0) then
+				!goris = ''
+				var !goris ori of $!gp wrt worl
+				handle any
+					!how = !how & ' / ori: ' & !!error.text
+				elsehandle none
+					!how = !how & ' / ori ' & !goris
+					!gzs = ''
+					!gzsp = !goris.after('Z is ').trim().split()
+					if (!gzsp.size() gt 0) then
+						!gzs = !gzsp[1]
+					endif
+					if (!gzs.eq('U') or !gzs.eq('D')) then
+						!level = true
+					endif
+				endhandle
+			endif
+			------------------------------------------------------------
+			-- its place through the objects, AVEVA's way; a bare      --
+			-- 'var !x pos of .. wrt worl' is (47,15) Syntax error on  --
+			-- every plane (2026-09-29) -- the one VAR that reads POS   --
+			-- in this form puts it in brackets, and that is the       --
+			-- fallback                                                 --
+			------------------------------------------------------------
+			!gpos = ''
+			!gperr = ''
+			!gpo = !gpr.position.wrt(world)
+			handle any
+				!gperr = !!error.text
+			elsehandle none
+				!gpos = !gpo.string()
+			endhandle
+			if (!gpos.eq('')) then
+				var !gpos ( pos of $!gp wrt worl )
+				handle any
+					!this.UvLog('    GRIDPL ' & !gpn & ' ' & !how & ' level=' & !level.string() & ' no POS: ' & !gperr & ' / ' & !!error.text)
+					skip
+				endhandle
+				!gpo = object position(!gpos)
+			endif
+			!this.UvLog('    GRIDPL ' & !gpn & ' ' & !how & ' level=' & !level.string() & ' pos ' & !gpos)
+			if (not(!level)) then
+				skip
+			endif
+			!gu = !gpo.up.value()
+			!dup = false
+			do !ku values !us
+				!dd = !ku - !gu
+				if (abs(!dd) le 1) then
+					!dup = true
+					break
+				endif
+			enddo
+			if (!dup) then
+				skip
+			endif
+			!pstr = 'E ' & !ce0 & ' N ' & !cn0 & ' U ' & !gu.string('D3') & ' WRT /*'
+			!pp = object position(!pstr)
+			var !psh shpos of $!pp
+			handle any
+				skip
+			endhandle
+			!py = !psh.part(4).replace('mm', '').real()
+			if (!py lt !by1 - 0.01 or !py gt !by2 + 0.01) then
+				!this.UvLog('      U ' & !gu.string('D1') & ' at sheet y ' & !py.string('D2') & ' is outside the cut')
+				skip
+			endif
+			!us.append(!gu)
+			!ys.append(!py)
+		enddo
+	enddo
+
+	!nt = !vw & '/ateLEVEL'
+	$!vw
+	new note $!nt
+	handle any
+		!this.UvLog('  levels: the note could not be made: ' & !!error.text)
+		return 0
+	endhandle
+	!made = 0
+	------------------------------------------------------------------
+	-- where the plan puts a left column bubble (user, 2026-09-29):  --
+	-- the line starts the Grid tab's Gap off the cut and runs out   --
+	-- to its Distance, the triangle on the outer end. the level     --
+	-- also goes into !!DrawingPlan1GridBubbles as a Left bubble, so --
+	-- the pipe numbers keep off it as they keep off a bubble, and   --
+	-- into .allintersections on the left and right edges, so both   --
+	-- chains dimension it as they dimension a column line. this     --
+	-- runs before !!DrawingPlan1LineNoAnnotation for that           --
+	------------------------------------------------------------------
+	!xb = !bx1 - !ggap
+	!xa = !bx1 - !gdist
+	!xas = !xa.string('D3').replace('mm', '')
+	!xbs = !xb.string('D3').replace('mm', '')
+	!tx1 = !xa + !tri * 0.5
+	!tx2 = !xa + !tri * 1.5
+	!txm = !xa + !tri
+	!xts = !xa + !tri * 2 + 1
+	!ths = !th.string('D2').replace('mm', '')
+	do !k from 1 to !us.size()
+		!y = !ys[!k]
+		!ys0 = !y.string('D3').replace('mm', '')
+		!yt = !y + !tri * 0.866
+		!yts = !yt.string('D3').replace('mm', '')
+		------------------------------------------------------------
+		-- the capitals' foot 0.5mm above the line (user,           --
+		-- 2026-09-30: lower, nearer the line). ALIG BBODY puts the --
+		-- origin 0.29 of the height below the capitals (measured   --
+		-- on the view title, 2026-09-25), so the old +1 left them  --
+		-- about 1.9mm up at 3mm text                               --
+		------------------------------------------------------------
+		!ytx = !y + 0.5 - 0.29 * !th
+		!ytxs = !ytx.string('D3').replace('mm', '')
+		!u = !us[!k]
+		!ut = !u.string('D0').replace('mm', '')
+		if (!u ge 0) then
+			!ut = '+' & !ut
+		endif
+		$!nt
+		new stra fpt x $!xas y $!ys0 tpt x $!xbs y $!ys0
+		handle any
+			!this.UvLog('  level ' & !ut & ' line failed: ' & !!error.text)
+		elsehandle none
+			NLColour cyan
+			handle any
+			endhandle
+		endhandle
+		$!nt
+		new outl lclosed true NLColour cyan
+		handle any
+			!this.UvLog('  level ' & !ut & ' triangle failed: ' & !!error.text)
+		elsehandle none
+			FStyle Off
+			handle any
+			endhandle
+			!v1 = !txm.string('D3').replace('mm', '')
+			!v2 = !tx1.string('D3').replace('mm', '')
+			!v3 = !tx2.string('D3').replace('mm', '')
+			new VRTX at X ($!v1) Y ($!ys0)
+			new VRTX at X ($!v2) Y ($!yts)
+			new VRTX at X ($!v3) Y ($!yts)
+			handle any
+				!this.UvLog('  level ' & !ut & ' triangle corners failed: ' & !!error.text)
+			endhandle
+		endhandle
+		$!nt
+		!xtss = !xts.string('D3').replace('mm', '')
+		new texp btext |$!ut| origin x $!xtss y $!ytxs cheitx |$!ths| alig bbody just left txcolour yellow font 1
+		handle any
+			!this.UvLog('  level ' & !ut & ' text failed: ' & !!error.text)
+		endhandle
+		!!DrawingPlan1GridBubbles.append('Left~' & string(!xa) & '~' & string(!y) & '~' & !ut)
+		!this.allintersections.append('boxLlinesh-E ' & !bx1.string('D3') & 'mm N ' & !ys0 & 'mm U 0mm')
+		!this.allintersections.append('boxRlinesh-E ' & !bx2.string('D3') & 'mm N ' & !ys0 & 'mm U 0mm')
+		!made = !made + 1
+		!this.UvLog('    level ' & !ut & ' at sheet y ' & !ys0)
+	enddo
+	return !made
+endmethod
+
+------------------------------------------------------------------------
+-- the library a view drawn by hand works from, made again from     --
+-- scratch: what an earlier run left is cleared first, then its own  --
+-- LIBY, drawlist (filled over .wminE .. .wmaxE, .minU .. .maxU the  --
+-- way .Apply() fills one), label templates, IDLN, the styles. !lim  --
+-- is the view's limits, min E N U then max E N U, written down as   --
+-- :CDLIMITS when they came from VVOL / VLIMITS. steps that fail     --
+-- without stopping go into !warn. answers '' or what stopped it.    --
+-- the plan and the elevation both use it (2026-09-29)                --
+------------------------------------------------------------------------
+define method .UvLibrary(!vw is string, !lsrc is string, !lim is array, !warn is array) is string
+	!lminE = !lim[1]
+	!lminN = !lim[2]
+	!lminU = !lim[3]
+	!lmaxE = !lim[4]
+	!lmaxN = !lim[5]
+	!lmaxU = !lim[6]
+	!err = !this.UvClearOwn(!vw)
+	if (!err.neq('')) then
+		return !err
+	endif
+	$!vw
+	var !sh owner
+	var !dw owner of $!sh
+	$!dw
+	new liby $!vw/LIBY
+	handle any
+		return 'its library ' & !vw & '/LIBY could not be made: ' & !!error.text
+	endhandle
+	new dllb $!vw/DRAWLIST
+	handle any
+		return 'its drawlist library could not be made: ' & !!error.text
+	endhandle
+	new idli $!vw/DRAWLIST/DRWG
+	handle any
+		return 'its drawlist could not be made: ' & !!error.text
+	endhandle
+	!this.InstTemplate(!vw)
+	handle any
+		return 'its label templates could not be made: ' & !!error.text
+	endhandle
+
+	------------------------------------------------------------------
+	-- the drawlist, filled the way .Apply() fills one (user: take   --
+	-- everything in the range, grids included, and let the exclude  --
+	-- list on the View tab take out what is not wanted). a drawlist --
+	-- of its own: the one the view had may well be shared with      --
+	-- other views, and filling that would redraw them as well       --
+	------------------------------------------------------------------
+	$!vw/DRAWLIST/DRWG
+	add all zone within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	handle any
+		!warn.append('add zones: ' & !!error.text)
+	endhandle
+	add all REFGRD within E $!this.wminE N $!this.wminN U $!this.minU to E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	handle any
+		!warn.append('add grids: ' & !!error.text)
+	endhandle
+	!excls = object array()
+	!excls = !this.excllist.dtext
+	handle any
+		!excls = object array()
+	endhandle
+	if (!excls.size().gt(0)) then
+		!idlname = !vw & '/DRAWLIST/DRWG'
+		!idli = object IDLIST(!idlname.dbref())
+		do !excl values !excls
+			!exclref = object DBREF()
+			!exclref = !excl.dbref()
+			handle any
+			endhandle
+			if (not(!exclref.badref())) then
+				!idli.remove(!exclref)
+				handle any
+				endhandle
+			endif
+		enddo
+		$!vw/DRAWLIST/DRWG
+	endif
+	limits E $!this.wminE N $!this.wminN U $!this.minU TO E $!this.wmaxE N $!this.wmaxN U $!this.maxU
+	handle any
+		!warn.append('drawlist limits: ' & !!error.text)
+	endhandle
+	var !addn coll all adde for ce
+	handle any
+		!addn = object array()
+	endhandle
+	!this.UvLog('  drawlist ' & !vw & '/DRAWLIST/DRWG: ' & !addn.size().string() & ' member(s)')
+
+	$!vw
+	Idlname $!vw/DRAWLIST/DRWG
+	handle any
+		return 'IDLNAME could not be set to its new drawlist: ' & !!error.text
+	endhandle
+	------------------------------------------------------------------
+	-- a range that came from the drawlist (VVOL, VLIMITS) would move -
+	-- now that the drawlist is a different one, so it is written     --
+	-- down where the next run reads it first after VWLIMITS, the way --
+	-- .Apply() keeps its own                                         --
+	------------------------------------------------------------------
+	if (!lsrc.eq('VVOL') or !lsrc.eq('VLIMITS')) then
+		:CDLIMITS |FROM E $!lminE N $!lminN U $!lminU TO E $!lmaxE N $!lmaxN U $!lmaxU|
+		handle any
+			!warn.append(':CDLIMITS: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.rrsftext.val.neq('')) then
+		rrsf $!this.rrsftext.val
+		handle any
+			!warn.append('representation style: ' & !!error.text)
+		endhandle
+	endif
+	if (!this.hrsftext.val.neq('')) then
+		hrsf $!this.hrsftext.val
+		handle any
+			!warn.append('hatching style: ' & !!error.text)
+		endhandle
+	endif
+	Agmode 'OFF'
+	handle any
+	endhandle
+	Agside 'All'
+	handle any
+	endhandle
+	return ''
+endmethod
+
+------------------------------------------------------------------------
 -- CE to the last member of view !vw, so the next NEW goes in after   --
 -- everything already there -- or on the view itself when it has no   --
 -- members at all. a view drawn by hand has none of its own, and once --
@@ -3210,9 +4930,17 @@ define method .UvSetScale(!vref is string, !trans is array, !ls is array, !fx1 i
 	!src = ''
 	if (!scalestr.eqnocase('auto')) then
 		------------------------------------------------------------------
-		-- sheet mm per world mm at the scale the view has now           --
+		-- sheet mm per world mm at the scale the view has now: the      --
+		-- longest of east, north and up on the sheet, whichever of them --
+		-- lies in the view's plane -- east on a plan, up on an          --
+		-- elevation, where east may well come out 0 (2026-09-29)        --
 		------------------------------------------------------------------
-		!v0 = sqrt(!trans[5] * !trans[5] + !trans[6] * !trans[6])
+		!ve2 = !trans[5] * !trans[5] + !trans[6] * !trans[6]
+		!vn2 = !trans[7] * !trans[7] + !trans[8] * !trans[8]
+		!vu2 = !trans[11] * !trans[11] + !trans[12] * !trans[12]
+		!vm2 = max(!ve2, !vn2)
+		!vm2 = max(!vm2, !vu2)
+		!v0 = sqrt(!vm2)
 		if (!v0 le 0) then
 			return 'auto scale: the scale the view has now could not be measured'
 		endif
@@ -5221,6 +6949,19 @@ define method .NozzleAnnotation(!name is string)
 		!nzu.append(!aposobj.up.value())
 	enddo
 
+	------------------------------------------------------------------
+	-- an elevation shows the height itself: no (U) / (D) there      --
+	-- (user, 2026-09-29)                                            --
+	------------------------------------------------------------------
+	!nzelev = false
+	!nztrans = !this.ViewSheetTransform()
+	handle any
+	elsehandle none
+		!nzelev = !this.IsElevTrans(!nztrans)
+		handle any
+			!nzelev = false
+		endhandle
+	endhandle
 	do !k from 1 to !nzrefs.size()
 		!nozz = !nzrefs[!k]
 		!apos1 = !nzsh[!k]
@@ -5250,7 +6991,9 @@ define method .NozzleAnnotation(!name is string)
 			endif
 		enddo
 		!nzsuf = ''
-		if (!nzbelow and not(!nzabove)) then
+		if (!nzelev) then
+			!nzsuf = ''
+		elseif (!nzbelow and not(!nzabove)) then
 			!nzsuf = '(U)'
 		elseif (!nzabove and not(!nzbelow)) then
 			!nzsuf = '(D)'
@@ -6717,6 +8460,9 @@ endmethod
 --         box is orthogonal to the world, whatever rcode is. the world  --
 --         box of a band is then the band itself and nothing has to be   --
 --         checked a second time                                         --
+--   11, 12  sheet x, y of a 1mm step up: 0 on a plan, full length on   --
+--         an elevation or a section (2026-09-29)                        --
+--   13    up of the centre of the view                                   --
 -- CE must be the view or an element inside it                           --
 --------------------------------------------------------------------------
 define method .ViewSheetTransform() is array
@@ -6739,6 +8485,11 @@ define method .ViewSheetTransform() is array
 	!trans[7] = (!tempsh.part(2).replace('mm', '').real() - !c0x) / 1000
 	!trans[8] = (!tempsh.part(4).replace('mm', '').real() - !c0y) / 1000
 	!trans[9] = !trans[5] * !trans[8] - !trans[7] * !trans[6]
+	!tempp = !cen.offset(object direction('U'), 1000)
+	var !tempsh shpos of $!tempp
+	!trans[11] = (!tempsh.part(2).replace('mm', '').real() - !c0x) / 1000
+	!trans[12] = (!tempsh.part(4).replace('mm', '').real() - !c0y) / 1000
+	!trans[13] = !cen.up
 	----------------------------------------------------------------------
 	-- square means east lies along one of the two sheet axes and north  --
 	-- along the other one. compared as squares to keep clear of sqrt    --
@@ -6808,12 +8559,182 @@ define method .SheetBandOfSide(!dir is string, !depth is real) is array
 endmethod
 
 ------------------------------------------------------------------------
+-- true when !trans (.ViewSheetTransform()) is an elevation or a      --
+-- section: up comes out on the sheet at least half as long as east  --
+-- and north together. on a plan it is 0                              --
+------------------------------------------------------------------------
+define method .IsElevTrans(!trans is array) is boolean
+	!u2 = 0
+	!u2 = !trans[11] * !trans[11] + !trans[12] * !trans[12]
+	handle any
+		return false
+	endhandle
+	!h2 = !trans[5] * !trans[5] + !trans[6] * !trans[6] + !trans[7] * !trans[7] + !trans[8] * !trans[8]
+	if (!u2 gt !h2 * 0.25) then
+		return true
+	endif
+	return false
+endmethod
+
+------------------------------------------------------------------------
+-- the world volume !!DrawingPlan1LineNoAnnotation collects in: a      --
+-- rectangle on the sheet, x1 y1 x2 y2, taken through a depth. the    --
+-- depth runs 'min', 'min+10', 'max-10' or 'max' at each end (!lo,    --
+-- !hi). answers the two corners as 'E .. N .. U ..' strings, [1] the --
+-- from and [2] the to.                                               --
+--                                                                    --
+-- a plan looks down, so the depth is U: .minU / .maxU, 10mm in where --
+-- asked, and the rectangle is east and north through                 --
+-- .WorldLimitsOfSheetRect() -- the very strings the function used to --
+-- build for itself.                                                  --
+--                                                                    --
+-- an elevation looks level: the sheet's y is U and its x runs along  --
+-- h, the horizontal direction lying in the view; the depth runs      --
+-- along d, the horizontal normal to it, between .depthmin and        --
+-- .depthmax (set by .AnnotateSection()). the volume is the world box --
+-- round the rectangle's two ends at both depths (2026-09-29)         --
+------------------------------------------------------------------------
+define method .BandVol(!x1 is real, !y1 is real, !x2 is real, !y2 is real, !trans is array, !lo is string, !hi is string) is array
+	!r = object array()
+	if (not(!this.IsElevTrans(!trans))) then
+		!wlim = !this.WorldLimitsOfSheetRect(!x1, !y1, !x2, !y2, !trans)
+		!bminE = !wlim[1]
+		!bminN = !wlim[2]
+		!bmaxE = !wlim[3]
+		!bmaxN = !wlim[4]
+		!ulo = !this.minU
+		if (!lo.eq('min+10')) then
+			!ulo = !this.minU + 10
+		elseif (!lo.eq('max-10')) then
+			!ulo = !this.maxU - 10
+		elseif (!lo.eq('max')) then
+			!ulo = !this.maxU
+		endif
+		!uhi = !this.maxU
+		if (!hi.eq('min+10')) then
+			!uhi = !this.minU + 10
+		elseif (!hi.eq('max-10')) then
+			!uhi = !this.maxU - 10
+		elseif (!hi.eq('min')) then
+			!uhi = !this.minU
+		endif
+		!r[1] = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!ulo
+		!r[2] = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!uhi
+		return !r
+	endif
+	!t5 = !trans[5].string('D9').replace('mm', '').real()
+	!t7 = !trans[7].string('D9').replace('mm', '').real()
+	!t12 = !trans[12].string('D9').replace('mm', '').real()
+	!s2 = !t5 * !t5 + !t7 * !t7
+	!s = sqrt(!s2)
+	!hE = !t5 / !s
+	!hN = !t7 / !s
+	!dE = 0 - !hN
+	!dN = !hE
+	!cx = !trans[1].string('D6').replace('mm', '').real()
+	!cy = !trans[2].string('D6').replace('mm', '').real()
+	!cE = !trans[3].string('D6').replace('mm', '').real()
+	!cN = !trans[4].string('D6').replace('mm', '').real()
+	!cU = !trans[13].string('D6').replace('mm', '').real()
+	!cd = !cE * !dE + !cN * !dN
+	!dmin = !this.depthmin
+	!dmax = !this.depthmax
+	!dlo = !dmin
+	if (!lo.eq('min+10')) then
+		!dlo = !dmin + 10
+	elseif (!lo.eq('max-10')) then
+		!dlo = !dmax - 10
+	elseif (!lo.eq('max')) then
+		!dlo = !dmax
+	endif
+	!dhi = !dmax
+	if (!hi.eq('min+10')) then
+		!dhi = !dmin + 10
+	elseif (!hi.eq('max-10')) then
+		!dhi = !dmax - 10
+	elseif (!hi.eq('min')) then
+		!dhi = !dmin
+	endif
+	!a1 = (!x1 - !cx) / !s
+	!a2 = (!x2 - !cx) / !s
+	!u1 = !cU + (!y1 - !cy) / !t12
+	!u2 = !cU + (!y2 - !cy) / !t12
+	!es = object array()
+	!ns = object array()
+	do !ia from 1 to 2
+		!aa = !a1
+		if (!ia eq 2) then
+			!aa = !a2
+		endif
+		do !id from 1 to 2
+			!dd = !dlo - !cd
+			if (!id eq 2) then
+				!dd = !dhi - !cd
+			endif
+			!es.append(!cE + !aa * !hE + !dd * !dE)
+			!ns.append(!cN + !aa * !hN + !dd * !dN)
+		enddo
+	enddo
+	!emin = min(min(!es[1], !es[2]), min(!es[3], !es[4]))
+	!emax = max(max(!es[1], !es[2]), max(!es[3], !es[4]))
+	!nmin = min(min(!ns[1], !ns[2]), min(!ns[3], !ns[4]))
+	!nmax = max(max(!ns[1], !ns[2]), max(!ns[3], !ns[4]))
+	!umin = min(!u1, !u2)
+	!umax = max(!u1, !u2)
+	!r[1] = 'E ' & !emin.string('D3') & ' N ' & !nmin.string('D3') & ' U ' & !umin.string('D3')
+	!r[2] = 'E ' & !emax.string('D3') & ' N ' & !nmax.string('D3') & ' U ' & !umax.string('D3')
+	return !r
+endmethod
+
+------------------------------------------------------------------------
+-- whether !p lies inside the drawing's depth, strictly: on a plan     --
+-- between .minU and .maxU, as the open-ended branches were always     --
+-- tested; on an elevation between .depthmin and .depthmax along d    --
+-- (see .BandVol())                                                   --
+------------------------------------------------------------------------
+define method .InDepth(!p is position, !trans is array) is boolean
+	if (not(!this.IsElevTrans(!trans))) then
+		if (!p.up lt !this.maxU and !p.up gt !this.minU) then
+			return true
+		endif
+		return false
+	endif
+	!t5 = !trans[5].string('D9').replace('mm', '').real()
+	!t7 = !trans[7].string('D9').replace('mm', '').real()
+	!s = sqrt(!t5 * !t5 + !t7 * !t7)
+	!dE = 0 - !t7 / !s
+	!dN = !t5 / !s
+	!pd = !p.east.value() * !dE + !p.north.value() * !dN
+	if (!pd gt !this.depthmin and !pd lt !this.depthmax) then
+		return true
+	endif
+	return false
+endmethod
+
+------------------------------------------------------------------------
 -- the world axis aligned volume which contains a sheet rectangle.     --
 -- it is the same rectangle when the box is orthogonal, and bigger     --
 -- than it when the view is turned, so it is safe to hand to WITHIN    --
 -- returns min E, min N, max E, max N                                  --
 ------------------------------------------------------------------------
 define method .WorldLimitsOfSheetRect(!x1 is real, !y1 is real, !x2 is real, !y2 is real, !trans is array) is array
+	------------------------------------------------------------------
+	-- an elevation has no east / north inverse -- its determinant is  --
+	-- 0 and the formula below divided by it (2026-09-29, the first    --
+	-- section with dimension chains). its volume is .BandVol()'s,     --
+	-- through the whole depth                                        --
+	------------------------------------------------------------------
+	if (!this.IsElevTrans(!trans)) then
+		!bv = !this.BandVol(!x1, !y1, !x2, !y2, !trans, 'min', 'max')
+		!p1 = !bv[1].split()
+		!p2 = !bv[2].split()
+		!elim = object array()
+		!elim[1] = !p1[2].real()
+		!elim[2] = !p1[4].real()
+		!elim[3] = !p2[2].real()
+		!elim[4] = !p2[4].real()
+		return !elim
+	endif
 	!xs = object array()
 	!ys = object array()
 	!xs[1] = !x1
@@ -6937,6 +8858,8 @@ endmethod
 --------------------------------------------------------------------------
 define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) is string
 	!answer = ''
+	!this.crossuok = false
+	!this.crossslope = false
 	!ok = true
 	!stpos = ''
 	!stdir = ''
@@ -7073,6 +8996,26 @@ define method .CrossingOfTube(!tube is string, !elem is string, !dir is string) 
 		endhandle
 		if (!ok) then
 			!answer = !crossenu
+			------------------------------------------------------------
+			-- and the tube's own centre height there: as far along   --
+			-- the tube as the crossing is along its sheet image. the --
+			-- label prints it as WOP EL (user, 2026-09-30)            --
+			------------------------------------------------------------
+			!cs1 = !p1sh.position()
+			!cs2 = !p2sh.position()
+			!ccs = !crosssh.position()
+			!cslen = !cs1.distance(!cs2)
+			if (!cslen gt 0.001) then
+				!ct = !cs1.distance(!ccs) / !cslen
+				!cu1 = !p1.up
+				!cu2 = !p2.up
+				!cdu = !cu2 - !cu1
+				!this.crossu = !cu1 + !ct * !cdu
+				!this.crossuok = true
+				if (abs(!cdu) gt 1) then
+					!this.crossslope = true
+				endif
+			endif
 		endif
 	endif
 	------------------------------------------------------------------------

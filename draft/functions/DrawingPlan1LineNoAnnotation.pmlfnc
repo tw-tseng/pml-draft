@@ -328,8 +328,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bminN = !wlim[2]
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'min', 'max')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 
 		$!vw
 		var !mems coll all bran members within $!vlfm to $!vlto
@@ -375,6 +376,13 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					-- off the end of it                                             --
 					------------------------------------------------------------------
 					!useit = true
+					--------------------------------------------------------------
+					-- field 6 of the record: 'y' a BOP figure, 'w' a WOP one -- --
+					-- a sloping tube, whose height at the crossing is not its  --
+					-- fitting's (user, 2026-09-30: level pipes BOP, sloping    --
+					-- ones WOP)                                                --
+					--------------------------------------------------------------
+					!elflag = 'y'
 					if (!istube) then
 						!crossenu = !!DrawingPlan1.CrossingOfTube(!tubeelem, !mem, !dir)
 						if (!dbgln and !dir.eq('left')) then
@@ -404,7 +412,24 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							!useit = false
 						elseif (!crossenu.neq('')) then
 							!crosspos = object position(!crossenu)
-							!crosspos.up = !memenupos.position().up
+							--------------------------------------------------------------
+							-- a plan's crossing takes the tube's own centre height     --
+							-- there -- the WOP EL the label prints (user, 2026-09-30)  --
+							-- -- and the fitting's where that could not be worked out; --
+							-- an elevation's crossing is on the box edge and its U is  --
+							-- the edge's own (2026-09-29)                              --
+							--------------------------------------------------------------
+							-- a sloping tube, plan or elevation: WOP, not BOP (user, 2026-09-30)
+							if (!!DrawingPlan1.crossuok and !!DrawingPlan1.crossslope) then
+								!elflag = 'w'
+							endif
+							if (not(!!DrawingPlan1.IsElevTrans(!trans))) then
+								if (!!DrawingPlan1.crossuok) then
+									!crosspos.up = !!DrawingPlan1.crossu
+								else
+									!crosspos.up = !memenupos.position().up
+								endif
+							endif
 							---------------------------------------------------------------
 							-- not !crosspos.string(): a POSITION built with object       --
 							-- position(<string>) stringifies back with a 'WRT /*' tail,   --
@@ -491,7 +516,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							----------------------------------------------------------------
 							!x = !memshx + 0.0000000001 * !j
 							!y = !memshy + 0.0000000001 * !j
-							!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!y'
+							!memstr = !y & '~' & !x & '~type1!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe & '!' & !elflag
 							!result[!j] = !memstr
 							!j = !j + 1
 							if (!dbgln and !dir.eq('left')) then
@@ -580,8 +605,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
 		!tempvl  = !!DrawingPlan1.maxU - 10
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!!DrawingPlan1.maxU
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'max-10', 'max')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 
 		$!vw
 		var !mems coll all bran members within $!vlfm to $!vlto
@@ -642,8 +668,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
 		!tempvl  = !!DrawingPlan1.minU + 10
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!!DrawingPlan1.minU
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'min', 'min+10')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 
 		$!vw
 		var !mems coll all bran members within $!vlfm to $!vlto
@@ -705,8 +732,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bminN = !wlim[2]
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'min+10', 'max-10')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 
 		$!vw
 		var !mems coll all elbo within $!vlfm to $!vlto
@@ -756,8 +784,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!bminN = !wlim[2]
 		!bmaxE = !wlim[3]
 		!bmaxN = !wlim[4]
-		!vlfm = 'E ' & $!bminE & ' N ' & $!bminN & ' U ' & $!tempvl
-		!vlto = 'E ' & $!bmaxE & ' N ' & $!bmaxN & ' U ' & $!tempvl1
+		!bv = !!DrawingPlan1.BandVol(!band[1], !band[2], !band[3], !band[4], !trans, 'min+10', 'max-10')
+		!vlfm = !bv[1]
+		!vlto = !bv[2]
 		----------------------------------------------------------------------
 		-- the equipment below is collected over the whole of the box and    --
 		-- not, like everything else on this side, over the shallow band     --
@@ -776,8 +805,9 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		!eqminN = !eqwlim[2]
 		!eqmaxE = !eqwlim[3]
 		!eqmaxN = !eqwlim[4]
-		!eqvlfm = 'E ' & $!eqminE & ' N ' & $!eqminN & ' U ' & $!tempvl
-		!eqvlto = 'E ' & $!eqmaxE & ' N ' & $!eqmaxN & ' U ' & $!tempvl1
+		!eqbv = !!DrawingPlan1.BandVol(!vwx1, !vwy1, !vwx2, !vwy2, !trans, 'min+10', 'max-10')
+		!eqvlfm = !eqbv[1]
+		!eqvlto = !eqbv[2]
 		----------------------------------------------------------------------
 		-- the drawing plan boxes themselves are NOT plant equipment and are --
 		-- never annotated. they live under /<projid>_DrawingPlanBox as EQUI --
@@ -932,6 +962,45 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 							!sideE = !lrside
 							!sideN = !udside
 						endif
+						------------------------------------------------------------
+						-- an elevation (2026-09-29): its two centre lines are the  --
+						-- view's horizontal axis -- E or N, whichever the sheet's  --
+						-- x follows -- and U, as EquiAnnotation draws them. the    --
+						-- first reaches the left or right chain, the second the    --
+						-- top or bottom one; the plan's E / N reading above sent   --
+						-- the bottom chain to the end of the vessel                --
+						------------------------------------------------------------
+						if (!!DrawingPlan1.IsElevTrans(!trans)) then
+							!hext = !ewid
+							if (abs(!trans[7]) gt abs(!trans[5])) then
+								!hext = !nlen
+							endif
+							!vext = !wvol.part(3).real() - !wvol.part(6).real()
+							!vext = abs(!vext)
+							!wantE = true
+							!wantN = true
+							if (!hext gt !vext) then
+								if (!vext gt 0) then
+									!ratio = !hext / !vext
+									if (!ratio gt 3) then
+										!wantN = false
+									endif
+								else
+									!wantN = false
+								endif
+							else
+								if (!hext gt 0) then
+									!ratio = !vext / !hext
+									if (!ratio gt 3) then
+										!wantE = false
+									endif
+								else
+									!wantE = false
+								endif
+							endif
+							!sideE = !lrside
+							!sideN = !udside
+						endif
 						!take = false
 						if (!wantE and !dir.eq(!sideE)) then
 							!take = true
@@ -989,7 +1058,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!memy = !memshpos.split().getindexed(4).replace('mm','').real()
 				if (!memx lt !vwx2 and !memx gt !vwx1) then
 					if (!memy lt !vwy2 and !memy gt !vwy1) then
-						if (!memenupos1.up lt !!DrawingPlan1.maxU and !memenupos1.up gt !!DrawingPlan1.minU) then
+						if (!!DrawingPlan1.InDepth(!memenupos1, !trans)) then
 							!x = !memx + 0.0000000001 * !j
 							!y = !memy + 0.0000000001 * !j
 							!memstr = !y & '~' & !x & '~type4!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
@@ -1007,7 +1076,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!memy = !memshpos.split().getindexed(4).replace('mm','').real()
 				if (!memx lt !vwx2 and !memx gt !vwx1) then
 					if (!memy lt !vwy2 and !memy gt !vwy1) then
-						if (!memenupos1.up lt !!DrawingPlan1.maxU and !memenupos1.up gt !!DrawingPlan1.minU) then
+						if (!!DrawingPlan1.InDepth(!memenupos1, !trans)) then
 							!x = !memx + 0.0000000001 * !j
 							!y = !memy + 0.0000000001 * !j
 							!memstr = !y & '~' & !x & '~type4!' & !memenupos & '!' & !memshpos & '!' & !mem & '!' & !pipe
@@ -1085,7 +1154,51 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		do !i from !dels.size() to 1 by -1
 			!sortedtypes.remove(!dels[!i])
 		enddo
-		
+		--------------------------------------------------------------------
+		-- the same spot rule as the clusters below (SAMESPOT), for the    --
+		-- border crossings already in !result: two DIFFERENT pipes        --
+		-- crossing the border within 1mm of the model of each other get   --
+		-- one point, the first keeps it and the others go through as      --
+		-- label-only. on a section 100-A-15 and 100-A-18, both sloping,   --
+		-- crossed the right border 0.7mm apart and measured a '1'         --
+		-- between them (user, 2026-09-30)                                 --
+		--------------------------------------------------------------------
+		!samtol1 = 1 * !!DrawingPlan1.vsca
+		!alix1 = 2
+		if (!dir.eq('right') or !dir.eq('left')) then
+			!alix1 = 1
+		endif
+		if (!result.size() gt 1) then
+			do !ssi from 2 to !result.size()
+				!ssrecA = !result[!ssi]
+				if (!ssrecA.split('~').size() gt 3) then
+					skip
+				endif
+				!ssalA = !ssrecA.split('~').getindexed(!alix1).real()
+				!sspipeA = !ssrecA.split('~').getindexed(3).split('!').getindexed(5)
+				!ssjmax = !ssi - 1
+				do !ssj from 1 to !ssjmax
+					!ssrecB = !result[!ssj]
+					if (!ssrecB.split('~').size() gt 3) then
+						skip
+					endif
+					!sspipeB = !ssrecB.split('~').getindexed(3).split('!').getindexed(5)
+					if (!sspipeB.eq(!sspipeA)) then
+						skip
+					endif
+					!ssalB = !ssrecB.split('~').getindexed(!alix1).real()
+					!ssdAB = !ssalB - !ssalA
+					if (abs(!ssdAB) le !samtol1) then
+						!result[!ssi] = !ssrecA & '~LABELONLY'
+						if (!dbgln) then
+							!dbgf.writerecord('SAMESPOT ' & !dir & ' crossing label only pipe=' & !sspipeA & ' along=' & !ssalA.string() & ' kept=' & !sspipeB)
+						endif
+						break
+					endif
+				enddo
+			enddo
+		endif
+
 	$(
 		do !i from 1 to !sortedtypes.size()
 			$p $!sortedtypes[$!i]
@@ -1781,6 +1894,52 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!ey1 = !ey + !ede1 * !trans[6] + !edn1 * !trans[8]
 					!ex2 = !ex + !ede2 * !trans[5] + !edn2 * !trans[7]
 					!ey2 = !ey + !ede2 * !trans[6] + !edn2 * !trans[8]
+					----------------------------------------------------------------
+					-- an elevation (2026-09-29): E and N come out on the sheet's  --
+					-- x only, so the left and right chains take the line along    --
+					-- the horizontal axis and the top and bottom ones the U line  --
+					-- -- the plan's pick above measured D1201's N line off the   --
+					-- bottom chain and put the point at the end of the vessel     --
+					----------------------------------------------------------------
+					if (!!DrawingPlan1.IsElevTrans(!trans)) then
+						!et5 = !trans[5].string('D9').replace('mm', '').real()
+						!et7 = !trans[7].string('D9').replace('mm', '').real()
+						!et11 = !trans[11].string('D9').replace('mm', '').real()
+						!et12 = !trans[12].string('D9').replace('mm', '').real()
+						if (!dir.eq('right') or !dir.eq('left')) then
+							!ea5 = abs(!et5)
+							!ea7 = abs(!et7)
+							!eusee = false
+							if (!ea5 geq !ea7) then
+								!eusee = true
+							endif
+							if (!eusee) then
+								!eh1 = !ewvol.part(4).replace('mm', '').real() + !eoff - !eoe
+								!eh2 = !ewvol.part(1).replace('mm', '').real() - !eoff - !eoe
+								!ehs = !et5
+							else
+								!eh1 = !ewvol.part(5).replace('mm', '').real() + !eoff - !eon
+								!eh2 = !ewvol.part(2).replace('mm', '').real() - !eoff - !eon
+								!ehs = !et7
+							endif
+							!ex1 = !ex + !eh1 * !ehs
+							!ey1 = !ey
+							!ex2 = !ex + !eh2 * !ehs
+							!ey2 = !ey
+						else
+							!eusee = false
+							!eou = !mempos.part(6).replace('mm', '').real()
+							if (!mempos.part(5).eqnocase('D')) then
+								!eou = !eou * -1
+							endif
+							!eu1 = !ewvol.part(6).replace('mm', '').real() + !eoff - !eou
+							!eu2 = !ewvol.part(3).replace('mm', '').real() - !eoff - !eou
+							!ex1 = !ex + !eu1 * !et11
+							!ey1 = !ey + !eu1 * !et12
+							!ex2 = !ex + !eu2 * !et11
+							!ey2 = !ey + !eu2 * !et12
+						endif
+					endif
 					-- the equipment position is wanted again below, and the winner --
 					-- is about to be written over !ex / !ey                         --
 					!eox = !ex
@@ -1931,6 +2090,7 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				---------------------------------------------------------------------
 				!labbop = 0
 				!labhasbop = false
+				!labwop = false
 				---------------------------------------------------------------------
 				-- field 6 of the record is the 'this one wants a BOP figure' flag, --
 				-- and only the TYPE 1 pipe records carry it (:330). every other    --
@@ -1948,6 +2108,40 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!labwantbop = 'n'
 				if (!labparts.size().geq(6)) then
 					!labwantbop = !labparts.getindexed(6)
+				endif
+				---------------------------------------------------------------------
+				-- an elevation (2026-09-29, user): a pipe crossing the top or      --
+				-- bottom edge runs up and down, and a BOP figure there is only the --
+				-- edge's own U. only the left and right edges -- level pipes --    --
+				-- keep it, as a plan's crossings do                                --
+				---------------------------------------------------------------------
+				if (!labwantbop.neq('n') and (!dir.eq('up') or !dir.eq('down'))) then
+					if (!!DrawingPlan1.IsElevTrans(!trans)) then
+						!labwantbop = 'n'
+					endif
+				endif
+				---------------------------------------------------------------------
+				-- the point's own centre height, as WOP (working point) EL, and    --
+				-- not the BOP of the fitting (user, 2026-09-30). on a section the  --
+				-- 100-A-18 point was where the sloping pipe crosses the right      --
+				-- border, 107354, while its BOP came from an elbow outside the     --
+				-- view, 107233; a plan's crossings the same (user: 'the plan as    --
+				-- well'). the point's U is the tube's own there -- see             --
+				-- .CrossingOfTube() -- the element's where there is no tube.       --
+				-- only a sloping pipe ('w'), plan or elevation alike: a level one  --
+				-- keeps its BOP (user, 2026-09-30)                                 --
+				---------------------------------------------------------------------
+				!labgowop = false
+				if (!labwantbop.eqnocase('w')) then
+					!labgowop = true
+				endif
+				if (!labgowop) then
+					if (not(!type.eqnocase('EQUI'))) then
+						!labwantbop = 'n'
+						!labbop = !attapos.up.nint().value()
+						!labhasbop = true
+						!labwop = true
+					endif
 				endif
 				if (!labwantbop.eqnocase('y')) then
 					if (!type.eqnocase('BRAN')) then
@@ -1981,10 +2175,14 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					!labtext = '#PIPE(c2:)'
 					!labchei = !glabchei
 					if (!labhasbop) then
+						!labkind = ' BOP EL'
+						if (!labwop) then
+							!labkind = ' WOP EL'
+						endif
 						if (!labbop.geq(0)) then
-							!labtext = !labtext & ' BOP EL+' & !labbop.string()
+							!labtext = !labtext & !labkind & '+' & !labbop.string()
 						else
-							!labtext = !labtext & ' BOP EL' & !labbop.string()
+							!labtext = !labtext & !labkind & !labbop.string()
 						endif
 					endif
 				endif

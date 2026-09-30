@@ -361,18 +361,174 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 		var !origin1 (pos of $!equi wrt worl)
 		!enupos = object position(!origin1)
 		
-		if( !DIR.eq(|W|) or !DIR.eq(|E|) or !DIR.eq(|-X|) or !DIR.eq(|X|) ) then
-			NEW STRA $!EQUI$!VIEW/CenL3 FPT $!SPOS TPT $!NPOS
-			Tcode Endpoint
-			NEW STRA $!EQUI$!VIEW/CenL4 FPT $!DPOS TPT $!UPOS
-			Tcode Endpoint
-			!This.Reposition(!EQUI, !VIEW, !namedir, !VSCA, !DPOS, !UPOS, !SPOS, !NPOS, !DPOS1, !UPOS1, !SPOS1, !NPOS1, !DIR1)
-		elseif( !DIR.eq(|N|) or !DIR.eq(|S|) or !DIR.eq(|-Y|) or !DIR.eq(|Y|) ) then
-			NEW STRA $!EQUI$!VIEW/CenL3 FPT $!WPOS TPT $!EPOS
-			Tcode Endpoint
-			NEW STRA $!EQUI$!VIEW/CenL4 FPT $!DPOS TPT $!UPOS
-			Tcode Endpoint
-			!This.Reposition(!EQUI, !VIEW, !namedir, !VSCA, !WPOS, !EPOS, !DPOS, !UPOS, !WPOS1, !EPOS1, !DPOS1, !UPOS1, !DIR1)
+		------------------------------------------------------------------
+		-- an elevation or a section (user, 2026-09-29: equipment the way  --
+		-- the plan has it). the plan's two centre lines are east and      --
+		-- north; here they are the horizontal axis lying in the view --   --
+		-- north when the view looks east or west, east when it looks     --
+		-- north or south -- and up. each is clipped to the drawing and    --
+		-- left out under 20mm on the sheet, the name goes on once, along  --
+		-- the longer of the two, and a shape three times longer one way   --
+		-- than the other gets its long line only -- the plan's rules.    --
+		-- this replaces the old E/W and N/S branches, which named their   --
+		-- lines off the equipment's refno ('(47,8) No digit after / in    --
+		-- REFNO') and called a .Reposition() this function does not have  --
+		------------------------------------------------------------------
+		if( !DIR.eq(|W|) or !DIR.eq(|E|) or !DIR.eq(|-X|) or !DIR.eq(|X|) or !DIR.eq(|N|) or !DIR.eq(|S|) or !DIR.eq(|-Y|) or !DIR.eq(|Y|) ) then
+			if( !DIR.eq(|W|) or !DIR.eq(|E|) or !DIR.eq(|-X|) or !DIR.eq(|X|) ) then
+				!HLO = !SPOS
+				!HHI = !NPOS
+				!hix = 4
+				!hmin = !minN
+				!hmax = !maxN
+				!hw1 = 2
+				!hw2 = 5
+			else
+				!HLO = !WPOS
+				!HHI = !EPOS
+				!hix = 2
+				!hmin = !minE
+				!hmax = !maxE
+				!hw1 = 1
+				!hw2 = 4
+			endif
+			!VLO = !DPOS
+			!VHI = !UPOS
+
+			!strahori = false
+			!hu = !HLO.part(6).real()
+			if (!hu.leq(!maxU.real()) and !hu.geq(!minU.real())) then
+				!pp = !HLO.split()
+				if (!pp[!hix].real() lt !hmin.real()) then
+					!pp[!hix] = !hmin
+					!HLO = !pp[1] & ' ' & !pp[2] & ' ' & !pp[3] & ' ' & !pp[4] & ' ' & !pp[5] & ' ' & !pp[6]
+				endif
+				!pp = !HHI.split()
+				if (!pp[!hix].real() gt !hmax.real()) then
+					!pp[!hix] = !hmax
+					!HHI = !pp[1] & ' ' & !pp[2] & ' ' & !pp[3] & ' ' & !pp[4] & ' ' & !pp[5] & ' ' & !pp[6]
+				endif
+				if (!HHI.part(!hix).real() gt !HLO.part(!hix).real()) then
+					!strahori = true
+				endif
+			endif
+			if (!strahori) then
+				!pos1 = object position(!HLO)
+				!pos2 = object position(!HHI)
+				!dist = !pos1.distance(!pos2) * !VSCA.real()
+				if (!dist.leq(20)) then
+					!strahori = false
+				endif
+			endif
+
+			!stravert = false
+			!vh = !VLO.part(!hix).real()
+			if (!vh.leq(!hmax.real()) and !vh.geq(!hmin.real())) then
+				!pp = !VLO.split()
+				if (!pp[6].real() lt !minU.real()) then
+					!pp[6] = !minU
+					!VLO = !pp[1] & ' ' & !pp[2] & ' ' & !pp[3] & ' ' & !pp[4] & ' ' & !pp[5] & ' ' & !pp[6]
+				endif
+				!pp = !VHI.split()
+				if (!pp[6].real() gt !maxU.real()) then
+					!pp[6] = !maxU
+					!VHI = !pp[1] & ' ' & !pp[2] & ' ' & !pp[3] & ' ' & !pp[4] & ' ' & !pp[5] & ' ' & !pp[6]
+				endif
+				if (!VHI.part(6).real() gt !VLO.part(6).real()) then
+					!stravert = true
+				endif
+			endif
+			if (!stravert) then
+				!pos1 = object position(!VLO)
+				!pos2 = object position(!VHI)
+				!dist = !pos1.distance(!pos2) * !VSCA.real()
+				if (!dist.leq(20)) then
+					!stravert = false
+				endif
+			endif
+
+			!hext = abs(!wvol.part(!hw1).real() - !wvol.part(!hw2).real())
+			!vext = abs(!wvol.part(3).real() - !wvol.part(6).real())
+			!horiz = false
+			if (!hext gt !vext) then
+				!horiz = true
+			endif
+
+			if (unset(!!DrawingPlan1.equiparray.findfirst(!namn))) then
+				!eqglabref = ''
+				do !egi from 1 to !existingeqglabs.size()
+					if (!existingeqnames[!egi].eq(!namn) and not(!existingeqtaken[!egi])) then
+						!eqglabref = !existingeqglabs[!egi]
+						!existingeqtaken[!egi] = true
+						!eqclaimedglabs.append(!eqglabref)
+						break
+					endif
+				enddo
+				$!vw/ateEQUI
+				if (!eqglabref.eq('')) then
+					NEW GLAB
+				else
+					$!eqglabref
+				endif
+				DDNA $!EQUI
+				Btext |#EQUI(C2:)|
+				ABSO
+				if (!horiz) then
+					Adegrees 0
+					Justification Left
+					ALIGN BBODY
+					var !cpos1 shpos OF $!HHI
+					AT $!cpos1
+					var !extent extent btext
+					!pp = !HHI.split()
+					!ppv = !pp[!hix].real() + (abs(!extent.part(2).real() - !extent.part(6).real()) / !!DrawingPlan1.vsca)
+					!pp[!hix] = !ppv.string()
+					!HHI = !pp[1] & ' ' & !pp[2] & ' ' & !pp[3] & ' ' & !pp[4] & ' ' & !pp[5] & ' ' & !pp[6]
+				else
+					if (!!DrawingPlan1.rcode.eqnocase('left')) then
+						Adegrees -90
+						Justification Right
+						ALIGN TBODY
+					else
+						Adegrees 90
+						Justification Left
+						ALIGN BBODY
+					endif
+					var !cpos1 shpos OF $!VHI
+					AT $!cpos1
+					var !extent extent btext
+					!pp = !VHI.split()
+					!ppv = !pp[6].real() + (abs(!extent.part(4).real() - !extent.part(8).real()) / !!DrawingPlan1.vsca)
+					!pp[6] = !ppv.string()
+					!VHI = !pp[1] & ' ' & !pp[2] & ' ' & !pp[3] & ' ' & !pp[4] & ' ' & !pp[5] & ' ' & !pp[6]
+				endif
+			endif
+
+			!drawh = !strahori
+			!drawv = !stravert
+			if (!horiz) then
+				if (!vext gt 0) then
+					if (!hext / !vext gt 3) then
+						!drawv = false
+					endif
+				endif
+			else
+				if (!hext gt 0) then
+					if (!vext / !hext gt 3) then
+						!drawh = false
+					endif
+				endif
+			endif
+			if (!drawh) then
+				$!vw/ateEQUI/VNOT
+				NEW STRA FPT $!HLO TPT $!HHI
+				Tcode Endpoint
+			endif
+			if (!drawv) then
+				$!vw/ateEQUI/VNOT
+				NEW STRA FPT $!VLO TPT $!VHI
+				Tcode Endpoint
+			endif
 		elseif (!DIR.eq(|U|) or !DIR.eq(|D|) or !DIR.eq(|-Z|) or !DIR.eq(|Z|) ) then
 			------------------------------------------------------------
 			-- check if position of equipment is within view boundary --
@@ -655,13 +811,11 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 				endif
 			endif
 		else
-			NEW STRA $!EQUI$!VIEW/CenL3 FPT $!WPOS TPT $!EPOS
-			Tcode Endpoint
-			NEW STRA $!EQUI$!VIEW/CenL4 FPT $!SPOS TPT $!NPOS
-			Tcode Endpoint
-			NEW STRA $!EQUI$!VIEW/CenL5 FPT $!DPOS TPT $!UPOS
-			Tcode Endpoint
-			!This.Reposition(!EQUI, !VIEW, !namedir, !VSCA, !WPOS, !EPOS, !SPOS, !NPOS, !WPOS1, !EPOS1, !SPOS1, !NPOS1, !DIR1)
+			--------------------------------------------------------------
+			-- a view looking along no axis: no centre lines. the old     --
+			-- lines here were named off the equipment's refno and could  --
+			-- not be made, and .Reposition() is not this function's      --
+			--------------------------------------------------------------
 		endif
 	enddo
 	----------------------------------------------------------------------
