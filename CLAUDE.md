@@ -25,7 +25,7 @@
   - 沒有 LIMITS、只有 VSEC 的 SECTION view（使用者，2026-09-29：「一刀也有可能兩刀，但不管幾刀，都是 6 個 VSEC」；drawlist 仍照 B＝程式自己建）：`.VsecBox()` 讀 view 底下的 VSEC → `PLRF` → 平面的 `POS`／`NORM`（AVEVA 的 Set View Limits 與 Quick Grid Plane View 都是這樣建，每軸兩個平面），法線平行（|dot|≥0.999）的兩兩配成三對，克拉瑪公式解出 8 個角（轉角度的盒子也對）。範圍來源順序：VWLIMITS → CDLIMITS → **VSEC** → VVOL → VLIMITS。紙上範圍＝8 個角 SHPOS 的外接框（`.SheetBoxOfPoints()`），drawlist＝8 個角的世界外接範圍。每個平面寫進 check_userview（`VSEC ... pos ... norm ...`）。只做在 SECTION（`.AnnotateSection()`），平面圖沒加。第一次實測（2026-09-29，`/DWGNO-002/SS/S1/V2`）：view 底下其實有 **8 個** VSEC——Set View Limits 建的 `<view>/FREP|TOEP|FRNP|TONP|FRUP|TOUP/VSEC` 六個，加上使用者自己的剖切面 `VS1`、`VS2`；log 一個平面都沒列（`0 section plane(s)`），讀 PLRF 那一步失敗而且沒寫原因。改成：先認那六個名字（`*/<tag>/VSEC`），湊滿 6 個就只用它們，否則全部剛好 6 個才用；PLRF 改 AVEVA 的寫法 `!vs.dbref().plrf`（`drasetviewlimits.pmlfrm:1142`），每一步失敗都寫 log（`N VSEC(s) under the view`、`no PLRF`、`PLRF not set`、`no POS`、`no NORM`）。VS1／VS2 不進盒子（只影響深度，drawlist 取盒子就夠）。第二次實測：8 個 VSEC、PLRF 都讀到了（平面 `=2013286677/207106` 等），但 `var !pp pos of $!pl wrt /*` 8 個全是 `(47,15) CP: Syntax error`——改成 repo 其他地方用的 `wrt worl`，失敗再退回物件屬性 `!plr.position.wrt(world)`／`!plr.norm.wrt(world)`，兩種錯誤都寫 log。**還沒實測。**
 - 使用者自建 VIEW 套標註（原分支 `feature/user-view`，**2026-09-29 併回 master、分支已刪，已在 E3D 實測**）：Drawing 分頁下方「Views drawn by hand」→ Annotate Views。實測過：有名字／沒名字、重跑、一張 SHEE 多個 view、旁邊有 BOX、轉角度、混 SECTION（被擋下）、表單比例固定與 auto。途中修的 **BOX 的圖也有** 的 bug：格線壓框邊時圓圈掛錯端、左尺寸鏈第一點在框內時尺寸線太靠框、格線只在框邊內一點點時左邊投影線橫跨整張圖、同一點兩條管子標 0；另外 keyplan 沒設不畫方塊、同點管嘴加 (U)/(D)。沒測（使用者決定）：範圍來自 VVOL／VLIMITS（沒設 limits 的 view 本來就不處理）。**待使用者決定**：局部圖要不要擋。**下一步**：立面／SECTION（樣圖見「DRAFT：使用者自建的 VIEW」最後一條）。
 - 切分支的坑：E3D 讀的是工作目錄，同一個檔案有兩支分支在改時**一次只能測一支**，切分支後 kill／reload／show。切分支時遇過 `unable to unlink ... Invalid argument`（檔案剛好被 E3D 或防毒讀著），分支名換了、檔案沒換——看 `git status` 有沒有多出 `M`，有就確認內容等於哪一支已 commit 的版本後 `git checkout -- <檔>`。
-- 其他還沒實測的舊項目：「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）、Grid 分頁 Top/Bottom U 併入分層。
+- 其他還沒實測的舊項目：Grid 分頁 Top/Bottom U 併入分層。「設備尺寸的標註點」（`8c69f54`＋`1c99bc6`）使用者 2026-09-30 說目前看起來沒問題。
 - 沒驗證的疑點：`DrawingPlan1.pmlfrm` 讀 Drawing Scale 用的是 `!this.scaleopt.selection()`（約 1111 行），option 只設了 dtext——跟 Assign Numbers 的 Order by 同一種寫法，那次改成 `.selection('DTEXT')` 之後才正常。但那次沒有修正前的 dump，不能證明 `.selection()` 本身就是原因。出圖時若發現 Drawing Scale 選了沒作用，先查這裡。
 - 使用者決定不做的（別再提）：複製到其他樓層、BOX 總覽清單、3D 標圖號、局部圖框在 Assign Numbers 裡的排序限制（分開選、分開編就好）、圖名更新路徑的實測（目前沒有這種情形）。
 - 合作方式：一個功能一支分支，使用者在 E3D 實測後才 `--no-ff` 併回 master 並 push；每次改完 `.pmlfrm` 提醒 kill／reload／show；使用者回報時截圖放 repo 根目錄 `error.png`，除錯看 `check*.txt`（`check_box.txt`＝Check 分頁、`check_batch.txt`＝Assign Numbers、`check4.txt`＝RecenterView、`check_title.txt`＝view 下方的圖名、`check_liby.txt`＝匯入 PA-LIBY、`check_userview.txt`＝自建 VIEW 的 Annotate Views）。
@@ -160,7 +160,7 @@
 - 已實測 OK（2026-09-24，使用者）：單選 Show Box 側面標籤方向、`AID TEXT |$!lbl|` 帶空格與 `=` 印得出來、按鈕 `.tag` 改字、Split 預設勾 U/D、多選三種給法、多選 Pick 後 ShowFaceCoord 只在座標一致時填欄位、有 BOX 出問題時 alert 一次列完（offset `-100000` 全部擋下）、一部分成功一部分失敗時成功的照移。
 - Batch／Merge 各自還有一份讀選取的迴圈，新的 `SelectedBoxEquis()` 沒去動它們（怕動到已實測的東西），之後可以收成一份。
 
-## 設備尺寸的標註點（2026-09-21，`8c69f54`＋`1c99bc6`，已在 master，**未在 E3D 實測**）
+## 設備尺寸的標註點（2026-09-21，`8c69f54`＋`1c99bc6`，已在 master，**使用者 2026-09-30：目前看起來沒問題**）
 - 尺寸鏈上設備那一點，從「`SheetLimitsOfVolume()` 的紙面外接框邊緣＋2mm」改成「設備中心線的端點，落在 BOX 外就沿線夾回邊界」＝ 中心線與 matchline 的交點。
 - 為什麼要夾：P1501A/B 兩台泵跨在 match line 上，WVOL 往北伸出上邊界 942mm，端點落到紙面 y=529.343，比 up 尺寸線（510.942）還高 18.4mm，投影線整條畫在尺寸線上方、伸進標籤區。
 - 端點本來就在 BOX 內的不動——管線自己的位置在 BOX 內時也是就地標，設備不該被特別推到邊界。
