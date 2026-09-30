@@ -39,7 +39,7 @@ layout form !!DrawingPlan1 dialog dock
 			-- (.AnnotateViews()). Add CE takes a VIEW, or every view of a  --
 			-- SHEE or DRWG                                                 --
 			----------------------------------------------------------------
-			frame .uvframe 'Views drawn by hand (plan only for now)' at xmin.dest ymax.apply+1.2
+			frame .uvframe 'Views drawn by hand' at xmin.dest ymax.apply+1.2
 				list .uvlist 'Views' multiple width 36 height 6
 				button .uvadd 'Add CE'     at xmax.uvlist+0.5 ymin.uvlist+0.75 width 12 call '!This.UvAddCe()'
 				button .uvrem 'Remove'     at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
@@ -52,7 +52,14 @@ layout form !!DrawingPlan1 dialog dock
 				-- went missing there once this frame was added           --
 				----------------------------------------------------------
 				button .Cancel 'Cancel' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
-				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
+				----------------------------------------------------------
+				-- off: no match line, no MATCH LINE / SEE texts, no tick --
+				-- points on the chains -- for a local view standing      --
+				-- inside a bigger box (user, 2026-09-30). Annotate Views --
+				-- only; Create Drawings keeps them                       --
+				----------------------------------------------------------
+				toggle .uvmatch 'Match lines' at xmin.uvgo ymax.uvgo+0.2
+				paragraph .uvresult at xmin.uvgo ymax.uvmatch+0.2 text ' ' width 50
 			exit
 		exit
 		frame .viewframe 'View' width 40
@@ -379,6 +386,7 @@ define method .DrawingPlan1()
 	!this.equiheitx.val = 4
 	!this.dimheitx.val = 3
 	!this.matchhei.val = |4|
+	!this.uvmatch.val = true
 	!this.autoplace.val=TRUE
 	!this.insttog.val=TRUE
 	!this.insttext1.val = |ALL INST WITH ISNAMED|
@@ -3003,11 +3011,29 @@ define method .AnnotateView(!it is string) is string
 	handle any
 		!warn.append('grid: ' & !!error.text)
 	endhandle
-	$!vw
-	!!DrawingPlan1MatchTicks(!vw, !vwnn)
+	------------------------------------------------------------------
+	-- Match lines unticked (user, 2026-09-30): a local view inside a --
+	-- bigger box would only say SEE <that box> on all four sides. no --
+	-- ticks, so no tick points on the chains, and no match line; the --
+	-- lists the later passes read are emptied, not left to the last  --
+	-- drawing                                                        --
+	------------------------------------------------------------------
+	!uvm = true
+	!uvm = !this.uvmatch.val
 	handle any
-		!warn.append('match ticks: ' & !!error.text)
+		!uvm = true
 	endhandle
+	!!DrawingPlan1MatchTickPos = object array()
+	!!DrawingPlan1MatchTexts = object array()
+	if (!uvm) then
+		$!vw
+		!!DrawingPlan1MatchTicks(!vw, !vwnn)
+		handle any
+			!warn.append('match ticks: ' & !!error.text)
+		endhandle
+	else
+		!this.UvLog('  match lines: off (the form)')
+	endif
 	!this.UvToLast(!vw)
 	!!DrawingPlan1LineNoAnnotation(!vw, !xlen, !ylen)
 	handle any
@@ -3018,11 +3044,13 @@ define method .AnnotateView(!it is string) is string
 	handle any
 		!warn.append('equipment: ' & !!error.text)
 	endhandle
-	$!vw
-	!!DrawingPlan1MatchLine(!vw, !vwnn)
-	handle any
-		!warn.append('match line: ' & !!error.text)
-	endhandle
+	if (!uvm) then
+		$!vw
+		!!DrawingPlan1MatchLine(!vw, !vwnn)
+		handle any
+			!warn.append('match line: ' & !!error.text)
+		endhandle
+	endif
 
 	!ff = object file(!this.blankdir & 'WriteLabelToText.txt')
 	if !ff.exists() then
