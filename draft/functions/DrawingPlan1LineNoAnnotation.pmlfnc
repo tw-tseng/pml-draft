@@ -1152,29 +1152,29 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			!alix1 = 1
 		endif
 		if (!result.size() gt 1) then
-			do !ra from 2 to !result.size()
-				!rA = !result[!ra]
-				if (!rA.split('~').size() gt 3) then
+			do !ssi from 2 to !result.size()
+				!ssrecA = !result[!ssi]
+				if (!ssrecA.split('~').size() gt 3) then
 					skip
 				endif
-				!alA = !rA.split('~').getindexed(!alix1).real()
-				!pA = !rA.split('~').getindexed(3).split('!').getindexed(5)
-				!rbmax = !ra - 1
-				do !rb from 1 to !rbmax
-					!rB = !result[!rb]
-					if (!rB.split('~').size() gt 3) then
+				!ssalA = !ssrecA.split('~').getindexed(!alix1).real()
+				!sspipeA = !ssrecA.split('~').getindexed(3).split('!').getindexed(5)
+				!ssjmax = !ssi - 1
+				do !ssj from 1 to !ssjmax
+					!ssrecB = !result[!ssj]
+					if (!ssrecB.split('~').size() gt 3) then
 						skip
 					endif
-					!pB = !rB.split('~').getindexed(3).split('!').getindexed(5)
-					if (!pB.eq(!pA)) then
+					!sspipeB = !ssrecB.split('~').getindexed(3).split('!').getindexed(5)
+					if (!sspipeB.eq(!sspipeA)) then
 						skip
 					endif
-					!alB = !rB.split('~').getindexed(!alix1).real()
-					!dAB = !alB - !alA
-					if (abs(!dAB) le !samtol1) then
-						!result[!ra] = !rA & '~LABELONLY'
+					!ssalB = !ssrecB.split('~').getindexed(!alix1).real()
+					!ssdAB = !ssalB - !ssalA
+					if (abs(!ssdAB) le !samtol1) then
+						!result[!ssi] = !ssrecA & '~LABELONLY'
 						if (!dbgln) then
-							!dbgf.writerecord('SAMESPOT ' & !dir & ' crossing label only pipe=' & !pA & ' along=' & !alA.string() & ' kept=' & !pB)
+							!dbgf.writerecord('SAMESPOT ' & !dir & ' crossing label only pipe=' & !sspipeA & ' along=' & !ssalA.string() & ' kept=' & !sspipeB)
 						endif
 						break
 					endif

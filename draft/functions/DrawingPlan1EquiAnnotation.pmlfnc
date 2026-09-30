@@ -481,7 +481,8 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 					AT $!cpos1
 					var !extent extent btext
 					!pp = !HHI.split()
-					!pp[!hix] = !pp[!hix].real() + (abs(!extent.part(2).real() - !extent.part(6).real()) / !!DrawingPlan1.vsca)
+					!ppv = !pp[!hix].real() + (abs(!extent.part(2).real() - !extent.part(6).real()) / !!DrawingPlan1.vsca)
+					!pp[!hix] = !ppv.string()
 					!HHI = !pp[1] & ' ' & !pp[2] & ' ' & !pp[3] & ' ' & !pp[4] & ' ' & !pp[5] & ' ' & !pp[6]
 				else
 					if (!!DrawingPlan1.rcode.eqnocase('left')) then
@@ -497,7 +498,8 @@ define function !!DrawingPlan1EquiAnnotation(!name is string, !minE is string, !
 					AT $!cpos1
 					var !extent extent btext
 					!pp = !VHI.split()
-					!pp[6] = !pp[6].real() + (abs(!extent.part(4).real() - !extent.part(8).real()) / !!DrawingPlan1.vsca)
+					!ppv = !pp[6].real() + (abs(!extent.part(4).real() - !extent.part(8).real()) / !!DrawingPlan1.vsca)
+					!pp[6] = !ppv.string()
 					!VHI = !pp[1] & ' ' & !pp[2] & ' ' & !pp[3] & ' ' & !pp[4] & ' ' & !pp[5] & ' ' & !pp[6]
 				endif
 			endif
