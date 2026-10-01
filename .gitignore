@@ -72,3 +72,13 @@ bin/
 # of files that live in the project folder and AVEVA_DESIGN_USER.
 *_REV.log
 RevCloud_*
+
+# nwd/: vendor models and what the NWD -> plan DXF tools make from them.
+# only the Python and the batch files belong in the repo; the FBX is
+# gigabytes, the cache is rebuilt from it, plans/ is output
+nwd/*.fbx
+nwd/*.nwc
+nwd/*.nwd
+nwd/*.cache/
+nwd/plans/
+nwd/__pycache__/
