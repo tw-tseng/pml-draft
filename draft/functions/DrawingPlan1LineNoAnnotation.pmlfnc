@@ -3686,6 +3686,203 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 			------------------------------------------------------------------
 			-- and draw them                                                 --
 			------------------------------------------------------------------
+			------------------------------------------------------------------
+			-- where every label of this side goes, worked out before any of  --
+			-- them is drawn, so that a label can make room BEHIND a grid band --
+			-- by pushing the ones already placed back (2026-10-01)            --
+			--                                                                --
+			-- the drawing loop below packs forwards only: a label sitting on  --
+			-- a band steps back to its own side of it, but if the label       --
+			-- before it already holds that room it gives up and jumps the     --
+			-- band forwards -- sometimes over the next band too. reported     --
+			-- live: 150-A-19 sat 0.55mm below the D line, 100-A-18 already    --
+			-- held the slot under D, so 150-A-19 went up past D and ES.B,     --
+			-- 23.8mm off its point, its leader across the ES.B line, while    --
+			-- pushing 100-A-18 down another 4mm would have let it sit just    --
+			-- under D (user, 2026-10-01: move it down)                        --
+			--                                                                --
+			-- so when that happens the earlier labels are pushed back one     --
+			-- after the other, and it is taken only if:                      --
+			--   this label ends nearer its point than the forward jump did,  --
+			--   no label, this one included, lands on a band,                --
+			--   none of the earlier ones is pushed more than !gpushmax        --
+			-- otherwise the forward jump stands, exactly as before            --
+			--                                                                --
+			-- rebuild only (no GLAB on the view yet). on the update path an   --
+			-- existing GLAB must not move or the REVI clouds it, and which    --
+			-- ones exist is only found inside the drawing loop -- so there    --
+			-- nothing changes. the packing here is a copy of the one in the  --
+			-- drawing loop (keep the two the same); the loop takes its place  --
+			-- from !gpre when !gpreon                                        --
+			------------------------------------------------------------------
+			!gpreon = false
+			if (!existingglabs.size().eq(0)) then
+				!gpreon = true
+			endif
+			!gpushmax = 6
+			!gpre = object array()
+			if (!gpreon) then
+				!gpch = object array()
+				do !i from 1 to !glabrec.size()
+					!pparts = !glabrec[!i].split('~')
+					!pal = !pparts.getindexed(4).real().string('D3').real()
+					!pch = !pparts.getindexed(3).real()
+					!gpch[!i] = !pch
+					!pwo = !gloff * !pch
+					-- forward packing: room after the label before --
+					!pclr = !pch
+					!pi1 = !i - 1
+					if (!i gt 1) then
+						!pprevch = !gpch[!pi1]
+						if (!pprevch gt !pclr) then
+							!pclr = !pprevch
+						endif
+					endif
+					!pminclr = !pclr + !glabair
+					if (!pminclr lt !glabmin) then
+						!pminclr = !glabmin
+					endif
+					!pplace = !pal
+					!plowbound = 0
+					!phaslow = false
+					if (!i gt 1) then
+						!plowbound = !gpre[!pi1] + !pminclr
+						!phaslow = true
+						if (!pplace lt !plowbound) then
+							!pplace = !plowbound
+						endif
+					endif
+					-- the side the attach point is on, from the first band it hits --
+					!pback = true
+					do !gbc values !gblock
+						!gb1 = !gbc - !ghalf
+						!gb2 = !gbc + !ghalf
+						!plo = !pplace + !pwo
+						!phi = !plo + !pch
+						if (!plo lt !gb2 and !phi gt !gb1) then
+							if (!pal gt !gbc) then
+								!pback = false
+							endif
+							break
+						endif
+					enddo
+					-- out of the bands; !pshutat is the place behind the band it --
+					-- could not take because the label before was in the way     --
+					!pshut = false
+					!pshutat = 0
+					do !kk from 1 to !gblock.size()
+						!pmoved = false
+						do !gbc values !gblock
+							!gb1 = !gbc - !ghalf
+							!gb2 = !gbc + !ghalf
+							!plo = !pplace + !pwo
+							!phi = !plo + !pch
+							if (!plo lt !gb2 and !phi gt !gb1) then
+								if (!pback) then
+									!pnew = !gb1 - !pch - !pwo
+									if (!phaslow and !pnew lt !plowbound) then
+										!pback = false
+										if (not(!pshut)) then
+											!pshut = true
+											!pshutat = !pnew
+										endif
+										!pplace = !gb2 - !pwo
+									else
+										!pplace = !pnew
+									endif
+								else
+									!pplace = !gb2 - !pwo
+								endif
+								!pmoved = true
+							endif
+						enddo
+						break if (not(!pmoved))
+					enddo
+					--------------------------------------------------------------
+					-- and the other way: stay behind the band, push the earlier --
+					--------------------------------------------------------------
+					if (!pshut) then
+						!pok = true
+						!pwhy = ''
+						!pdback = !pal - !pshutat
+						!pdback = abs(!pdback)
+						!pdfwd = !pplace - !pal
+						!pdfwd = abs(!pdfwd)
+						if (!pdback ge !pdfwd) then
+							!pok = false
+							!pwhy = 'not nearer'
+						endif
+						if (!pok) then
+							do !gbc values !gblock
+								!gb1 = !gbc - !ghalf
+								!gb2 = !gbc + !ghalf
+								!plo = !pshutat + !pwo
+								!phi = !plo + !pch
+								if (!plo lt !gb2 and !phi gt !gb1) then
+									!pok = false
+									!pwhy = 'on a band'
+									break
+								endif
+							enddo
+						endif
+						!pidx = object array()
+						!pval = object array()
+						!pnext = !pshutat
+						!pnextch = !pch
+						!j = !i - 1
+						do !k from 1 to !i
+							break if (not(!pok))
+							break if (!j lt 1)
+							!pjch = !gpch[!j]
+							!pjclr = !pjch
+							if (!pnextch gt !pjclr) then
+								!pjclr = !pnextch
+							endif
+							!pjclr = !pjclr + !glabair
+							if (!pjclr lt !glabmin) then
+								!pjclr = !glabmin
+							endif
+							!pjmax = !pnext - !pjclr
+							break if (!gpre[!j] le !pjmax)
+							!pjpush = !gpre[!j] - !pjmax
+							if (!pjpush gt !gpushmax) then
+								!pok = false
+								!pwhy = 'label ' & !j.string() & ' pushed ' & !pjpush.string('D3')
+								break
+							endif
+							!pjwo = !gloff * !pjch
+							do !gbc values !gblock
+								!gb1 = !gbc - !ghalf
+								!gb2 = !gbc + !ghalf
+								!plo = !pjmax + !pjwo
+								!phi = !plo + !pjch
+								if (!plo lt !gb2 and !phi gt !gb1) then
+									!pok = false
+									!pwhy = 'label ' & !j.string() & ' onto a band'
+									break
+								endif
+							enddo
+							break if (not(!pok))
+							!pidx.append(!j)
+							!pval.append(!pjmax)
+							!pnext = !pjmax
+							!pnextch = !pjch
+							!j = !j - 1
+						enddo
+						if (!dbgln) then
+							!dbgf.writerecord('GLABBACK ' & !dir & ' i=' & !i.string() & ' along=' & !pal.string('D3') & ' fwd=' & !pplace.string('D3') & ' back=' & !pshutat.string('D3') & ' ok=' & !pok & ' pushed=' & !pidx.size().string() & ' ' & !pwhy)
+						endif
+						if (!pok) then
+							do !m from 1 to !pidx.size()
+								!pk = !pidx[!m]
+								!gpre[!pk] = !pval[!m]
+							enddo
+							!pplace = !pshutat
+						endif
+					endif
+					!gpre[!i] = !pplace
+				enddo
+			endif
 			$!vw/ateLINE
 			!gprev = 0
 			!gprevplace = 0
@@ -4158,6 +4355,11 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 					enddo
 					break if (not(!gmoved))
 				enddo
+				-- rebuild: the place worked out above, which may have been   --
+				-- pushed back to make room for a later label (2026-10-01)     --
+				if (!gpreon) then
+					!gplace = !gpre[!i]
+				endif
 				--------------------------------------------------------------------
 				-- root cause, found live 2026-09-01: this subtraction is exactly  --
 				-- what the comment below already describes as wrong -- !galong is --
