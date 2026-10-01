@@ -5676,6 +5676,10 @@ define method .PinnedLabelRecords(!name is string, !rcode is string) is array
 			!h   = !chei.replace('mm', '').real() + 0.5
 			!w   = !exbtext.length() * !h * 0.65  $( 0.65 is text width factor $)
 			!typ = 'box'
+			-- nozzles and valves may turn, as when they were made --
+			if (!kind.eq('NOZZ') or !kind.eq('VALV')) then
+				!typ = 'boxr'
+			endif
 		endif
 		!cx = (!x1 + !x2) * 0.5
 		!cy = (!y1 + !y2) * 0.5
@@ -7364,7 +7368,12 @@ define method .NozzleAnnotation(!name is string)
 		!height = !chei.replace('mm', '').real() + 0.5
 		!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
 		
-		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
+		------------------------------------------------------------------
+		-- boxr: BlankPos may stand the label on end when that gets it  --
+		-- much nearer (user, 2026-10-01: crowded nozzles and valves    --
+		-- ended on long leaders; supports could already turn)          --
+		------------------------------------------------------------------
+		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' boxr')
 	enddo
 	!ff.close()
 endmethod
@@ -8028,7 +8037,12 @@ define method .ValveAnnotation(!name is string)
 		!height = !chei.replace('mm', '').real() + 0.5
 		!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
 		
-		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
+		------------------------------------------------------------------
+		-- boxr: BlankPos may stand the label on end when that gets it  --
+		-- much nearer (user, 2026-10-01: crowded nozzles and valves    --
+		-- ended on long leaders; supports could already turn)          --
+		------------------------------------------------------------------
+		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' boxr')
 	enddo
 	!ff.close()
 endmethod
