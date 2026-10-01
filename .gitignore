@@ -60,8 +60,17 @@ draft/forms/DrawingPlan1 - 複製.pmlfrm
 # DrawingPlan1 / DrawingPlan1Revision constructors. ~25MB of PyInstaller
 # onefile each, rebuilt every time the Python changes, so they are copied
 # to the share by hand rather than carried in the history. built from
-# Documents/Python/blankpos and Documents/Python/revcloud.
+# tools/blankpos and tools/revcloud (moved in from Documents/Python
+# on 2026-10-01).
 bin/
+
+# tools/: only the Python and the PyInstaller .spec belong in the repo.
+# build/ and dist/ are PyInstaller output, the exe goes to bin/ by hand
+tools/*/build/
+tools/*/dist/
+tools/*/__pycache__/
+tools/*/*.bak-*
+tools/*/build.log
 
 # DXF dropped here to be read while working out how DXFOUT lays a drawing
 # out. diagnostic only, and a megabyte a time.
