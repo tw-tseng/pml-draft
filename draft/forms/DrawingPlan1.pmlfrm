@@ -142,10 +142,18 @@ layout form !!DrawingPlan1 dialog dock
 			paragraph .keyoverpara at xmax.keyoverbutn+0.5 ymin.keyoverbutn+0.1 text 'OVER'
 			text .keytext1 '左下角圖紙座標' tagwidth 22 at xmin.keyovertext ymax.keyovertext+0.1 width 27 is string
 			button .keybutn1 '點選' at xmax.keytext1+0.4 ymin.keytext1 width 5 call |!This.keyplanpick()|
-			text .keytext2 '左下角模型座標  E'  tagwidth 22 at xmin.keytext1 ymax.keytext1+0.1 width 11 is string 
+			--------------------------------------------------------------
+			-- the row's name on its own, E as the field's own tag right --
+			-- in front of it the way N is: the whole '...  E' as one    --
+			-- tag left E halfway across once the name was Chinese and  --
+			-- short (user, 2026-10-02). 20 + tagwidth 2 puts the field  --
+			-- where the rows above and below have theirs (tagwidth 22) --
+			--------------------------------------------------------------
+			paragraph .keymodelpara at xmin.keytext1 ymax.keytext1+0.1 text '左下角模型座標'
+			text .keytext2 'E' tagwidth 2 at xmin.keytext1+20 ymin.keymodelpara width 11 is string 
 			text .keytext3 'N' at xmax.keytext2+2 ymin.keytext2 width 11 is string 
-			text .keytext4 'Keyplan 比例'   tagwidth 22 at xmin.keytext2 ymax.keytext2+0.1 width 27 is string
-			text .keytext5 'Keyplan Y 軸朝向'   tagwidth 22 at xmin.keytext2 ymax.keytext4+0.1 width 27 is string
+			text .keytext4 'Keyplan 比例'   tagwidth 22 at xmin.keytext1 ymax.keytext2+0.1 width 27 is string
+			text .keytext5 'Keyplan Y 軸朝向'   tagwidth 22 at xmin.keytext1 ymax.keytext4+0.1 width 27 is string
 			button .applykey '建立圖面' at xmin.keytext5 ymax.keytext5+0.5 width 12 call '!This.Apply()'
 			button .closekey '關閉' at xmax.applykey+0.8 ymin.applykey width 12 call '!This.Close()'
 		exit
