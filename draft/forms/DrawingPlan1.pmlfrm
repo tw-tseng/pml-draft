@@ -535,6 +535,7 @@ define method .DrawingPlan1()
 		endif
 	endif
 	!this.SetApplyActive(false)
+	!this.UvGoActive()
 	!this.dwgnopos.val = '700,55'
 	!this.dwgnohei.val = '3'
 	!this.scalepos.val = '740,29'
@@ -2648,6 +2649,7 @@ define method .UvAddCe()
 		endif
 	enddo
 	!this.uvlist.dtext = !items
+	!this.UvGoActive()
 	if (!added.eq(0)) then
 		!msg = 'No view added'
 		if (!vs.size().eq(0)) then
@@ -2671,6 +2673,7 @@ define method .UvRemove()
 		do !str values !strs
 			!this.uvlist.clear(!str)
 		enddo
+		!this.UvGoActive()
 	else
 		!!alert.error('Select one or more views in the list first')
 	endif
@@ -2678,6 +2681,16 @@ endmethod
 
 define method .UvRemoveAll()
 	!this.uvlist.clear()
+	!this.UvGoActive()
+endmethod
+
+------------------------------------------------------------------------
+-- 標註 VIEW is grey while the list is empty (user, 2026-10-02). the    --
+-- list only changes in the three methods above, each of which calls  --
+-- this afterwards; the constructor sets it for the empty list        --
+------------------------------------------------------------------------
+define method .UvGoActive()
+	!this.uvgo.active = !this.uvlist.dtext.size().gt(0)
 endmethod
 
 ------------------------------------------------------------------------
