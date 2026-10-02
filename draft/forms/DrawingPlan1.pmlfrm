@@ -40,9 +40,14 @@ layout form !!DrawingPlan1 dialog dock
 			-- SHEE or DRWG                                                 --
 			----------------------------------------------------------------
 			frame .uvframe '自建的 VIEW' at xmin.dest ymax.apply+1.2
-				list .uvlist 'VIEW 清單' multiple width 36 height 6
+				----------------------------------------------------------
+				-- 4.7: the bottom of the list level with the bottom of   --
+				-- 全部移除, so 標註 VIEW / 關閉 sit right under both     --
+				-- (user, 2026-10-02; 6 left a gap below the buttons)     --
+				----------------------------------------------------------
+				list .uvlist 'VIEW 清單' multiple width 36 height 4.7
 				button .uvadd '加入 CE'    at xmax.uvlist+0.5 ymin.uvlist+0.75 width 12 call '!This.UvAddCe()'
-				button .uvrem '移除'       at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
+				button .uvrem '移除 CE'    at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
 				button .uvall '全部移除'   at xmin.uvadd ymax.uvrem+0.3 width 12 call '!This.UvRemoveAll()'
 				button .uvgo '標註 VIEW' at xmin.uvlist ymax.uvlist+0.3 width 23 call '!This.AnnotateViews()'
 				----------------------------------------------------------
@@ -70,7 +75,7 @@ layout form !!DrawingPlan1 dialog dock
 			-- +0.75 drops the three buttons clear of the list's own tag row, so that
 			-- Add CE lines up with the top of the list box and not with the label
 			button .excladdbutn '加入 CE'    at xmax.excllist+0.5 ymin.excllist+0.75  width 12 call '!This.ExclAddCe()'
-			button .exclrembutn '移除'       at xmin.excladdbutn  ymax.excladdbutn+0.3 width 12 call '!This.ExclRemoveCe()'
+			button .exclrembutn '移除 CE'    at xmin.excladdbutn  ymax.excladdbutn+0.3 width 12 call '!This.ExclRemoveCe()'
 			button .exclallbutn '全部移除'   at xmin.excladdbutn  ymax.exclrembutn+0.3 width 12 call '!This.ExclRemoveAll()'
 			option .scaleopt '出圖比例' at xmin.excllist ymax.excllist+0.3 tagwidth 20 width 10
 			text .scaletext '自訂比例' at xmax.scaleopt+1 ymin.scaleopt tagwidth 11 width 10 is string
