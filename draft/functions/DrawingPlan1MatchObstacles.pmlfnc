@@ -128,6 +128,25 @@ define function !!DrawingPlan1MatchObstacles(!name is string)
 		if (!lbnm.upcase().matchwild('*/MLARR_*')) then
 			skip
 		endif
+		---------------------------------------------------------------
+		-- the component labels BlankPos placed are not obstacles.    --
+		-- there are none on the first run, but .RecenterView() asks  --
+		-- for the match line again after BlankPos, and then they are --
+		-- here -- placed off the texts already (the texts are in the --
+		-- DXF BlankPos reads), yet a valve label 2.2mm inside the    --
+		-- border fell inside the 3mm kept round a box and pushed the --
+		-- bottom text out twelve rows with an arrow (2026-10-02,     --
+		-- /DWGNO-005, once BlankPos kept no margin of its own)       --
+		---------------------------------------------------------------
+		!lbown = ''
+		var !lbown name of owner
+		handle any
+			!lbown = ''
+		endhandle
+		!lbown = !lbown.upcase()
+		if (!lbown.matchwild('*/ATENOZZ') or !lbown.matchwild('*/ATEVALV') or !lbown.matchwild('*/ATEREDU') or !lbown.matchwild('*/ATEINST') or !lbown.matchwild('*/ATESUPT')) then
+			skip
+		endif
 		!ext = ''
 		var !ext extent btex
 		handle any
