@@ -891,7 +891,7 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	-- the leader as leader all the same (2026-09-18), so a break that   --
 	-- rides along with its element is not a change to cloud            --
 	----------------------------------------------------------------------
-	!ldkinds = ' NOZZ VALV REDU INST SUPT '
+	!ldkinds = ' NOZZ VALV REDU INST SUPT USER '
 	!ldpad = 1
 	!ldkeep = 1
 	!ldn = 0

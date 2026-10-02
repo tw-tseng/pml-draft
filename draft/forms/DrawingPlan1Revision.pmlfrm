@@ -999,7 +999,8 @@ endmethod
 ----------------------------------------------------------------------
 -- the component labels of the sheet pinned to the page: OSET FALSE  --
 -- on every GLAB/SLAB under a layer named ate<NOZZ|VALV|REDU|INST|   --
--- SUPT>, so a later model change stretches the leader but leaves    --
+-- SUPT|USER>, so a later model change stretches the leader but      --
+-- leaves                                                            --
 -- the text where BlankPos put it (see the header). other labels are --
 -- left alone: line numbers, grid bubbles and flow arrows are        --
 -- re-placed by the update path itself (a flow arrow does NOT ride   --
@@ -1014,7 +1015,7 @@ define method .FreezeLabels(!ref is STRING, !box is STRING, !nxt is STRING) is S
 	handle any
 		return 'cannot collect the labels of ' & !ref & ': ' & !!error.text
 	endhandle
-	!kinds   = ' NOZZ VALV REDU INST SUPT '
+	!kinds   = ' NOZZ VALV REDU INST SUPT USER '
 	!frozen  = 0
 	!already = 0
 	!refused = 0
