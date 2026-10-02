@@ -113,34 +113,6 @@ layout form !!DrawingPlan1 dialog dock
 			button .closeview '關閉' at xmax.applyview+0.8 ymin.applyview width 12 call '!This.Close()'
 
 		exit
-		frame .info '圖框文字' width 40
-			text .dwgnopos  'Dwg.No.'                                                tagwidth 15 width 10 is string
-			text .dwgnohei  '字高'            at xmax.dwgnopos+2  ymin.dwgnopos      tagwidth 10 width 5 is string
-			text .scalepos  'Scale'           at xmin.dwgnopos    ymax.dwgnopos      tagwidth 15 width 10 is string
-			text .scalehei  '字高'            at xmax.scalepos+2  ymin.scalepos      tagwidth 10 width 5 is string
-			text .revpos    'Rev'             at xmin.dwgnopos    ymax.scalepos      tagwidth 15 width 10 is string
-			text .revhei    '字高'            at xmax.revpos+2    ymin.revpos        tagwidth 10 width 5 is string
-			text .title1pos 'Title1'          at xmin.revpos      ymax.revpos+0.2    tagwidth 15 width 10 is string 
-			text .title1hei '字高'            at xmax.title1pos+2 ymin.title1pos     tagwidth 10 width 5 is string 
-			text .title2pos 'Title2'          at xmin.revpos      ymax.title1pos+0.2 tagwidth 15 width 10 is string 
-			text .title2hei '字高'            at xmax.title2pos+2 ymin.title2pos     tagwidth 10 width 5 is string 
-			text .title3pos 'Title3'          at xmin.revpos      ymax.title2pos+0.2 tagwidth 15 width 10 is string 
-			text .title3hei '字高'            at xmax.title3pos+2 ymin.title3pos     tagwidth 10 width 5 is string 
-			text .name1pos  'Name1'           at xmin.revpos      ymax.title3pos+0.2 tagwidth 15 width 10 is string 
-			text .name1hei  '字高'            at xmax.name1pos+2  ymin.name1pos      tagwidth 10 width 5 is string 
-			text .name2pos  'Name2'           at xmin.revpos      ymax.name1pos+0.2  tagwidth 15 width 10 is string 
-			text .name2hei  '字高'            at xmax.name2pos+2  ymin.name2pos      tagwidth 10 width 5 is string 
-			text .name3pos  'Name3'           at xmin.revpos      ymax.name2pos+0.2  tagwidth 15 width 10 is string 
-			text .name3hei  '字高'            at xmax.name3pos+2  ymin.name3pos      tagwidth 10 width 5 is string 
-			text .date1pos  'Date1'           at xmin.revpos      ymax.name3pos+0.2  tagwidth 15 width 10 is string 
-			text .date1hei  '字高'            at xmax.date1pos+2  ymin.date1pos      tagwidth 10 width 5 is string 
-			text .date2pos  'Date2'           at xmin.revpos      ymax.date1pos+0.2  tagwidth 15 width 10 is string 
-			text .date2hei  '字高'            at xmax.date2pos+2  ymin.date2pos      tagwidth 10 width 5 is string 
-			text .date3pos  'Date3'           at xmin.revpos      ymax.date2pos+0.2  tagwidth 15 width 10 is string 
-			text .date3hei  '字高'            at xmax.date3pos+2  ymin.date3pos      tagwidth 10 width 5 is string 
-			button .applyinfo '建立圖面' at xmin.date3pos ymax.date3pos+0.5 width 12 call '!This.Apply()'
-			button .closeinfo '關閉' at xmax.applyinfo+0.8 ymin.applyinfo width 12 call '!This.Close()'
-		exit
 		frame .fra 'Keyplan'
 			--------------------------------------------------------------
 			-- tagwidth 12 / width 37: the fields start right after the --
@@ -203,7 +175,7 @@ layout form !!DrawingPlan1 dialog dock
 			button .closeflow '關閉' at xmax.applyflow+0.8 ymin.applyflow width 12 call '!This.Close()'
 		exit
 		frame .gridframe '柱位線'
-			text .griddist '距離'        tagwidth 10 width 6 is real
+			text .griddist '圓圈距離邊界' tagwidth 10 width 6 is real
 			text .gridgap  '間隙'        tagwidth 10 at xmin.griddist ymax.griddist+0.1 width 6 is real
 			text .gridhei  '字高'        tagwidth 10 at xmin.gridgap  ymax.gridgap+0.1  width 6 is real
 			text .griddia  '圓圈直徑'    tagwidth 10 at xmin.gridhei  ymax.gridhei+0.1  width 6 is real
@@ -282,6 +254,35 @@ layout form !!DrawingPlan1 dialog dock
 			exit
 			button .applyanno '建立圖面' at xmin.reduframe ymax.reduframe+0.5 width 12 call '!This.Apply()'
 			button .closeanno '關閉' at xmax.applyanno+0.8 ymin.applyanno width 12 call '!This.Close()'
+		exit
+		-- the last tab (user, 2026-10-02)
+		frame .info '圖框文字' width 40
+			text .dwgnopos  'Dwg.No.'                                                tagwidth 15 width 10 is string
+			text .dwgnohei  '字高'            at xmax.dwgnopos+2  ymin.dwgnopos      tagwidth 10 width 5 is string
+			text .scalepos  'Scale'           at xmin.dwgnopos    ymax.dwgnopos      tagwidth 15 width 10 is string
+			text .scalehei  '字高'            at xmax.scalepos+2  ymin.scalepos      tagwidth 10 width 5 is string
+			text .revpos    'Rev'             at xmin.dwgnopos    ymax.scalepos      tagwidth 15 width 10 is string
+			text .revhei    '字高'            at xmax.revpos+2    ymin.revpos        tagwidth 10 width 5 is string
+			text .title1pos 'Title1'          at xmin.revpos      ymax.revpos+0.2    tagwidth 15 width 10 is string 
+			text .title1hei '字高'            at xmax.title1pos+2 ymin.title1pos     tagwidth 10 width 5 is string 
+			text .title2pos 'Title2'          at xmin.revpos      ymax.title1pos+0.2 tagwidth 15 width 10 is string 
+			text .title2hei '字高'            at xmax.title2pos+2 ymin.title2pos     tagwidth 10 width 5 is string 
+			text .title3pos 'Title3'          at xmin.revpos      ymax.title2pos+0.2 tagwidth 15 width 10 is string 
+			text .title3hei '字高'            at xmax.title3pos+2 ymin.title3pos     tagwidth 10 width 5 is string 
+			text .name1pos  'Name1'           at xmin.revpos      ymax.title3pos+0.2 tagwidth 15 width 10 is string 
+			text .name1hei  '字高'            at xmax.name1pos+2  ymin.name1pos      tagwidth 10 width 5 is string 
+			text .name2pos  'Name2'           at xmin.revpos      ymax.name1pos+0.2  tagwidth 15 width 10 is string 
+			text .name2hei  '字高'            at xmax.name2pos+2  ymin.name2pos      tagwidth 10 width 5 is string 
+			text .name3pos  'Name3'           at xmin.revpos      ymax.name2pos+0.2  tagwidth 15 width 10 is string 
+			text .name3hei  '字高'            at xmax.name3pos+2  ymin.name3pos      tagwidth 10 width 5 is string 
+			text .date1pos  'Date1'           at xmin.revpos      ymax.name3pos+0.2  tagwidth 15 width 10 is string 
+			text .date1hei  '字高'            at xmax.date1pos+2  ymin.date1pos      tagwidth 10 width 5 is string 
+			text .date2pos  'Date2'           at xmin.revpos      ymax.date1pos+0.2  tagwidth 15 width 10 is string 
+			text .date2hei  '字高'            at xmax.date2pos+2  ymin.date2pos      tagwidth 10 width 5 is string 
+			text .date3pos  'Date3'           at xmin.revpos      ymax.date2pos+0.2  tagwidth 15 width 10 is string 
+			text .date3hei  '字高'            at xmax.date3pos+2  ymin.date3pos      tagwidth 10 width 5 is string 
+			button .applyinfo '建立圖面' at xmin.date3pos ymax.date3pos+0.5 width 12 call '!This.Apply()'
+			button .closeinfo '關閉' at xmax.applyinfo+0.8 ymin.applyinfo width 12 call '!This.Close()'
 		exit
 	exit
 	
