@@ -17,7 +17,7 @@ layout form !!DrawingPlan1 dialog dock
 	!this.formTitle = '管線平面圖出圖'
 	
 	frame .tabset tabset
-		frame .drawings '出圖' width 40
+		frame .drawings '出圖-BOX' width 40
 			frame .hiera
 				list   .files1 '全部 BOX' multiple width 25 height 10
 				button .addce  ' >'     at xmax.files1+0.4 ymin.files1+1 width 3 call '!This.selectce()'
@@ -32,19 +32,23 @@ layout form !!DrawingPlan1 dialog dock
 --				button .sort   'Sort  '     at xmin.addce  ymax.export+0.2 width 12 call '!This.sortce()'
 				----------------------------------------------------------
 				-- inside the box lists' frame, so drawing from boxes is  --
-				-- one group the way 自建的 VIEW below is (user,          --
-				-- 2026-10-02)                                            --
+				-- one group (user, 2026-10-02)                           --
 				----------------------------------------------------------
 				text .dest     '存放位置'        at xmin.files1 ymax.files1+0.5 tagwidth 11 width 33 is string
 				button .desbut 'CE'              at xmax.dest+0.1 ymin.dest width 6 call '!This.desce()'
 				button .apply  '建立圖面'        at xmin.dest ymax.dest+0.5 width 23 call '!This.Apply()'
+				-- 關閉 on every tab, see .Cancel on the 出圖-VIEW tab
+				button .closebox '關閉' at xmax.apply+0.8 ymin.apply width 12 call '!This.Close()'
 			exit
-			----------------------------------------------------------------
-			-- views drawn by hand in Draw, annotated where they stand      --
-			-- (.AnnotateViews()). Add CE takes a VIEW, or every view of a  --
-			-- SHEE or DRWG                                                 --
-			----------------------------------------------------------------
-			frame .uvframe '自建的 VIEW' at xmin.hiera ymax.hiera+0.5
+		exit
+		----------------------------------------------------------------
+		-- views drawn by hand in Draw, annotated where they stand      --
+		-- (.AnnotateViews()). Add CE takes a VIEW, or every view of a  --
+		-- SHEE or DRWG. a tab of its own, out of 出圖-BOX (user,       --
+		-- 2026-10-02)                                                  --
+		----------------------------------------------------------------
+		frame .uvtab '出圖-VIEW' width 40
+			frame .uvframe '自建的 VIEW'
 				----------------------------------------------------------
 				-- 4.7: the bottom of the list level with the bottom of   --
 				-- 全部移除, so 標註 VIEW sits right under both           --
@@ -60,9 +64,11 @@ layout form !!DrawingPlan1 dialog dock
 				-- its own last row, beside a 建立圖面 of its own        --
 				-- (user, 2026-10-02; .SetApplyActive() greys them all   --
 				-- together) -- one under the tabs sat below the tallest --
-				-- tab, too far off on the short ones. here beside       --
-				-- 標註 VIEW, in the column of 加入 CE / 移除 CE /       --
-				-- 全部移除 (user, 2026-09-27)                           --
+				-- tab, too far off on the short ones. this tab has none --
+				-- of 建立圖面: its job is 標註 VIEW, and the two stay    --
+				-- apart (user, 2026-09-27). 關閉 beside 標註 VIEW, in   --
+				-- the column of 加入 CE / 移除 CE / 全部移除 (user,     --
+				-- 2026-09-27)                                           --
 				----------------------------------------------------------
 				button .Cancel '關閉' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
 				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
@@ -97,7 +103,7 @@ layout form !!DrawingPlan1 dialog dock
 			button .load   '載入設定' at xmax.save+0.8  ymin.save        width 10 call '!This.Load()'
 			button .setdef '設為預設值' at xmax.load+0.8 ymin.save       width 12 call '!This.SetDefault()'
 			paragraph .defresult at xmin.save ymax.save+0.2 text ' ' width 40
-			-- 建立圖面 and 關閉 on every tab, see .Cancel on the Drawing tab
+			-- 建立圖面 and 關閉 on every tab, see .Cancel on the 出圖-VIEW tab
 			button .applyview '建立圖面' at xmin.save ymax.defresult+0.3 width 12 call '!This.Apply()'
 			button .closeview '關閉' at xmax.applyview+0.8 ymin.applyview width 12 call '!This.Close()'
 
