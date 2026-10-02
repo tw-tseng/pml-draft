@@ -144,7 +144,7 @@ define function !!DrawingPlan1MatchObstacles(!name is string)
 			!lbown = ''
 		endhandle
 		!lbown = !lbown.upcase()
-		if (!lbown.matchwild('*/ATENOZZ') or !lbown.matchwild('*/ATEVALV') or !lbown.matchwild('*/ATEREDU') or !lbown.matchwild('*/ATEINST') or !lbown.matchwild('*/ATESUPT')) then
+		if (!lbown.matchwild('*/ATENOZZ') or !lbown.matchwild('*/ATEVALV') or !lbown.matchwild('*/ATEREDU') or !lbown.matchwild('*/ATEINST') or !lbown.matchwild('*/ATESUPT') or !lbown.matchwild('*/ATEUSER')) then
 			skip
 		endif
 		!ext = ''
