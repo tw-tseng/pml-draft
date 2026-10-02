@@ -55,6 +55,14 @@ layout form !!DrawingPlan1 dialog dock
 				button .uvrem '移除 CE'    at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
 				button .uvall '全部移除'   at xmin.uvadd ymax.uvrem+0.3 width 12 call '!This.UvRemoveAll()'
 				button .uvgo '標註 VIEW' at xmin.uvlist ymax.uvlist+0.3 width 23 call '!This.AnnotateViews()'
+				----------------------------------------------------------
+				-- closes the whole form. every tab has one right under  --
+				-- its own last row (user, 2026-10-02: one under the     --
+				-- tabs sat below the tallest tab, too far off on the    --
+				-- short ones). here beside 標註 VIEW, in the column of  --
+				-- 加入 CE / 移除 CE / 全部移除 (user, 2026-09-27)        --
+				----------------------------------------------------------
+				button .Cancel '關閉' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
 				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
 			exit
 		exit
@@ -87,6 +95,8 @@ layout form !!DrawingPlan1 dialog dock
 			button .load   '載入設定' at xmax.save+0.8  ymin.save        width 10 call '!This.Load()'
 			button .setdef '設為預設值' at xmax.load+0.8 ymin.save       width 12 call '!This.SetDefault()'
 			paragraph .defresult at xmin.save ymax.save+0.2 text ' ' width 40
+			-- 關閉 on every tab, see .Cancel on the Drawing tab
+			button .closeview '關閉' at xmin.save ymax.defresult+0.3 width 12 call '!This.Close()'
 
 		exit
 		frame .info '圖框文字' width 40
@@ -114,6 +124,7 @@ layout form !!DrawingPlan1 dialog dock
 			text .date2hei  '字高'            at xmax.date2pos+2  ymin.date2pos      tagwidth 10 width 5 is string 
 			text .date3pos  '日期3 位置'      at xmin.revpos      ymax.date2pos+0.2  tagwidth 15 width 10 is string 
 			text .date3hei  '字高'            at xmax.date3pos+2  ymin.date3pos      tagwidth 10 width 5 is string 
+			button .closeinfo '關閉' at xmin.date3pos ymax.date3pos+0.5 width 12 call '!This.Close()'
 		exit
 		frame .fra 'Keyplan'
 			text .keyovertext 'Keyplan 底圖' tagwidth 22 width 27 is string
@@ -125,6 +136,7 @@ layout form !!DrawingPlan1 dialog dock
 			text .keytext3 'N' at xmax.keytext2+2 ymin.keytext2 width 11 is string 
 			text .keytext4 'Keyplan 比例'   tagwidth 22 at xmin.keytext2 ymax.keytext2+0.1 width 27 is string
 			text .keytext5 'Keyplan Y 軸朝向'   tagwidth 22 at xmin.keytext2 ymax.keytext4+0.1 width 27 is string
+			button .closekey '關閉' at xmin.keytext5 ymax.keytext5+0.5 width 12 call '!This.Close()'
 		exit
 		frame .northarrow '指北針'
 			text .northtext '指北針符號' tagwidth 22 width 27 is string
@@ -133,6 +145,7 @@ layout form !!DrawingPlan1 dialog dock
 			text .northsca '縮放比例' tagwidth 22 at xmin.northtext ymax.northtext+0.1 width 27 is real
 			text .northpostext '位置' tagwidth 22 at xmin.northsca ymax.northsca+0.1 width 27 is string
 			button .northposbutn '點選' at xmax.northpostext+0.4 ymin.northpostext width 5 call |!This.northarrowpick()|
+			button .closenorth '關閉' at xmin.northpostext ymax.northpostext+0.5 width 12 call '!This.Close()'
 		exit
 		frame .flowarrow '流向箭頭'
 			---------------------------------------------------------------------
@@ -144,12 +157,14 @@ layout form !!DrawingPlan1 dialog dock
 			button .flowbutn 'CE' at xmax.flowtext+0.4 ymin.flowtext width 5 call |!This.typepick('SYTM', 'flowtext')|
 			paragraph .flowpara at xmax.flowbutn+0.5 ymin.flowbutn+0.1 text 'SYTM'
 			text .flowsca '縮放比例' tagwidth 22 at xmin.flowtext ymax.flowtext+0.1 width 27 is real
+			button .closeflow '關閉' at xmin.flowsca ymax.flowsca+0.5 width 12 call '!This.Close()'
 		exit
 		frame .gridframe '柱位線'
 			text .griddist '距離'        tagwidth 10 width 6 is real
 			text .gridgap  '間隙'        tagwidth 10 at xmin.griddist ymax.griddist+0.1 width 6 is real
 			text .gridhei  '字高'        tagwidth 10 at xmin.gridgap  ymax.gridgap+0.1  width 6 is real
 			text .griddia  '圓圈直徑'    tagwidth 10 at xmin.gridhei  ymax.gridhei+0.1  width 6 is real
+			button .closegrid '關閉' at xmin.griddia ymax.griddia+0.5 width 12 call '!This.Close()'
 --			para .sketch at xmax.griddist+2 ymin.griddist pixmap width 5 height 5
 		exit
 		frame .anno '標註'
@@ -216,15 +231,9 @@ layout form !!DrawingPlan1 dialog dock
 				toggle .redutog '建立標籤' tagwidth 10
 				paragraph .redupara at xmax.redutog+35 ymin.redutog text ' '
 			exit
+			button .closeanno '關閉' at xmin.reduframe ymax.reduframe+0.5 width 12 call '!This.Close()'
 		exit
 	exit
-	--------------------------------------------------------------------
-	-- closes the whole form. under the tabs, so every tab has it      --
-	-- (user, 2026-10-02) -- the way DrawingPlan does it. it sat beside --
-	-- Annotate Views on the Drawing tab before (2026-09-27), and after --
-	-- Create Drawings before that                                      --
-	--------------------------------------------------------------------
-	button .Cancel '關閉' at xmin.tabset ymax.tabset+0.3 width 12 call '!This.Close()'
 	
 	member .vsca is real
   member .viewULsh is string
