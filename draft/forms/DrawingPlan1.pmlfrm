@@ -75,13 +75,18 @@ layout form !!DrawingPlan1 dialog dock
 			exit
 		exit
 		frame .viewframe 'View 設定' width 40
-			text .frametext 'Backing Sheet' tagwidth 20 width 30 is string 
+			--------------------------------------------------------------
+			-- tagwidth / width: the fields start right after the longest  --
+			-- name on the tab, their right ends where they were (user,    --
+			-- 2026-10-02, as on Keyplan)                                  --
+			--------------------------------------------------------------
+			text .frametext 'Backing Sheet' tagwidth 15 width 35 is string 
 			button .framebutn 'CE' at xmax.frametext+0.4 ymin.frametext width 5 call |!This.typepick('BACK', 'frametext')|
 			paragraph .framepara at xmax.framebutn+0.5 ymin.framebutn+0.1 text 'BACK'
-			text .rrsftext 'Representation Style' at xmin.frametext ymax.frametext+0.1 tagwidth 20 width 30 is string 
+			text .rrsftext 'Representation Style' at xmin.frametext ymax.frametext+0.1 tagwidth 15 width 35 is string 
 			button .rrsfbutn 'CE' at xmax.rrsftext+0.4 ymin.rrsftext width 5 call |!This.typepick('RRST', 'rrsftext')|
 			paragraph .rrsfpara at xmax.rrsfbutn+0.5 ymin.rrsfbutn+0.1 text 'RRST'
-			text .hrsftext 'Hatching Style' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 20 width 30 is string
+			text .hrsftext 'Hatching Style' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 15 width 35 is string
 			button .hrsfbutn 'CE' at xmax.hrsftext+0.4 ymin.hrsftext width 5 call |!This.typepick('HRST', 'hrsftext')|
 			paragraph .hrsfpara at xmax.hrsfbutn+0.5 ymin.hrsfbutn+0.1 text 'HRST'
 			button .palibybutn '匯入 PA-LIBY' at xmin.hrsftext ymax.hrsftext+0.1 width 15 call |!This.ImportPaLiby()|
@@ -165,11 +170,16 @@ layout form !!DrawingPlan1 dialog dock
 			button .closekey '關閉' at xmax.applykey+0.8 ymin.applykey width 12 call '!This.Close()'
 		exit
 		frame .northarrow '指北針'
-			text .northtext '指北針符號' tagwidth 22 width 27 is string
+			--------------------------------------------------------------
+			-- tagwidth / width: the fields start right after the longest  --
+			-- name on the tab, their right ends where they were (user,    --
+			-- 2026-10-02, as on Keyplan)                                  --
+			--------------------------------------------------------------
+			text .northtext '指北針符號' tagwidth 8 width 41 is string
 			button .northbutn 'CE' at xmax.northtext+0.4 ymin.northtext width 5 call |!This.typepick('SYTM', 'northtext')|
 			paragraph .northpara at xmax.northbutn+0.5 ymin.northbutn+0.1 text 'SYTM'
-			text .northsca '縮放比例' tagwidth 22 at xmin.northtext ymax.northtext+0.1 width 27 is real
-			text .northpostext '位置' tagwidth 22 at xmin.northsca ymax.northsca+0.1 width 27 is string
+			text .northsca '縮放比例' tagwidth 8 at xmin.northtext ymax.northtext+0.1 width 41 is real
+			text .northpostext '位置' tagwidth 8 at xmin.northsca ymax.northsca+0.1 width 41 is string
 			button .northposbutn '點選' at xmax.northpostext+0.4 ymin.northpostext width 5 call |!This.northarrowpick()|
 			button .applynorth '建立圖面' at xmin.northpostext ymax.northpostext+0.5 width 12 call '!This.Apply()'
 			button .closenorth '關閉' at xmax.applynorth+0.8 ymin.applynorth width 12 call '!This.Close()'
@@ -180,10 +190,15 @@ layout form !!DrawingPlan1 dialog dock
 			-- button goes through .typepick(), so the field only ever takes a  --
 			-- SYTM and says so instead of accepting whatever CE happens to be  --
 			---------------------------------------------------------------------
-			text .flowtext '流向箭頭符號' tagwidth 22 width 27 is string
+			--------------------------------------------------------------
+			-- tagwidth / width: the fields start right after the longest  --
+			-- name on the tab, their right ends where they were (user,    --
+			-- 2026-10-02, as on Keyplan)                                  --
+			--------------------------------------------------------------
+			text .flowtext '流向箭頭符號' tagwidth 10 width 39 is string
 			button .flowbutn 'CE' at xmax.flowtext+0.4 ymin.flowtext width 5 call |!This.typepick('SYTM', 'flowtext')|
 			paragraph .flowpara at xmax.flowbutn+0.5 ymin.flowbutn+0.1 text 'SYTM'
-			text .flowsca '縮放比例' tagwidth 22 at xmin.flowtext ymax.flowtext+0.1 width 27 is real
+			text .flowsca '縮放比例' tagwidth 10 at xmin.flowtext ymax.flowtext+0.1 width 39 is real
 			button .applyflow '建立圖面' at xmin.flowsca ymax.flowsca+0.5 width 12 call '!This.Apply()'
 			button .closeflow '關閉' at xmax.applyflow+0.8 ymin.applyflow width 12 call '!This.Close()'
 		exit
@@ -205,10 +220,15 @@ layout form !!DrawingPlan1 dialog dock
 			-- broad 'Text Height' to what it actually drives -- the     --
 			-- five component label layers and the support symbol        --
 			--------------------------------------------------------------
-			text .annotext  '元件標籤字高'           tagwidth 22 width 6 is string
-			text .lineheitx '管線號字高'             tagwidth 22 at xmin.annotext ymax.annotext+0.1 width 6 is real
-			text .equiheitx '設備名稱字高'           tagwidth 22 at xmin.lineheitx ymax.lineheitx+0.1 width 6 is real
-			text .dimheitx  '尺寸字高'               tagwidth 22 at xmin.equiheitx ymax.equiheitx+0.1 width 6 is real
+			--------------------------------------------------------------
+			-- tagwidth / width: the fields start right after the longest  --
+			-- name on the tab, their right ends where they were (user,    --
+			-- 2026-10-02, as on Keyplan)                                  --
+			--------------------------------------------------------------
+			text .annotext  '元件標籤字高'           tagwidth 11 width 17 is string
+			text .lineheitx '管線號字高'             tagwidth 11 at xmin.annotext ymax.annotext+0.1 width 17 is real
+			text .equiheitx '設備名稱字高'           tagwidth 11 at xmin.lineheitx ymax.lineheitx+0.1 width 17 is real
+			text .dimheitx  '尺寸字高'               tagwidth 11 at xmin.equiheitx ymax.equiheitx+0.1 width 17 is real
 			--------------------------------------------------------------
 			-- the match line text used to read .dwgnohei -- the Dwg.No.  --
 			-- height on the BorderText tab -- so changing the drawing    --
@@ -217,13 +237,13 @@ layout form !!DrawingPlan1 dialog dock
 			-- real, because the call sites pass it straight through as   --
 			-- cheitx |<val>| the way .dwgnohei always did                --
 			--------------------------------------------------------------
-			text .matchhei  'Match Line 字高'        tagwidth 22 at xmin.dimheitx ymax.dimheitx+0.1 width 6 is string
+			text .matchhei  'Match Line 字高'        tagwidth 11 at xmin.dimheitx ymax.dimheitx+0.1 width 17 is string
 			toggle .autoplace '自動安排標籤位置' tagwidth 18 at xmin.annotext ymax.matchhei+0.1
 			frame .instframe '儀表' at xmin.annotext ymax.autoplace+0.1
 				toggle .insttog  '建立標籤' tagwidth 10
-				text .insttext1 'Rule'        tagwidth 12 at xmin.insttog ymax.insttog+0.1 width 40 is string
-				text .insttext2 'Format'      tagwidth 12 at xmin.insttog ymax.insttext1+0.1 width 40 is string
-				text .insttext3 '圓圈直徑'    tagwidth 12 at xmin.insttog ymax.insttext2+0.1 width 40 is real
+				text .insttext1 'Rule'        tagwidth 7 at xmin.insttog ymax.insttog+0.1 width 45 is string
+				text .insttext2 'Format'      tagwidth 7 at xmin.insttog ymax.insttext1+0.1 width 45 is string
+				text .insttext3 '圓圈直徑'    tagwidth 7 at xmin.insttog ymax.insttext2+0.1 width 45 is real
 	$(		-- for template reference	
 				button .instbutn 'CE' at xmax.insttext2+0.4 ymin.insttext2 width 5 call |!This.typepick('SYTM', 'insttext2')|
 				paragraph .instpara at xmax.instbutn+0.5 ymin.instbutn+0.1 text 'SYTM'
@@ -231,13 +251,13 @@ layout form !!DrawingPlan1 dialog dock
 			exit
 			frame .nozzframe '管嘴' at xmin.annotext ymax.instframe+0.1
 				toggle .nozztog  '建立標籤' tagwidth 10
-				text .nozztext1 'Rule'        tagwidth 12 at xmin.nozztog ymax.nozztog+0.1  width 40 is string
-				text .nozztext2 'Format'      tagwidth 12 at xmin.nozztog ymax.nozztext1+0.1 width 40 is string
+				text .nozztext1 'Rule'        tagwidth 7 at xmin.nozztog ymax.nozztog+0.1  width 45 is string
+				text .nozztext2 'Format'      tagwidth 7 at xmin.nozztog ymax.nozztext1+0.1 width 45 is string
 			exit
 			frame .valvframe '閥' at xmin.annotext ymax.nozzframe+0.1
 				toggle .valvtog  '建立標籤' tagwidth 10
-				text .valvtext1 'Rule'        tagwidth 12 at xmin.valvtog ymax.valvtog+0.1 width 40 is string
-				text .valvtext2 'Format'      tagwidth 12 at xmin.valvtog ymax.valvtext1+0.1 width 40 is string
+				text .valvtext1 'Rule'        tagwidth 7 at xmin.valvtog ymax.valvtog+0.1 width 45 is string
+				text .valvtext2 'Format'      tagwidth 7 at xmin.valvtog ymax.valvtext1+0.1 width 45 is string
 			exit
 			frame .suptframe '管支撐' at xmin.annotext ymax.valvframe+0.1
 				toggle .supttog  '建立標籤' tagwidth 10
@@ -253,8 +273,8 @@ layout form !!DrawingPlan1 dialog dock
 			toggle .uvmatch '畫 Match Line（只影響標註 VIEW）' tagwidth 33 at xmin.annotext ymax.suptframe+0.1
 			frame .userframe '自訂' at xmin.annotext ymax.uvmatch+0.1
 				toggle .usertog '建立標籤' tagwidth 10
-				text .usertext1 'Rule'   tagwidth 12 at xmin.usertog ymax.usertog+0.1 width 40 is string
-				text .usertext2 'Format' tagwidth 12 at xmin.usertog ymax.usertext1+0.1 width 40 is string
+				text .usertext1 'Rule'   tagwidth 7 at xmin.usertog ymax.usertog+0.1 width 45 is string
+				text .usertext2 'Format' tagwidth 7 at xmin.usertog ymax.usertext1+0.1 width 45 is string
 			exit
 			frame .reduframe '異徑管／異徑三通' at xmin.annotext ymax.userframe+0.1
 				toggle .redutog '建立標籤' tagwidth 10
