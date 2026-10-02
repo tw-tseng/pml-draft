@@ -47,7 +47,7 @@ layout form !!DrawingPlan1 dialog dock
 			frame .uvframe '自建的 VIEW' at xmin.hiera ymax.hiera+0.5
 				----------------------------------------------------------
 				-- 4.7: the bottom of the list level with the bottom of   --
-				-- 全部移除, so 標註 VIEW / 關閉 sit right under both     --
+				-- 全部移除, so 標註 VIEW sits right under both           --
 				-- (user, 2026-10-02; 6 left a gap below the buttons)     --
 				----------------------------------------------------------
 				list .uvlist 'VIEW 清單' multiple width 36 height 4.7
@@ -55,13 +55,6 @@ layout form !!DrawingPlan1 dialog dock
 				button .uvrem '移除 CE'    at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
 				button .uvall '全部移除'   at xmin.uvadd ymax.uvrem+0.3 width 12 call '!This.UvRemoveAll()'
 				button .uvgo '標註 VIEW' at xmin.uvlist ymax.uvlist+0.3 width 23 call '!This.AnnotateViews()'
-				----------------------------------------------------------
-				-- closes the whole form. beside Annotate Views, in the   --
-				-- column of Add CE / Remove / Remove All (user,          --
-				-- 2026-09-27); it used to sit after Create Drawings, and --
-				-- went missing there once this frame was added           --
-				----------------------------------------------------------
-				button .Cancel '關閉' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
 				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
 			exit
 		exit
@@ -69,23 +62,23 @@ layout form !!DrawingPlan1 dialog dock
 			text .frametext 'Backing Sheet' tagwidth 20 width 30 is string 
 			button .framebutn 'CE' at xmax.frametext+0.4 ymin.frametext width 5 call |!This.typepick('BACK', 'frametext')|
 			paragraph .framepara at xmax.framebutn+0.5 ymin.framebutn+0.1 text 'BACK'
-			text .rrsftext 'Representation 樣式' at xmin.frametext ymax.frametext+0.1 tagwidth 20 width 30 is string 
+			text .rrsftext 'Representation Style' at xmin.frametext ymax.frametext+0.1 tagwidth 20 width 30 is string 
 			button .rrsfbutn 'CE' at xmax.rrsftext+0.4 ymin.rrsftext width 5 call |!This.typepick('RRST', 'rrsftext')|
 			paragraph .rrsfpara at xmax.rrsfbutn+0.5 ymin.rrsfbutn+0.1 text 'RRST'
-			text .hrsftext 'Hatching 樣式' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 20 width 30 is string
+			text .hrsftext 'Hatching Style' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 20 width 30 is string
 			button .hrsfbutn 'CE' at xmax.hrsftext+0.4 ymin.hrsftext width 5 call |!This.typepick('HRST', 'hrsftext')|
 			paragraph .hrsfpara at xmax.hrsfbutn+0.5 ymin.hrsfbutn+0.1 text 'HRST'
 			button .palibybutn '匯入 PA-LIBY' at xmin.hrsftext ymax.hrsftext+0.1 width 15 call |!This.ImportPaLiby()|
-			list .excllist '不畫進 View 的元件' at xmin.hrsftext ymax.palibybutn+0.2 multiple width 34 height 4
+			list .excllist 'Exclusion List' at xmin.hrsftext ymax.palibybutn+0.2 multiple width 34 height 4
 			-- +0.75 drops the three buttons clear of the list's own tag row, so that
 			-- Add CE lines up with the top of the list box and not with the label
 			button .excladdbutn '加入 CE'    at xmax.excllist+0.5 ymin.excllist+0.75  width 12 call '!This.ExclAddCe()'
 			button .exclrembutn '移除 CE'    at xmin.excladdbutn  ymax.excladdbutn+0.3 width 12 call '!This.ExclRemoveCe()'
 			button .exclallbutn '全部移除'   at xmin.excladdbutn  ymax.exclrembutn+0.3 width 12 call '!This.ExclRemoveAll()'
-			option .scaleopt '出圖比例' at xmin.excllist ymax.excllist+0.3 tagwidth 20 width 10
+			option .scaleopt '出圖比例' at xmin.excllist ymax.excllist+0.3 tagwidth 9 width 10
 			text .scaletext '自訂比例' at xmax.scaleopt+1 ymin.scaleopt tagwidth 11 width 10 is string
 			toggle .portrait '直式框轉橫式' tagwidth 14 at xmin.frametext ymax.scaletext+0.2
-			button .canvas  '點選畫布範圍' at xmin.portrait ymax.portrait+0.1 width 15 call |!This.canvaspick()|
+			button .canvas  'Pick Canvas Size' at xmin.portrait ymax.portrait+0.1 width 15 call |!This.canvaspick()|
 			paragraph .canvasp at xmax.canvas+1 ymin.canvas text '未點選，用預設範圍' width 25
 			toggle .openshee '完成後開啟 SHEE' tagwidth 16 at xmin.canvas ymax.canvas+0.1
 			toggle .delshee  '覆蓋已有的 DRWG' tagwidth 16 at xmin.openshee ymax.openshee+0.1
@@ -225,6 +218,13 @@ layout form !!DrawingPlan1 dialog dock
 			exit
 		exit
 	exit
+	--------------------------------------------------------------------
+	-- closes the whole form. under the tabs, so every tab has it      --
+	-- (user, 2026-10-02) -- the way DrawingPlan does it. it sat beside --
+	-- Annotate Views on the Drawing tab before (2026-09-27), and after --
+	-- Create Drawings before that                                      --
+	--------------------------------------------------------------------
+	button .Cancel '關閉' at xmin.tabset ymax.tabset+0.3 width 12 call '!This.Close()'
 	
 	member .vsca is real
   member .viewULsh is string
@@ -7802,7 +7802,7 @@ define method .Save()
 	!browser.show('c:\temp\', |$!login_$!projid|, 'Filename', false ,' text files (*.txt)|*.txt' , 2)
 	!file = !browser.file()
 	if (!file neq '') then
-		if (not(!this.WriteSettings(!file, true))) then
+		if (not(!this.WriteSettings(!file))) then
 			!!alert.error('Could not write ' & !file)
 		endif
 	endif
@@ -7810,14 +7810,12 @@ endmethod
 
 ------------------------------------------------------------------------
 -- every setting on the form into !file, one 'field=value' a line, as  --
--- .ReadSettings() reads it back. !withjob false leaves out what       --
--- belongs to one job rather than to how the drawings look -- the In   --
--- Use boxes, Destination (a raw ref, dead in another project) and the --
--- Exclude list, which as a default would quietly leave the same       --
--- elements out of every later drawing -- for the default file         --
--- (.SetDefault(), 2026-10-02). false when the file cannot be written  --
+-- .ReadSettings() reads it back -- 儲存設定 and 設為預設值 alike. the  --
+-- In Use boxes, Destination and the Exclusion List go into the       --
+-- default too (user, 2026-10-02). false when the file cannot be       --
+-- written                                                             --
 ------------------------------------------------------------------------
-define method .WriteSettings(!file is string, !withjob is boolean) is boolean
+define method .WriteSettings(!file is string) is boolean
 	!ff = object file(!file)
 	!opened = true
 	!ff.open('overwrite')
@@ -7827,24 +7825,22 @@ define method .WriteSettings(!file is string, !withjob is boolean) is boolean
 	if (not(!opened)) then
 		return false
 	endif
-	if (!withjob) then
-		---------------------------------------------------------------------
-		-- 'In Use' box list (Drawing tab) is an array, not a plain .val -- --
-		-- join it into one comma separated, pipe quoted line; .Load()     --
-		-- rebuilds the array from it instead of the generic $!option =    --
-		-- $!val used for every other (scalar) field below                --
-		---------------------------------------------------------------------
-		!filestr = ''
-		do !f values !this.files.dtext
-			if (!filestr.eq('')) then
-				!filestr = !f
-			else
-				!filestr = !filestr & ',' & !f
-			endif
-		enddo
-		!ff.writerecord('!this.files.dtext' & '=|' & !filestr & '|')
-		!ff.writerecord('!this.dest.val' & '=|' & !this.dest.val & '|')
-	endif
+	---------------------------------------------------------------------
+	-- 'In Use' box list (Drawing tab) is an array, not a plain .val -- --
+	-- join it into one comma separated, pipe quoted line; .Load()     --
+	-- rebuilds the array from it instead of the generic $!option =    --
+	-- $!val used for every other (scalar) field below                --
+	---------------------------------------------------------------------
+	!filestr = ''
+	do !f values !this.files.dtext
+		if (!filestr.eq('')) then
+			!filestr = !f
+		else
+			!filestr = !filestr & ',' & !f
+		endif
+	enddo
+	!ff.writerecord('!this.files.dtext' & '=|' & !filestr & '|')
+	!ff.writerecord('!this.dest.val' & '=|' & !this.dest.val & '|')
 	!ff.writerecord('!this.portrait.val' & '=' & !this.portrait.val)
 	!ff.writerecord('!this.canvasp.val' & '=|' & !this.canvasp.val & '|')
 	!ff.writerecord('!this.openshee.val' & '=' & !this.openshee.val)
@@ -7854,18 +7850,16 @@ define method .WriteSettings(!file is string, !withjob is boolean) is boolean
 	!ff.writerecord('!this.hrsftext.val' & '=|' & !this.hrsftext.val & '|')
 	!ff.writerecord('!this.scaleopt.selection()' & '=|' & !this.scaleopt.selection('RTEXT') & '|')
 	!ff.writerecord('!this.scaletext.val' & '=|' & !this.scaletext.val & '|')
-	if (!withjob) then
-		-- the exclude list is an array, joined the same way as the box list above --
-		!exclstr = ''
-		do !e values !this.excllist.dtext
-			if (!exclstr.eq('')) then
-				!exclstr = !e
-			else
-				!exclstr = !exclstr & ',' & !e
-			endif
-		enddo
-		!ff.writerecord('!this.excllist.dtext' & '=|' & !exclstr & '|')
-	endif
+	-- the exclude list is an array, joined the same way as the box list above --
+	!exclstr = ''
+	do !e values !this.excllist.dtext
+		if (!exclstr.eq('')) then
+			!exclstr = !e
+		else
+			!exclstr = !exclstr & ',' & !e
+		endif
+	enddo
+	!ff.writerecord('!this.excllist.dtext' & '=|' & !exclstr & '|')
 	!ff.writerecord('!this.dwgnopos.val' & '=|' & !this.dwgnopos.val & '|')
 	!ff.writerecord('!this.dwgnohei.val' & '=|' & !this.dwgnohei.val & '|')
 	!ff.writerecord('!this.scalepos.val' & '=|' & !this.scalepos.val & '|')
@@ -8201,8 +8195,7 @@ endmethod
 -- 設為預設值 (user, 2026-10-02): the settings on the form now, into a  --
 -- file in the user's own AVEVA_DESIGN_USER folder (.blankdir), which   --
 -- the constructor reads back, over the built in defaults, every time  --
--- the form is loaded. the job's own lists stay out of it, see         --
--- .WriteSettings(). deleting the file brings the built in ones back   --
+-- the form is loaded. deleting the file brings the built in ones back --
 ------------------------------------------------------------------------
 define method .DefaultFile() is string
 	return !this.blankdir & 'DrawingPlan1Default.txt'
@@ -8210,7 +8203,7 @@ endmethod
 
 define method .SetDefault()
 	!file = !this.DefaultFile()
-	if (!this.WriteSettings(!file, false)) then
+	if (!this.WriteSettings(!file)) then
 		!this.defresult.val = '已設為預設值，下次開啟表單時套用'
 	else
 		!this.defresult.val = '寫不進預設值檔 ' & !file
