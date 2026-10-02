@@ -109,29 +109,29 @@ layout form !!DrawingPlan1 dialog dock
 
 		exit
 		frame .info '圖框文字' width 40
-			text .dwgnopos  '圖號位置'                                               tagwidth 15 width 10 is string
+			text .dwgnopos  'Dwg.No.'                                                tagwidth 15 width 10 is string
 			text .dwgnohei  '字高'            at xmax.dwgnopos+2  ymin.dwgnopos      tagwidth 10 width 5 is string
-			text .scalepos  '比例位置'        at xmin.dwgnopos    ymax.dwgnopos      tagwidth 15 width 10 is string
+			text .scalepos  'Scale'           at xmin.dwgnopos    ymax.dwgnopos      tagwidth 15 width 10 is string
 			text .scalehei  '字高'            at xmax.scalepos+2  ymin.scalepos      tagwidth 10 width 5 is string
-			text .revpos    '版次位置'        at xmin.dwgnopos    ymax.scalepos      tagwidth 15 width 10 is string
+			text .revpos    'Rev'             at xmin.dwgnopos    ymax.scalepos      tagwidth 15 width 10 is string
 			text .revhei    '字高'            at xmax.revpos+2    ymin.revpos        tagwidth 10 width 5 is string
-			text .title1pos '標題1 位置'      at xmin.revpos      ymax.revpos+0.2    tagwidth 15 width 10 is string 
+			text .title1pos 'Title1'          at xmin.revpos      ymax.revpos+0.2    tagwidth 15 width 10 is string 
 			text .title1hei '字高'            at xmax.title1pos+2 ymin.title1pos     tagwidth 10 width 5 is string 
-			text .title2pos '標題2 位置'      at xmin.revpos      ymax.title1pos+0.2 tagwidth 15 width 10 is string 
+			text .title2pos 'Title2'          at xmin.revpos      ymax.title1pos+0.2 tagwidth 15 width 10 is string 
 			text .title2hei '字高'            at xmax.title2pos+2 ymin.title2pos     tagwidth 10 width 5 is string 
-			text .title3pos '標題3 位置'      at xmin.revpos      ymax.title2pos+0.2 tagwidth 15 width 10 is string 
+			text .title3pos 'Title3'          at xmin.revpos      ymax.title2pos+0.2 tagwidth 15 width 10 is string 
 			text .title3hei '字高'            at xmax.title3pos+2 ymin.title3pos     tagwidth 10 width 5 is string 
-			text .name1pos  '姓名1 位置'      at xmin.revpos      ymax.title3pos+0.2 tagwidth 15 width 10 is string 
+			text .name1pos  'Name1'           at xmin.revpos      ymax.title3pos+0.2 tagwidth 15 width 10 is string 
 			text .name1hei  '字高'            at xmax.name1pos+2  ymin.name1pos      tagwidth 10 width 5 is string 
-			text .name2pos  '姓名2 位置'      at xmin.revpos      ymax.name1pos+0.2  tagwidth 15 width 10 is string 
+			text .name2pos  'Name2'           at xmin.revpos      ymax.name1pos+0.2  tagwidth 15 width 10 is string 
 			text .name2hei  '字高'            at xmax.name2pos+2  ymin.name2pos      tagwidth 10 width 5 is string 
-			text .name3pos  '姓名3 位置'      at xmin.revpos      ymax.name2pos+0.2  tagwidth 15 width 10 is string 
+			text .name3pos  'Name3'           at xmin.revpos      ymax.name2pos+0.2  tagwidth 15 width 10 is string 
 			text .name3hei  '字高'            at xmax.name3pos+2  ymin.name3pos      tagwidth 10 width 5 is string 
-			text .date1pos  '日期1 位置'      at xmin.revpos      ymax.name3pos+0.2  tagwidth 15 width 10 is string 
+			text .date1pos  'Date1'           at xmin.revpos      ymax.name3pos+0.2  tagwidth 15 width 10 is string 
 			text .date1hei  '字高'            at xmax.date1pos+2  ymin.date1pos      tagwidth 10 width 5 is string 
-			text .date2pos  '日期2 位置'      at xmin.revpos      ymax.date1pos+0.2  tagwidth 15 width 10 is string 
+			text .date2pos  'Date2'           at xmin.revpos      ymax.date1pos+0.2  tagwidth 15 width 10 is string 
 			text .date2hei  '字高'            at xmax.date2pos+2  ymin.date2pos      tagwidth 10 width 5 is string 
-			text .date3pos  '日期3 位置'      at xmin.revpos      ymax.date2pos+0.2  tagwidth 15 width 10 is string 
+			text .date3pos  'Date3'           at xmin.revpos      ymax.date2pos+0.2  tagwidth 15 width 10 is string 
 			text .date3hei  '字高'            at xmax.date3pos+2  ymin.date3pos      tagwidth 10 width 5 is string 
 			button .applyinfo '建立圖面' at xmin.date3pos ymax.date3pos+0.5 width 12 call '!This.Apply()'
 			button .closeinfo '關閉' at xmax.applyinfo+0.8 ymin.applyinfo width 12 call '!This.Close()'
