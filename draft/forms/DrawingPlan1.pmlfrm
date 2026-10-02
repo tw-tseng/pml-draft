@@ -5702,7 +5702,7 @@ define method .PinnedLabelRecords(!name is string, !rcode is string) is array
 			endif
 			var !exbtext exbtext
 			!h   = !chei.replace('mm', '').real() + 0.5
-			!w   = !exbtext.length() * !h * 0.65  $( 0.65 is text width factor $)
+			!w   = !exbtext.length() * !chei.replace('mm', '').real() * 0.625  $( font 1 is 0.625 x the text height per character, measured 2026-09-25 (see TitleWidth). no margin: BlankPos packs the box tight, so a wider box only pushes labels away $)
 			!typ = 'box'
 			-- nozzles and valves may turn, as when they were made --
 			if (!kind.eq('NOZZ') or !kind.eq('VALV')) then
@@ -7592,7 +7592,7 @@ define method .NozzleAnnotation(!name is string)
 			endif
 			var !exbtext exbtext
 			!height = !chei.replace('mm', '').real() + 0.5
-			!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
+			!width = !exbtext.length() * !chei.replace('mm', '').real() * 0.625  $( font 1 is 0.625 x the text height per character, measured 2026-09-25 (see TitleWidth). no margin: BlankPos packs the box tight, so a wider box only pushes labels away $)
 			if (!width.gt(!nzmaxw)) then
 				!nzmaxw = !width
 			endif
@@ -8299,7 +8299,7 @@ define method .ValveAnnotation(!name is string)
 		endif
 		var !exbtext exbtext
 		!height = !chei.replace('mm', '').real() + 0.5
-		!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
+		!width = !exbtext.length() * !chei.replace('mm', '').real() * 0.625  $( font 1 is 0.625 x the text height per character, measured 2026-09-25 (see TitleWidth). no margin: BlankPos packs the box tight, so a wider box only pushes labels away $)
 		
 		------------------------------------------------------------------
 		-- boxr: BlankPos may stand the label on end when that gets it  --
@@ -8416,7 +8416,7 @@ define method .ReduAnnotation(!name is string)
 				endif
 				var !exbtext exbtext
 				!height = !chei.replace('mm', '').real() + 0.5
-				!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
+				!width = !exbtext.length() * !chei.replace('mm', '').real() * 0.625  $( font 1 is 0.625 x the text height per character, measured 2026-09-25 (see TitleWidth). no margin: BlankPos packs the box tight, so a wider box only pushes labels away $)
 				
 				!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
 

@@ -51,7 +51,9 @@ def log(msg):
 
 CHECK_REGION = box(50, 80, 660, 550)
 TEXT_WIDTH_RATIO = 0.65
-SAFE_GAP = 1
+# 框外圍的留白(mm)。0:使用者 2026-10-02「留白不要,免得不好找位置」——
+# PML 送來的寬度已經是實際字寬(字數 x 字高 x 0.625),高是字高 + 0.5
+SAFE_GAP = 0
 MAX_BLOCK_DEPTH = 3  # 炸開層數
 
 # 搜尋參數（可調）
@@ -919,7 +921,7 @@ def leader_conflict_count(leader, cand, existing_leaders, existing_labels):
 # === Find blank area with leader check (跳過 0,90,180,270) ===
 def _scan_ring(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type, radius,
                existing_leaders, existing_labels, check_leader, region, old_pos=None,
-               leader_text=False):
+               leader_text=False, rtest=None):
     """掃一圈:同一個半徑上,兩個方向的所有角度。回傳這一圈找到的候選。
 
     old_pos 只有重放被撞到的 pinned 標籤時才給:分數多加離它的距離乘
@@ -941,9 +943,18 @@ def _scan_ring(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type, ra
                     continue
             elif abs(x - cx) < cw / 2.0 + ANCHOR_CLEAR and abs(y - cy) < ch / 2.0 + ANCHOR_CLEAR:
                 continue
-            cand = candidate_geom(x, y, cw, ch, shape_type)
-            if region is not None and not region.contains(cand):
-                continue
+            # 先用數字判斷在不在範圍裡,過了才建 shapely 的框 —— 建框是整個搜尋
+            # 最貴的一步,而 box 外那圈的搜尋大部分候選都落在 box 內(2026-10-02,
+            # 加了再調整一輪之後時間變三倍才去量的)。結果跟 region.contains() 相同
+            if rtest is not None and shape_type.lower() != "circle":
+                if not rtest(x - cw/2.0 - SAFE_GAP, y - ch/2.0 - SAFE_GAP,
+                             x + cw/2.0 + SAFE_GAP, y + ch/2.0 + SAFE_GAP):
+                    continue
+                cand = candidate_geom(x, y, cw, ch, shape_type)
+            else:
+                cand = candidate_geom(x, y, cw, ch, shape_type)
+                if region is not None and not region.contains(cand):
+                    continue
             # 硬障礙(管線等)一碰就淘汰;軟障礙(尺寸線)只記下來加罰分,
             # 因為 PML 事後會用 GAP 把壓到的尺寸線斷開
             blocked = False
@@ -990,6 +1001,34 @@ def _scan_ring(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type, ra
     return found
 
 
+def _region_test(region):
+    """region 是矩形(box 內)或矩形挖掉矩形(box 外那圈)時,回傳一個
+    (x1, y1, x2, y2) -> bool,跟 region.contains(那個框) 結果相同;其他形狀回 None
+    (照舊用 shapely)。邊貼著邊算在裡面,跟 contains 一樣。"""
+    if region is None or region.geom_type != "Polygon":
+        return None
+    def rect_of(ring):
+        cs = list(ring.coords)
+        if len(cs) != 5:
+            return None
+        xs = sorted(set(c[0] for c in cs)); ys = sorted(set(c[1] for c in cs))
+        if len(xs) != 2 or len(ys) != 2:
+            return None
+        return xs[0], ys[0], xs[1], ys[1]
+    outer = rect_of(region.exterior)
+    if outer is None:
+        return None
+    ox1, oy1, ox2, oy2 = outer
+    holes = [rect_of(r) for r in region.interiors]
+    if any(h is None for h in holes) or len(holes) > 1:
+        return None
+    if not holes:
+        return lambda x1, y1, x2, y2: x1 >= ox1 and y1 >= oy1 and x2 <= ox2 and y2 <= oy2
+    hx1, hy1, hx2, hy2 = holes[0]
+    return lambda x1, y1, x2, y2: (x1 >= ox1 and y1 >= oy1 and x2 <= ox2 and y2 <= oy2
+                                   and not (x1 < hx2 and x2 > hx1 and y1 < hy2 and y2 > hy1))
+
+
 def _search(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
             existing_leaders, existing_labels, check_leader, region=None,
             max_radius=MAX_SEARCH_RADIUS, old_pos=None, leader_text=False):
@@ -1002,6 +1041,7 @@ def _search(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
     """
     best = None
     radius = 0.0
+    rtest = _region_test(region)
     while radius <= max_radius:
         # 容差是為了上面那點浮點雜訊:score 可能比 radius 小個 1e-9,
         # 沒有容差的話有機會早收一圈而漏掉真正最好的
@@ -1009,7 +1049,7 @@ def _search(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
             break
         for c in _scan_ring(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
                             radius, existing_leaders, existing_labels, check_leader, region, old_pos,
-                            leader_text):
+                            leader_text, rtest):
             if best is None or (c[0], c[1]) < (best[0], best[1]):
                 best = c
         radius += STEP_RADIUS
@@ -1017,10 +1057,12 @@ def _search(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
 
 
 def find_blank_area_with_leader(shapes_list, soft_flags, rtree_idx, cx, cy, w, h, shape_type, region,
-                                existing_leaders, existing_labels, old_pos=None):
+                                existing_leaders, existing_labels, old_pos=None, max_radius=None):
     """回傳 (候選框, 引線, 採用的寬, 採用的高, Adegrees)。
 
     old_pos:被撞到而重放的 pinned 標籤的舊中心,見 _scan_ring;新標籤是 None。
+    max_radius:只找這麼遠(再調整那一輪用,見 refine_pass);找不到回傳 None,
+    不走下面的分層、也不退回錨點。
 
     四層,由嚴到寬,前一層找不到才往下:
       1. matchline 矩形內 + 引線不跟既有標籤/引線衝突
@@ -1036,6 +1078,10 @@ def find_blank_area_with_leader(shapes_list, soft_flags, rtree_idx, cx, cy, w, h
     """
     tries = orientations_for(w, h, shape_type)
     inside_max = INSIDE_MAX_RADIUS if INSIDE_MAX_RADIUS is not None else MAX_SEARCH_RADIUS
+    near_max = NEAR_RADIUS
+    if max_radius is not None:
+        inside_max = min(inside_max, max_radius)
+        near_max = min(near_max, max_radius)
 
     # 近處先找,見 NEAR_RADIUS 的說明。每一邊先要引線不衝突的,找不到才放寬
     if region is not None:
@@ -1052,13 +1098,21 @@ def find_blank_area_with_leader(shapes_list, soft_flags, rtree_idx, cx, cy, w, h
                      inside_max, old_pos)
         bo = _search(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
                      existing_leaders, existing_labels, False, ring,
-                     NEAR_RADIUS, old_pos, leader_text=True)
+                     near_max, old_pos, leader_text=True)
         best = bi
         if bo is not None and (bi is None or bo[0] + OUTSIDE_PENALTY < bi[0]):
             best = bo
         if best is not None:
             _score, rot, cand, leader, cw, ch = best
             return cand, leader, cw, ch, rot
+    if max_radius is not None:
+        if region is None:
+            best = _search(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
+                           existing_leaders, existing_labels, False, None, max_radius, old_pos)
+            if best is not None:
+                _score, rot, cand, leader, cw, ch = best
+                return cand, leader, cw, ch, rot
+        return None, None, w, h, 0
 
     tiers = []
     if region is not None:
@@ -1077,6 +1131,142 @@ def find_blank_area_with_leader(shapes_list, soft_flags, rtree_idx, cx, cy, w, h
     # fallback:哪裡都塞不下就擺回錨點,不轉向
     cand = candidate_geom(cx, cy, w, h, shape_type)
     return cand, LineString([(cx, cy), (cx, cy)]), w, h, 0
+
+# === 再調整一輪(2026-10-02)===
+# 標籤是大的先放、放了就不動的貪婪法:先放的隨手佔掉別人唯一的近位,後放的只好
+# 拉很遠(重播:一排閥件標籤,193 的近位被 191 佔走,193 拉到 34mm)。所以全部
+# 放完後,分數最高(引線最長)的先,把它連同「框比它目前位置還靠近它錨點」的那幾個
+# 鄰居一起拿起來(從障礙裡移除),它先挑、鄰居照原本的順序再放一次,整組的分數
+# 總和(每個:距離 + 轉向 + 壓尺寸線 + 引線衝突 + box 外,跟搜尋同一個算法)比原
+# 來少 REFINE_MIN_GAIN 以上才採用,否則整組放回原位。只拿它自己一個重找通常沒用:
+# 近位還被鄰居佔著(同一份重播 0 個搬動)。
+# 一輪有人搬就再來一輪,最多 REFINE_PASSES 輪(重播:3 輪跟 1 輪結果相同,時間
+# 8 秒 -> 1 輪 19 秒 -> 3 輪 27 秒,所以只跑 1 輪);一個都沒搬時輸出跟沒有這段完全
+# 相同。分數不到 REFINE_MIN_SCORE 的不試(已經夠近)。pinned(更新路徑凍在紙上
+# 的、被撞到重放的)不參加、也不當鄰居被拿起來。REFINE_PASSES = 0 = 關掉。
+REFINE_PASSES = 1
+REFINE_MIN_GAIN = 1.0
+REFINE_MIN_SCORE = 10.0
+
+def _obstacles_except(placed, skip):
+    """拿掉 skip(一個標籤)與所有 absent 的標籤之後的標籤框與引線。引線是錨點
+    到框中心整條,扣掉落在別的標籤框裡的部分(跟 break_leader_at_intersections
+    同一套),所以 skip 原本蓋住的那幾截別人的引線會回來,新位置不會壓上去而不自知。"""
+    live = [p for p in placed if p is not skip and not p.get("absent")]
+    labels = [p["cand"] for p in live]
+    leaders = []
+    for p in live:
+        lb = p["leader"].bounds
+        others = [q["cand"] for q in live
+                  if q is not p
+                  and not (q["cand"].bounds[2] < lb[0] or q["cand"].bounds[0] > lb[2]
+                           or q["cand"].bounds[3] < lb[1] or q["cand"].bounds[1] > lb[3])]
+        segs = break_leader_at_intersections(p["leader"], [], others) if others else []
+        leaders.extend(segs or [p["leader"]])
+    return leaders, labels
+
+def _placed_score(ax, ay, cand, rot, all_shapes, soft_flags, rtree_idx, leaders, labels):
+    """一個已知位置的分數,跟 _scan_ring + find_blank_area_with_leader 同一個算法。"""
+    leader = LineString([(ax, ay), cand.centroid.coords[0]])
+    on_dim = False
+    for i in rtree_query_ids(rtree_idx, all_shapes, cand):
+        if soft_flags[i] and all_shapes[i].intersects(cand):
+            on_dim = True
+            break
+    s = (Point(ax, ay).distance(cand.centroid)
+         + (ROT_PENALTY if rot else 0.0)
+         + (DIM_PENALTY if on_dim else 0.0)
+         + LEADER_CONFLICT_PENALTY * leader_conflict_count(leader, cand, leaders, labels))
+    if INSIDE_REGION is not None and not INSIDE_REGION.contains(cand):
+        s += OUTSIDE_PENALTY
+    return s
+
+def _member_score(p, placed, all_shapes, soft_flags, rtree_idx):
+    """p 在目前位置的分數,障礙是其他所有在場的標籤(不含它自己)。"""
+    rtree_idx.delete(p["sid"], p["cand"].bounds)
+    leaders, labels = _obstacles_except(placed, p)
+    s = _placed_score(p["rec"]["ax"], p["rec"]["ay"], p["cand"], p["rot"],
+                      all_shapes, soft_flags, rtree_idx, leaders, labels)
+    rtree_idx.insert(p["sid"], p["cand"].bounds)
+    return s
+
+def refine_pass(placed, out_lines, all_shapes, soft_flags, rtree_idx, msp_b):
+    n_moved = 0
+    gained = 0.0
+    movable = [p for p in placed if not p["fixed"]]
+    for npass in range(REFINE_PASSES):
+        moved = 0
+        scored = [(_member_score(p, placed, all_shapes, soft_flags, rtree_idx), i, p)
+                  for i, p in enumerate(movable)]
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        for _s, _i, p in scored:
+            old_p = _member_score(p, placed, all_shapes, soft_flags, rtree_idx)
+            if old_p < REFINE_MIN_SCORE:
+                continue
+            anchor = Point(p["rec"]["ax"], p["rec"]["ay"])
+            reach = anchor.distance(p["cand"].centroid)
+            group = [p] + [q for q in movable
+                           if q is not p and q["cand"].distance(anchor) < reach]
+            old_total = sum(_member_score(q, placed, all_shapes, soft_flags, rtree_idx)
+                            for q in group)
+            saved = [(q, q["cand"], q["leader"], q["rot"], q["w"], q["h"]) for q in group]
+            for q in group:
+                rtree_idx.delete(q["sid"], q["cand"].bounds)
+                q["absent"] = True
+            # p 先挑,鄰居照原本放的順序。每個的分數至少是它的搜尋半徑,所以
+            # 每次只找到「剩下的額度」那麼遠;放到一半總分已經不可能比原來好
+            # (或某個找不到位置)就整組放棄 —— 不然被否決的組要花大部分時間
+            ok = True
+            budget = old_total - REFINE_MIN_GAIN
+            for q in group:
+                rec = q["rec"]
+                leaders, labels = _obstacles_except(placed, q)
+                cand, leader, cw, ch, rot = find_blank_area_with_leader(
+                    all_shapes, soft_flags, rtree_idx, rec["ax"], rec["ay"], rec["w"], rec["h"],
+                    rec["type"], INSIDE_REGION, leaders, labels, max_radius=max(budget, 0.0))
+                if cand is None:
+                    ok = False
+                    break
+                budget -= _placed_score(rec["ax"], rec["ay"], cand, rot, all_shapes, soft_flags,
+                                        rtree_idx, leaders, labels)
+                q.update(cand=cand, leader=leader, rot=rot, w=cw, h=ch, absent=False)
+                all_shapes[q["sid"]] = cand
+                rtree_idx.insert(q["sid"], cand.bounds)
+                if budget <= 0:
+                    ok = False
+                    break
+            new_total = sum(_member_score(q, placed, all_shapes, soft_flags, rtree_idx)
+                            for q in group) if ok else old_total
+            if ok and new_total < old_total - REFINE_MIN_GAIN:
+                changed = [t for t in saved if not t[0]["cand"].equals(t[1])]
+                log("refine %d: %s with %d neighbour(s), %.1f -> %.1f, moved %s"
+                    % (npass + 1, p["rec"]["ref"], len(group) - 1, old_total, new_total,
+                       " ".join(t[0]["rec"]["ref"] for t in changed)))
+                for t in changed:
+                    q = t[0]
+                    rec = q["rec"]
+                    cen = q["cand"].centroid
+                    out_lines[q["line"]] = (f"{rec['ref']} {cen.x:.3f} {cen.y:.3f} {rec['ax']} {rec['ay']} "
+                                            f"{q['w']} {q['h']} {rec['type']} {q['rot']}")
+                    try:
+                        minx, miny, maxx, maxy = q["cand"].bounds
+                        msp_b.add_lwpolyline([(minx, miny), (minx, maxy), (maxx, maxy), (maxx, miny)],
+                                             close=True, dxfattribs={"color": 5})
+                    except Exception:
+                        pass
+                moved += len(changed)
+                gained += old_total - new_total
+            else:
+                for (q, cand, leader, rot, w, h) in saved:
+                    if not q.get("absent"):          # 放到一半就放棄的,後面幾個還沒放回去
+                        rtree_idx.delete(q["sid"], q["cand"].bounds)
+                    q.update(cand=cand, leader=leader, rot=rot, w=w, h=h, absent=False)
+                    all_shapes[q["sid"]] = cand
+                    rtree_idx.insert(q["sid"], cand.bounds)
+        n_moved += moved
+        if moved == 0:
+            break
+    log("refine: %d move(s), score %.1f lower in all" % (n_moved, gained))
 
 # === Main ===
 def main():
@@ -1210,6 +1400,7 @@ def main():
     n_on_soft = 0
     existing_leaders = []  # will store LineString segments
     existing_labels = []   # will store label geometries (boxes, polygons)
+    placed = []            # 每個放好的標籤一筆,給最後的「再調整一輪」用,見 refine_pass()
 
     # pinned 標籤:框本體(不含留白)跟 DXF 硬障礙相交的才算撞到、才重放;
     # 其餘 kept —— 原座標輸出,而且先當硬障礙放進去(框帶 SAFE_GAP,跟放好的
@@ -1242,6 +1433,8 @@ def main():
         out_lines.append(f"{rec['ref']} {rec['cx']:.3f} {rec['cy']:.3f} {rec['ax']} {rec['ay']} {cw} {ch} {rec['type']} {rec['rot']} kept")
         existing_labels.append(kept_geom)
         existing_leaders.append(pinned_leader(rec, kept_geom))
+        placed.append({"rec": rec, "fixed": True, "sid": next_id, "cand": kept_geom,
+                       "leader": existing_leaders[-1]})
         all_shapes.append(kept_geom)
         soft_flags.append(False)
         try:
@@ -1337,6 +1530,11 @@ def main():
         except Exception:
             pass
 
+        # pinned 被撞到而重放的不參加再調整(它的分數帶 old_pos,而且進版時少動為上)
+        placed.append({"rec": rec, "fixed": rec["pinned"], "sid": next_id, "cand": cand,
+                       "leader": leader, "rot": rot, "w": out_w, "h": out_h,
+                       "line": len(out_lines) - 1})
+
         # Also add placed label geometry into all_shapes & rtree
         all_shapes.append(cand)
         soft_flags.append(False)   # 放好的標籤是硬障礙
@@ -1348,6 +1546,9 @@ def main():
 
     log("labels placed: %d (of which pinned kept: %d) ;  laid on a dimension line: %d"
         % (len(out_lines), n_kept, n_on_soft))
+
+    if REFINE_PASSES > 0:
+        refine_pass(placed, out_lines, all_shapes, soft_flags, rtree_idx, msp_b)
 
     # 輸出 LabelSpace.txt
     try:
