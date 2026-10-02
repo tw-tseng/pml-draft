@@ -94,6 +94,8 @@ INSIDE_MAX_RADIUS = None
 NEAR_RADIUS = 25.0
 OUTSIDE_BAND = 15.0
 OUTSIDE_PENALTY = 5.0
+# 引線找不到完全不衝突的位置時,每一個衝突算多遠(mm),見 _scan_ring(2026-10-02)
+LEADER_CONFLICT_PENALTY = 20.0
 # box 外的標籤,引線不准穿過任何文字:box 邊上就是 MATCH LINE 字,一條從 box 內
 # 拉出來的引線很容易整條穿過它(2026-10-01 重播實測)。文字外框由 main() 收進來
 LEADER_TEXT_SHAPES = []
@@ -898,6 +900,22 @@ def leader_conflicts_with_existing(leader, existing_leaders, existing_labels):
             continue
     return False
 
+def leader_conflict_count(leader, cand, existing_leaders, existing_labels):
+    n = 0
+    for lbl in existing_labels:
+        try:
+            if lbl.intersects(leader):
+                n += 1
+        except Exception:
+            continue
+    for l in existing_leaders:
+        try:
+            if l.crosses(leader) or l.intersects(cand):
+                n += 1
+        except Exception:
+            continue
+    return n
+
 # === Find blank area with leader check (跳過 0,90,180,270) ===
 def _scan_ring(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type, radius,
                existing_leaders, existing_labels, check_leader, region, old_pos=None,
@@ -943,6 +961,17 @@ def _scan_ring(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type, ra
             leader = LineString([(cx, cy), cand.centroid.coords[0]])
             if check_leader and leader_conflicts_with_existing(leader, existing_leaders, existing_labels):
                 continue
+            # 反過來也要查:這個框不准蓋到已經放好的引線。原本只查新引線碰不碰舊
+            # 標籤,後放的標籤可以整個壓在先放的引線上(2026-10-02,同一點的
+            # "N2"(U) 壓在 "N3"(D) 的引線上)
+            if check_leader and any(l.intersects(cand) for l in existing_leaders):
+                continue
+            # 放寬引線的那一輪不是「什麼都可以」:每一個衝突(引線穿過別的標籤、
+            # 跟別的引線交叉、框蓋到別的引線)加 LEADER_CONFLICT_PENALTY,
+            # 所以還是挑衝突最少、其次最近的位置
+            n_conf = 0
+            if not check_leader:
+                n_conf = leader_conflict_count(leader, cand, existing_leaders, existing_labels)
             if leader_text and leader_hits_text(leader):
                 continue
             # 分數用實際距離算,跟提早收手之前的版本逐位元相同 —— 這個值
@@ -951,7 +980,8 @@ def _scan_ring(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type, ra
             # 位置一樣好但跟舊版不同,所以這裡照舊。
             score = (Point(cx, cy).distance(cand.centroid)
                      + (ROT_PENALTY if rot else 0.0)
-                     + (DIM_PENALTY if on_dim else 0.0))
+                     + (DIM_PENALTY if on_dim else 0.0)
+                     + LEADER_CONFLICT_PENALTY * n_conf)
             if old_pos is not None:
                 score += OLD_POS_WEIGHT * Point(old_pos).distance(cand.centroid)
             # 排序鍵帶 rot:同分時直立優先,結果才不會因為掃描順序而飄
@@ -1012,17 +1042,17 @@ def find_blank_area_with_leader(shapes_list, soft_flags, rtree_idx, cx, cy, w, h
         x1, y1, x2, y2 = region.bounds
         ring = box(x1 - OUTSIDE_BAND, y1 - OUTSIDE_BAND,
                    x2 + OUTSIDE_BAND, y2 + OUTSIDE_BAND).difference(region)
-        near = []
-        for rgn in (region, ring):
-            got = None
-            for check_leader in (True, False):
-                got = _search(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
-                              existing_leaders, existing_labels, check_leader, rgn,
-                              NEAR_RADIUS, old_pos, leader_text=(rgn is ring))
-                if got is not None:
-                    break
-            near.append(got)
-        bi, bo = near
+        # 一次比完:分數 = 距離 + 每個引線衝突 LEADER_CONFLICT_PENALTY,不再
+        # 「先找完全不衝突的、找不到才放寬」—— 那樣 25mm 內一個有衝突的位置
+        # 會贏過 30mm 外完全乾淨的位置(2026-10-02 重播)。box 內照舊可以找到
+        # MAX_SEARCH_RADIUS(_search 一超過目前最佳分數就收手),box 外那圈只找
+        # NEAR_RADIUS 以內
+        bi = _search(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
+                     existing_leaders, existing_labels, False, region,
+                     inside_max, old_pos)
+        bo = _search(shapes_list, soft_flags, rtree_idx, cx, cy, tries, shape_type,
+                     existing_leaders, existing_labels, False, ring,
+                     NEAR_RADIUS, old_pos, leader_text=True)
         best = bi
         if bo is not None and (bi is None or bo[0] + OUTSIDE_PENALTY < bi[0]):
             best = bo
