@@ -57,10 +57,12 @@ layout form !!DrawingPlan1 dialog dock
 				button .uvgo '標註 VIEW' at xmin.uvlist ymax.uvlist+0.3 width 23 call '!This.AnnotateViews()'
 				----------------------------------------------------------
 				-- closes the whole form. every tab has one right under  --
-				-- its own last row (user, 2026-10-02: one under the     --
-				-- tabs sat below the tallest tab, too far off on the    --
-				-- short ones). here beside 標註 VIEW, in the column of  --
-				-- 加入 CE / 移除 CE / 全部移除 (user, 2026-09-27)        --
+				-- its own last row, beside a 建立圖面 of its own        --
+				-- (user, 2026-10-02; .SetApplyActive() greys them all   --
+				-- together) -- one under the tabs sat below the tallest --
+				-- tab, too far off on the short ones. here beside       --
+				-- 標註 VIEW, in the column of 加入 CE / 移除 CE /       --
+				-- 全部移除 (user, 2026-09-27)                           --
 				----------------------------------------------------------
 				button .Cancel '關閉' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
 				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
@@ -95,8 +97,9 @@ layout form !!DrawingPlan1 dialog dock
 			button .load   '載入設定' at xmax.save+0.8  ymin.save        width 10 call '!This.Load()'
 			button .setdef '設為預設值' at xmax.load+0.8 ymin.save       width 12 call '!This.SetDefault()'
 			paragraph .defresult at xmin.save ymax.save+0.2 text ' ' width 40
-			-- 關閉 on every tab, see .Cancel on the Drawing tab
-			button .closeview '關閉' at xmin.save ymax.defresult+0.3 width 12 call '!This.Close()'
+			-- 建立圖面 and 關閉 on every tab, see .Cancel on the Drawing tab
+			button .applyview '建立圖面' at xmin.save ymax.defresult+0.3 width 12 call '!This.Apply()'
+			button .closeview '關閉' at xmax.applyview+0.8 ymin.applyview width 12 call '!This.Close()'
 
 		exit
 		frame .info '圖框文字' width 40
@@ -124,7 +127,8 @@ layout form !!DrawingPlan1 dialog dock
 			text .date2hei  '字高'            at xmax.date2pos+2  ymin.date2pos      tagwidth 10 width 5 is string 
 			text .date3pos  '日期3 位置'      at xmin.revpos      ymax.date2pos+0.2  tagwidth 15 width 10 is string 
 			text .date3hei  '字高'            at xmax.date3pos+2  ymin.date3pos      tagwidth 10 width 5 is string 
-			button .closeinfo '關閉' at xmin.date3pos ymax.date3pos+0.5 width 12 call '!This.Close()'
+			button .applyinfo '建立圖面' at xmin.date3pos ymax.date3pos+0.5 width 12 call '!This.Apply()'
+			button .closeinfo '關閉' at xmax.applyinfo+0.8 ymin.applyinfo width 12 call '!This.Close()'
 		exit
 		frame .fra 'Keyplan'
 			text .keyovertext 'Keyplan 底圖' tagwidth 22 width 27 is string
@@ -136,7 +140,8 @@ layout form !!DrawingPlan1 dialog dock
 			text .keytext3 'N' at xmax.keytext2+2 ymin.keytext2 width 11 is string 
 			text .keytext4 'Keyplan 比例'   tagwidth 22 at xmin.keytext2 ymax.keytext2+0.1 width 27 is string
 			text .keytext5 'Keyplan Y 軸朝向'   tagwidth 22 at xmin.keytext2 ymax.keytext4+0.1 width 27 is string
-			button .closekey '關閉' at xmin.keytext5 ymax.keytext5+0.5 width 12 call '!This.Close()'
+			button .applykey '建立圖面' at xmin.keytext5 ymax.keytext5+0.5 width 12 call '!This.Apply()'
+			button .closekey '關閉' at xmax.applykey+0.8 ymin.applykey width 12 call '!This.Close()'
 		exit
 		frame .northarrow '指北針'
 			text .northtext '指北針符號' tagwidth 22 width 27 is string
@@ -145,7 +150,8 @@ layout form !!DrawingPlan1 dialog dock
 			text .northsca '縮放比例' tagwidth 22 at xmin.northtext ymax.northtext+0.1 width 27 is real
 			text .northpostext '位置' tagwidth 22 at xmin.northsca ymax.northsca+0.1 width 27 is string
 			button .northposbutn '點選' at xmax.northpostext+0.4 ymin.northpostext width 5 call |!This.northarrowpick()|
-			button .closenorth '關閉' at xmin.northpostext ymax.northpostext+0.5 width 12 call '!This.Close()'
+			button .applynorth '建立圖面' at xmin.northpostext ymax.northpostext+0.5 width 12 call '!This.Apply()'
+			button .closenorth '關閉' at xmax.applynorth+0.8 ymin.applynorth width 12 call '!This.Close()'
 		exit
 		frame .flowarrow '流向箭頭'
 			---------------------------------------------------------------------
@@ -157,14 +163,16 @@ layout form !!DrawingPlan1 dialog dock
 			button .flowbutn 'CE' at xmax.flowtext+0.4 ymin.flowtext width 5 call |!This.typepick('SYTM', 'flowtext')|
 			paragraph .flowpara at xmax.flowbutn+0.5 ymin.flowbutn+0.1 text 'SYTM'
 			text .flowsca '縮放比例' tagwidth 22 at xmin.flowtext ymax.flowtext+0.1 width 27 is real
-			button .closeflow '關閉' at xmin.flowsca ymax.flowsca+0.5 width 12 call '!This.Close()'
+			button .applyflow '建立圖面' at xmin.flowsca ymax.flowsca+0.5 width 12 call '!This.Apply()'
+			button .closeflow '關閉' at xmax.applyflow+0.8 ymin.applyflow width 12 call '!This.Close()'
 		exit
 		frame .gridframe '柱位線'
 			text .griddist '距離'        tagwidth 10 width 6 is real
 			text .gridgap  '間隙'        tagwidth 10 at xmin.griddist ymax.griddist+0.1 width 6 is real
 			text .gridhei  '字高'        tagwidth 10 at xmin.gridgap  ymax.gridgap+0.1  width 6 is real
 			text .griddia  '圓圈直徑'    tagwidth 10 at xmin.gridhei  ymax.gridhei+0.1  width 6 is real
-			button .closegrid '關閉' at xmin.griddia ymax.griddia+0.5 width 12 call '!This.Close()'
+			button .applygrid '建立圖面' at xmin.griddia ymax.griddia+0.5 width 12 call '!This.Apply()'
+			button .closegrid '關閉' at xmax.applygrid+0.8 ymin.applygrid width 12 call '!This.Close()'
 --			para .sketch at xmax.griddist+2 ymin.griddist pixmap width 5 height 5
 		exit
 		frame .anno '標註'
@@ -231,7 +239,8 @@ layout form !!DrawingPlan1 dialog dock
 				toggle .redutog '建立標籤' tagwidth 10
 				paragraph .redupara at xmax.redutog+35 ymin.redutog text ' '
 			exit
-			button .closeanno '關閉' at xmin.reduframe ymax.reduframe+0.5 width 12 call '!This.Close()'
+			button .applyanno '建立圖面' at xmin.reduframe ymax.reduframe+0.5 width 12 call '!This.Apply()'
+			button .closeanno '關閉' at xmax.applyanno+0.8 ymin.applyanno width 12 call '!This.Close()'
 		exit
 	exit
 	
@@ -519,7 +528,7 @@ define method .DrawingPlan1()
 			endif
 		endif
 	endif
-	!this.apply.active = false	
+	!this.SetApplyActive(false)
 	!this.dwgnopos.val = '700,55'
 	!this.dwgnohei.val = '3'
 	!this.scalepos.val = '740,29'
@@ -649,9 +658,9 @@ define method .selectce()
 	endif
 	
 	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
-		!this.apply.active = true
+		!this.SetApplyActive(true)
 	else
-		!this.apply.active = false
+		!this.SetApplyActive(false)
 	endif
 endmethod
 
@@ -668,9 +677,9 @@ define method .selectall()
 		!this.files1.clear()
 	endif
 	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
-		!this.apply.active = true
+		!this.SetApplyActive(true)
 	else
-		!this.apply.active = false
+		!this.SetApplyActive(false)
 	endif
 endmethod
 
@@ -690,9 +699,9 @@ define method .removece()
 	endif
 	
 	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
-		!this.apply.active = true
+		!this.SetApplyActive(true)
 	else
-		!this.apply.active = false
+		!this.SetApplyActive(false)
 	endif
 endmethod
 
@@ -709,7 +718,7 @@ define method .removeall()
 		!this.files1.dtext = !strs1
 	endif
 	
-	!this.apply.active = false
+	!this.SetApplyActive(false)
 endmethod
 
 --------------------------------------------------------------------------
@@ -7712,9 +7721,9 @@ define method .desce()
 		!this.dest.val = !ce
 	endhandle
 	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
-		!this.apply.active = true
+		!this.SetApplyActive(true)
 	else
-		!this.apply.active = false
+		!this.SetApplyActive(false)
 	endif
 endmethod
 
@@ -7782,9 +7791,9 @@ define method .importfile()
 		!filedata.close()
 	endif
 	if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
-		!this.apply.active = true
+		!this.SetApplyActive(true)
 	else
-		!this.apply.active = false
+		!this.SetApplyActive(false)
 	endif
 endmethod
 
@@ -8050,9 +8059,9 @@ define method .ReadSettings(!file is string)
 					!!alert.warning('These saved Drawing Boxes are not in this project any more and have been skipped: ' & !msg)
 				endif
 				if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
-					!this.apply.active = true
+					!this.SetApplyActive(true)
 				else
-					!this.apply.active = false
+					!this.SetApplyActive(false)
 				endif
 			elseif (!option.eq('!this.excllist.dtext')) then
 				---------------------------------------------------------------------
@@ -8157,9 +8166,9 @@ define method .ReadSettings(!file is string)
 					endhandle
 				endif
 				if not(!this.dest.val.eqnocase('')) and !this.files.dtext.size().gt(0) then
-					!this.apply.active = true
+					!this.SetApplyActive(true)
 				else
-					!this.apply.active = false
+					!this.SetApplyActive(false)
 				endif
 			else
 				-----------------------------------------------------------------------
@@ -8206,6 +8215,21 @@ endmethod
 -- the constructor reads back, over the built in defaults, every time  --
 -- the form is loaded. deleting the file brings the built in ones back --
 ------------------------------------------------------------------------
+--------------------------------------------------------------------------
+-- 建立圖面 is on every tab (user, 2026-10-02): the Drawing tab's .apply  --
+-- and one beside each tab's 關閉. they go grey and live together       --
+--------------------------------------------------------------------------
+define method .SetApplyActive(!on is boolean)
+	!this.apply.active = !on
+	!this.applyview.active = !on
+	!this.applyinfo.active = !on
+	!this.applykey.active = !on
+	!this.applynorth.active = !on
+	!this.applyflow.active = !on
+	!this.applygrid.active = !on
+	!this.applyanno.active = !on
+endmethod
+
 define method .DefaultFile() is string
 	return !this.blankdir & 'DrawingPlan1Default.txt'
 endmethod
