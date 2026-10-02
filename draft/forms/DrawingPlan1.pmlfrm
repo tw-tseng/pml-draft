@@ -30,16 +30,21 @@ layout form !!DrawingPlan1 dialog dock
 --				button .import 'Import'     at xmin.addce  ymax.addce+0.2  width 12 call '!This.importfile()'
 --				button .export 'Export'     at xmin.addce  ymax.import+0.2 width 12 call '!This.exportfile()'
 --				button .sort   'Sort  '     at xmin.addce  ymax.export+0.2 width 12 call '!This.sortce()'
+				----------------------------------------------------------
+				-- inside the box lists' frame, so drawing from boxes is  --
+				-- one group the way 自建的 VIEW below is (user,          --
+				-- 2026-10-02)                                            --
+				----------------------------------------------------------
+				text .dest     '存放位置'        at xmin.files1 ymax.files1+0.5 tagwidth 11 width 33 is string
+				button .desbut 'CE'              at xmax.dest+0.1 ymin.dest width 6 call '!This.desce()'
+				button .apply  '建立圖面'        at xmin.dest ymax.dest+0.5 width 23 call '!This.Apply()'
 			exit
-			text .dest     '存放位置'        at xmin.hiera ymax.hiera+0.5 tagwidth 11 width 33 is string 
-			button .desbut 'CE'              at xmax.dest+0.1 ymin.dest width 6 call '!This.desce()'
-			button .apply  '建立圖面'        at xmin.dest ymax.dest+0.5 width 23 call '!This.Apply()'
 			----------------------------------------------------------------
 			-- views drawn by hand in Draw, annotated where they stand      --
 			-- (.AnnotateViews()). Add CE takes a VIEW, or every view of a  --
 			-- SHEE or DRWG                                                 --
 			----------------------------------------------------------------
-			frame .uvframe '自建的 VIEW' at xmin.dest ymax.apply+1.2
+			frame .uvframe '自建的 VIEW' at xmin.hiera ymax.hiera+0.5
 				----------------------------------------------------------
 				-- 4.7: the bottom of the list level with the bottom of   --
 				-- 全部移除, so 標註 VIEW / 關閉 sit right under both     --
