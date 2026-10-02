@@ -5556,6 +5556,34 @@ define method .PinnedLabelRecords(!name is string, !rcode is string) is array
 	!sy1    = object array()
 	!sy2    = object array()
 	!srot   = object array()
+	----------------------------------------------------------------
+	-- nozzles too: one block per sheet point (2026-10-02), see    --
+	-- .NozzleAnnotation()                                          --
+	----------------------------------------------------------------
+	!nrefs = object array()
+	!naxs  = object array()
+	!nays  = object array()
+	!nxa   = object array()
+	!nya   = object array()
+	!nws   = object array()
+	!nhs   = object array()
+	!nkey  = object array()
+	!nlead = object array()
+	!nx1   = object array()
+	!nx2   = object array()
+	!ny1   = object array()
+	!ny2   = object array()
+	!nrot  = object array()
+	!pltrans = object array()
+	!plelev = false
+	!pltrans = !this.ViewSheetTransform()
+	handle any
+	elsehandle none
+		!plelev = !this.IsElevTrans(!pltrans)
+		handle any
+			!plelev = false
+		endhandle
+	endhandle
 	do !l values !labs
 		!lname = ''
 		var !lname name of owner of $!l
@@ -5674,12 +5702,40 @@ define method .PinnedLabelRecords(!name is string, !rcode is string) is array
 			endif
 			var !exbtext exbtext
 			!h   = !chei.replace('mm', '').real() + 0.5
-			!w   = !exbtext.length() * !h * 0.65  $( 0.65 is text width factor $)
+			!w   = !exbtext.length() * !chei.replace('mm', '').real() * 0.625  $( font 1 is 0.625 x the text height per character, measured 2026-09-25 (see TitleWidth). no margin: BlankPos packs the box tight, so a wider box only pushes labels away $)
 			!typ = 'box'
 			-- nozzles and valves may turn, as when they were made --
 			if (!kind.eq('NOZZ') or !kind.eq('VALV')) then
 				!typ = 'boxr'
 			endif
+		endif
+		if (!kind.eq('NOZZ')) then
+			!nk = 0
+			!nkp = object position(!apos)
+			!nk = !this.NozzStackKey(!nkp, !pltrans, !plelev)
+			handle any
+				!nk = 0
+			endhandle
+			!ll = 'true'
+			var !ll lleader
+			handle any
+				!ll = 'true'
+			endhandle
+			!nrefs.append(!l)
+			!naxs.append(!axs)
+			!nays.append(!ays)
+			!nxa.append(!axs.real())
+			!nya.append(!ays.real())
+			!nws.append(!w)
+			!nhs.append(!h)
+			!nkey.append(!nk)
+			!nlead.append(!ll.upcase().eq('TRUE'))
+			!nx1.append(!x1)
+			!nx2.append(!x2)
+			!ny1.append(!y1)
+			!ny2.append(!y2)
+			!nrot.append(!rots)
+			skip
 		endif
 		!cx = (!x1 + !x2) * 0.5
 		!cy = (!y1 + !y2) * 0.5
@@ -5771,6 +5827,112 @@ define method .PinnedLabelRecords(!name is string, !rcode is string) is array
 				!followers = !followers & ' ' & !srefs[!fi]
 			enddo
 			!this.suptstack.append(!top & ' ' & !lineh & !followers)
+		endif
+	enddo
+	----------------------------------------------------------------
+	-- nozzle stacks: 0.5mm, as when they were made. the top is the --
+	-- row with the leader; the rows under it go by .NozzStackKey() --
+	----------------------------------------------------------------
+	!nn = !nrefs.size()
+	!ntaken = object array()
+	do !i from 1 to !nn
+		!ntaken.append(false)
+	enddo
+	do !i from 1 to !nn
+		skip if (!ntaken[!i])
+		!grp = object array()
+		!grp.append(!i)
+		!ntaken[!i] = true
+		do !j from 1 to !nn
+			skip if (!ntaken[!j])
+			!ddx = !nxa[!j] - !nxa[!i]
+			!ddy = !nya[!j] - !nya[!i]
+			!dd2 = !ddx * !ddx + !ddy * !ddy
+			if (!dd2.lt(0.25)) then
+				!grp.append(!j)
+				!ntaken[!j] = true
+			endif
+		enddo
+		!gn = !grp.size()
+		------------------------------------------------------------
+		-- a point whose nozzles all carry their own leader is a     --
+		-- sheet from before the stacks: each stays its own record,  --
+		-- as it was made, and nothing on it is rearranged           --
+		------------------------------------------------------------
+		!nlc = 0
+		do !k from 1 to !gn
+			!ik = !grp[!k]
+			if (!nlead[!ik]) then
+				!nlc = !nlc + 1
+			endif
+		enddo
+		if (!nlc.gt(1)) then
+			do !k from 1 to !gn
+				!ik = !grp[!k]
+				!cx = (!nx1[!ik] + !nx2[!ik]) * 0.5
+				!cy = (!ny1[!ik] + !ny2[!ik]) * 0.5
+				!recs.append(!nrefs[!ik] & ' ' & !naxs[!ik] & ' ' & !nays[!ik] & ' ' & !nws[!ik].string('D3') & ' ' & !nhs[!ik].string('D3') & ' boxr pinned ' & !cx.string('D3') & ' ' & !cy.string('D3') & ' ' & !nrot[!ik])
+			enddo
+			skip
+		endif
+		!itop = !grp[1]
+		do !k from 1 to !gn
+			!ik = !grp[!k]
+			if (!nlead[!ik]) then
+				!itop = !ik
+				break
+			endif
+		enddo
+		!maxw = 0
+		!nlh = 0
+		!ux1 = !nx1[!itop]
+		!ux2 = !nx2[!itop]
+		!uy1 = !ny1[!itop]
+		!uy2 = !ny2[!itop]
+		do !k from 1 to !gn
+			!ik = !grp[!k]
+			if (!nws[!ik].gt(!maxw)) then
+				!maxw = !nws[!ik]
+			endif
+			if (!nhs[!ik].gt(!nlh)) then
+				!nlh = !nhs[!ik]
+			endif
+			!ux1 = min(!ux1, !nx1[!ik])
+			!ux2 = max(!ux2, !nx2[!ik])
+			!uy1 = min(!uy1, !ny1[!ik])
+			!uy2 = max(!uy2, !ny2[!ik])
+		enddo
+		!stackh = !nlh * !gn
+		!cx = (!ux1 + !ux2) * 0.5
+		!cy = (!uy1 + !uy2) * 0.5
+		!top = !nrefs[!itop]
+		!recs.append(!top & ' ' & !naxs[!itop] & ' ' & !nays[!itop] & ' ' & !maxw.string('D3') & ' ' & !stackh.string('D3') & ' boxr pinned ' & !cx.string('D3') & ' ' & !cy.string('D3') & ' ' & !nrot[!itop])
+		if (!gn.gt(1)) then
+			!fidx = object array()
+			do !k from 1 to !gn
+				!ik = !grp[!k]
+				skip if (!ik.eq(!itop))
+				!fidx.append(!ik)
+			enddo
+			!nf = !fidx.size()
+			!nfm1 = !nf - 1
+			do !a from 1 to !nfm1
+				do !b from 1 to !nfm1
+					!b1 = !b + 1
+					!ia = !fidx[!b]
+					!ib = !fidx[!b1]
+					if (!nkey[!ib].gt(!nkey[!ia])) then
+						!fidx[!b]  = !ib
+						!fidx[!b1] = !ia
+					endif
+				enddo
+			enddo
+			!followers = ''
+			do !k from 1 to !nf
+				!fi = !fidx[!k]
+				!followers = !followers & ' ' & !nrefs[!fi]
+			enddo
+			!this.suptstack.append(!top & ' ' & !nlh & !followers)
 		endif
 	enddo
 	return !recs
@@ -7275,6 +7437,7 @@ define method .NozzleAnnotation(!name is string)
 	!nzx = object array()
 	!nzy = object array()
 	!nzu = object array()
+	!nzwp = object array()
 	do !nozz values !nozzs
 		var !apos ( pos of $!nozz wrt worl )
 		var !apos1 shpos of $!apos
@@ -7293,6 +7456,7 @@ define method .NozzleAnnotation(!name is string)
 		!nzx.append(!apos1.part(2).replace('mm', '').real())
 		!nzy.append(!apos1.part(4).replace('mm', '').real())
 		!nzu.append(!aposobj.up.value())
+		!nzwp.append(!apos)
 	enddo
 
 	------------------------------------------------------------------
@@ -7308,74 +7472,174 @@ define method .NozzleAnnotation(!name is string)
 			!nzelev = false
 		endhandle
 	endhandle
+	------------------------------------------------------------------
+	-- nozzles on one sheet point (0.5mm, the same test as (U) / (D)  --
+	-- below) are one block on one leader, as a support stack is: the --
+	-- top row carries the leader, the rows under it ride on it, and  --
+	-- BlankPos is offered the block once (user, 2026-10-02 -- two    --
+	-- labels from one point used to be placed apart and their        --
+	-- leaders ran through each other's text). rows go higher first   --
+	-- on a plan; on an elevation, where one point is the same height --
+	-- seen front and back, nearer the viewer first. .NozzStackKey()  --
+	------------------------------------------------------------------
+	!nzkey = object array()
 	do !k from 1 to !nzrefs.size()
-		!nozz = !nzrefs[!k]
-		!apos1 = !nzsh[!k]
-		------------------------------------------------------------------
-		-- nozzles stacked on one plan point (N7 under N8 on the shell   --
-		-- of C1101) print their labels on top of each other and the     --
-		-- plan cannot tell which is which: the upper one gets (U), the  --
-		-- lower one (D) after its name (user, 2026-09-29). same point = --
-		-- within 0.5mm on the paper; a third one in between gets        --
-		-- neither, one at the same elevation does not count             --
-		------------------------------------------------------------------
-		!nzabove = false
-		!nzbelow = false
+		!nzkp = object position(!nzwp[!k])
+		!nzkey.append(!this.NozzStackKey(!nzkp, !nztrans, !nzelev))
+		handle any
+			!nzkey.append(!nzu[!k])
+		endhandle
+	enddo
+	!nztaken = object array()
+	do !k from 1 to !nzrefs.size()
+		!nztaken.append(false)
+	enddo
+	!nzgroups = object array()
+	do !k from 1 to !nzrefs.size()
+		skip if (!nztaken[!k])
+		!nztaken[!k] = true
+		!grp = object array()
+		!grp.append(!k)
 		do !m from 1 to !nzrefs.size()
-			if (!m.eq(!k)) then
-				skip
-			endif
+			skip if (!nztaken[!m])
 			!ddx = !nzx[!m] - !nzx[!k]
 			!ddy = !nzy[!m] - !nzy[!k]
 			!dd2 = !ddx * !ddx + !ddy * !ddy
 			if (!dd2.lt(0.25)) then
-				if (!nzu[!m].gt(!nzu[!k] + 1)) then
-					!nzabove = true
-				elseif (!nzu[!m].lt(!nzu[!k] - 1)) then
-					!nzbelow = true
-				endif
+				!nztaken[!m] = true
+				!grp.append(!m)
 			endif
 		enddo
-		!nzsuf = ''
-		if (!nzelev) then
+		-- highest key first --
+		!gn = !grp.size()
+		!gnm1 = !gn - 1
+		do !a from 1 to !gnm1
+			do !b from 1 to !gnm1
+				!b1 = !b + 1
+				!ia = !grp[!b]
+				!ib = !grp[!b1]
+				if (!nzkey[!ib].gt(!nzkey[!ia])) then
+					!grp[!b] = !ib
+					!grp[!b1] = !ia
+				endif
+			enddo
+		enddo
+		!nzgroups.append(!grp)
+	enddo
+	do !g from 1 to !nzgroups.size()
+		!grp = !nzgroups[!g]
+		!gn = !grp.size()
+		!nzmaxw = 0
+		!nzlineh = 0
+		!nzanchor = ''
+		!nzfollow = ''
+		!nzax = ''
+		!nzay = ''
+		do !gk from 1 to !gn
+			!k = !grp[!gk]
+			!nozz = !nzrefs[!k]
+			!apos1 = !nzsh[!k]
+			------------------------------------------------------------------
+			-- nozzles stacked on one plan point (N7 under N8 on the shell   --
+			-- of C1101) print their labels on top of each other and the     --
+			-- plan cannot tell which is which: the upper one gets (U), the  --
+			-- lower one (D) after its name (user, 2026-09-29). same point = --
+			-- within 0.5mm on the paper; a third one in between gets        --
+			-- neither, one at the same elevation does not count             --
+			------------------------------------------------------------------
+			!nzabove = false
+			!nzbelow = false
+			do !m from 1 to !nzrefs.size()
+				if (!m.eq(!k)) then
+					skip
+				endif
+				!ddx = !nzx[!m] - !nzx[!k]
+				!ddy = !nzy[!m] - !nzy[!k]
+				!dd2 = !ddx * !ddx + !ddy * !ddy
+				if (!dd2.lt(0.25)) then
+					if (!nzu[!m].gt(!nzu[!k] + 1)) then
+						!nzabove = true
+					elseif (!nzu[!m].lt(!nzu[!k] - 1)) then
+						!nzbelow = true
+					endif
+				endif
+			enddo
 			!nzsuf = ''
-		elseif (!nzbelow and not(!nzabove)) then
-			!nzsuf = '(U)'
-		elseif (!nzabove and not(!nzbelow)) then
-			!nzsuf = '(D)'
-		endif
-		!nzbtext = !this.nozztext2.val & !nzsuf
-		NEW GLAB
-		DDNA $!nozz
-		Btext |$!nzbtext|
-		Justification Centre
-		Alignment Hbody
-		ABSO
-		AT $!apos1
-		XYPO 5 5
+			if (!nzelev) then
+				!nzsuf = ''
+			elseif (!nzbelow and not(!nzabove)) then
+				!nzsuf = '(U)'
+			elseif (!nzabove and not(!nzbelow)) then
+				!nzsuf = '(D)'
+			endif
+			!nzbtext = !this.nozztext2.val & !nzsuf
+			NEW GLAB
+			DDNA $!nozz
+			Btext |$!nzbtext|
+			Justification Centre
+			Alignment Hbody
+			ABSO
+			AT $!apos1
+			XYPO 5 5
 
+			------------------------------------------------------------------
+			-- save label info. in WriteLabelToText.txt under .blankdir     --
+			------------------------------------------------------------------
+			var !label ref
+			var !chei chei
+			if !chei.eqnocase('ByVStyle') then
+				var !chei chei of owner
+			endif
+			var !exbtext exbtext
+			!height = !chei.replace('mm', '').real() + 0.5
+			!width = !exbtext.length() * !chei.replace('mm', '').real() * 0.625  $( font 1 is 0.625 x the text height per character, measured 2026-09-25 (see TitleWidth). no margin: BlankPos packs the box tight, so a wider box only pushes labels away $)
+			if (!width.gt(!nzmaxw)) then
+				!nzmaxw = !width
+			endif
+			if (!height.gt(!nzlineh)) then
+				!nzlineh = !height
+			endif
+			if (!gk.eq(1)) then
+				!nzanchor = !label
+				!nzax = !apos1.part(2).replace('mm', '')
+				!nzay = !apos1.part(4).replace('mm', '')
+			else
+				-- the rows under the top one ride on its leader --
+				Lleader false
+				!nzfollow = !nzfollow & ' ' & !label
+			endif
+		enddo
 		------------------------------------------------------------------
-		-- save label info. in WriteLabelToText.txt under .blankdir     --
+		-- one record for the whole block, filed under the top label --  --
+		-- the rows below it are hung off it by .PlaceLabelFromSpace()   --
+		-- through .suptstack, the list the support stacks use. boxr:    --
+		-- BlankPos may stand the block on end when that gets it much    --
+		-- nearer (user, 2026-10-01)                                     --
 		------------------------------------------------------------------
-		var !label ref
-		!shposx = !apos1.part(2).replace('mm', '')
-		!shposy = !apos1.part(4).replace('mm', '')
-		var !chei chei
-		if !chei.eqnocase('ByVStyle') then
-			var !chei chei of owner
+		!nzstackh = !nzlineh * !gn
+		!ff.writerecord(!nzanchor & ' ' & !nzax & ' ' & !nzay & ' ' & !nzmaxw & ' ' & !nzstackh & ' boxr')
+		if (!gn.gt(1)) then
+			!this.suptstack.append(!nzanchor & ' ' & !nzlineh & !nzfollow)
 		endif
-		var !exbtext exbtext
-		!height = !chei.replace('mm', '').real() + 0.5
-		!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
-		
-		------------------------------------------------------------------
-		-- boxr: BlankPos may stand the label on end when that gets it  --
-		-- much nearer (user, 2026-10-01: crowded nozzles and valves    --
-		-- ended on long leaders; supports could already turn)          --
-		------------------------------------------------------------------
-		!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' boxr')
 	enddo
 	!ff.close()
+endmethod
+
+------------------------------------------------------------------------
+-- which way a nozzle stack is ordered: the row with the largest key   --
+-- goes on top. a plan: its up. an elevation: how far towards the      --
+-- viewer it stands, along sheet x crossed with up -- (t7, -t5) in     --
+-- east, north, with t5 / t7 the sheet x of a step east / north from    --
+-- .ViewSheetTransform(). only the order matters, so it is not scaled  --
+------------------------------------------------------------------------
+define method .NozzStackKey(!p is position, !trans is array, !elev is boolean) is real
+	if (not(!elev)) then
+		return !p.up.value()
+	endif
+	!t5 = !trans[5].string('D9').replace('mm', '').real()
+	!t7 = !trans[7].string('D9').replace('mm', '').real()
+	!kv = !p.east.value() * !t7 - !p.north.value() * !t5
+	return !kv
 endmethod
 
 ---------------------------------------
@@ -8035,7 +8299,7 @@ define method .ValveAnnotation(!name is string)
 		endif
 		var !exbtext exbtext
 		!height = !chei.replace('mm', '').real() + 0.5
-		!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
+		!width = !exbtext.length() * !chei.replace('mm', '').real() * 0.625  $( font 1 is 0.625 x the text height per character, measured 2026-09-25 (see TitleWidth). no margin: BlankPos packs the box tight, so a wider box only pushes labels away $)
 		
 		------------------------------------------------------------------
 		-- boxr: BlankPos may stand the label on end when that gets it  --
@@ -8152,7 +8416,7 @@ define method .ReduAnnotation(!name is string)
 				endif
 				var !exbtext exbtext
 				!height = !chei.replace('mm', '').real() + 0.5
-				!width = !exbtext.length() * !height * 0.65  $( 0.65 is text width factor $)
+				!width = !exbtext.length() * !chei.replace('mm', '').real() * 0.625  $( font 1 is 0.625 x the text height per character, measured 2026-09-25 (see TitleWidth). no margin: BlankPos packs the box tight, so a wider box only pushes labels away $)
 				
 				!ff.writerecord(!label & ' ' & !shposx & ' ' & !shposy & ' ' & !width & ' ' & !height & ' box')
 
@@ -10044,7 +10308,11 @@ define method .SuptAnnotation(!name is string)
 	-- come out at one sheet position, and they have to be found     --
 	-- before any label is made so the block can be sized as a unit  --
 	------------------------------------------------------------------
-	!this.suptstack = object array()
+	------------------------------------------------------------------
+	-- .suptstack is NOT cleared here any more: the nozzle stacks are  --
+	-- in it too, made before this runs (2026-10-02). every caller    --
+	-- clears it before the first annotation of a drawing             --
+	------------------------------------------------------------------
 	!snames = object array()
 	!stexts = object array()
 	!sposs  = object array()

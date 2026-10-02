@@ -873,10 +873,10 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 	-- the user drew. and whatever the box says, !ldkeep of the leader  --
 	-- is always left standing at each end, so the line can be seen to  --
 	-- leave the pipe and to arrive at its label                        --
-	-- its own box is not a crossing, and neither is any label hanging  --
-	-- off the same design point (the rows of a support stack, a second --
-	-- label on one component): the leader ends at the block those      --
-	-- share, it does not run through them                               --
+	-- its own box is not a crossing, and neither are the lower rows of --
+	-- its own stack (same design point, same layer, no leader): the    --
+	-- leader ends at the block those share, it does not run through   --
+	-- them. any other label on the same point is crossed like any other --
 	--                                                                    --
 	-- the break goes on the GLAB or SLAB the leader belongs to, the     --
 	-- same command the grid bubbles take above, centred on the piece    --
@@ -979,7 +979,18 @@ define function !!DrawingPlan1MatchGaps(!name is string)
 		endhandle
 		do !bi from 1 to !ldrefs.size()
 			skip if (!bi eq !li)
-			if (!ldhasa[!bi]) then
+			------------------------------------------------------------
+			-- the same-point exemption is for the lower rows of a      --
+			-- stack only -- a support stack, or a nozzle stack        --
+			-- (2026-10-02): same layer, and no leader of their own,   --
+			-- since they ride on the top row's. any other pair on one  --
+			-- point -- a valve tag and its instrument, two nozzles on  --
+			-- a sheet from before the nozzle stacks -- is two labels   --
+			-- BlankPos placed apart, and a leader through the other's  --
+			-- text needs its break like any other (2026-10-02:         --
+			-- "N3"(D) ran through "N2"(U) with no break)               --
+			------------------------------------------------------------
+			if (!ldhasa[!bi] and !ldkind[!bi].eq(!ldkind[!li]) and not(!ldlead[!bi])) then
 				!adx = !ldax[!bi] - !ax
 				!ady = !lday[!bi] - !ay
 				!aadx = abs(!adx)

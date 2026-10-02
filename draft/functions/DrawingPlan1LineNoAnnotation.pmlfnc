@@ -2418,6 +2418,52 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 		-- !!DrawingPlan1.allintersections including  --
 		-- intersection points between view and grids --
 		------------------------------------------------
+		--------------------------------------------------------------------
+		-- two grids drawn on top of each other (2026-10-02, /DWGNO-005:   --
+		-- the pipe rack's P1.1 and the plant grid's 2) give two crossings --
+		-- at the same coordinate, and only the first one is dimensioned.  --
+		-- P1.1 starts at P1.A, deep inside the view, so its point dragged --
+		-- the projection line 120mm up the border while the plant grid's  --
+		-- line runs right down to it. among crossings at the same         --
+		-- coordinate keep the one nearest the border: same dimension,     --
+		-- shortest projection line. this pass works out each crossing's   --
+		-- coordinate and depth the same way as the loop below            --
+		--------------------------------------------------------------------
+		!gpal = object array()
+		!gpdp = object array()
+		do !intersection value !!DrawingPlan1.allintersections
+			!gpside = !intersection.split('-').getindexed(1)
+			if ((!gpside.eqnocase('boxRlinesh') and !dir.eq('right')) or (!gpside.eqnocase('boxLlinesh') and !dir.eq('left')) or (!gpside.eqnocase('boxUlinesh') and !dir.eq('up')) or (!gpside.eqnocase('boxDlinesh') and !dir.eq('down'))) then
+				!intpt = !intersection.split('-').getindexed(2).before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				!ptx = !intpt.part(2).replace('mm', '').real()
+				!pty = !intpt.part(4).replace('mm', '').real()
+				!nearpt = ''
+				!nearpt = !intersection.split('~').getindexed(2).before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
+				handle any
+				endhandle
+				if (!nearpt.neq('')) then
+					if (!dir.eq('right') or !dir.eq('left')) then
+						!ptx = min(max(!nearpt.part(2).replace('mm', '').real(), !vwx1), !vwx2)
+					else
+						!pty = min(max(!nearpt.part(4).replace('mm', '').real(), !vwy1), !vwy2)
+					endif
+				endif
+				if (!dir.eq('right')) then
+					!gpal.append(!pty)
+					!gpdp.append(!vwx2 - !ptx)
+				elseif (!dir.eq('left')) then
+					!gpal.append(!pty)
+					!gpdp.append(!ptx - !vwx1)
+				elseif (!dir.eq('up')) then
+					!gpal.append(!ptx)
+					!gpdp.append(!vwy2 - !pty)
+				else
+					!gpal.append(!ptx)
+					!gpdp.append(!pty - !vwy1)
+				endif
+			endif
+		enddo
+		!gpk = 0
 		do !intersection value !!DrawingPlan1.allintersections
 			!checkpt = false
 			if (!intersection.split('-').getindexed(1).eqnocase('boxRlinesh') and !dir.eq('right')) then
@@ -2430,6 +2476,32 @@ define function !!DrawingPlan1LineNoAnnotation(!name is string, !boxXlen is real
 				!checkpt = true
 			endif
 			if (!checkpt) then
+				!gpk = !gpk + 1
+				------------------------------------------------------------
+				-- another crossing at the same coordinate nearer the      --
+				-- border (or as near and earlier) takes the place, see    --
+				-- the pass above. skipped before claiming, so an older    --
+				-- run's deep point here is cleaned up                     --
+				------------------------------------------------------------
+				!gpbeaten = false
+				do !gpj from 1 to !gpal.size()
+					if (!gpj.neq(!gpk)) then
+						!gpdal = !gpal[!gpj] - !gpal[!gpk]
+						if (!gpdal.abs().leq(!dimtol)) then
+							if (!gpdp[!gpj].lt(!gpdp[!gpk] - 0.01)) then
+								!gpbeaten = true
+							elseif (!gpj.lt(!gpk) and !gpdp[!gpj].leq(!gpdp[!gpk] + 0.01)) then
+								!gpbeaten = true
+							endif
+						endif
+					endif
+				enddo
+				if (!gpbeaten) then
+					if (!dbgln) then
+						!dbgf.writerecord('GRIDSAMEAT ' & !dir & ' along=' & !gpal[!gpk].string() & ' depth=' & !gpdp[!gpk].string() & ' skipped, a crossing nearer the border has the place')
+					endif
+					skip
+				endif
 				!intpt = !intersection.split('-').getindexed(2).before('U').replace('N', 'Y').replace('S', 'Y').replace('E', 'X').replace('W', 'X')
 				!ptx = !intpt.part(2).replace('mm', '').real()
 				!pty = !intpt.part(4).replace('mm', '').real()
