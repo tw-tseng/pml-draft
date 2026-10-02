@@ -1,4 +1,4 @@
---------------------------------------------------
+﻿--------------------------------------------------
 -- Copyright ATOMTECH Ltd 2024                  --
 --                                              --
 -- Function : Create GA Drawings in DRAW        --
@@ -14,140 +14,140 @@ handle any
 endhandle
 
 layout form !!DrawingPlan1 dialog dock
-	!this.formTitle = 'Drawing Options'
+	!this.formTitle = '管線平面圖出圖'
 	
 	frame .tabset tabset
-		frame .drawings 'Drawing' width 40
+		frame .drawings '出圖' width 40
 			frame .hiera
-				list   .files1 'All'    multiple width 25 height 10
+				list   .files1 '全部 BOX' multiple width 25 height 10
 				button .addce  ' >'     at xmax.files1+0.4 ymin.files1+1 width 3 call '!This.selectce()'
 				button .addall '>>'     at xmin.addce  ymax.addce+0.6  width 3 call '!This.selectall()'
 				button .remce  ' <'     at xmin.addce  ymax.addall+0.6 width 3 call '!This.removece()'
 				button .remall '<<'     at xmin.addce  ymax.remce+0.6  width 3 call '!This.removeall()'
-				list   .files  'In Use' at xmax.addce+0.5 ymin.files1 multiple width 25 height 10
+				list   .files  '要出圖的 BOX' at xmax.addce+0.5 ymin.files1 multiple width 25 height 10
         
         
 --				button .import 'Import'     at xmin.addce  ymax.addce+0.2  width 12 call '!This.importfile()'
 --				button .export 'Export'     at xmin.addce  ymax.import+0.2 width 12 call '!This.exportfile()'
 --				button .sort   'Sort  '     at xmin.addce  ymax.export+0.2 width 12 call '!This.sortce()'
 			exit
-			text .dest     'Destination'     at xmin.hiera ymax.hiera+0.5 width 33 is string 
+			text .dest     '存放位置'        at xmin.hiera ymax.hiera+0.5 tagwidth 11 width 33 is string 
 			button .desbut 'CE'              at xmax.dest+0.1 ymin.dest width 6 call '!This.desce()'
-			button .apply  'Create Drawings' at xmin.dest ymax.dest+0.5 width 23 call '!This.Apply()'
+			button .apply  '建立圖面'        at xmin.dest ymax.dest+0.5 width 23 call '!This.Apply()'
 			----------------------------------------------------------------
 			-- views drawn by hand in Draw, annotated where they stand      --
 			-- (.AnnotateViews()). Add CE takes a VIEW, or every view of a  --
 			-- SHEE or DRWG                                                 --
 			----------------------------------------------------------------
-			frame .uvframe 'Views drawn by hand' at xmin.dest ymax.apply+1.2
-				list .uvlist 'Views' multiple width 36 height 6
-				button .uvadd 'Add CE'     at xmax.uvlist+0.5 ymin.uvlist+0.75 width 12 call '!This.UvAddCe()'
-				button .uvrem 'Remove'     at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
-				button .uvall 'Remove All' at xmin.uvadd ymax.uvrem+0.3 width 12 call '!This.UvRemoveAll()'
-				button .uvgo 'Annotate Views' at xmin.uvlist ymax.uvlist+0.3 width 23 call '!This.AnnotateViews()'
+			frame .uvframe '自建的 VIEW' at xmin.dest ymax.apply+1.2
+				list .uvlist 'VIEW 清單' multiple width 36 height 6
+				button .uvadd '加入 CE'    at xmax.uvlist+0.5 ymin.uvlist+0.75 width 12 call '!This.UvAddCe()'
+				button .uvrem '移除'       at xmin.uvadd ymax.uvadd+0.3 width 12 call '!This.UvRemove()'
+				button .uvall '全部移除'   at xmin.uvadd ymax.uvrem+0.3 width 12 call '!This.UvRemoveAll()'
+				button .uvgo '標註 VIEW' at xmin.uvlist ymax.uvlist+0.3 width 23 call '!This.AnnotateViews()'
 				----------------------------------------------------------
 				-- closes the whole form. beside Annotate Views, in the   --
 				-- column of Add CE / Remove / Remove All (user,          --
 				-- 2026-09-27); it used to sit after Create Drawings, and --
 				-- went missing there once this frame was added           --
 				----------------------------------------------------------
-				button .Cancel 'Cancel' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
+				button .Cancel '關閉' at xmin.uvadd ymin.uvgo width 12 call '!This.Close()'
 				paragraph .uvresult at xmin.uvgo ymax.uvgo+0.2 text ' ' width 50
 			exit
 		exit
-		frame .viewframe 'View' width 40
+		frame .viewframe 'View 設定' width 40
 			text .frametext 'Backing Sheet' tagwidth 20 width 30 is string 
 			button .framebutn 'CE' at xmax.frametext+0.4 ymin.frametext width 5 call |!This.typepick('BACK', 'frametext')|
 			paragraph .framepara at xmax.framebutn+0.5 ymin.framebutn+0.1 text 'BACK'
-			text .rrsftext 'Representation Style' at xmin.frametext ymax.frametext+0.1 tagwidth 20 width 30 is string 
+			text .rrsftext 'Representation 樣式' at xmin.frametext ymax.frametext+0.1 tagwidth 20 width 30 is string 
 			button .rrsfbutn 'CE' at xmax.rrsftext+0.4 ymin.rrsftext width 5 call |!This.typepick('RRST', 'rrsftext')|
 			paragraph .rrsfpara at xmax.rrsfbutn+0.5 ymin.rrsfbutn+0.1 text 'RRST'
-			text .hrsftext 'Hatching Style' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 20 width 30 is string
+			text .hrsftext 'Hatching 樣式' at xmin.rrsftext ymax.rrsftext+0.1 tagwidth 20 width 30 is string
 			button .hrsfbutn 'CE' at xmax.hrsftext+0.4 ymin.hrsftext width 5 call |!This.typepick('HRST', 'hrsftext')|
 			paragraph .hrsfpara at xmax.hrsfbutn+0.5 ymin.hrsfbutn+0.1 text 'HRST'
-			button .palibybutn 'Import PA-LIBY' at xmin.hrsftext ymax.hrsftext+0.1 width 15 call |!This.ImportPaLiby()|
-			list .excllist 'Exclude from View' at xmin.hrsftext ymax.palibybutn+0.2 multiple width 34 height 4
+			button .palibybutn '匯入 PA-LIBY' at xmin.hrsftext ymax.hrsftext+0.1 width 15 call |!This.ImportPaLiby()|
+			list .excllist '不畫進 View 的元件' at xmin.hrsftext ymax.palibybutn+0.2 multiple width 34 height 4
 			-- +0.75 drops the three buttons clear of the list's own tag row, so that
 			-- Add CE lines up with the top of the list box and not with the label
-			button .excladdbutn 'Add CE'     at xmax.excllist+0.5 ymin.excllist+0.75  width 12 call '!This.ExclAddCe()'
-			button .exclrembutn 'Remove CE'  at xmin.excladdbutn  ymax.excladdbutn+0.3 width 12 call '!This.ExclRemoveCe()'
-			button .exclallbutn 'Remove All' at xmin.excladdbutn  ymax.exclrembutn+0.3 width 12 call '!This.ExclRemoveAll()'
-			option .scaleopt 'Drawing Scale' at xmin.excllist ymax.excllist+0.3 tagwidth 20 width 10
-			text .scaletext 'User Define' at xmax.scaleopt+1 ymin.scaleopt tagwidth 11 width 10 is string
-			toggle .portrait at xmin.frametext ymax.scaletext+0.2 'Portrait to Landscape'
-			button .canvas  'Pick Canvas Size' at xmin.portrait ymax.portrait+0.1 width 15 call |!This.canvaspick()|
-			paragraph .canvasp at xmax.canvas+1 ymin.canvas text 'X unset Y unset' width 25
-			toggle .openshee at xmin.canvas ymax.canvas+0.1   'Open SHEE after finish'
-			toggle .delshee  at xmin.openshee ymax.openshee+0.1 'Overwrite Existing DRWG'
+			button .excladdbutn '加入 CE'    at xmax.excllist+0.5 ymin.excllist+0.75  width 12 call '!This.ExclAddCe()'
+			button .exclrembutn '移除'       at xmin.excladdbutn  ymax.excladdbutn+0.3 width 12 call '!This.ExclRemoveCe()'
+			button .exclallbutn '全部移除'   at xmin.excladdbutn  ymax.exclrembutn+0.3 width 12 call '!This.ExclRemoveAll()'
+			option .scaleopt '出圖比例' at xmin.excllist ymax.excllist+0.3 tagwidth 20 width 10
+			text .scaletext '自訂比例' at xmax.scaleopt+1 ymin.scaleopt tagwidth 11 width 10 is string
+			toggle .portrait '直式框轉橫式' tagwidth 14 at xmin.frametext ymax.scaletext+0.2
+			button .canvas  '點選畫布範圍' at xmin.portrait ymax.portrait+0.1 width 15 call |!This.canvaspick()|
+			paragraph .canvasp at xmax.canvas+1 ymin.canvas text '未點選，用預設範圍' width 25
+			toggle .openshee '完成後開啟 SHEE' tagwidth 16 at xmin.canvas ymax.canvas+0.1
+			toggle .delshee  '覆蓋已有的 DRWG' tagwidth 16 at xmin.openshee ymax.openshee+0.1
 			
-			button .save   'Save'   at xmin.delshee   ymax.delshee+0.4 width 6 call '!This.Save()'
-			button .load   'Load'   at xmax.save+0.8  ymin.save        width 6 call '!This.Load()'
+			button .save   '儲存設定' at xmin.delshee   ymax.delshee+0.4 width 10 call '!This.Save()'
+			button .load   '載入設定' at xmax.save+0.8  ymin.save        width 10 call '!This.Load()'
 
 		exit
-		frame .info 'BorderText' width 40
-			text .dwgnopos  'Dwg.No. position'                                       tagwidth 15 width 10 is string
-			text .dwgnohei  'Text height'     at xmax.dwgnopos+2  ymin.dwgnopos      tagwidth 10 width 5 is string
-			text .scalepos  'Scale position'  at xmin.dwgnopos    ymax.dwgnopos      tagwidth 15 width 10 is string
-			text .scalehei  'Text height'     at xmax.scalepos+2  ymin.scalepos      tagwidth 10 width 5 is string
-			text .revpos    'Rev position'    at xmin.dwgnopos    ymax.scalepos      tagwidth 15 width 10 is string
-			text .revhei    'Text height'     at xmax.revpos+2    ymin.revpos        tagwidth 10 width 5 is string
-			text .title1pos 'Title1 position' at xmin.revpos      ymax.revpos+0.2    tagwidth 15 width 10 is string 
-			text .title1hei 'Text height'     at xmax.title1pos+2 ymin.title1pos     tagwidth 10 width 5 is string 
-			text .title2pos 'Title2 position' at xmin.revpos      ymax.title1pos+0.2 tagwidth 15 width 10 is string 
-			text .title2hei 'Text height'     at xmax.title2pos+2 ymin.title2pos     tagwidth 10 width 5 is string 
-			text .title3pos 'Title3 position' at xmin.revpos      ymax.title2pos+0.2 tagwidth 15 width 10 is string 
-			text .title3hei 'Text height'     at xmax.title3pos+2 ymin.title3pos     tagwidth 10 width 5 is string 
-			text .name1pos  'Name1 position'  at xmin.revpos      ymax.title3pos+0.2 tagwidth 15 width 10 is string 
-			text .name1hei  'Text height'     at xmax.name1pos+2  ymin.name1pos      tagwidth 10 width 5 is string 
-			text .name2pos  'Name2 position'  at xmin.revpos      ymax.name1pos+0.2  tagwidth 15 width 10 is string 
-			text .name2hei  'Text height'     at xmax.name2pos+2  ymin.name2pos      tagwidth 10 width 5 is string 
-			text .name3pos  'Name3 position'  at xmin.revpos      ymax.name2pos+0.2  tagwidth 15 width 10 is string 
-			text .name3hei  'Text height'     at xmax.name3pos+2  ymin.name3pos      tagwidth 10 width 5 is string 
-			text .date1pos  'Date1 position'  at xmin.revpos      ymax.name3pos+0.2  tagwidth 15 width 10 is string 
-			text .date1hei  'Text height'     at xmax.date1pos+2  ymin.date1pos      tagwidth 10 width 5 is string 
-			text .date2pos  'Date2 position'  at xmin.revpos      ymax.date1pos+0.2  tagwidth 15 width 10 is string 
-			text .date2hei  'Text height'     at xmax.date2pos+2  ymin.date2pos      tagwidth 10 width 5 is string 
-			text .date3pos  'Date3 position'  at xmin.revpos      ymax.date2pos+0.2  tagwidth 15 width 10 is string 
-			text .date3hei  'Text height'     at xmax.date3pos+2  ymin.date3pos      tagwidth 10 width 5 is string 
+		frame .info '圖框文字' width 40
+			text .dwgnopos  '圖號位置'                                               tagwidth 15 width 10 is string
+			text .dwgnohei  '字高'            at xmax.dwgnopos+2  ymin.dwgnopos      tagwidth 10 width 5 is string
+			text .scalepos  '比例位置'        at xmin.dwgnopos    ymax.dwgnopos      tagwidth 15 width 10 is string
+			text .scalehei  '字高'            at xmax.scalepos+2  ymin.scalepos      tagwidth 10 width 5 is string
+			text .revpos    '版次位置'        at xmin.dwgnopos    ymax.scalepos      tagwidth 15 width 10 is string
+			text .revhei    '字高'            at xmax.revpos+2    ymin.revpos        tagwidth 10 width 5 is string
+			text .title1pos '標題1 位置'      at xmin.revpos      ymax.revpos+0.2    tagwidth 15 width 10 is string 
+			text .title1hei '字高'            at xmax.title1pos+2 ymin.title1pos     tagwidth 10 width 5 is string 
+			text .title2pos '標題2 位置'      at xmin.revpos      ymax.title1pos+0.2 tagwidth 15 width 10 is string 
+			text .title2hei '字高'            at xmax.title2pos+2 ymin.title2pos     tagwidth 10 width 5 is string 
+			text .title3pos '標題3 位置'      at xmin.revpos      ymax.title2pos+0.2 tagwidth 15 width 10 is string 
+			text .title3hei '字高'            at xmax.title3pos+2 ymin.title3pos     tagwidth 10 width 5 is string 
+			text .name1pos  '姓名1 位置'      at xmin.revpos      ymax.title3pos+0.2 tagwidth 15 width 10 is string 
+			text .name1hei  '字高'            at xmax.name1pos+2  ymin.name1pos      tagwidth 10 width 5 is string 
+			text .name2pos  '姓名2 位置'      at xmin.revpos      ymax.name1pos+0.2  tagwidth 15 width 10 is string 
+			text .name2hei  '字高'            at xmax.name2pos+2  ymin.name2pos      tagwidth 10 width 5 is string 
+			text .name3pos  '姓名3 位置'      at xmin.revpos      ymax.name2pos+0.2  tagwidth 15 width 10 is string 
+			text .name3hei  '字高'            at xmax.name3pos+2  ymin.name3pos      tagwidth 10 width 5 is string 
+			text .date1pos  '日期1 位置'      at xmin.revpos      ymax.name3pos+0.2  tagwidth 15 width 10 is string 
+			text .date1hei  '字高'            at xmax.date1pos+2  ymin.date1pos      tagwidth 10 width 5 is string 
+			text .date2pos  '日期2 位置'      at xmin.revpos      ymax.date1pos+0.2  tagwidth 15 width 10 is string 
+			text .date2hei  '字高'            at xmax.date2pos+2  ymin.date2pos      tagwidth 10 width 5 is string 
+			text .date3pos  '日期3 位置'      at xmin.revpos      ymax.date2pos+0.2  tagwidth 15 width 10 is string 
+			text .date3hei  '字高'            at xmax.date3pos+2  ymin.date3pos      tagwidth 10 width 5 is string 
 		exit
 		frame .fra 'Keyplan'
-			text .keyovertext 'KeyPlan' tagwidth 22 width 27 is string
+			text .keyovertext 'Keyplan 底圖' tagwidth 22 width 27 is string
 			button .keyoverbutn 'CE' at xmax.keyovertext+0.4 ymin.keyovertext width 5 call |!This.typepick('OVER', 'keyovertext')|
 			paragraph .keyoverpara at xmax.keyoverbutn+0.5 ymin.keyoverbutn+0.1 text 'OVER'
-			text .keytext1 'Lower Left Paper Coord.' tagwidth 22 at xmin.keyovertext ymax.keyovertext+0.1 width 27 is string
-			button .keybutn1 'Pick' at xmax.keytext1+0.4 ymin.keytext1 width 5 call |!This.keyplanpick()|
-			text .keytext2 'Lower Left Model Coord.  E'  tagwidth 22 at xmin.keytext1 ymax.keytext1+0.1 width 11 is string 
+			text .keytext1 '左下角圖紙座標' tagwidth 22 at xmin.keyovertext ymax.keyovertext+0.1 width 27 is string
+			button .keybutn1 '點選' at xmax.keytext1+0.4 ymin.keytext1 width 5 call |!This.keyplanpick()|
+			text .keytext2 '左下角模型座標  E'  tagwidth 22 at xmin.keytext1 ymax.keytext1+0.1 width 11 is string 
 			text .keytext3 'N' at xmax.keytext2+2 ymin.keytext2 width 11 is string 
-			text .keytext4 'Keyplan Scale'  tagwidth 22 at xmin.keytext2 ymax.keytext2+0.1 width 27 is string
-			text .keytext5 'Keyplan Y axis is'  tagwidth 22 at xmin.keytext2 ymax.keytext4+0.1 width 27 is string
+			text .keytext4 'Keyplan 比例'   tagwidth 22 at xmin.keytext2 ymax.keytext2+0.1 width 27 is string
+			text .keytext5 'Keyplan Y 軸朝向'   tagwidth 22 at xmin.keytext2 ymax.keytext4+0.1 width 27 is string
 		exit
-		frame .northarrow 'NorthArrow'
-			text .northtext 'North Arrow' tagwidth 22 width 27 is string
+		frame .northarrow '指北針'
+			text .northtext '指北針符號' tagwidth 22 width 27 is string
 			button .northbutn 'CE' at xmax.northtext+0.4 ymin.northtext width 5 call |!This.typepick('SYTM', 'northtext')|
 			paragraph .northpara at xmax.northbutn+0.5 ymin.northbutn+0.1 text 'SYTM'
-			text .northsca 'Scale' tagwidth 22 at xmin.northtext ymax.northtext+0.1 width 27 is real
-			text .northpostext 'POS' tagwidth 22 at xmin.northsca ymax.northsca+0.1 width 27 is string
-			button .northposbutn 'Pick' at xmax.northpostext+0.4 ymin.northpostext width 5 call |!This.northarrowpick()|
+			text .northsca '縮放比例' tagwidth 22 at xmin.northtext ymax.northtext+0.1 width 27 is real
+			text .northpostext '位置' tagwidth 22 at xmin.northsca ymax.northsca+0.1 width 27 is string
+			button .northposbutn '點選' at xmax.northpostext+0.4 ymin.northpostext width 5 call |!This.northarrowpick()|
 		exit
-		frame .flowarrow 'FlowArrow'
+		frame .flowarrow '流向箭頭'
 			---------------------------------------------------------------------
 			-- the symbol drawn on a pipe to show which way it flows. the CE    --
 			-- button goes through .typepick(), so the field only ever takes a  --
 			-- SYTM and says so instead of accepting whatever CE happens to be  --
 			---------------------------------------------------------------------
-			text .flowtext 'Flow Arrow' tagwidth 22 width 27 is string
+			text .flowtext '流向箭頭符號' tagwidth 22 width 27 is string
 			button .flowbutn 'CE' at xmax.flowtext+0.4 ymin.flowtext width 5 call |!This.typepick('SYTM', 'flowtext')|
 			paragraph .flowpara at xmax.flowbutn+0.5 ymin.flowbutn+0.1 text 'SYTM'
-			text .flowsca 'Scale' tagwidth 22 at xmin.flowtext ymax.flowtext+0.1 width 27 is real
+			text .flowsca '縮放比例' tagwidth 22 at xmin.flowtext ymax.flowtext+0.1 width 27 is real
 		exit
-		frame .gridframe 'Grid'
-			text .griddist 'Distance'    tagwidth 10 width 6 is real
-			text .gridgap  'Gap'         tagwidth 10 at xmin.griddist ymax.griddist+0.1 width 6 is real
-			text .gridhei  'Text Height' tagwidth 10 at xmin.gridgap  ymax.gridgap+0.1  width 6 is real
-			text .griddia  'Diameter'    tagwidth 10 at xmin.gridhei  ymax.gridhei+0.1  width 6 is real
+		frame .gridframe '柱位線'
+			text .griddist '距離'        tagwidth 10 width 6 is real
+			text .gridgap  '間隙'        tagwidth 10 at xmin.griddist ymax.griddist+0.1 width 6 is real
+			text .gridhei  '字高'        tagwidth 10 at xmin.gridgap  ymax.gridgap+0.1  width 6 is real
+			text .griddia  '圓圈直徑'    tagwidth 10 at xmin.gridhei  ymax.gridhei+0.1  width 6 is real
 --			para .sketch at xmax.griddist+2 ymin.griddist pixmap width 5 height 5
 		exit
-		frame .anno 'Annotation'
+		frame .anno '標註'
 			--------------------------------------------------------------
 			-- text heights: one field per thing the user can see, each  --
 			-- feeding EVERY place that height is written. .annotext     --
@@ -156,10 +156,10 @@ layout form !!DrawingPlan1 dialog dock
 			-- broad 'Text Height' to what it actually drives -- the     --
 			-- five component label layers and the support symbol        --
 			--------------------------------------------------------------
-			text .annotext  'Component Label Height' tagwidth 22 width 6 is string
-			text .lineheitx 'Pipe Label Height'      tagwidth 22 at xmin.annotext ymax.annotext+0.1 width 6 is real
-			text .equiheitx 'Equipment Name Height'  tagwidth 22 at xmin.lineheitx ymax.lineheitx+0.1 width 6 is real
-			text .dimheitx  'Dimension Text Height'  tagwidth 22 at xmin.equiheitx ymax.equiheitx+0.1 width 6 is real
+			text .annotext  '元件標籤字高'           tagwidth 22 width 6 is string
+			text .lineheitx '管線號字高'             tagwidth 22 at xmin.annotext ymax.annotext+0.1 width 6 is real
+			text .equiheitx '設備名稱字高'           tagwidth 22 at xmin.lineheitx ymax.lineheitx+0.1 width 6 is real
+			text .dimheitx  '尺寸字高'               tagwidth 22 at xmin.equiheitx ymax.equiheitx+0.1 width 6 is real
 			--------------------------------------------------------------
 			-- the match line text used to read .dwgnohei -- the Dwg.No.  --
 			-- height on the BorderText tab -- so changing the drawing    --
@@ -168,31 +168,31 @@ layout form !!DrawingPlan1 dialog dock
 			-- real, because the call sites pass it straight through as   --
 			-- cheitx |<val>| the way .dwgnohei always did                --
 			--------------------------------------------------------------
-			text .matchhei  'Match Line Text Height' tagwidth 22 at xmin.dimheitx ymax.dimheitx+0.1 width 6 is string
-			toggle .autoplace at xmin.annotext ymax.matchhei+0.1  'Automatic Label Placement'
-			frame .instframe 'Instrument' at xmin.annotext ymax.autoplace+0.1
-				toggle .insttog  'Create Label'
-				text .insttext1 'Inst Rule'   tagwidth 12 at xmin.insttog ymax.insttog+0.1 width 40 is string
-				text .insttext2 'Inst Format' tagwidth 12 at xmin.insttog ymax.insttext1+0.1 width 40 is string
-				text .insttext3 'Diameter'    tagwidth 12 at xmin.insttog ymax.insttext2+0.1 width 40 is real
+			text .matchhei  'Match Line 字高'        tagwidth 22 at xmin.dimheitx ymax.dimheitx+0.1 width 6 is string
+			toggle .autoplace '自動安排標籤位置' tagwidth 18 at xmin.annotext ymax.matchhei+0.1
+			frame .instframe '儀表' at xmin.annotext ymax.autoplace+0.1
+				toggle .insttog  '建立標籤' tagwidth 10
+				text .insttext1 'Rule'        tagwidth 12 at xmin.insttog ymax.insttog+0.1 width 40 is string
+				text .insttext2 'Format'      tagwidth 12 at xmin.insttog ymax.insttext1+0.1 width 40 is string
+				text .insttext3 '圓圈直徑'    tagwidth 12 at xmin.insttog ymax.insttext2+0.1 width 40 is real
 	$(		-- for template reference	
 				button .instbutn 'CE' at xmax.insttext2+0.4 ymin.insttext2 width 5 call |!This.typepick('SYTM', 'insttext2')|
 				paragraph .instpara at xmax.instbutn+0.5 ymin.instbutn+0.1 text 'SYTM'
 	$)			
 			exit
-			frame .nozzframe 'Nozzle' at xmin.annotext ymax.instframe+0.1
-				toggle .nozztog  'Create Label'
-				text .nozztext1 'Nozz Rule'   tagwidth 12 at xmin.nozztog ymax.nozztog+0.1  width 40 is string
-				text .nozztext2 'Nozz Format' tagwidth 12 at xmin.nozztog ymax.nozztext1+0.1 width 40 is string
+			frame .nozzframe '管嘴' at xmin.annotext ymax.instframe+0.1
+				toggle .nozztog  '建立標籤' tagwidth 10
+				text .nozztext1 'Rule'        tagwidth 12 at xmin.nozztog ymax.nozztog+0.1  width 40 is string
+				text .nozztext2 'Format'      tagwidth 12 at xmin.nozztog ymax.nozztext1+0.1 width 40 is string
 			exit
-			frame .valvframe 'Valve' at xmin.annotext ymax.nozzframe+0.1
-				toggle .valvtog  'Create Label'
-				text .valvtext1 'Valv Rule'   tagwidth 12 at xmin.valvtog ymax.valvtog+0.1 width 40 is string
-				text .valvtext2 'Valv Format' tagwidth 12 at xmin.valvtog ymax.valvtext1+0.1 width 40 is string
+			frame .valvframe '閥' at xmin.annotext ymax.nozzframe+0.1
+				toggle .valvtog  '建立標籤' tagwidth 10
+				text .valvtext1 'Rule'        tagwidth 12 at xmin.valvtog ymax.valvtog+0.1 width 40 is string
+				text .valvtext2 'Format'      tagwidth 12 at xmin.valvtog ymax.valvtext1+0.1 width 40 is string
 			exit
-			frame .suptframe 'Support' at xmin.annotext ymax.valvframe+0.1
-				toggle .supttog  'Create Label'
-				toggle .supttog1 'Flat Oval Frame'
+			frame .suptframe '管支撐' at xmin.annotext ymax.valvframe+0.1
+				toggle .supttog  '建立標籤' tagwidth 10
+				toggle .supttog1 '長圓形外框' tagwidth 12
 			exit
 			----------------------------------------------------------
 			-- off: no match line, no MATCH LINE / SEE texts, no tick --
@@ -201,14 +201,14 @@ layout form !!DrawingPlan1 dialog dock
 			-- on this tab, the user's place for it). Annotate Views  --
 			-- only; Create Drawings keeps them                       --
 			----------------------------------------------------------
-			toggle .uvmatch 'Match Lines (Annotate Views)' at xmin.annotext ymax.suptframe+0.1
-			frame .userframe 'User Defined' at xmin.annotext ymax.uvmatch+0.1
-				toggle .usertog 'Create Label'
+			toggle .uvmatch '畫 Match Line（只影響標註 VIEW）' tagwidth 33 at xmin.annotext ymax.suptframe+0.1
+			frame .userframe '自訂' at xmin.annotext ymax.uvmatch+0.1
+				toggle .usertog '建立標籤' tagwidth 10
 				text .usertext1 'Rule'   tagwidth 12 at xmin.usertog ymax.usertog+0.1 width 40 is string
 				text .usertext2 'Format' tagwidth 12 at xmin.usertog ymax.usertext1+0.1 width 40 is string
 			exit
-			frame .reduframe 'Reducer/Red.Tee' at xmin.annotext ymax.userframe+0.1
-				toggle .redutog 'Create Label'
+			frame .reduframe '異徑管／異徑三通' at xmin.annotext ymax.userframe+0.1
+				toggle .redutog '建立標籤' tagwidth 10
 				paragraph .redupara at xmax.redutog+35 ymin.redutog text ' '
 			exit
 		exit
@@ -358,7 +358,23 @@ define method .DrawingPlan1()
 	!scales[20] = '1:2000'
 	!scales[21] = '1:2500'
 	!scales[22] = 'User Define'
-	!this.scaleopt.dtext = !scales
+	----------------------------------------------------------------------
+	-- what the form shows. the rtext stays the English above: the code  --
+	-- below and the files Save writes go by it, so a settings file      --
+	-- saved before the labels were Chinese still loads (2026-10-02)     --
+	----------------------------------------------------------------------
+	!shown = object array()
+	do !sc values !scales
+		if (!sc.eq('auto')) then
+			!shown.append('自動')
+		elseif (!sc.eq('User Define')) then
+			!shown.append('自訂')
+		else
+			!shown.append(!sc)
+		endif
+	enddo
+	!this.scaleopt.dtext = !shown
+	!this.scaleopt.rtext = !scales
 	!this.scaleopt.val = 1
 	!this.scaletext.val = ''
 	----------------------------------------------------------------------
@@ -1320,7 +1336,7 @@ define method .Apply()
 				-- the fit is still run: it costs nothing and its answer is what  --
 				-- the field is left empty for                                    --
 				------------------------------------------------------------------
-				!scalestr = !this.scaleopt.selection()
+				!scalestr = !this.scaleopt.selection('RTEXT')
 				if (!scalestr.eqnocase('User Define')) then
 					!scalestr = !this.scaletext.val
 				elseif (!scalestr.eqnocase('auto')) then
@@ -2657,7 +2673,7 @@ define method .AnnotateViews()
 		endif
 	enddo
 	!res = !ok.string() & ' of ' & !items.size().string() & ' view(s) annotated'
-	!this.uvresult.val = !res
+	!this.uvresult.val = '已標註 ' & !ok.string() & ' 個 VIEW，共 ' & !items.size().string() & ' 個'
 	if (!fails.size().gt(0) or !this.uvnotes.size().gt(0)) then
 		!txt = !res & ' - see check_userview.txt'
 		do !fl values !fails
@@ -5258,11 +5274,11 @@ endmethod
 -- limit reaches is read off them and divided by that scale, so what   --
 -- VSCA or VRAT say does not matter. answers '' or why it could not    --
 --                                                                     --
--- .selection('DTEXT'): the list has no rtext of its own, and a bare   --
--- .selection() read the wrong one in Assign Numbers (2026-09-24)      --
+-- .selection('RTEXT'): the rtext is the English ('auto', '1:30',     --
+-- 'User Define'), the dtext what the form shows (2026-10-02)          --
 ------------------------------------------------------------------------
 define method .UvSetScale(!vref is string, !trans is array, !ls is array, !fx1 is real, !fy1 is real, !fx2 is real, !fy2 is real) is string
-	!scalestr = !this.scaleopt.selection('DTEXT')
+	!scalestr = !this.scaleopt.selection('RTEXT')
 	if (!scalestr.eqnocase('User Define')) then
 		!scalestr = !this.scaletext.val
 	endif
@@ -5297,7 +5313,7 @@ define method .UvSetScale(!vref is string, !trans is array, !ls is array, !fx1 i
 		!needx = !ax / !v0 / !hw
 		!needy = !ay / !v0 / !hh
 		!need = max(!needx, !needy)
-		!opts = !this.scaleopt.dtext
+		!opts = !this.scaleopt.rtext
 		do !sc values !opts
 			if (!sc.matchwild('1:*')) then
 				!d = 0
@@ -7781,7 +7797,7 @@ define method .Save()
 		!ff.writerecord('!this.frametext.val' & '=|' & !this.frametext.val & '|')
 		!ff.writerecord('!this.rrsftext.val' & '=|' & !this.rrsftext.val & '|')
 		!ff.writerecord('!this.hrsftext.val' & '=|' & !this.hrsftext.val & '|')
-		!ff.writerecord('!this.scaleopt.selection()' & '=|' & !this.scaleopt.selection() & '|')
+		!ff.writerecord('!this.scaleopt.selection()' & '=|' & !this.scaleopt.selection('RTEXT') & '|')
 		!ff.writerecord('!this.scaletext.val' & '=|' & !this.scaletext.val & '|')
 		-- the exclude list is an array, joined the same way as the box list above --
 		!exclstr = ''
@@ -7981,7 +7997,7 @@ define method .Load()
 					if (!scstr.length() gt 0 and !scstr.substring(1,1).eq('|')) then
 						!scstr = !scstr.substring(2, !scstr.length() - 2)
 					endif
-					!scitems = !this.scaleopt.dtext
+					!scitems = !this.scaleopt.rtext
 					do !si from 1 to !scitems.size()
 						if (!scitems[!si].eqnocase(!scstr)) then
 							!this.scaleopt.val = !si
@@ -8004,9 +8020,17 @@ define method .Load()
 					if (!canvstr.length() gt 0 and !canvstr.substring(1,1).eq('|')) then
 						!canvstr = !canvstr.substring(2, !canvstr.length() - 2)
 					endif
-					!this.canvasp.val = !canvstr
-					if (!canvstr.neq('') and not(!canvstr.matchwild('*unset*'))) then
+					---------------------------------------------------------------------
+					-- only 'X .. Y .. X .. Y ..' is a canvas. anything else is the     --
+					-- unset text, the English 'X unset Y unset' of an older file or    --
+					-- the Chinese of the layout, which is put back from here rather    --
+					-- than read from the file (2026-10-02)                             --
+					---------------------------------------------------------------------
+					if (!canvstr.matchwild('X *') and not(!canvstr.matchwild('*unset*'))) then
+						!this.canvasp.val = !canvstr
 						!this.canvassize = !canvstr
+					else
+						!this.canvasp.val = '未點選，用預設範圍'
 					endif
 				elseif (!option.eq('!this.dest.val')) then
 					-----------------------------------------------------------------------
@@ -8165,7 +8189,7 @@ endmethod
 -- in it, so it is only alive while User Define is the choice        --
 ----------------------------------------------------------------------
 define method .ScalePick()
-	if (!this.scaleopt.selection().eqnocase('User Define')) then
+	if (!this.scaleopt.selection('RTEXT').eqnocase('User Define')) then
 		!this.scaletext.active = true
 	else
 		!this.scaletext.active = false
